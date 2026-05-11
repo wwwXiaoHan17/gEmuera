@@ -1,4 +1,6 @@
-# gemuera-c#
+[中文](README.md) | [English](README_en.md) | **日本語**
+
+# gEmuera
 
 Godot 4.6 + .NET 8.0 によるクロスプラットフォーム Emuera テキストゲームエンジンの移植版です。
 

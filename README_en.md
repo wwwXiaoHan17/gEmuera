@@ -1,4 +1,6 @@
-# gemuera-c#
+[中文](README.md) | **English** | [日本語](README_ja.md)
+
+# gEmuera
 
 A cross-platform Emuera text game engine port built with Godot 4.6 + .NET 8.0.
 

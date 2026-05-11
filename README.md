@@ -1,4 +1,6 @@
-# gemuera-c#
+**中文** | [English](README_en.md) | [日本語](README_ja.md)
+
+# gEmuera
 
 基于 Godot 4.6 + .NET 8.0 的跨平台 Emuera 文字游戏引擎移植版。
 
