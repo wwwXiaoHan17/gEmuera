@@ -1,0 +1,334 @@
+using Godot;
+using MinorShift._Library;
+using MinorShift.Emuera;
+using MinorShift.Emuera.GameView;
+using System.Collections.Concurrent;
+using System.Threading;
+using MinorShift.Emuera.Content;
+
+public partial class EmueraMain : Node
+{
+    [Export] public bool debug = false;
+    [Export] public bool use_coroutine = false;
+    [Export] public bool enable_sprite_debug_viewer = true;
+
+    // GPU work queue for cross-thread ColorMatrix rendering from background thread
+    public class GpuWorkItem
+    {
+        public int Id;
+        public Godot.Image SrcImage;
+        public Godot.Rect2I SrcRegion;
+        public float[][] ColorMatrix;
+        public Godot.Image ResultImage;
+        public ManualResetEventSlim Completed = new ManualResetEventSlim(false);
+    }
+
+    static ConcurrentQueue<GpuWorkItem> gpuQueue = new ConcurrentQueue<GpuWorkItem>();
+    static int gpuWorkIdCounter = 0;
+
+    /// <summary>
+    /// True once _Process has been called at least once, indicating the main loop is running
+    /// and the SubViewport render pipeline is ready to process GPU work.
+    /// </summary>
+    public static bool GpuReady { get; private set; } = false;
+
+    /// Submit ColorMatrix work from any thread. Returns the GpuWorkItem for direct wait.
+    public static GpuWorkItem GpuSubmitColorMatrix(Godot.Image src, Godot.Rect2I region, float[][] cm)
+    {
+        var item = new GpuWorkItem
+        {
+            Id = Interlocked.Increment(ref gpuWorkIdCounter),
+            SrcImage = src,
+            SrcRegion = region,
+            ColorMatrix = cm
+        };
+        gpuQueue.Enqueue(item);
+        return item;
+    }
+
+    // SubViewport-based GPU rendering for ColorMatrix
+    SubViewport gpuViewport;
+    TextureRect gpuTextureRect;
+    ShaderMaterial gpuShaderMaterial;
+    GpuWorkItem pendingGpuItem;
+    int gpuRenderFrameCount = 0;
+    bool gpuWaitingForRender = false;
+
+    void SetupGpuRenderer()
+    {
+        gpuViewport = new SubViewport();
+        gpuViewport.TransparentBg = true;
+        gpuViewport.Size = new Vector2I(2048, 2048);
+        gpuViewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
+        gpuViewport.Name = "GpuRenderViewport";
+
+        gpuTextureRect = new TextureRect();
+        gpuTextureRect.ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize;
+        gpuTextureRect.Name = "GpuTextureRect";
+
+        gpuShaderMaterial = ColorMatrixGPU.CreateCompositMaterial();
+        gpuTextureRect.Material = gpuShaderMaterial;
+
+        gpuViewport.AddChild(gpuTextureRect);
+        AddChild(gpuViewport);
+    }
+
+    /// Process pending GPU work. Called from _Process on the main thread.
+    /// Frame-counted cycle: setup render → wait 2 frames → retrieve result.
+    /// Falls back to CPU processing if GPU render produces no output.
+    void ProcessGpuQueue()
+    {
+        // Phase 1: Wait for render to complete (2 frames after setup)
+        if (gpuWaitingForRender)
+        {
+            gpuRenderFrameCount++;
+            if (gpuRenderFrameCount >= 2)
+            {
+                var vpTex = gpuViewport.GetTexture();
+                if (vpTex != null)
+                {
+                    var resultImg = vpTex.GetImage();
+                    if (resultImg != null && resultImg.GetWidth() > 0 && resultImg.GetHeight() > 0)
+                    {
+                        if (resultImg.GetFormat() != Godot.Image.Format.Rgba8)
+                            resultImg.Convert(Godot.Image.Format.Rgba8);
+                        pendingGpuItem.ResultImage = resultImg;
+                    }
+                    else
+                    {
+                        pendingGpuItem.ResultImage = MinorShift.Emuera.Content.GraphicsImage.ApplyColorMatrixGPU(
+                            pendingGpuItem.SrcImage, pendingGpuItem.SrcRegion, pendingGpuItem.ColorMatrix);
+                    }
+                }
+                else
+                {
+                    pendingGpuItem.ResultImage = MinorShift.Emuera.Content.GraphicsImage.ApplyColorMatrixGPU(
+                        pendingGpuItem.SrcImage, pendingGpuItem.SrcRegion, pendingGpuItem.ColorMatrix);
+                }
+                pendingGpuItem.Completed.Set();
+                pendingGpuItem = null;
+                gpuWaitingForRender = false;
+                gpuViewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
+            }
+        }
+
+        // Phase 2: Set up next render if idle
+        if (!gpuWaitingForRender && gpuQueue.TryDequeue(out var item))
+        {
+            var srcW = item.SrcRegion.Size.X;
+            var srcH = item.SrcRegion.Size.Y;
+            if (srcW > 0 && srcH > 0)
+            {
+                var subImg = item.SrcImage.GetRegion(item.SrcRegion);
+                if (subImg != null)
+                {
+                    var imgTex = ImageTexture.CreateFromImage(subImg);
+                    gpuTextureRect.Texture = imgTex;
+                    gpuTextureRect.Size = new Vector2(srcW, srcH);
+                    gpuTextureRect.Position = Vector2.Zero;
+                    gpuViewport.Size = item.SrcRegion.Size;
+
+                    ColorMatrixGPU.SetMatrixUniforms(gpuShaderMaterial, item.ColorMatrix);
+
+                    gpuViewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
+                    gpuRenderFrameCount = 0;
+                    gpuWaitingForRender = true;
+                    pendingGpuItem = item;
+                }
+                else
+                {
+                    // GetRegion failed, use CPU fallback
+                    item.ResultImage = MinorShift.Emuera.Content.GraphicsImage.ApplyColorMatrixGPU(
+                        item.SrcImage, item.SrcRegion, item.ColorMatrix);
+                    item.Completed.Set();
+                }
+            }
+            else
+            {
+                item.ResultImage = Godot.Image.CreateEmpty(1, 1, false, Godot.Image.Format.Rgba8);
+                item.Completed.Set();
+            }
+        }
+    }
+
+    public override void _Ready()
+    {
+        Engine.MaxFps = 24;
+        GenericUtils.SetMainThread();
+
+        // Setup path resolution
+        string eraPath = FirstWindow.SelectedGamePath;
+        if (string.IsNullOrEmpty(eraPath) || !uEmuera.Utils.DirectoryExists(eraPath))
+        {
+            eraPath = ProjectSettings.GlobalizePath("res://eraAkumaMaid0.305-CH-正式版");
+        }
+        if (!string.IsNullOrEmpty(eraPath) && uEmuera.Utils.DirectoryExists(eraPath))
+        {
+            Sys.ExeDir = uEmuera.Utils.NormalizePath(eraPath + "/");
+        }
+        else
+        {
+            Sys.ExeDir = uEmuera.Utils.NormalizePath(OS.GetExecutablePath().GetBaseDir() + "/");
+        }
+
+        // Load SHIFT-JIS / UTF-8 config maps
+        LoadConfigMaps();
+
+        // Setup logger delegates
+        uEmuera.Logger.info = GenericUtils.Info;
+        uEmuera.Logger.warn = GenericUtils.Warn;
+        uEmuera.Logger.error = GenericUtils.Error;
+
+        // Reset global state for clean restart
+        GlobalStatic.Reset();
+
+        SetupGpuRenderer();
+
+        // Sprite debug viewer — press F3 to toggle
+        if (enable_sprite_debug_viewer && OS.GetName() != "Android")
+        {
+            var debugViewer = new SpriteDebugViewer();
+            debugViewer.Name = "SpriteDebugViewer";
+            AddChild(debugViewer);
+        }
+
+        // Create content renderer
+        var content = new EmueraContent();
+        content.Name = "EmueraContent";
+        AddChild(content);
+
+        // Start the engine
+        EmueraThread.instance.Start(debug, use_coroutine);
+        working = true;
+    }
+
+    public override void _Process(double delta)
+    {
+        if (OS.GetName() != "Android")
+            GpuReady = true;
+        GenericUtils.FlushLogs();
+        GenericUtils.FlushUI();
+
+        if (!working)
+            return;
+
+        if (clearRequested)
+        {
+            clearRequested = false;
+            GenericUtils.ClearText();
+        }
+
+        if (restartRequested)
+        {
+            restartRequested = false;
+            GetTree().ReloadCurrentScene();
+            return;
+        }
+
+        if (GlobalStatic.MainWindow != null)
+            GlobalStatic.MainWindow.Update();
+
+        ProcessGpuQueue();
+
+        SpriteManager.UpdateCleanup();
+        SpriteManager.UpdateOtherThreads();
+        MinorShift._Library.WinInput.UpdateKeyState();
+
+        var console = GlobalStatic.Console;
+        var content = EmueraContent.instance;
+        if (console != null && content != null)
+        {
+            bool needsInput = console.IsWaitingInputSomething;
+            if (!needsInput && content.IsInputVisible())
+                content.ShowInput(false);
+        }
+    }
+
+    public override void _ExitTree()
+    {
+        EmueraThread.instance.End();
+        working = false;
+        GlobalStatic.Reset();
+        uEmuera.Utils.ResourceClear();
+    }
+
+    public void Run()
+    {
+        EmueraThread.instance.Start(debug, use_coroutine);
+        working = true;
+    }
+
+    public void Clear()
+    {
+        if (working)
+        {
+            // Request clear on next process
+            clearRequested = true;
+        }
+    }
+
+    public void Restart()
+    {
+        if (working)
+        {
+            restartRequested = true;
+        }
+    }
+
+    bool working = false;
+    bool clearRequested = false;
+    bool restartRequested = false;
+
+    void LoadConfigMaps()
+    {
+        char[] split = new char[] { '\r', '\n' };
+        var shiftjisPath = "res://Text/emuera_config_shiftjis.bytes";
+        var utf8Path = "res://Text/emuera_config_utf8.txt";
+        var utf8CnPath = "res://Text/emuera_config_utf8_zhcn.txt";
+
+        if (!Godot.FileAccess.FileExists(shiftjisPath) ||
+            !Godot.FileAccess.FileExists(utf8Path) ||
+            !Godot.FileAccess.FileExists(utf8CnPath))
+            return;
+
+        var shiftjisBytes = Godot.FileAccess.GetFileAsBytes(shiftjisPath);
+        var utf8Text = Godot.FileAccess.GetFileAsString(utf8Path);
+        var utf8CnText = Godot.FileAccess.GetFileAsString(utf8CnPath);
+
+        var jis_md5_strs = GenericUtils.CalcMd5List(shiftjisBytes);
+
+        var utf8_strs = utf8Text.Split(split, System.StringSplitOptions.RemoveEmptyEntries);
+        var utf8_str_list = new System.Collections.Generic.List<string>();
+        foreach (var str in utf8_strs)
+        {
+            if (string.IsNullOrWhiteSpace(str))
+                continue;
+            utf8_str_list.Add(str);
+        }
+
+        var utf8cn_strs = utf8CnText.Split(split, System.StringSplitOptions.RemoveEmptyEntries);
+        var utf8cn_str_list = new System.Collections.Generic.List<string>();
+        foreach (var str in utf8cn_strs)
+        {
+            if (string.IsNullOrWhiteSpace(str))
+                continue;
+            utf8cn_str_list.Add(str);
+        }
+
+        if (jis_md5_strs.Count != utf8cn_str_list.Count)
+            return;
+
+        var jis_map = new System.Collections.Generic.Dictionary<string, string>();
+        for (int i = 0; i < jis_md5_strs.Count; ++i)
+        {
+            jis_map[jis_md5_strs[i]] = utf8_str_list[i];
+        }
+        var utf8cn_map = new System.Collections.Generic.Dictionary<string, string>();
+        for (int i = 0; i < utf8cn_str_list.Count; ++i)
+        {
+            utf8cn_map[utf8cn_str_list[i]] = utf8_str_list[i];
+        }
+        uEmuera.Utils.SetSHIFTJIS_to_UTF8Dict(jis_map);
+        uEmuera.Utils.SetUTF8ZHCN_to_UTF8Dict(utf8cn_map);
+    }
+}

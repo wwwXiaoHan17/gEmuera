@@ -1,0 +1,32 @@
+# Godot 4+ specific ignores
+.godot/
+/android/
+
+# Build output
+.mono/
+bin/
+obj/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vs/
+.vscode/
+*.user
+*.suo
+
+# Reference/legacy code (not part of this project)
+uEmuera-0.2.9d/
+XEmuera-0.5.1/
+
+# Game content (too large for git, users provide their own)
+eraAkumaMaid*/
+era*/
+
+# Export templates
+/export/
+*.apk
+*.aab

@@ -1,0 +1,12 @@
+[gd_scene format=3 uid="uid://dc0nxsib5jj8o"]
+
+[ext_resource type="Script" uid="uid://vj61obgfj46x" path="res://Scripts/FirstWindow.cs" id="1_first"]
+
+[node name="FirstWindow" type="Control" unique_id=973085953]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_first")

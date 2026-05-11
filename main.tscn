@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://c4u7kgm7pnjux"]
+
+[ext_resource type="Script" uid="uid://p364fp5n6mlo" path="res://Scripts/EmueraMain.cs" id="1_emuera"]
+
+[node name="Main" type="Node" unique_id=57311244]
+script = ExtResource("1_emuera")

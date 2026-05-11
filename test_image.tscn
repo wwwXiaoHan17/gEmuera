@@ -1,0 +1,14 @@
+[gd_scene format=3 uid="uid://bf82tuu8dynmb"]
+
+[ext_resource type="Script" uid="uid://n8kmd6pa2f8x" path="res://Scripts/ImageTestTool.cs" id="1_x0test"]
+
+[node name="ImageTestTool" type="Control" unique_id=605198312]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+script = ExtResource("1_x0test")
