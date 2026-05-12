@@ -53,12 +53,18 @@ public partial class EmueraMain : Node
     GpuWorkItem pendingGpuItem;
     int gpuRenderFrameCount = 0;
     bool gpuWaitingForRender = false;
+    bool startupStarted = false;
+    Control startupOverlay;
+    Label startupStatusLabel;
 
     void SetupGpuRenderer()
     {
+        if (!ShouldUseGpuRenderer() || gpuViewport != null)
+            return;
+
         gpuViewport = new SubViewport();
         gpuViewport.TransparentBg = true;
-        gpuViewport.Size = new Vector2I(2048, 2048);
+        gpuViewport.Size = new Vector2I(16, 16);
         gpuViewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
         gpuViewport.Name = "GpuRenderViewport";
 
@@ -73,11 +79,32 @@ public partial class EmueraMain : Node
         AddChild(gpuViewport);
     }
 
+    static bool ShouldUseGpuRenderer()
+    {
+        return !OS.HasFeature("mobile");
+    }
+
     /// Process pending GPU work. Called from _Process on the main thread.
     /// Frame-counted cycle: setup render → wait 2 frames → retrieve result.
     /// Falls back to CPU processing if GPU render produces no output.
     void ProcessGpuQueue()
     {
+        if (!ShouldUseGpuRenderer())
+        {
+            while (gpuQueue.TryDequeue(out var queuedItem))
+            {
+                queuedItem.ResultImage = MinorShift.Emuera.Content.GraphicsImage.ApplyColorMatrixGPU(
+                    queuedItem.SrcImage, queuedItem.SrcRegion, queuedItem.ColorMatrix);
+                queuedItem.Completed.Set();
+            }
+            return;
+        }
+
+        if (gpuViewport == null)
+            SetupGpuRenderer();
+        if (gpuViewport == null)
+            return;
+
         // Phase 1: Wait for render to complete (2 frames after setup)
         if (gpuWaitingForRender)
         {
@@ -153,8 +180,27 @@ public partial class EmueraMain : Node
 
     public override void _Ready()
     {
-        Engine.MaxFps = 24;
+        FrameRateHelper.Apply();
         GenericUtils.SetMainThread();
+        uEmuera.Logger.info = GenericUtils.Info;
+        uEmuera.Logger.warn = GenericUtils.Warn;
+        uEmuera.Logger.error = GenericUtils.Error;
+
+        CreateStartupOverlay();
+        CallDeferred(nameof(StartGameDeferred));
+    }
+
+    async void StartGameDeferred()
+    {
+        if (startupStarted)
+            return;
+        startupStarted = true;
+
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        if (!IsInsideTree())
+            return;
+
+        UpdateStartupStatus("正在准备游戏目录...");
 
         // Setup path resolution
         string eraPath = FirstWindow.SelectedGamePath;
@@ -172,17 +218,21 @@ public partial class EmueraMain : Node
         }
 
         // Load SHIFT-JIS / UTF-8 config maps
-        LoadConfigMaps();
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        if (!IsInsideTree())
+            return;
 
-        // Setup logger delegates
-        uEmuera.Logger.info = GenericUtils.Info;
-        uEmuera.Logger.warn = GenericUtils.Warn;
-        uEmuera.Logger.error = GenericUtils.Error;
+        UpdateStartupStatus("Loading config...");
+        LoadConfigMaps();
 
         // Reset global state for clean restart
         GlobalStatic.Reset();
 
-        SetupGpuRenderer();
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        if (!IsInsideTree())
+            return;
+
+        UpdateStartupStatus("Creating interface...");
 
         // Sprite debug viewer — press F3 to toggle
         if (enable_sprite_debug_viewer && OS.GetName() != "Android")
@@ -197,14 +247,22 @@ public partial class EmueraMain : Node
         content.Name = "EmueraContent";
         AddChild(content);
 
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        if (!IsInsideTree())
+            return;
+
+        UpdateStartupStatus("Starting game...");
         // Start the engine
         EmueraThread.instance.Start(debug, use_coroutine);
         working = true;
+
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        HideStartupOverlay();
     }
 
     public override void _Process(double delta)
     {
-        if (OS.GetName() != "Android")
+        if (ShouldUseGpuRenderer())
             GpuReady = true;
         GenericUtils.FlushLogs();
         GenericUtils.FlushUI();
@@ -278,6 +336,55 @@ public partial class EmueraMain : Node
     bool working = false;
     bool clearRequested = false;
     bool restartRequested = false;
+
+    void CreateStartupOverlay()
+    {
+        startupOverlay = new Control();
+        startupOverlay.Name = "StartupOverlay";
+        startupOverlay.AnchorLeft = 0;
+        startupOverlay.AnchorTop = 0;
+        startupOverlay.AnchorRight = 1;
+        startupOverlay.AnchorBottom = 1;
+        startupOverlay.MouseFilter = Control.MouseFilterEnum.Stop;
+
+        var bg = new ColorRect();
+        bg.AnchorLeft = 0;
+        bg.AnchorTop = 0;
+        bg.AnchorRight = 1;
+        bg.AnchorBottom = 1;
+        bg.Color = Colors.Black;
+        startupOverlay.AddChild(bg);
+
+        startupStatusLabel = new Label();
+        startupStatusLabel.AnchorLeft = 0;
+        startupStatusLabel.AnchorTop = 0;
+        startupStatusLabel.AnchorRight = 1;
+        startupStatusLabel.AnchorBottom = 1;
+        startupStatusLabel.HorizontalAlignment = HorizontalAlignment.Center;
+        startupStatusLabel.VerticalAlignment = VerticalAlignment.Center;
+        startupStatusLabel.Text = "Loading game...";
+        startupStatusLabel.AddThemeFontSizeOverride("font_size", 20);
+        startupStatusLabel.AddThemeColorOverride("font_color", Colors.White);
+        startupOverlay.AddChild(startupStatusLabel);
+
+        AddChild(startupOverlay);
+    }
+
+    void UpdateStartupStatus(string status)
+    {
+        if (startupStatusLabel != null)
+            startupStatusLabel.Text = status;
+    }
+
+    void HideStartupOverlay()
+    {
+        if (startupOverlay == null)
+            return;
+
+        startupOverlay.QueueFree();
+        startupOverlay = null;
+        startupStatusLabel = null;
+    }
 
     void LoadConfigMaps()
     {

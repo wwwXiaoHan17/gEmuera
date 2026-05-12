@@ -8,6 +8,7 @@ public partial class OptionWindow : Control
     Label fontSizeLabel;
     OptionButton resolutionOption;
     OptionButton languageOption;
+    OptionButton frameRateOption;
 
     static readonly string[] languages = new string[] { "default", "zh_cn", "en_us", "jp" };
     static readonly string[] languageNames = new string[] { "Default", "简体中文", "English", "日本語" };
@@ -55,6 +56,21 @@ public partial class OptionWindow : Control
         resolutionOption.ItemSelected += OnResolutionSelected;
         resHBox.AddChild(resolutionOption);
 
+        // Frame rate
+        var fpsHBox = new HBoxContainer();
+        vbox.AddChild(fpsHBox);
+        var fpsLabel = new Label();
+        fpsLabel.Text = MultiLanguage.Get("OptionWindow.FrameRate", "Frame Rate");
+        fpsHBox.AddChild(fpsLabel);
+        frameRateOption = new OptionButton();
+        for (int i = 0; i < FrameRateHelper.FrameRates.Count; i++)
+        {
+            frameRateOption.AddItem(FrameRateHelper.FrameRates[i] + " FPS", i);
+        }
+        frameRateOption.Select(FrameRateHelper.frame_rate_index);
+        frameRateOption.ItemSelected += OnFrameRateSelected;
+        fpsHBox.AddChild(frameRateOption);
+
         // Language
         var langHBox = new HBoxContainer();
         vbox.AddChild(langHBox);
@@ -100,6 +116,12 @@ public partial class OptionWindow : Control
     {
         ResolutionHelper.resolution_index = (int)index;
         ResolutionHelper.Apply();
+    }
+
+    void OnFrameRateSelected(long index)
+    {
+        FrameRateHelper.frame_rate_index = (int)index;
+        FrameRateHelper.Apply();
     }
 
     void OnLanguageSelected(long index)

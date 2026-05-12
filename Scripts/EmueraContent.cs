@@ -10,6 +10,7 @@ public partial class EmueraContent : Control
     public static EmueraContent instance { get; private set; }
 
     ScrollContainer scrollContainer;
+    Control scaledContentRoot;
     VBoxContainer lineContainer;
     HBoxContainer menuBar;
     Inputpad inputpad;
@@ -20,16 +21,21 @@ public partial class EmueraContent : Control
     OptionWindow optionWindow;
 
     Dictionary<int, ConsoleDisplayLine> lineObjects = new Dictionary<int, ConsoleDisplayLine>();
-    Dictionary<Button, long> buttonGenerations = new Dictionary<Button, long>();
     HashSet<string> failedTextureSearches = new HashSet<string>();
+    List<EmueraImage> cbgNodes = new List<EmueraImage>();
 
     const int MaxVisibleLines = 1000;
     const int LineTrimBatch = 100;
 
     FontFile mainFont;
     int lastButtonGeneration = -1;
+    int displayRevision = 0;
+    int quickRenderedGeneration = int.MinValue;
+    int quickRenderedRevision = -1;
     uint lastClickTick = 0;
     bool pendingScroll = false;
+    bool pendingScaleBoundsUpdate = false;
+    float contentScale = 1.0f;
 
     Label inProcessLabel;
 
@@ -128,23 +134,14 @@ public partial class EmueraContent : Control
         menuToggleBtn.Pressed += OnMenuTogglePressed;
         menuRoot.AddChild(menuToggleBtn);
 
-        // Small top offset so first line of text isn't hidden behind the toggle
-        var menuSpacer = new Control();
-        menuSpacer.CustomMinimumSize = new Vector2(0, 44);
-        rootVBox.AddChild(menuSpacer);
-
         quickButtons = new QuickButtons();
-        quickButtons.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        quickButtons.CustomMinimumSize = new Vector2(0, 120);
-        rootVBox.AddChild(quickButtons);
+        AddChild(quickButtons);
 
         inputpad = new Inputpad();
-        inputpad.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        rootVBox.AddChild(inputpad);
+        AddChild(inputpad);
 
         scalepad = new Scalepad();
-        scalepad.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        rootVBox.AddChild(scalepad);
+        AddChild(scalepad);
 
         optionWindow = new OptionWindow();
         AddChild(optionWindow);
@@ -160,14 +157,23 @@ public partial class EmueraContent : Control
         scrollContainer.SizeFlagsVertical = SizeFlags.ExpandFill;
         scrollContainer.HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled;
         scrollContainer.ClipContents = true;
+        scrollContainer.MouseFilter = MouseFilterEnum.Pass;
+        scrollContainer.GuiInput += OnContentGuiInput;
         rootVBox.AddChild(scrollContainer);
+
+        scaledContentRoot = new Control();
+        scaledContentRoot.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        scaledContentRoot.SizeFlagsVertical = SizeFlags.ExpandFill;
+        scaledContentRoot.MouseFilter = MouseFilterEnum.Pass;
+        scaledContentRoot.GuiInput += OnContentGuiInput;
+        scrollContainer.AddChild(scaledContentRoot);
 
         lineContainer = new VBoxContainer();
         lineContainer.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         lineContainer.SizeFlagsVertical = SizeFlags.ExpandFill;
         lineContainer.ClipContents = false;
         lineContainer.AddThemeConstantOverride("separation", 4);
-        scrollContainer.AddChild(lineContainer);
+        scaledContentRoot.AddChild(lineContainer);
 
         // Message box popup
         msgBox = new PopupPanel();
@@ -231,8 +237,11 @@ public partial class EmueraContent : Control
         foreach(var child in lineContainer.GetChildren())
             SafeQueueFree(child);
         lineObjects.Clear();
-        buttonGenerations.Clear();
         failedTextureSearches.Clear();
+        displayRevision++;
+        quickRenderedRevision = -1;
+        if (quickButtons != null && quickButtons.IsShow)
+            quickButtons.Clear();
     }
 
     public override void _ExitTree()
@@ -345,7 +354,6 @@ public partial class EmueraContent : Control
                 long generation = button.Generation;
                 btn.Pressed += () => OnButtonPressed(inputs, generation);
                 btn.SetMeta("generation", generation);
-                buttonGenerations[btn] = generation;
 
                 var contentBox = new Control();
                 contentBox.MouseFilter = MouseFilterEnum.Ignore;
@@ -402,15 +410,6 @@ public partial class EmueraContent : Control
                 var child = lineContainer.GetChild(i);
                 if (child.HasMeta("line_no") && (int)child.GetMeta("line_no") == line.LineNo)
                 {
-                    // Remove old buttons from tracking
-                    if (child is Control oldCtrl)
-                    {
-                        foreach (var grandchild in oldCtrl.GetChildren())
-                        {
-                            if (grandchild is Button oldBtn)
-                                buttonGenerations.Remove(oldBtn);
-                        }
-                    }
                     SafeQueueFree(child);
                     insertIndex = i;
                     break;
@@ -424,12 +423,14 @@ public partial class EmueraContent : Control
 
         lineControl.SetMeta("line_no", line.LineNo);
         lineObjects[line.LineNo] = line;
+        displayRevision++;
 
         // Enforce node cap to prevent unbounded memory growth
         if (lineContainer.GetChildCount() > MaxVisibleLines)
             RemoveTopLines(LineTrimBatch);
 
         // Auto-scroll to bottom on next frame after layout stabilizes
+        QueueScaleBoundsUpdate();
         if (!pendingScroll)
         {
             pendingScroll = true;
@@ -439,12 +440,68 @@ public partial class EmueraContent : Control
 
     async void DeferredScrollToBottom()
     {
-        pendingScroll = false;
         if (scrollContainer != null)
         {
+            UpdateScaleBounds();
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             scrollContainer.ScrollVertical = (int)scrollContainer.GetVScrollBar().MaxValue;
         }
+        pendingScroll = false;
+    }
+
+    void QueueScaleBoundsUpdate()
+    {
+        if (pendingScaleBoundsUpdate)
+            return;
+        pendingScaleBoundsUpdate = true;
+        CallDeferred(nameof(DeferredUpdateScaleBounds));
+    }
+
+    async void DeferredUpdateScaleBounds()
+    {
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        pendingScaleBoundsUpdate = false;
+        UpdateScaleBounds();
+    }
+
+    void UpdateScaleBounds()
+    {
+        if (scaledContentRoot == null || lineContainer == null)
+            return;
+
+        var scrollSize = scrollContainer != null ? scrollContainer.Size : Vector2.Zero;
+        var contentSize = CalculateLineContentSize();
+        float unscaledWidth = Mathf.Max(Mathf.Max(Config.DrawableWidth, scrollSize.X / contentScale), contentSize.X);
+        lineContainer.CustomMinimumSize = new Vector2(unscaledWidth, contentSize.Y);
+        var scaledSize = new Vector2(
+            Mathf.Max(unscaledWidth * contentScale, scrollSize.X),
+            Mathf.Max(contentSize.Y * contentScale, scrollSize.Y));
+        scaledContentRoot.CustomMinimumSize = scaledSize;
+        scaledContentRoot.Size = scaledSize;
+    }
+
+    Vector2 CalculateLineContentSize()
+    {
+        float width = Config.DrawableWidth;
+        float height = 0;
+        int visibleRows = 0;
+        int childCount = lineContainer.GetChildCount();
+        for (int i = 0; i < childCount; i++)
+        {
+            if (lineContainer.GetChild(i) is Control row)
+            {
+                var rowSize = row.CustomMinimumSize;
+                if (rowSize.Y <= 0)
+                    rowSize = row.GetCombinedMinimumSize();
+                width = Mathf.Max(width, rowSize.X);
+                height += rowSize.Y;
+                visibleRows++;
+            }
+        }
+        if (visibleRows > 1)
+            height += (visibleRows - 1) * lineContainer.GetThemeConstant("separation");
+        return new Vector2(width, height);
     }
 
     int AddPartToContainer(AConsoleDisplayPart part, Control container, int relX)
@@ -785,46 +842,38 @@ public partial class EmueraContent : Control
 
     public void RemoveTopLines(int count)
     {
+        bool removedAny = false;
         for(int i = 0; i < count && lineContainer.GetChildCount() > 0; i++)
         {
             var child = lineContainer.GetChild(0);
+            removedAny = true;
             if (child.HasMeta("line_no"))
             {
                 int lineNo = (int)child.GetMeta("line_no");
                 lineObjects.Remove(lineNo);
             }
-            if (child is Control ctrl)
-            {
-                foreach (var grandchild in ctrl.GetChildren())
-                {
-                    if (grandchild is Button btn)
-                        buttonGenerations.Remove(btn);
-                }
-            }
             SafeQueueFree(child);
         }
+        if (removedAny)
+            displayRevision++;
     }
 
     public void RemoveBottomLines(int count)
     {
+        bool removedAny = false;
         for(int i = 0; i < count && lineContainer.GetChildCount() > 0; i++)
         {
             var child = lineContainer.GetChild(lineContainer.GetChildCount() - 1);
+            removedAny = true;
             if (child.HasMeta("line_no"))
             {
                 int lineNo = (int)child.GetMeta("line_no");
                 lineObjects.Remove(lineNo);
             }
-            if (child is Control ctrl)
-            {
-                foreach (var grandchild in ctrl.GetChildren())
-                {
-                    if (grandchild is Button btn)
-                        buttonGenerations.Remove(btn);
-                }
-            }
             SafeQueueFree(child);
         }
+        if (removedAny)
+            displayRevision++;
     }
 
     static void SafeQueueFree(Node node)
@@ -848,12 +897,13 @@ public partial class EmueraContent : Control
         if (cbgContainer == null)
             return;
 
-        foreach (var child in cbgContainer.GetChildren())
-            SafeQueueFree(child);
-
         if (list == null || list.Count == 0)
+        {
+            TrimCbgNodes(0);
             return;
+        }
 
+        int nodeIndex = 0;
         foreach (var cbg in list)
         {
             if (cbg.zdepth == 0)
@@ -865,8 +915,7 @@ public partial class EmueraContent : Control
             if (texture == null)
                 continue;
 
-            var emuImg = new EmueraImage();
-            emuImg.MouseFilter = MouseFilterEnum.Ignore;
+            var emuImg = GetOrCreateCbgNode(nodeIndex);
             if (texture is AtlasTexture atlas)
             {
                 emuImg.SourceTexture = atlas.Atlas;
@@ -875,13 +924,38 @@ public partial class EmueraContent : Control
             else
             {
                 emuImg.SourceTexture = texture;
+                emuImg.SourceRegion = default;
             }
             emuImg.DrawOffset = new Vector2(0, 0);
             emuImg.Position = new Vector2(cbg.x, cbg.y);
             int w = cbg.Img.DestBaseSize.Width > 0 ? cbg.Img.DestBaseSize.Width : texture.GetWidth();
             int h = cbg.Img.DestBaseSize.Height > 0 ? cbg.Img.DestBaseSize.Height : texture.GetHeight();
             emuImg.Size = new Vector2(w, h);
-            cbgContainer.AddChild(emuImg);
+            emuImg.Visible = true;
+            nodeIndex++;
+        }
+        TrimCbgNodes(nodeIndex);
+    }
+
+    EmueraImage GetOrCreateCbgNode(int index)
+    {
+        while (cbgNodes.Count <= index)
+        {
+            var node = new EmueraImage();
+            node.MouseFilter = MouseFilterEnum.Ignore;
+            cbgNodes.Add(node);
+            cbgContainer.AddChild(node);
+        }
+        return cbgNodes[index];
+    }
+
+    void TrimCbgNodes(int keepCount)
+    {
+        for (int i = cbgNodes.Count - 1; i >= keepCount; i--)
+        {
+            var node = cbgNodes[i];
+            cbgNodes.RemoveAt(i);
+            SafeQueueFree(node);
         }
     }
 
@@ -891,12 +965,16 @@ public partial class EmueraContent : Control
 
         if (quickButtons != null && quickButtons.IsShow)
         {
+            if (quickRenderedGeneration == lastButtonGeneration && quickRenderedRevision == displayRevision)
+                return;
+
             quickButtons.Clear();
+            quickRenderedGeneration = lastButtonGeneration;
+            quickRenderedRevision = displayRevision;
+
             if (lastButtonGeneration < 0)
                 return;
 
-            // Scan lineObjects from newest to oldest to populate quick buttons
-            // Group buttons by line
             var lineGroups = new List<(int lineNo, List<(string text, Godot.Color color, string code)> buttons)>();
             foreach (var kvp in lineObjects)
             {
@@ -908,26 +986,41 @@ public partial class EmueraContent : Control
                         continue;
                     if (btn.Generation != lastButtonGeneration)
                         continue;
-                    string text = btn.Title ?? btn.ToString();
-                    Godot.Color color = new Godot.Color(Config.ForeColor.r, Config.ForeColor.g, Config.ForeColor.b, Config.ForeColor.a);
+                    string text = btn.ToString().Trim();
+                    if (string.IsNullOrEmpty(text))
+                        text = btn.Title ?? "";
+                    Godot.Color color = GetQuickButtonColor(btn);
                     lineButtons.Add((text, color, btn.Inputs));
                 }
                 if (lineButtons.Count > 0)
                     lineGroups.Add((kvp.Key, lineButtons));
             }
 
-            // Sort by line number descending (newest first)
-            lineGroups.Sort((a, b) => b.lineNo.CompareTo(a.lineNo));
+            lineGroups.Sort((a, b) => a.lineNo.CompareTo(b.lineNo));
 
-            foreach (var group in lineGroups)
+            for (int i = 0; i < lineGroups.Count; i++)
             {
-                foreach (var btn in group.buttons)
+                foreach (var btn in lineGroups[i].buttons)
                 {
                     quickButtons.AddButton(btn.text, btn.color, btn.code);
                 }
-                quickButtons.ShiftLine();
+                if (i < lineGroups.Count - 1)
+                    quickButtons.ShiftLine();
             }
         }
+    }
+
+    Godot.Color GetQuickButtonColor(ConsoleButtonString button)
+    {
+        if (button.StrArray != null && button.StrArray.Length > 0)
+        {
+            if (button.StrArray[button.StrArray.Length - 1] is AConsoleColoredPart coloredPart)
+            {
+                var c = coloredPart.pColor;
+                return new Godot.Color(c.r, c.g, c.b, c.a);
+            }
+        }
+        return new Godot.Color(Config.ForeColor.r, Config.ForeColor.g, Config.ForeColor.b, Config.ForeColor.a);
     }
 
     public void SetBackgroundColor(uEmuera.Drawing.Color color)
@@ -1165,12 +1258,26 @@ public partial class EmueraContent : Control
     {
         Size = GetViewportRect().Size;
         ContentWidth = (int)Size.X;
+        QueueScaleBoundsUpdate();
     }
 
     public void SetContentScale(float scale)
     {
+        contentScale = Mathf.Clamp(scale, 0.5f, 3.0f);
+        var scaleVector = new Vector2(contentScale, contentScale);
+        if (scrollContainer != null)
+        {
+            scrollContainer.HorizontalScrollMode = contentScale > 1.01f
+                ? ScrollContainer.ScrollMode.Auto
+                : ScrollContainer.ScrollMode.Disabled;
+            if (contentScale <= 1.01f)
+                scrollContainer.ScrollHorizontal = 0;
+        }
         if (lineContainer != null)
-            lineContainer.Scale = new Vector2(scale, scale);
+            lineContainer.Scale = scaleVector;
+        if (cbgContainer != null)
+            cbgContainer.Scale = scaleVector;
+        QueueScaleBoundsUpdate();
         // Force scroll container to recalculate its scroll area on next frame after layout
         if (!pendingScroll)
         {
@@ -1209,25 +1316,56 @@ public partial class EmueraContent : Control
 
     public override void _GuiInput(InputEvent @event)
     {
-        if (@event is InputEventMouseButton mb && mb.Pressed && mb.ButtonIndex == MouseButton.Left)
+        TryAdvanceByPointer(@event, true);
+    }
+
+    void OnContentGuiInput(InputEvent @event)
+    {
+        TryAdvanceByPointer(@event, true);
+    }
+
+    bool TryAdvanceByPointer(InputEvent @event, bool acceptEvent)
+    {
+        Vector2 pointerPosition;
+        bool pressed = false;
+        if (@event is InputEventMouseButton mb && mb.ButtonIndex == MouseButton.Left)
         {
-            if (scrollContainer != null && scrollContainer.GetGlobalRect().HasPoint(GetGlobalMousePosition()))
-            {
-                var console = GlobalStatic.Console;
-                if (console != null && (console.IsWaitingEnterKey || console.IsWaitAnyKey))
-                {
-                    uint nowTick = MinorShift._Library.WinmmTimer.TickCount;
-                    bool skipFlag = (nowTick - lastClickTick < 200);
-                    EmueraThread.instance.Input("", false, skipFlag);
-                    lastClickTick = nowTick;
-                    AcceptEvent();
-                }
-            }
+            pointerPosition = mb.GlobalPosition;
+            pressed = mb.Pressed;
         }
+        else if (@event is InputEventScreenTouch touch)
+        {
+            pointerPosition = touch.Position;
+            pressed = touch.Pressed;
+        }
+        else
+        {
+            return false;
+        }
+
+        if (!pressed || scrollContainer == null || !scrollContainer.GetGlobalRect().HasPoint(pointerPosition))
+            return false;
+
+        var console = GlobalStatic.Console;
+        if (console == null || (!console.IsWaitingEnterKey && !console.IsWaitAnyKey))
+            return false;
+
+        uint nowTick = MinorShift._Library.WinmmTimer.TickCount;
+        bool skipFlag = (nowTick - lastClickTick < 200);
+        EmueraThread.instance.Input("", false, skipFlag);
+        lastClickTick = nowTick;
+        if (acceptEvent)
+            AcceptEvent();
+        else
+            GetViewport().SetInputAsHandled();
+        return true;
     }
 
     public override void _UnhandledInput(InputEvent @event)
     {
+        if (TryAdvanceByPointer(@event, false))
+            return;
+
         if (@event is InputEventKey keyEvent && keyEvent.Pressed && !keyEvent.Echo)
         {
             if (inputpad != null && inputpad.IsShow)

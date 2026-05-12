@@ -95,6 +95,8 @@ namespace uEmuera.Window
             //uEmuera.Logger.Info("MainWindow.Update");
             if(console_ == null)
                 return;
+            if(GenericUtils.HasPendingDisplayWork)
+                return;
 
             if(console_.IsInitializing)
             {

@@ -3,12 +3,15 @@ using System.IO;
 
 public partial class FirstWindow : Control
 {
+	const string ProjectGitHubUrl = "https://github.com/wwwXiaoHan17/gEmuera";
+
 	public static string SelectedGamePath { get; private set; }
 
 	ItemList gameList;
 	Button startButton;
 	Label statusLabel;
-	bool permissionGranted = false;
+	bool androidPermissionCheckPending = false;
+	bool androidPermissionResultReceived = false;
 
 	public override void _Ready()
 	{
@@ -19,9 +22,21 @@ public partial class FirstWindow : Control
 		AddChild(vbox);
 
 		var title = new Label();
-		title.Text = MultiLanguage.Get("FirstWindow.Title", "uEmuera for Godot");
+		title.Text = MultiLanguage.Get("FirstWindow.Title", "gEmuera(Emuera for Godot)");
 		title.HorizontalAlignment = HorizontalAlignment.Center;
 		vbox.AddChild(title);
+
+		var authorLabel = new Label();
+		authorLabel.Text = MultiLanguage.Get("FirstWindow.Author", "Author: 恋雨朦胧/xiao_han17");
+		authorLabel.HorizontalAlignment = HorizontalAlignment.Center;
+		vbox.AddChild(authorLabel);
+
+		var githubButton = new LinkButton();
+		githubButton.Text = MultiLanguage.Get("FirstWindow.GitHub", $"GitHub: {ProjectGitHubUrl}");
+		githubButton.TooltipText = ProjectGitHubUrl;
+		githubButton.SizeFlagsHorizontal = SizeFlags.ShrinkCenter;
+		githubButton.Pressed += () => OS.ShellOpen(ProjectGitHubUrl);
+		vbox.AddChild(githubButton);
 
 		gameList = new ItemList();
 		gameList.SizeFlagsVertical = SizeFlags.ExpandFill;
@@ -44,8 +59,10 @@ public partial class FirstWindow : Control
 		if (OS.GetName() == "Android")
 		{
 			GetTree().OnRequestPermissionsResult += OnPermissionsResult;
+			androidPermissionCheckPending = true;
 			statusLabel.Text = "正在请求文件权限...\nRequesting file permissions...";
 			OS.RequestPermissions();
+			GetTree().CreateTimer(2.5).Timeout += OnPermissionRequestFallbackTimeout;
 		}
 		else
 		{
@@ -53,11 +70,35 @@ public partial class FirstWindow : Control
 		}
 	}
 
+	public override void _ExitTree()
+	{
+		if (OS.GetName() == "Android")
+			GetTree().OnRequestPermissionsResult -= OnPermissionsResult;
+	}
+
 	void OnPermissionsResult(string permission, bool granted)
 	{
-		if (permissionGranted)
+		androidPermissionResultReceived = true;
+		ContinueAfterPermissionRequest();
+	}
+
+	void OnPermissionRequestFallbackTimeout()
+	{
+		if (OS.GetName() == "Android" && androidPermissionCheckPending && !androidPermissionResultReceived)
+			ContinueAfterPermissionRequest();
+	}
+
+	public override void _Notification(int what)
+	{
+		if (statusLabel == null || OS.GetName() != "Android" || !androidPermissionCheckPending)
 			return;
-		permissionGranted = true;
+
+		if (what == NotificationApplicationResumed || what == NotificationApplicationFocusIn)
+			ContinueAfterPermissionRequest();
+	}
+
+	void ContinueAfterPermissionRequest()
+	{
 		statusLabel.Text = "";
 
 		// Check if we can actually access the target directory
@@ -74,6 +115,7 @@ public partial class FirstWindow : Control
 				+ "\"All files access\" permission required. Please enable in system settings.";
 			// Still try to scan — user:// and app-specific dirs don't need this permission
 		}
+		androidPermissionCheckPending = !canAccess;
 
 		// Try to create the emuera directory
 		using (var dir = DirAccess.Open("/storage/emulated/0"))
@@ -87,6 +129,14 @@ public partial class FirstWindow : Control
 
 	void ScanGames()
 	{
+		string selectedPath = null;
+		var selectedItems = gameList.GetSelectedItems();
+		if (selectedItems.Length > 0 && !gameList.IsItemDisabled(selectedItems[0]))
+			selectedPath = gameList.GetItemMetadata(selectedItems[0]).As<string>();
+
+		gameList.Clear();
+		startButton.Disabled = true;
+
 		var roots = new System.Collections.Generic.List<string>();
 
 		if (OS.GetName() == "Android")
@@ -139,6 +189,11 @@ public partial class FirstWindow : Control
 					{
 						gameList.AddItem(entry);
 						gameList.SetItemMetadata(gameList.ItemCount - 1, fullPath);
+						if (fullPath == selectedPath)
+						{
+							gameList.Select(gameList.ItemCount - 1);
+							startButton.Disabled = false;
+						}
 					}
 				}
 			}

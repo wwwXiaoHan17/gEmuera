@@ -86,6 +86,7 @@ namespace MinorShift.Emuera
 			Application.EnableVisualStyles();
 			Application.SetCompatibleTextRenderingDefault(false);
 			ConfigData.Instance.LoadConfig();
+			global::FrameRateHelper.ApplyConfigFps();
 			//二重起動の禁止かつ二重起動
 			//if ((!Config.AllowMultipleInstances) && (Sys.PrevInstance()))
 			//{

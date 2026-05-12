@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using Godot;
 using MinorShift.Emuera.GameView;
 
@@ -11,6 +12,15 @@ internal static class GenericUtils
     static readonly ConcurrentQueue<(int Level, string Message)> logQueue = new ConcurrentQueue<(int, string)>();
     static readonly ConcurrentQueue<Action> uiQueue = new ConcurrentQueue<Action>();
     static int mainThreadId = -1;
+    static int pendingUiActions = 0;
+    static int pendingDisplayActions = 0;
+    const ulong AndroidUiBudgetUsec = 4000;
+    const ulong DesktopUiBudgetUsec = 7000;
+    const int AndroidMaxUiActionsPerFrame = 32;
+    const int DesktopMaxUiActionsPerFrame = 96;
+
+    public static bool HasPendingUIWork => Volatile.Read(ref pendingUiActions) > 0;
+    public static bool HasPendingDisplayWork => Volatile.Read(ref pendingDisplayActions) > 0;
 
     public static void SetMainThread()
     {
@@ -24,18 +34,56 @@ internal static class GenericUtils
 
     public static void FlushLogs()
     {
-        while (logQueue.TryDequeue(out var item))
+        int maxLogs = OS.IsDebugBuild() ? 64 : 16;
+        int count = 0;
+        while (count < maxLogs && logQueue.TryDequeue(out var item))
+        {
             WriteLog(item.Level, item.Message);
+            count++;
+        }
     }
 
     public static void FlushUI()
     {
+        int maxActions = OS.GetName() == "Android" ? AndroidMaxUiActionsPerFrame : DesktopMaxUiActionsPerFrame;
+        ulong budgetUsec = OS.GetName() == "Android" ? AndroidUiBudgetUsec : DesktopUiBudgetUsec;
+        ulong startUsec = Time.GetTicksUsec();
         int count = 0;
-        while (uiQueue.TryDequeue(out var action) && count < 200)
+        while (count < maxActions && uiQueue.TryDequeue(out var action))
         {
-            action();
+            try
+            {
+                action();
+            }
+            catch (Exception ex)
+            {
+                GD.PushError($"[UI Queue] {ex}");
+            }
             count++;
+            if (Time.GetTicksUsec() - startUsec >= budgetUsec)
+                break;
         }
+    }
+
+    static void EnqueueUI(Action action, bool displayWork = false)
+    {
+        Interlocked.Increment(ref pendingUiActions);
+        if (displayWork)
+            Interlocked.Increment(ref pendingDisplayActions);
+
+        uiQueue.Enqueue(() =>
+        {
+            try
+            {
+                action();
+            }
+            finally
+            {
+                if (displayWork)
+                    Interlocked.Decrement(ref pendingDisplayActions);
+                Interlocked.Decrement(ref pendingUiActions);
+            }
+        });
     }
 
     public static void Info(object content)
@@ -53,6 +101,9 @@ internal static class GenericUtils
 
     static void Log(int level, object content)
     {
+        if (level == 0 && !OS.IsDebugBuild())
+            return;
+
         var message = content?.ToString();
         if (IsMainThread())
             WriteLog(level, message);
@@ -84,56 +135,46 @@ internal static class GenericUtils
     public static List<string> CalcMd5ListForConfig(byte[] bytes)
     {
         var result = new List<string>();
-        var lines = new List<byte[]>();
         int start = 0;
-        for (int i = 0; i < bytes.Length; i++)
-        {
-            if (bytes[i] == 0x0A)
-            {
-                int len = i - start;
-                if (len > 0 && bytes[i - 1] == 0x0D)
-                    len--;
-                if (len > 0)
-                {
-                    var lineBytes = new byte[len];
-                    Array.Copy(bytes, start, lineBytes, 0, len);
-                    lines.Add(lineBytes);
-                }
-                start = i + 1;
-            }
-        }
-        if (start < bytes.Length)
-        {
-            var lineBytes = new byte[bytes.Length - start];
-            Array.Copy(bytes, start, lineBytes, 0, bytes.Length - start);
-            lines.Add(lineBytes);
-        }
 
         using(var md5 = MD5.Create())
         {
-            foreach(var lineBytes in lines)
+            for (int i = 0; i <= bytes.Length; i++)
             {
-                if (lineBytes.Length == 0)
+                if (i < bytes.Length && bytes[i] != 0x0A)
                     continue;
-                bool allWhite = true;
-                for (int i = 0; i < lineBytes.Length; i++)
+
+                int len = i - start;
+                if (len > 0 && bytes[start + len - 1] == 0x0D)
+                    len--;
+
+                if (len > 0 && !IsWhiteSpaceBytes(bytes, start, len))
                 {
-                    if (lineBytes[i] != (byte)' ' && lineBytes[i] != (byte)'\t')
-                    {
-                        allWhite = false;
-                        break;
-                    }
+                    var hash = md5.ComputeHash(bytes, start, len);
+                    var sb = new StringBuilder();
+                    for(int h = 0; h < hash.Length; h++)
+                        sb.Append(hash[h].ToString("x2"));
+                    result.Add(sb.ToString());
                 }
-                if (allWhite)
-                    continue;
-                var hash = md5.ComputeHash(lineBytes);
-                var sb = new StringBuilder();
-                for(int i = 0; i < hash.Length; i++)
-                    sb.Append(hash[i].ToString("x2"));
-                result.Add(sb.ToString());
+
+                start = i + 1;
             }
         }
+
         return result;
+    }
+
+    static bool IsWhiteSpaceBytes(byte[] bytes, int start, int len)
+    {
+        for (int i = 0; i < len; i++)
+        {
+            byte b = bytes[start + i];
+            if (b != (byte)' ' && b != (byte)'\t')
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
     // Shim bridge methods — connected to EmueraContent
@@ -143,15 +184,12 @@ internal static class GenericUtils
         if (IsMainThread())
             EmueraContent.instance?.SetBackgroundColor(color);
         else
-            uiQueue.Enqueue(() => EmueraContent.instance?.SetBackgroundColor(color));
+            EnqueueUI(() => EmueraContent.instance?.SetBackgroundColor(color));
     }
 
     public static void ClearText()
     {
-        if (IsMainThread())
-            EmueraContent.instance?.Clear();
-        else
-            uiQueue.Enqueue(() => EmueraContent.instance?.Clear());
+        EnqueueUI(() => EmueraContent.instance?.Clear(), true);
     }
 
     public static int GetTextMaxLineNo()
@@ -171,54 +209,34 @@ internal static class GenericUtils
 
     public static void RemoveTextCount(int count)
     {
-        if (IsMainThread())
-            EmueraContent.instance?.RemoveBottomLines(count);
-        else
-            uiQueue.Enqueue(() => EmueraContent.instance?.RemoveBottomLines(count));
+        EnqueueUI(() => EmueraContent.instance?.RemoveBottomLines(count), true);
     }
 
     public static void AddText(ConsoleDisplayLine line, bool update)
     {
-        if (IsMainThread())
-            EmueraContent.instance?.AddLine(line, update);
-        else
-            uiQueue.Enqueue(() => EmueraContent.instance?.AddLine(line, update));
+        EnqueueUI(() => EmueraContent.instance?.AddLine(line, update), true);
     }
 
     public static void SetLastButtonGeneration(int generation)
     {
-        if (IsMainThread())
-            EmueraContent.instance?.SetLastButtonGeneration(generation);
-        else
-            uiQueue.Enqueue(() => EmueraContent.instance?.SetLastButtonGeneration(generation));
+        EnqueueUI(() => EmueraContent.instance?.SetLastButtonGeneration(generation), true);
     }
 
     public static void TextUpdate()
     {
-        if (IsMainThread())
-            EmueraContent.instance?.UpdateDisplay();
-        else
-            uiQueue.Enqueue(() => EmueraContent.instance?.UpdateDisplay());
+        EnqueueUI(() => EmueraContent.instance?.UpdateDisplay(), true);
     }
 
     public static void ShowIsInProcess(bool show)
     {
-        if (IsMainThread())
-            EmueraContent.instance?.ShowIsInProcess(show);
-        else
-            uiQueue.Enqueue(() => EmueraContent.instance?.ShowIsInProcess(show));
+        EnqueueUI(() => EmueraContent.instance?.ShowIsInProcess(show));
     }
 
     public static void RefreshCBG(EmueraConsole console)
     {
         if (console == null)
             return;
-        if (IsMainThread())
-            EmueraContent.instance?.RefreshCBG(console.GetCBGList());
-        else
-        {
-            var cbgList = console.GetCBGList();
-            uiQueue.Enqueue(() => EmueraContent.instance?.RefreshCBG(cbgList));
-        }
+        var cbgList = console.GetCBGList();
+        EnqueueUI(() => EmueraContent.instance?.RefreshCBG(cbgList), true);
     }
 }
