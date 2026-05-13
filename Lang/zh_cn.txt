@@ -33,6 +33,7 @@ Inputpad.Repeat=重复
 MsgBox.Confirm=确定
 MsgBox.Cancel=取消
 OptionWindow.FontSize=字体大小
+OptionWindow.ButtonDragSensitivity=滚动灵敏度
 OptionWindow.Resolution=分辨率
 OptionWindow.Language=语言
 OptionWindow.Close=关闭

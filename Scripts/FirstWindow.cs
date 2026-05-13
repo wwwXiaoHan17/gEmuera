@@ -15,6 +15,9 @@ public partial class FirstWindow : Control
 
 	public override void _Ready()
 	{
+		FrameRateHelper.Apply();
+		ResolutionHelper.Apply();
+
 		var vbox = new VBoxContainer();
 		vbox.SetAnchorsPreset(LayoutPreset.Center);
 		vbox.GrowHorizontal = GrowDirection.Both;
@@ -171,9 +174,10 @@ public partial class FirstWindow : Control
 			if (dir == null)
 				continue;
 
+			dir.IncludeHidden = true;
 			foreach (string entry in dir.GetDirectories())
 			{
-				if (entry.StartsWith("era", System.StringComparison.OrdinalIgnoreCase))
+				if (IsEraGameDirectoryName(entry))
 				{
 					string fullPath = root.TrimEnd('/') + "/" + entry;
 					bool exists = false;
@@ -206,6 +210,13 @@ public partial class FirstWindow : Control
 			if (string.IsNullOrEmpty(statusLabel.Text))
 				statusLabel.Text = "请将 era 游戏文件夹放入以下路径:\n" + string.Join("\n", roots);
 		}
+	}
+
+	bool IsEraGameDirectoryName(string entry)
+	{
+		if (string.IsNullOrEmpty(entry))
+			return false;
+		return entry.TrimStart('.').StartsWith("era", System.StringComparison.OrdinalIgnoreCase);
 	}
 
 	void OnGameSelected(long index)

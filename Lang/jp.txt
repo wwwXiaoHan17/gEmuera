@@ -34,6 +34,7 @@ FirstWindow.Start=開始
 FirstWindow.NoGames=eraゲームが見つかりません
 FirstWindow.Titlebar.title=ゲームリスト
 OptionWindow.FontSize=フォントサイズ
+OptionWindow.ButtonDragSensitivity=スクロール感度
 OptionWindow.Resolution=解像度
 OptionWindow.Language=言語
 OptionWindow.Close=閉じる

@@ -181,6 +181,7 @@ public partial class EmueraMain : Node
     public override void _Ready()
     {
         FrameRateHelper.Apply();
+        ResolutionHelper.Apply();
         GenericUtils.SetMainThread();
         uEmuera.Logger.info = GenericUtils.Info;
         uEmuera.Logger.warn = GenericUtils.Warn;

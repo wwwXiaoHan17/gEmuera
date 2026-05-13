@@ -6,6 +6,8 @@ public partial class OptionWindow : Control
     PopupPanel popup;
     Slider fontSizeSlider;
     Label fontSizeLabel;
+    Slider buttonDragSensitivitySlider;
+    Label buttonDragSensitivityLabel;
     OptionButton resolutionOption;
     OptionButton languageOption;
     OptionButton frameRateOption;
@@ -16,7 +18,7 @@ public partial class OptionWindow : Control
     public override void _Ready()
     {
         popup = new PopupPanel();
-        popup.Size = new Vector2I(400, 300);
+        popup.Size = new Vector2I(400, 360);
         AddChild(popup);
 
         var vbox = new VBoxContainer();
@@ -42,6 +44,25 @@ public partial class OptionWindow : Control
         fontSizeLabel.Text = fontSizeSlider.Value.ToString();
         fontHBox.AddChild(fontSizeLabel);
 
+        // Button drag sensitivity
+        var sensitivityHBox = new HBoxContainer();
+        vbox.AddChild(sensitivityHBox);
+        var sensitivityLabel = new Label();
+        sensitivityLabel.Text = MultiLanguage.Get("OptionWindow.ButtonDragSensitivity", "Scroll Sensitivity");
+        sensitivityHBox.AddChild(sensitivityLabel);
+        buttonDragSensitivitySlider = new HSlider();
+        buttonDragSensitivitySlider.MinValue = 0.5;
+        buttonDragSensitivitySlider.MaxValue = 2.0;
+        buttonDragSensitivitySlider.Step = 0.05;
+        buttonDragSensitivitySlider.Value = EmueraContent.ContentDragSensitivity;
+        buttonDragSensitivitySlider.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        buttonDragSensitivitySlider.CustomMinimumSize = new Vector2(120, 44);
+        buttonDragSensitivitySlider.ValueChanged += OnButtonDragSensitivityChanged;
+        sensitivityHBox.AddChild(buttonDragSensitivitySlider);
+        buttonDragSensitivityLabel = new Label();
+        buttonDragSensitivityLabel.Text = buttonDragSensitivitySlider.Value.ToString("0.00") + "x";
+        sensitivityHBox.AddChild(buttonDragSensitivityLabel);
+
         // Resolution
         var resHBox = new HBoxContainer();
         vbox.AddChild(resHBox);
@@ -49,10 +70,13 @@ public partial class OptionWindow : Control
         resLabel.Text = MultiLanguage.Get("OptionWindow.Resolution", "Resolution");
         resHBox.AddChild(resLabel);
         resolutionOption = new OptionButton();
+        ResolutionHelper.RefreshResolutions();
         for (int i = 0; i < ResolutionHelper.resolutions.Count; i++)
         {
             resolutionOption.AddItem(ResolutionHelper.resolutions[i] + "p", i);
         }
+        if (ResolutionHelper.resolution_index >= 0 && ResolutionHelper.resolution_index < ResolutionHelper.resolutions.Count)
+            resolutionOption.Select(ResolutionHelper.resolution_index);
         resolutionOption.ItemSelected += OnResolutionSelected;
         resHBox.AddChild(resolutionOption);
 
@@ -82,6 +106,7 @@ public partial class OptionWindow : Control
         {
             languageOption.AddItem(languageNames[i], i);
         }
+        languageOption.Select(GetLanguageIndex(MultiLanguage.CurrentLanguage));
         languageOption.ItemSelected += OnLanguageSelected;
         langHBox.AddChild(languageOption);
 
@@ -112,6 +137,13 @@ public partial class OptionWindow : Control
         EmueraContent.instance?.RefreshFontSize();
     }
 
+    void OnButtonDragSensitivityChanged(double value)
+    {
+        float sensitivity = (float)value;
+        buttonDragSensitivityLabel.Text = sensitivity.ToString("0.00") + "x";
+        EmueraContent.ContentDragSensitivity = sensitivity;
+    }
+
     void OnResolutionSelected(long index)
     {
         ResolutionHelper.resolution_index = (int)index;
@@ -127,5 +159,15 @@ public partial class OptionWindow : Control
     void OnLanguageSelected(long index)
     {
         MultiLanguage.Load(languages[index]);
+    }
+
+    int GetLanguageIndex(string lang)
+    {
+        for (int i = 0; i < languages.Length; i++)
+        {
+            if (languages[i] == lang)
+                return i;
+        }
+        return 0;
     }
 }

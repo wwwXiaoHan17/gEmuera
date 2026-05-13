@@ -97,6 +97,7 @@ namespace uEmuera
                 using var parentDir = Godot.DirAccess.Open(parent);
                 if (parentDir == null)
                     return false;
+                parentDir.IncludeHidden = true;
                 foreach (string subdir in parentDir.GetDirectories())
                 {
                     if (string.Equals(subdir, dirName, StringComparison.OrdinalIgnoreCase))
@@ -123,6 +124,7 @@ namespace uEmuera
                 using var da = Godot.DirAccess.Open(dir);
                 if (da == null)
                     return false;
+                da.IncludeHidden = true;
                 foreach (string file in da.GetFiles())
                 {
                     if (string.Equals(file, fileName, StringComparison.OrdinalIgnoreCase))
@@ -280,6 +282,7 @@ namespace uEmuera
                 Godot.GD.PrintErr($"DirAccess open failed: {search}, error: {Godot.DirAccess.GetOpenError()}");
                 return result;
             }
+            dir.IncludeHidden = true;
             foreach (string entry in dir.GetDirectories())
                 result.Add(search.TrimEnd('/') + "/" + entry);
             return result;
@@ -348,6 +351,7 @@ namespace uEmuera
                 using var dir = Godot.DirAccess.Open(current);
                 if (dir == null)
                     return path;
+                dir.IncludeHidden = true;
                 string match = null;
                 if (last && !directory)
                 {
@@ -386,6 +390,7 @@ namespace uEmuera
                 Godot.GD.PrintErr($"DirAccess open failed: {search}, error: {Godot.DirAccess.GetOpenError()}");
                 return;
             }
+            dir.IncludeHidden = true;
             foreach (string file in dir.GetFiles())
             {
                 if (WildcardMatch(file, pattern))

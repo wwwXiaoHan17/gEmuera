@@ -33,9 +33,24 @@ public partial class EmueraContent : Control
     int quickRenderedGeneration = int.MinValue;
     int quickRenderedRevision = -1;
     uint lastClickTick = 0;
+    bool contentDragActive = false;
+    bool contentDragMoved = false;
+    bool contentDragStartedOnButton = false;
+    Vector2 contentDragStartPosition;
+    Vector2 contentDragLastPosition;
+    Button contentDragButton;
+    string contentDragButtonInput;
+    long contentDragButtonGeneration;
     bool pendingScroll = false;
     bool pendingScaleBoundsUpdate = false;
     float contentScale = 1.0f;
+    const float ScrollDragThreshold = 10.0f;
+    const float MaxContentDragStep = 42.0f;
+    const string SettingsPath = "user://settings.cfg";
+    const string SettingsSection = "Display";
+    const string ContentDragSensitivityKey = "ContentDragSensitivity";
+    const string ButtonDragSensitivityKey = "ButtonDragSensitivity";
+    static float contentDragSensitivity = -1.0f;
 
     Label inProcessLabel;
 
@@ -51,8 +66,47 @@ public partial class EmueraContent : Control
     CanvasLayer menuLayer;
     HBoxContainer menuExpandedBar;
     bool menuExpanded = false;
+    TextureButton inputMenuButton;
+    TextureButton quickMenuButton;
+    TextureButton autoSkipMenuButton;
+    TextureButton scaleMenuButton;
+    bool autoClickSkipEnabled = false;
+    ulong lastAutoClickSkipTick = 0;
+    static readonly Color ActiveSystemButtonColor = new Color(1.0f, 0.86f, 0.15f, 1.0f);
+    static readonly Color NormalSystemButtonColor = new Color(1, 1, 1, 1);
 
     public static int ContentWidth { get; private set; }
+    public static float ContentDragSensitivity
+    {
+        get
+        {
+            if (contentDragSensitivity < 0)
+            {
+                var cfg = new ConfigFile();
+                cfg.Load(SettingsPath);
+                var fallback = cfg.GetValue(SettingsSection, ButtonDragSensitivityKey, 2.0);
+                contentDragSensitivity = Mathf.Clamp(
+                    (float)(double)cfg.GetValue(SettingsSection, ContentDragSensitivityKey, fallback),
+                    0.5f,
+                    2.0f);
+            }
+            return contentDragSensitivity;
+        }
+        set
+        {
+            contentDragSensitivity = Mathf.Clamp(value, 0.5f, 2.0f);
+            var cfg = new ConfigFile();
+            cfg.Load(SettingsPath);
+            cfg.SetValue(SettingsSection, ContentDragSensitivityKey, contentDragSensitivity);
+            cfg.Save(SettingsPath);
+        }
+    }
+
+    public static float ButtonDragSensitivity
+    {
+        get => ContentDragSensitivity;
+        set => ContentDragSensitivity = value;
+    }
 
     public override void _Ready()
     {
@@ -70,7 +124,7 @@ public partial class EmueraContent : Control
         bgRect.AnchorBottom = 1;
         AddChild(bgRect);
 
-        var rootVBox = new VBoxContainer();
+        var rootVBox = new Control();
         rootVBox.AnchorLeft = 0;
         rootVBox.AnchorTop = 0;
         rootVBox.AnchorRight = 1;
@@ -117,12 +171,13 @@ public partial class EmueraContent : Control
         AddIconButton("res://Icons/fenxiang.svg", OnBackPressed);
         AddIconButton("res://Icons/restart.svg", OnRestartPressed);
         AddIconButton("res://Icons/options.svg", OnOptionsPressed);
-        AddIconButton("res://Icons/io-input.svg", OnInputTogglePressed);
-        AddIconButton("res://Icons/quick.svg", OnQuickTogglePressed);
+        inputMenuButton = AddIconButton("res://Icons/io-input.svg", OnInputTogglePressed);
+        quickMenuButton = AddIconButton("res://Icons/quick.svg", OnQuickTogglePressed);
+        autoSkipMenuButton = AddIconButton("res://Icons/autoskip.svg", OnAutoSkipTogglePressed);
         AddIconButton("res://Icons/menu_save_log.svg", OnSaveLogPressed);
         AddIconButton("res://Icons/Title.svg", OnGotoTitlePressed);
         AddIconButton("res://Icons/exit.svg", OnExitPressed);
-        AddIconButton("res://Icons/Scale.svg", OnScaleTogglePressed);
+        scaleMenuButton = AddIconButton("res://Icons/Scale.svg", OnScaleTogglePressed);
 
         // Toggle at the right edge (last child = rightmost in HBox).
         var menuToggleBtn = new TextureButton();
@@ -131,7 +186,7 @@ public partial class EmueraContent : Control
         menuToggleBtn.MouseFilter = MouseFilterEnum.Stop;
         if (ResourceLoader.Exists("res://Icons/menu.svg"))
             menuToggleBtn.TextureNormal = ResourceLoader.Load<Texture2D>("res://Icons/menu.svg");
-        menuToggleBtn.Pressed += OnMenuTogglePressed;
+        WireSystemButton(menuToggleBtn, OnMenuTogglePressed);
         menuRoot.AddChild(menuToggleBtn);
 
         quickButtons = new QuickButtons();
@@ -146,20 +201,31 @@ public partial class EmueraContent : Control
         optionWindow = new OptionWindow();
         AddChild(optionWindow);
 
-        inProcessLabel = new Label();
-        inProcessLabel.Text = MultiLanguage.Get("EmueraContent.InProcess", "Processing...");
-        ApplyFont(inProcessLabel);
-        inProcessLabel.HorizontalAlignment = HorizontalAlignment.Center;
-        inProcessLabel.Visible = false;
-        rootVBox.AddChild(inProcessLabel);
-
         scrollContainer = new ScrollContainer();
-        scrollContainer.SizeFlagsVertical = SizeFlags.ExpandFill;
+        scrollContainer.AnchorLeft = 0;
+        scrollContainer.AnchorTop = 0;
+        scrollContainer.AnchorRight = 1;
+        scrollContainer.AnchorBottom = 1;
         scrollContainer.HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled;
         scrollContainer.ClipContents = true;
         scrollContainer.MouseFilter = MouseFilterEnum.Pass;
         scrollContainer.GuiInput += OnContentGuiInput;
         rootVBox.AddChild(scrollContainer);
+
+        inProcessLabel = new Label();
+        inProcessLabel.AnchorLeft = 0;
+        inProcessLabel.AnchorTop = 0;
+        inProcessLabel.AnchorRight = 1;
+        inProcessLabel.AnchorBottom = 0;
+        inProcessLabel.OffsetTop = 4;
+        inProcessLabel.OffsetBottom = 32;
+        inProcessLabel.Text = MultiLanguage.Get("EmueraContent.InProcess", "Processing...");
+        inProcessLabel.MouseFilter = MouseFilterEnum.Ignore;
+        inProcessLabel.ZIndex = 20;
+        ApplyFont(inProcessLabel);
+        inProcessLabel.HorizontalAlignment = HorizontalAlignment.Center;
+        inProcessLabel.Visible = false;
+        rootVBox.AddChild(inProcessLabel);
 
         scaledContentRoot = new Control();
         scaledContentRoot.SizeFlagsHorizontal = SizeFlags.ExpandFill;
@@ -320,7 +386,7 @@ public partial class EmueraContent : Control
         btn.AddThemeColorOverride("font_focus_color", focusColor);
     }
 
-    void AddIconButton(string iconPath, System.Action callback)
+    TextureButton AddIconButton(string iconPath, System.Action callback)
     {
         var btn = new TextureButton();
         btn.CustomMinimumSize = new Vector2(36, 36);
@@ -331,8 +397,49 @@ public partial class EmueraContent : Control
             var tex = ResourceLoader.Load<Texture2D>(iconPath);
             btn.TextureNormal = tex;
         }
-        btn.Pressed += callback;
+        WireSystemButton(btn, callback);
         menuBar.AddChild(btn);
+        return btn;
+    }
+
+    void WireSystemButton(TextureButton btn, System.Action callback)
+    {
+        bool tracking = false;
+        bool moved = false;
+        Vector2 start = Vector2.Zero;
+        btn.GuiInput += inputEvent =>
+        {
+            if (!TryGetPointer(inputEvent, out var position, out var pressed, out var released, out var motion))
+                return;
+
+            if (pressed)
+            {
+                tracking = true;
+                moved = false;
+                start = position;
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+
+            if (!tracking)
+                return;
+
+            if (motion)
+            {
+                if ((position - start).Length() >= ScrollDragThreshold)
+                    moved = true;
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+
+            if (released)
+            {
+                tracking = false;
+                GetViewport().SetInputAsHandled();
+                if (!moved)
+                    callback?.Invoke();
+            }
+        };
     }
 
     internal void AddLine(ConsoleDisplayLine line, bool isUpdate)
@@ -352,7 +459,7 @@ public partial class EmueraContent : Control
                 StyleButton(btn);
                 string inputs = button.Inputs;
                 long generation = button.Generation;
-                btn.Pressed += () => OnButtonPressed(inputs, generation);
+                btn.GuiInput += inputEvent => OnContentButtonGuiInput(inputEvent, btn, inputs, generation);
                 btn.SetMeta("generation", generation);
 
                 var contentBox = new Control();
@@ -442,10 +549,13 @@ public partial class EmueraContent : Control
     {
         if (scrollContainer != null)
         {
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             UpdateScaleBounds();
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            UpdateScaleBounds();
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-            scrollContainer.ScrollVertical = (int)scrollContainer.GetVScrollBar().MaxValue;
+            var vScroll = scrollContainer.GetVScrollBar();
+            scrollContainer.ScrollVertical = (int)Mathf.Ceil(Mathf.Max(0, vScroll.MaxValue - vScroll.Page));
         }
         pendingScroll = false;
     }
@@ -474,9 +584,12 @@ public partial class EmueraContent : Control
         var contentSize = CalculateLineContentSize();
         float unscaledWidth = Mathf.Max(Mathf.Max(Config.DrawableWidth, scrollSize.X / contentScale), contentSize.X);
         lineContainer.CustomMinimumSize = new Vector2(unscaledWidth, contentSize.Y);
+        lineContainer.Position = Vector2.Zero;
+        lineContainer.Size = new Vector2(unscaledWidth, contentSize.Y);
         var scaledSize = new Vector2(
             Mathf.Max(unscaledWidth * contentScale, scrollSize.X),
             Mathf.Max(contentSize.Y * contentScale, scrollSize.Y));
+        scaledContentRoot.Position = Vector2.Zero;
         scaledContentRoot.CustomMinimumSize = scaledSize;
         scaledContentRoot.Size = scaledSize;
     }
@@ -511,6 +624,7 @@ public partial class EmueraContent : Control
             if (string.IsNullOrEmpty(css.Str))
                 return EffectiveLineHeight;
             var label = new Label();
+            label.MouseFilter = MouseFilterEnum.Ignore;
             label.Text = css.Str;
             ApplyFont(label);
             label.AddThemeColorOverride("font_color",
@@ -665,6 +779,7 @@ public partial class EmueraContent : Control
             else
             {
                 var label = new Label();
+                label.MouseFilter = MouseFilterEnum.Ignore;
                 label.Text = cip.AltText ?? cip.ResourceName ?? "";
                 ApplyFont(label);
                 label.Position = new Vector2(cip.PointX - relX, 0);
@@ -677,6 +792,7 @@ public partial class EmueraContent : Control
             if (csp is ConsoleRectangleShapePart rectShape)
             {
                 var colorRect = new ColorRect();
+                colorRect.MouseFilter = MouseFilterEnum.Ignore;
                 colorRect.CustomMinimumSize = new Vector2(rectShape.Width, rectShape.Bottom - rectShape.Top);
                 var sc = rectShape.pColor;
                 colorRect.Color = new Godot.Color(sc.r, sc.g, sc.b, sc.a);
@@ -687,6 +803,7 @@ public partial class EmueraContent : Control
             else if (csp is ConsoleSpacePart)
             {
                 var spacer = new Control();
+                spacer.MouseFilter = MouseFilterEnum.Ignore;
                 spacer.CustomMinimumSize = new Vector2(csp.Width, FontSize);
                 spacer.Position = new Vector2(csp.PointX - relX, 0);
                 container.AddChild(spacer);
@@ -695,6 +812,7 @@ public partial class EmueraContent : Control
             else if (csp is ConsoleErrorShapePart errShape)
             {
                 var label = new Label();
+                label.MouseFilter = MouseFilterEnum.Ignore;
                 label.Text = errShape.AltText ?? errShape.Str ?? "";
                 ApplyFont(label);
                 label.Position = new Vector2(csp.PointX - relX, 0);
@@ -1050,6 +1168,7 @@ public partial class EmueraContent : Control
         {
             inputpad.HidePad();
         }
+        UpdateSystemButtonVisuals();
     }
 
     public bool IsInputVisible()
@@ -1057,15 +1176,15 @@ public partial class EmueraContent : Control
         return inputpad != null && inputpad.IsShow;
     }
 
-    void OnButtonPressed(string input, long generation)
+    void OnButtonPressed(string input, long generation, bool skip = false)
     {
         if (generation < lastButtonGeneration)
         {
             // Old button clicked - send empty input (acts as skip/advance)
-            EmueraThread.instance.Input("", false);
+            EmueraThread.instance.Input("", false, skip);
             return;
         }
-        EmueraThread.instance.Input(input, true);
+        EmueraThread.instance.Input(input, true, skip);
     }
 
     void OnBackPressed()
@@ -1128,6 +1247,7 @@ public partial class EmueraContent : Control
             scalepad?.HidePad();
             inputpad.ShowPad();
         }
+        UpdateSystemButtonVisuals();
     }
 
     void OnQuickTogglePressed()
@@ -1143,6 +1263,14 @@ public partial class EmueraContent : Control
             quickButtons.ShowPad();
             SetLastButtonGeneration(lastButtonGeneration);
         }
+        UpdateSystemButtonVisuals();
+    }
+
+    void OnAutoSkipTogglePressed()
+    {
+        autoClickSkipEnabled = !autoClickSkipEnabled;
+        lastAutoClickSkipTick = 0;
+        UpdateSystemButtonVisuals();
     }
 
     public void ShowMessageBox(string title, string message)
@@ -1245,6 +1373,22 @@ public partial class EmueraContent : Control
             quickButtons?.HidePad();
             scalepad.ShowPad();
         }
+        UpdateSystemButtonVisuals();
+    }
+
+    void UpdateSystemButtonVisuals()
+    {
+        SetSystemButtonActive(inputMenuButton, inputpad != null && inputpad.IsShow);
+        SetSystemButtonActive(quickMenuButton, quickButtons != null && quickButtons.IsShow);
+        SetSystemButtonActive(autoSkipMenuButton, autoClickSkipEnabled);
+        SetSystemButtonActive(scaleMenuButton, scalepad != null && scalepad.IsShow);
+    }
+
+    static void SetSystemButtonActive(TextureButton button, bool active)
+    {
+        if (button == null)
+            return;
+        button.SelfModulate = active ? ActiveSystemButtonColor : NormalSystemButtonColor;
     }
 
     void OnMenuTogglePressed()
@@ -1314,38 +1458,142 @@ public partial class EmueraContent : Control
         ApplyFont(msgBoxCancelBtn);
     }
 
+    public override void _Process(double delta)
+    {
+        if (!autoClickSkipEnabled)
+            return;
+        var console = GlobalStatic.Console;
+        if (console == null || (!console.IsWaitingEnterKey && !console.IsWaitAnyKey))
+            return;
+        ulong now = Time.GetTicksMsec();
+        if (now - lastAutoClickSkipTick < 80)
+            return;
+        lastAutoClickSkipTick = now;
+        EmueraThread.instance.Input("", false, true);
+    }
+
+    public override void _Input(InputEvent @event)
+    {
+        if (contentDragActive)
+            HandleContentPointerInput(@event, false);
+    }
+
     public override void _GuiInput(InputEvent @event)
     {
-        TryAdvanceByPointer(@event, true);
+        HandleContentPointerInput(@event, true);
     }
 
     void OnContentGuiInput(InputEvent @event)
     {
-        TryAdvanceByPointer(@event, true);
+        HandleContentPointerInput(@event, true);
     }
 
-    bool TryAdvanceByPointer(InputEvent @event, bool acceptEvent)
+    void OnContentButtonGuiInput(InputEvent @event, Button btn, string input, long generation)
     {
-        Vector2 pointerPosition;
-        bool pressed = false;
-        if (@event is InputEventMouseButton mb && mb.ButtonIndex == MouseButton.Left)
+        HandleContentPointerInput(@event, true, btn, input, generation);
+    }
+
+    bool HandleContentPointerInput(InputEvent @event, bool acceptEvent, Button button = null, string input = null, long generation = 0)
+    {
+        if (!TryGetPointer(@event, out var pointerPosition, out var pressed, out var released, out var motion))
+            return false;
+
+        if (scrollContainer == null || (!contentDragActive && !scrollContainer.GetGlobalRect().HasPoint(pointerPosition)))
+            return false;
+
+        if (pressed)
         {
-            pointerPosition = mb.GlobalPosition;
-            pressed = mb.Pressed;
-        }
-        else if (@event is InputEventScreenTouch touch)
-        {
-            pointerPosition = touch.Position;
-            pressed = touch.Pressed;
-        }
-        else
-        {
+            contentDragActive = true;
+            contentDragMoved = false;
+            contentDragStartedOnButton = button != null;
+            contentDragButton = button;
+            contentDragButtonInput = input;
+            contentDragButtonGeneration = generation;
+            contentDragStartPosition = pointerPosition;
+            contentDragLastPosition = pointerPosition;
+            if (contentDragStartedOnButton)
+            {
+                if (acceptEvent)
+                    AcceptEvent();
+                else
+                    GetViewport().SetInputAsHandled();
+                return true;
+            }
             return false;
         }
 
-        if (!pressed || scrollContainer == null || !scrollContainer.GetGlobalRect().HasPoint(pointerPosition))
+        if (!contentDragActive)
             return false;
 
+        if (motion)
+        {
+            var totalDelta = pointerPosition - contentDragStartPosition;
+            if (!contentDragMoved && totalDelta.Length() >= ScrollDragThreshold)
+            {
+                contentDragMoved = true;
+                contentDragLastPosition = pointerPosition;
+                if (acceptEvent)
+                    AcceptEvent();
+                else
+                    GetViewport().SetInputAsHandled();
+                return true;
+            }
+            if (contentDragMoved)
+            {
+                ScrollContentBy(contentDragLastPosition - pointerPosition);
+                contentDragLastPosition = pointerPosition;
+                if (acceptEvent)
+                    AcceptEvent();
+                else
+                    GetViewport().SetInputAsHandled();
+                return true;
+            }
+            contentDragLastPosition = pointerPosition;
+            return false;
+        }
+
+        if (!released)
+            return false;
+
+        bool handled = false;
+        if (contentDragMoved)
+        {
+            handled = true;
+        }
+        else if (contentDragStartedOnButton)
+        {
+            OnButtonPressed(contentDragButtonInput, contentDragButtonGeneration);
+            handled = true;
+        }
+        else if (!contentDragStartedOnButton)
+        {
+            handled = TryAdvanceTap(acceptEvent);
+        }
+
+        ResetContentDragState();
+        if (handled)
+        {
+            if (acceptEvent)
+                AcceptEvent();
+            else
+                GetViewport().SetInputAsHandled();
+        }
+        return handled;
+    }
+
+    void ScrollContentBy(Vector2 delta)
+    {
+        if (scrollContainer == null)
+            return;
+        delta *= ContentDragSensitivity;
+        if (delta.Length() > MaxContentDragStep)
+            delta = delta.Normalized() * MaxContentDragStep;
+        scrollContainer.ScrollHorizontal += Mathf.RoundToInt(delta.X);
+        scrollContainer.ScrollVertical += Mathf.RoundToInt(delta.Y);
+    }
+
+    bool TryAdvanceTap(bool acceptEvent)
+    {
         var console = GlobalStatic.Console;
         if (console == null || (!console.IsWaitingEnterKey && !console.IsWaitAnyKey))
             return false;
@@ -1354,16 +1602,58 @@ public partial class EmueraContent : Control
         bool skipFlag = (nowTick - lastClickTick < 200);
         EmueraThread.instance.Input("", false, skipFlag);
         lastClickTick = nowTick;
-        if (acceptEvent)
-            AcceptEvent();
-        else
-            GetViewport().SetInputAsHandled();
         return true;
+    }
+
+    void ResetContentDragState()
+    {
+        contentDragActive = false;
+        contentDragMoved = false;
+        contentDragStartedOnButton = false;
+        contentDragButton = null;
+        contentDragButtonInput = null;
+        contentDragButtonGeneration = 0;
+    }
+
+    static bool TryGetPointer(InputEvent @event, out Vector2 position, out bool pressed, out bool released, out bool motion)
+    {
+        position = Vector2.Zero;
+        pressed = false;
+        released = false;
+        motion = false;
+
+        if (@event is InputEventMouseButton mb && mb.ButtonIndex == MouseButton.Left)
+        {
+            position = mb.GlobalPosition;
+            pressed = mb.Pressed;
+            released = !mb.Pressed;
+            return true;
+        }
+        if (@event is InputEventMouseMotion mm && (mm.ButtonMask & MouseButtonMask.Left) != 0)
+        {
+            position = mm.GlobalPosition;
+            motion = true;
+            return true;
+        }
+        if (@event is InputEventScreenTouch touch)
+        {
+            position = touch.Position;
+            pressed = touch.Pressed;
+            released = !touch.Pressed;
+            return true;
+        }
+        if (@event is InputEventScreenDrag drag)
+        {
+            position = drag.Position;
+            motion = true;
+            return true;
+        }
+        return false;
     }
 
     public override void _UnhandledInput(InputEvent @event)
     {
-        if (TryAdvanceByPointer(@event, false))
+        if (HandleContentPointerInput(@event, false))
             return;
 
         if (@event is InputEventKey keyEvent && keyEvent.Pressed && !keyEvent.Echo)

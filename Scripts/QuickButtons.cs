@@ -14,14 +14,20 @@ public partial class QuickButtons : CanvasLayer
 	int fontSize;
 	bool layoutUpdateQueued;
 	bool resizingWidth;
+	bool scrollingByDrag;
+	bool dragMoved;
 	float resizeStartMouseX;
 	float resizeStartWidth;
+	Vector2 dragStartPosition;
+	Vector2 dragLastPosition;
+	Button dragButton;
 	float userWidth = -1;
 	const int QuickButtonFontSize = 12;
 	const int QuickButtonWidth = 90;
 	const int QuickButtonPadding = 2;
 	const int QuickButtonSpacing = 3;
-	const int ResizeHandleWidth = 14;
+	const int ResizeHandleWidth = 28;
+	const float DragThreshold = 10.0f;
 
 	public override void _Ready()
 	{
@@ -95,6 +101,12 @@ public partial class QuickButtons : CanvasLayer
 
 	public override void _Input(InputEvent @event)
 	{
+		if (scrollingByDrag)
+		{
+			HandleQuickDragInput(@event);
+			return;
+		}
+
 		if (!resizingWidth)
 			return;
 
@@ -111,6 +123,35 @@ public partial class QuickButtons : CanvasLayer
 		{
 			resizingWidth = false;
 			GetViewport().SetInputAsHandled();
+		}
+	}
+
+	void HandleQuickDragInput(InputEvent @event)
+	{
+		if (TryGetPointer(@event, out var position, out var pressed, out var released, out var motion))
+		{
+			if (pressed)
+				return;
+			if (motion)
+			{
+				var totalDelta = position - dragStartPosition;
+				if (!dragMoved && totalDelta.Length() >= DragThreshold)
+					dragMoved = true;
+				if (dragMoved && scroll != null)
+				{
+					var delta = dragLastPosition - position;
+					scroll.ScrollHorizontal += Mathf.RoundToInt(delta.X);
+					scroll.ScrollVertical += Mathf.RoundToInt(delta.Y);
+					GetViewport().SetInputAsHandled();
+				}
+				dragLastPosition = position;
+				return;
+			}
+			if (released)
+			{
+				FinishQuickButtonPointer();
+				GetViewport().SetInputAsHandled();
+			}
 		}
 	}
 
@@ -154,10 +195,103 @@ public partial class QuickButtons : CanvasLayer
 		btn.AutowrapMode = TextServer.AutowrapMode.WordSmart;
 		btn.TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis;
 		string inputCode = code;
-		btn.Pressed += () => EmueraThread.instance.Input(inputCode, true);
+		btn.SetMeta("input_code", inputCode);
+		btn.GuiInput += inputEvent => OnQuickButtonGuiInput(inputEvent, btn, inputCode);
 		currentRow.AddChild(btn);
 		buttons.Add(btn);
 		UpdatePanelSize();
+	}
+
+	void OnQuickButtonGuiInput(InputEvent @event, Button btn, string inputCode)
+	{
+		if (TryGetPointer(@event, out var position, out var pressed, out var released, out var motion))
+		{
+			if (pressed)
+			{
+				scrollingByDrag = true;
+				dragMoved = false;
+				dragButton = btn;
+				dragStartPosition = position;
+				dragLastPosition = position;
+				GetViewport().SetInputAsHandled();
+				return;
+			}
+
+			if (!scrollingByDrag || dragButton != btn)
+				return;
+
+			if (motion)
+			{
+				var totalDelta = position - dragStartPosition;
+				if (!dragMoved && totalDelta.Length() >= DragThreshold)
+					dragMoved = true;
+				if (dragMoved && scroll != null)
+				{
+					var delta = dragLastPosition - position;
+					scroll.ScrollHorizontal += Mathf.RoundToInt(delta.X);
+					scroll.ScrollVertical += Mathf.RoundToInt(delta.Y);
+					GetViewport().SetInputAsHandled();
+				}
+				dragLastPosition = position;
+				return;
+			}
+
+			if (released)
+			{
+				FinishQuickButtonPointer(inputCode);
+				GetViewport().SetInputAsHandled();
+			}
+		}
+	}
+
+	void FinishQuickButtonPointer(string fallbackInputCode = null)
+	{
+		if (!scrollingByDrag)
+			return;
+		string inputCode = fallbackInputCode;
+		if (inputCode == null && dragButton != null && dragButton.HasMeta("input_code"))
+			inputCode = dragButton.GetMeta("input_code").As<string>();
+		if (!dragMoved && !string.IsNullOrEmpty(inputCode))
+			EmueraThread.instance.Input(inputCode, true);
+		scrollingByDrag = false;
+		dragMoved = false;
+		dragButton = null;
+	}
+
+	static bool TryGetPointer(InputEvent @event, out Vector2 position, out bool pressed, out bool released, out bool motion)
+	{
+		position = Vector2.Zero;
+		pressed = false;
+		released = false;
+		motion = false;
+
+		if (@event is InputEventMouseButton mouseButton && mouseButton.ButtonIndex == MouseButton.Left)
+		{
+			position = mouseButton.GlobalPosition;
+			pressed = mouseButton.Pressed;
+			released = !mouseButton.Pressed;
+			return true;
+		}
+		if (@event is InputEventMouseMotion mouseMotion && (mouseMotion.ButtonMask & MouseButtonMask.Left) != 0)
+		{
+			position = mouseMotion.GlobalPosition;
+			motion = true;
+			return true;
+		}
+		if (@event is InputEventScreenTouch touch)
+		{
+			position = touch.Position;
+			pressed = touch.Pressed;
+			released = !touch.Pressed;
+			return true;
+		}
+		if (@event is InputEventScreenDrag drag)
+		{
+			position = drag.Position;
+			motion = true;
+			return true;
+		}
+		return false;
 	}
 
 	public void ShiftLine()
