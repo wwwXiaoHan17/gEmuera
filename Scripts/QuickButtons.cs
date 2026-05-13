@@ -9,25 +9,41 @@ public partial class QuickButtons : CanvasLayer
 	Control resizeHandle;
 	VBoxContainer rowsContainer;
 	HBoxContainer currentRow;
-	List<Button> buttons = new List<Button>();
+	List<Control> buttons = new List<Control>();
 	FontFile fontFile;
 	int fontSize;
 	bool layoutUpdateQueued;
 	bool resizingWidth;
 	bool scrollingByDrag;
 	bool dragMoved;
+	bool scrollToBottomAfterLayout = true;
+	bool quickInertiaActive;
+	int quickScrollInteractionSerial;
 	float resizeStartMouseX;
 	float resizeStartWidth;
+	float quickInertiaDeceleration = 900.0f;
 	Vector2 dragStartPosition;
 	Vector2 dragLastPosition;
-	Button dragButton;
+	Vector2 quickScrollVelocity = Vector2.Zero;
+	Vector2 quickInertiaRemainder = Vector2.Zero;
+	Control dragButton;
+	ulong quickLastDragTick;
 	float userWidth = -1;
 	const int QuickButtonFontSize = 12;
 	const int QuickButtonWidth = 90;
 	const int QuickButtonPadding = 2;
 	const int QuickButtonSpacing = 3;
 	const int ResizeHandleWidth = 28;
-	const float DragThreshold = 10.0f;
+	const int ScrollBottomTolerance = 4;
+	const float DragThreshold = 3.0f;
+	const float QuickInertiaMinVelocity = 80.0f;
+	const float QuickInertiaFastVelocity = 4500.0f;
+	const float QuickInertiaMaxVelocity = 14000.0f;
+	const float QuickInertiaMinReleaseBoost = 1.2f;
+	const float QuickInertiaMaxReleaseBoost = 3.0f;
+	const float QuickInertiaSlowDeceleration = 1800.0f;
+	const float QuickInertiaFastDeceleration = 520.0f;
+	const float QuickInertiaStopVelocity = 6.0f;
 
 	public override void _Ready()
 	{
@@ -85,12 +101,15 @@ public partial class QuickButtons : CanvasLayer
 		scroll = new ScrollContainer();
 		scroll.HorizontalScrollMode = ScrollContainer.ScrollMode.Auto;
 		scroll.VerticalScrollMode = ScrollContainer.ScrollMode.Auto;
-		scroll.MouseFilter = Control.MouseFilterEnum.Stop;
+		scroll.MouseFilter = Control.MouseFilterEnum.Pass;
+		scroll.GuiInput += OnQuickGuiInput;
 		panel.AddChild(scroll);
 
 		rowsContainer = new VBoxContainer();
 		rowsContainer.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
 		rowsContainer.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+		rowsContainer.MouseFilter = Control.MouseFilterEnum.Pass;
+		rowsContainer.GuiInput += OnQuickGuiInput;
 		rowsContainer.AddThemeConstantOverride("separation", QuickButtonSpacing);
 		scroll.AddChild(rowsContainer);
 
@@ -99,11 +118,16 @@ public partial class QuickButtons : CanvasLayer
 		rowsContainer.AddChild(currentRow);
 	}
 
+	public override void _Process(double delta)
+	{
+		ProcessQuickInertia((float)delta);
+	}
+
 	public override void _Input(InputEvent @event)
 	{
 		if (scrollingByDrag)
 		{
-			HandleQuickDragInput(@event);
+			HandleQuickPointerInput(@event, false);
 			return;
 		}
 
@@ -126,33 +150,9 @@ public partial class QuickButtons : CanvasLayer
 		}
 	}
 
-	void HandleQuickDragInput(InputEvent @event)
+	void OnQuickGuiInput(InputEvent @event)
 	{
-		if (TryGetPointer(@event, out var position, out var pressed, out var released, out var motion))
-		{
-			if (pressed)
-				return;
-			if (motion)
-			{
-				var totalDelta = position - dragStartPosition;
-				if (!dragMoved && totalDelta.Length() >= DragThreshold)
-					dragMoved = true;
-				if (dragMoved && scroll != null)
-				{
-					var delta = dragLastPosition - position;
-					scroll.ScrollHorizontal += Mathf.RoundToInt(delta.X);
-					scroll.ScrollVertical += Mathf.RoundToInt(delta.Y);
-					GetViewport().SetInputAsHandled();
-				}
-				dragLastPosition = position;
-				return;
-			}
-			if (released)
-			{
-				FinishQuickButtonPointer();
-				GetViewport().SetInputAsHandled();
-			}
-		}
+		HandleQuickPointerInput(@event, true);
 	}
 
 	void OnResizeHandleGuiInput(InputEvent @event)
@@ -177,71 +177,119 @@ public partial class QuickButtons : CanvasLayer
 		currentRow = new HBoxContainer();
 		currentRow.AddThemeConstantOverride("separation", QuickButtonSpacing);
 		rowsContainer.AddChild(currentRow);
-		UpdatePanelSize();
+		UpdatePanelSize(true);
 	}
 
 	public void AddButton(string text, Godot.Color color, string code)
 	{
-		var btn = new Button();
-		btn.Text = text.Trim();
+		var btn = new Panel();
+		btn.FocusMode = Control.FocusModeEnum.None;
+		btn.MouseForcePassScrollEvents = false;
+		btn.MouseFilter = Control.MouseFilterEnum.Stop;
 		StyleQuickButton(btn, color);
-		btn.AddThemeColorOverride("font_color", color);
-		if (fontFile != null)
-			btn.AddThemeFontOverride("font", fontFile);
-		btn.AddThemeFontSizeOverride("font_size", EffectiveFontSize);
 		btn.CustomMinimumSize = new Vector2(QuickButtonWidth, QuickButtonHeight);
 		btn.SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin;
 		btn.SizeFlagsVertical = Control.SizeFlags.ShrinkBegin;
-		btn.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-		btn.TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis;
+
+		var label = new Label();
+		label.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+		label.OffsetLeft = QuickButtonPadding;
+		label.OffsetTop = QuickButtonPadding;
+		label.OffsetRight = -QuickButtonPadding;
+		label.OffsetBottom = -QuickButtonPadding;
+		label.MouseFilter = Control.MouseFilterEnum.Ignore;
+		label.Text = text.Trim();
+		label.AddThemeColorOverride("font_color", color);
+		if (fontFile != null)
+			label.AddThemeFontOverride("font", fontFile);
+		label.AddThemeFontSizeOverride("font_size", EffectiveFontSize);
+		label.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+		label.TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis;
+		label.VerticalAlignment = VerticalAlignment.Center;
+		btn.AddChild(label);
+
 		string inputCode = code;
 		btn.SetMeta("input_code", inputCode);
 		btn.GuiInput += inputEvent => OnQuickButtonGuiInput(inputEvent, btn, inputCode);
 		currentRow.AddChild(btn);
 		buttons.Add(btn);
-		UpdatePanelSize();
+		UpdatePanelSize(ShouldStickToBottom());
 	}
 
-	void OnQuickButtonGuiInput(InputEvent @event, Button btn, string inputCode)
+	void OnQuickButtonGuiInput(InputEvent @event, Control btn, string inputCode)
+	{
+		HandleQuickPointerInput(@event, true, btn, inputCode);
+	}
+
+	bool HandleQuickPointerInput(InputEvent @event, bool acceptEvent, Control button = null, string inputCode = null)
 	{
 		if (TryGetPointer(@event, out var position, out var pressed, out var released, out var motion))
 		{
-			if (pressed)
+			if (scroll == null || panel == null || (!scrollingByDrag && !panel.GetGlobalRect().HasPoint(position)))
+				return false;
+
+			if (pressed && scrollingByDrag && button == null)
 			{
-				scrollingByDrag = true;
-				dragMoved = false;
-				dragButton = btn;
-				dragStartPosition = position;
-				dragLastPosition = position;
-				GetViewport().SetInputAsHandled();
-				return;
+				if (acceptEvent)
+					GetViewport().SetInputAsHandled();
+				else
+					GetViewport().SetInputAsHandled();
+				return true;
 			}
 
-			if (!scrollingByDrag || dragButton != btn)
-				return;
+			if (pressed)
+			{
+				StopQuickInertia();
+				scrollingByDrag = true;
+				dragMoved = false;
+				scrollToBottomAfterLayout = false;
+				dragButton = button;
+				dragStartPosition = position;
+				dragLastPosition = position;
+				quickLastDragTick = Time.GetTicksMsec();
+				if (button != null || acceptEvent)
+					GetViewport().SetInputAsHandled();
+				return button != null || acceptEvent;
+			}
+
+			if (!scrollingByDrag)
+				return false;
 
 			if (motion)
 			{
 				var totalDelta = position - dragStartPosition;
 				if (!dragMoved && totalDelta.Length() >= DragThreshold)
+				{
 					dragMoved = true;
+					quickScrollInteractionSerial++;
+				}
 				if (dragMoved && scroll != null)
 				{
 					var delta = dragLastPosition - position;
-					scroll.ScrollHorizontal += Mathf.RoundToInt(delta.X);
-					scroll.ScrollVertical += Mathf.RoundToInt(delta.Y);
-					GetViewport().SetInputAsHandled();
+					var appliedDelta = ScrollQuickBy(delta);
+					UpdateQuickScrollVelocity(delta, appliedDelta);
+					if (acceptEvent)
+						GetViewport().SetInputAsHandled();
+					else
+						GetViewport().SetInputAsHandled();
+					dragLastPosition = position;
+					return true;
 				}
 				dragLastPosition = position;
-				return;
+				return false;
 			}
 
 			if (released)
 			{
 				FinishQuickButtonPointer(inputCode);
-				GetViewport().SetInputAsHandled();
+				if (acceptEvent)
+					GetViewport().SetInputAsHandled();
+				else
+					GetViewport().SetInputAsHandled();
+				return true;
 			}
 		}
+		return false;
 	}
 
 	void FinishQuickButtonPointer(string fallbackInputCode = null)
@@ -253,6 +301,8 @@ public partial class QuickButtons : CanvasLayer
 			inputCode = dragButton.GetMeta("input_code").As<string>();
 		if (!dragMoved && !string.IsNullOrEmpty(inputCode))
 			EmueraThread.instance.Input(inputCode, true);
+		else if (dragMoved)
+			StartQuickInertia();
 		scrollingByDrag = false;
 		dragMoved = false;
 		dragButton = null;
@@ -301,7 +351,7 @@ public partial class QuickButtons : CanvasLayer
 		currentRow = new HBoxContainer();
 		currentRow.AddThemeConstantOverride("separation", QuickButtonSpacing);
 		rowsContainer.AddChild(currentRow);
-		UpdatePanelSize();
+		UpdatePanelSize(ShouldStickToBottom());
 	}
 
 	public void ShowPad()
@@ -323,18 +373,18 @@ public partial class QuickButtons : CanvasLayer
 		if (font != null)
 		{
 			foreach (var btn in buttons)
-				btn.AddThemeFontOverride("font", font);
+				ApplyFontToButtonLabel(btn);
 		}
 		foreach (var btn in buttons)
-			btn.AddThemeFontSizeOverride("font_size", EffectiveFontSize);
-		UpdatePanelSize();
+			ApplyFontToButtonLabel(btn);
+		UpdatePanelSize(ShouldStickToBottom());
 	}
 
 	int EffectiveFontSize => fontSize > 0 ? fontSize : QuickButtonFontSize;
 
 	int QuickButtonHeight => EffectiveFontSize * 3 + QuickButtonPadding * 2;
 
-	void StyleQuickButton(Button btn, Color textColor)
+	void StyleQuickButton(Panel btn, Color textColor)
 	{
 		var bgSource = IsMidGray(textColor)
 			? new Color(MinorShift.Emuera.Config.BackColor.r, MinorShift.Emuera.Config.BackColor.g, MinorShift.Emuera.Config.BackColor.b, 1)
@@ -350,16 +400,23 @@ public partial class QuickButtons : CanvasLayer
 		normal.ContentMarginTop = QuickButtonPadding;
 		normal.ContentMarginBottom = QuickButtonPadding;
 
-		var pressed = normal.Duplicate() as StyleBoxFlat;
-		pressed.BgColor = new Color(bgColor.R, bgColor.G, bgColor.B, 0.95f);
+		btn.AddThemeStyleboxOverride("panel", normal);
+	}
 
-		btn.AddThemeStyleboxOverride("normal", normal);
-		btn.AddThemeStyleboxOverride("hover", pressed);
-		btn.AddThemeStyleboxOverride("pressed", pressed);
-		btn.AddThemeStyleboxOverride("focus", pressed);
-		btn.AddThemeColorOverride("font_hover_color", textColor);
-		btn.AddThemeColorOverride("font_pressed_color", textColor);
-		btn.AddThemeColorOverride("font_focus_color", textColor);
+	void ApplyFontToButtonLabel(Control btn)
+	{
+		if (btn == null)
+			return;
+		foreach (var child in btn.GetChildren())
+		{
+			if (child is Label label)
+			{
+				if (fontFile != null)
+					label.AddThemeFontOverride("font", fontFile);
+				label.AddThemeFontSizeOverride("font_size", EffectiveFontSize);
+				return;
+			}
+		}
 	}
 
 	bool IsMidGray(Color color)
@@ -369,14 +426,16 @@ public partial class QuickButtons : CanvasLayer
 			&& Mathf.Abs(color.B - 0.5f) <= 0.063f;
 	}
 
-	async void UpdatePanelSize()
+	async void UpdatePanelSize(bool keepBottom)
 	{
 		if (panel == null || scroll == null || rowsContainer == null)
 			return;
+		scrollToBottomAfterLayout = !scrollingByDrag && !quickInertiaActive && (scrollToBottomAfterLayout || keepBottom);
 		if (layoutUpdateQueued)
 			return;
 
 		layoutUpdateQueued = true;
+		int autoScrollInteractionSerial = quickScrollInteractionSerial;
 		await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
 		layoutUpdateQueued = false;
 		var viewportSize = GetViewport().GetVisibleRect().Size;
@@ -387,7 +446,9 @@ public partial class QuickButtons : CanvasLayer
 		float width = userWidth > 0 ? Mathf.Min(userWidth, viewportSize.X - 40) : autoWidth;
 		float height = Mathf.Min(contentSize.Y, maxHeight);
 		ApplyPanelSize(width, height);
-		scroll.ScrollVertical = (int)rowsContainer.Size.Y;
+		if (scrollToBottomAfterLayout && !scrollingByDrag && !quickInertiaActive && autoScrollInteractionSerial == quickScrollInteractionSerial)
+			ScrollQuickToBottom();
+		scrollToBottomAfterLayout = false;
 	}
 
 	void ApplyPanelSize()
@@ -413,5 +474,130 @@ public partial class QuickButtons : CanvasLayer
 		resizeHandle.OffsetRight = -20 - width;
 		resizeHandle.OffsetTop = -20 - height;
 		resizeHandle.OffsetBottom = -20;
+	}
+
+	Vector2 ScrollQuickBy(Vector2 delta)
+	{
+		if (scroll == null)
+			return Vector2.Zero;
+		int oldHorizontal = scroll.ScrollHorizontal;
+		int oldVertical = scroll.ScrollVertical;
+		int nextHorizontal = scroll.ScrollHorizontal + Mathf.RoundToInt(delta.X);
+		int nextVertical = scroll.ScrollVertical + Mathf.RoundToInt(delta.Y);
+		scroll.ScrollHorizontal = Mathf.Clamp(nextHorizontal, 0, GetMaxHorizontalScroll());
+		scroll.ScrollVertical = Mathf.Clamp(nextVertical, 0, GetMaxVerticalScroll());
+		return new Vector2(scroll.ScrollHorizontal - oldHorizontal, scroll.ScrollVertical - oldVertical);
+	}
+
+	void ScrollQuickToBottom()
+	{
+		if (scroll == null)
+			return;
+		scroll.ScrollVertical = GetMaxVerticalScroll();
+	}
+
+	bool ShouldStickToBottom()
+	{
+		if (scroll == null || scrollingByDrag || quickInertiaActive)
+			return false;
+		return scroll.ScrollVertical >= GetMaxVerticalScroll() - ScrollBottomTolerance;
+	}
+
+	void UpdateQuickScrollVelocity(Vector2 rawScrollDelta, Vector2 appliedDelta)
+	{
+		ulong now = Time.GetTicksMsec();
+		if (quickLastDragTick == 0)
+		{
+			quickLastDragTick = now;
+			return;
+		}
+
+		if (rawScrollDelta.LengthSquared() <= 0.01f)
+			return;
+
+		float elapsed = Mathf.Max((now - quickLastDragTick) / 1000.0f, 1.0f / 120.0f);
+		if (appliedDelta.LengthSquared() <= 0.01f)
+		{
+			quickScrollVelocity = Vector2.Zero;
+			quickLastDragTick = now;
+			return;
+		}
+
+		var instantVelocity = rawScrollDelta / elapsed;
+		if (instantVelocity.Length() > QuickInertiaMaxVelocity)
+			instantVelocity = instantVelocity.Normalized() * QuickInertiaMaxVelocity;
+
+		quickScrollVelocity = quickScrollVelocity.Lerp(instantVelocity, 0.78f);
+		quickLastDragTick = now;
+	}
+
+	void StartQuickInertia()
+	{
+		float releaseSpeed = quickScrollVelocity.Length();
+		float fastRatio = Mathf.Clamp(
+			(releaseSpeed - QuickInertiaMinVelocity) / (QuickInertiaFastVelocity - QuickInertiaMinVelocity),
+			0.0f,
+			1.0f);
+		float releaseBoost = Mathf.Lerp(QuickInertiaMinReleaseBoost, QuickInertiaMaxReleaseBoost, fastRatio);
+		quickInertiaDeceleration = Mathf.Lerp(QuickInertiaSlowDeceleration, QuickInertiaFastDeceleration, fastRatio);
+		quickScrollVelocity *= releaseBoost;
+		if (quickScrollVelocity.Length() > QuickInertiaMaxVelocity)
+			quickScrollVelocity = quickScrollVelocity.Normalized() * QuickInertiaMaxVelocity;
+		if (quickScrollVelocity.Length() >= QuickInertiaMinVelocity)
+			quickInertiaActive = true;
+		else
+			StopQuickInertia();
+	}
+
+	void StopQuickInertia()
+	{
+		quickInertiaActive = false;
+		quickScrollVelocity = Vector2.Zero;
+		quickInertiaRemainder = Vector2.Zero;
+		quickLastDragTick = 0;
+	}
+
+	void ProcessQuickInertia(float delta)
+	{
+		if (!quickInertiaActive || scrollingByDrag || scroll == null)
+			return;
+
+		var desiredDelta = quickScrollVelocity * delta + quickInertiaRemainder;
+		var roundedDelta = new Vector2(Mathf.Round(desiredDelta.X), Mathf.Round(desiredDelta.Y));
+		quickInertiaRemainder = desiredDelta - roundedDelta;
+		if (roundedDelta.LengthSquared() > 0.01f)
+		{
+			var appliedDelta = ScrollQuickBy(roundedDelta);
+			if (appliedDelta.LengthSquared() <= 0.01f)
+			{
+				StopQuickInertia();
+				return;
+			}
+		}
+
+		float speed = quickScrollVelocity.Length();
+		speed = Mathf.MoveToward(speed, 0, quickInertiaDeceleration * delta);
+		if (speed <= QuickInertiaStopVelocity)
+		{
+			StopQuickInertia();
+			return;
+		}
+		quickScrollVelocity = quickScrollVelocity.Normalized() * speed;
+	}
+
+	int GetMaxHorizontalScroll()
+	{
+		if (scroll == null || rowsContainer == null)
+			return 0;
+		float contentWidth = Mathf.Max(rowsContainer.Size.X, rowsContainer.GetCombinedMinimumSize().X);
+		return Mathf.RoundToInt(Mathf.Max(0, contentWidth - scroll.Size.X));
+	}
+
+	int GetMaxVerticalScroll()
+	{
+		if (scroll == null || rowsContainer == null)
+			return 0;
+		float contentHeight = Mathf.Max(rowsContainer.Size.Y, rowsContainer.GetCombinedMinimumSize().Y);
+		return Mathf.RoundToInt(Mathf.Max(0, contentHeight - scroll.Size.Y));
 	}
 }

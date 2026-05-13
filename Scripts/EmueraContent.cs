@@ -38,14 +38,27 @@ public partial class EmueraContent : Control
     bool contentDragStartedOnButton = false;
     Vector2 contentDragStartPosition;
     Vector2 contentDragLastPosition;
-    Button contentDragButton;
+    Vector2 contentScrollVelocity = Vector2.Zero;
+    Vector2 contentInertiaRemainder = Vector2.Zero;
+    Control contentDragButton;
     string contentDragButtonInput;
     long contentDragButtonGeneration;
+    ulong contentLastDragTick = 0;
+    bool contentInertiaActive = false;
+    float contentInertiaDeceleration = 900.0f;
+    int contentScrollInteractionSerial = 0;
     bool pendingScroll = false;
     bool pendingScaleBoundsUpdate = false;
     float contentScale = 1.0f;
     const float ScrollDragThreshold = 10.0f;
-    const float MaxContentDragStep = 42.0f;
+    const float ContentInertiaMinVelocity = 80.0f;
+    const float ContentInertiaFastVelocity = 4500.0f;
+    const float ContentInertiaMaxVelocity = 14000.0f;
+    const float ContentInertiaMinReleaseBoost = 1.2f;
+    const float ContentInertiaMaxReleaseBoost = 3.0f;
+    const float ContentInertiaSlowDeceleration = 1800.0f;
+    const float ContentInertiaFastDeceleration = 520.0f;
+    const float ContentInertiaStopVelocity = 6.0f;
     const string SettingsPath = "user://settings.cfg";
     const string SettingsSection = "Display";
     const string ContentDragSensitivityKey = "ContentDragSensitivity";
@@ -207,6 +220,8 @@ public partial class EmueraContent : Control
         scrollContainer.AnchorRight = 1;
         scrollContainer.AnchorBottom = 1;
         scrollContainer.HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled;
+        scrollContainer.VerticalScrollMode = ScrollContainer.ScrollMode.Auto;
+        scrollContainer.FollowFocus = false;
         scrollContainer.ClipContents = true;
         scrollContainer.MouseFilter = MouseFilterEnum.Pass;
         scrollContainer.GuiInput += OnContentGuiInput;
@@ -453,10 +468,13 @@ public partial class EmueraContent : Control
         {
             if(button.IsButton)
             {
-                var btn = new Button();
-                btn.Text = "";
-                ApplyFont(btn);
-                StyleButton(btn);
+                var btn = new Panel();
+                btn.FocusMode = FocusModeEnum.None;
+                btn.MouseForcePassScrollEvents = false;
+                btn.MouseFilter = MouseFilterEnum.Stop;
+                btn.ClipContents = false;
+                EnsureButtonStyles();
+                btn.AddThemeStyleboxOverride("panel", _btnNormalStyle);
                 string inputs = button.Inputs;
                 long generation = button.Generation;
                 btn.GuiInput += inputEvent => OnContentButtonGuiInput(inputEvent, btn, inputs, generation);
@@ -541,11 +559,11 @@ public partial class EmueraContent : Control
         if (!pendingScroll)
         {
             pendingScroll = true;
-            CallDeferred(nameof(DeferredScrollToBottom));
+            CallDeferred(nameof(DeferredScrollToBottom), contentScrollInteractionSerial);
         }
     }
 
-    async void DeferredScrollToBottom()
+    async void DeferredScrollToBottom(int interactionSerial)
     {
         if (scrollContainer != null)
         {
@@ -554,8 +572,11 @@ public partial class EmueraContent : Control
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             UpdateScaleBounds();
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-            var vScroll = scrollContainer.GetVScrollBar();
-            scrollContainer.ScrollVertical = (int)Mathf.Ceil(Mathf.Max(0, vScroll.MaxValue - vScroll.Page));
+            if (!contentDragActive && !contentInertiaActive && interactionSerial == contentScrollInteractionSerial)
+            {
+                var vScroll = scrollContainer.GetVScrollBar();
+                scrollContainer.ScrollVertical = (int)Mathf.Ceil(Mathf.Max(0, vScroll.MaxValue - vScroll.Page));
+            }
         }
         pendingScroll = false;
     }
@@ -1426,7 +1447,7 @@ public partial class EmueraContent : Control
         if (!pendingScroll)
         {
             pendingScroll = true;
-            CallDeferred(nameof(DeferredScrollToBottom));
+            CallDeferred(nameof(DeferredScrollToBottom), contentScrollInteractionSerial);
         }
     }
 
@@ -1460,6 +1481,8 @@ public partial class EmueraContent : Control
 
     public override void _Process(double delta)
     {
+        ProcessContentInertia((float)delta);
+
         if (!autoClickSkipEnabled)
             return;
         var console = GlobalStatic.Console;
@@ -1488,12 +1511,12 @@ public partial class EmueraContent : Control
         HandleContentPointerInput(@event, true);
     }
 
-    void OnContentButtonGuiInput(InputEvent @event, Button btn, string input, long generation)
+    void OnContentButtonGuiInput(InputEvent @event, Control btn, string input, long generation)
     {
         HandleContentPointerInput(@event, true, btn, input, generation);
     }
 
-    bool HandleContentPointerInput(InputEvent @event, bool acceptEvent, Button button = null, string input = null, long generation = 0)
+    bool HandleContentPointerInput(InputEvent @event, bool acceptEvent, Control button = null, string input = null, long generation = 0)
     {
         if (!TryGetPointer(@event, out var pointerPosition, out var pressed, out var released, out var motion))
             return false;
@@ -1501,8 +1524,18 @@ public partial class EmueraContent : Control
         if (scrollContainer == null || (!contentDragActive && !scrollContainer.GetGlobalRect().HasPoint(pointerPosition)))
             return false;
 
+        if (pressed && contentDragActive && button == null)
+        {
+            if (acceptEvent)
+                AcceptEvent();
+            else
+                GetViewport().SetInputAsHandled();
+            return true;
+        }
+
         if (pressed)
         {
+            StopContentInertia();
             contentDragActive = true;
             contentDragMoved = false;
             contentDragStartedOnButton = button != null;
@@ -1511,6 +1544,7 @@ public partial class EmueraContent : Control
             contentDragButtonGeneration = generation;
             contentDragStartPosition = pointerPosition;
             contentDragLastPosition = pointerPosition;
+            contentLastDragTick = Time.GetTicksMsec();
             if (contentDragStartedOnButton)
             {
                 if (acceptEvent)
@@ -1531,16 +1565,13 @@ public partial class EmueraContent : Control
             if (!contentDragMoved && totalDelta.Length() >= ScrollDragThreshold)
             {
                 contentDragMoved = true;
-                contentDragLastPosition = pointerPosition;
-                if (acceptEvent)
-                    AcceptEvent();
-                else
-                    GetViewport().SetInputAsHandled();
-                return true;
+                contentScrollInteractionSerial++;
             }
             if (contentDragMoved)
             {
-                ScrollContentBy(contentDragLastPosition - pointerPosition);
+                var rawScrollDelta = contentDragLastPosition - pointerPosition;
+                var appliedDelta = ScrollContentBy(rawScrollDelta);
+                UpdateContentScrollVelocity(rawScrollDelta, appliedDelta);
                 contentDragLastPosition = pointerPosition;
                 if (acceptEvent)
                     AcceptEvent();
@@ -1558,6 +1589,7 @@ public partial class EmueraContent : Control
         bool handled = false;
         if (contentDragMoved)
         {
+            StartContentInertia();
             handled = true;
         }
         else if (contentDragStartedOnButton)
@@ -1581,15 +1613,124 @@ public partial class EmueraContent : Control
         return handled;
     }
 
-    void ScrollContentBy(Vector2 delta)
+    Vector2 ScrollContentBy(Vector2 delta)
     {
         if (scrollContainer == null)
-            return;
+            return Vector2.Zero;
         delta *= ContentDragSensitivity;
-        if (delta.Length() > MaxContentDragStep)
-            delta = delta.Normalized() * MaxContentDragStep;
-        scrollContainer.ScrollHorizontal += Mathf.RoundToInt(delta.X);
-        scrollContainer.ScrollVertical += Mathf.RoundToInt(delta.Y);
+        return ApplyContentScrollDelta(delta);
+    }
+
+    Vector2 ApplyContentScrollDelta(Vector2 delta)
+    {
+        if (scrollContainer == null)
+            return Vector2.Zero;
+
+        int oldHorizontal = scrollContainer.ScrollHorizontal;
+        int oldVertical = scrollContainer.ScrollVertical;
+        int nextHorizontal = Mathf.Clamp(oldHorizontal + Mathf.RoundToInt(delta.X), 0, GetMaxContentHorizontalScroll());
+        int nextVertical = Mathf.Clamp(oldVertical + Mathf.RoundToInt(delta.Y), 0, GetMaxContentVerticalScroll());
+        scrollContainer.ScrollHorizontal = nextHorizontal;
+        scrollContainer.ScrollVertical = nextVertical;
+        return new Vector2(nextHorizontal - oldHorizontal, nextVertical - oldVertical);
+    }
+
+    void UpdateContentScrollVelocity(Vector2 rawScrollDelta, Vector2 appliedDelta)
+    {
+        ulong now = Time.GetTicksMsec();
+        if (contentLastDragTick == 0)
+        {
+            contentLastDragTick = now;
+            return;
+        }
+
+        if (rawScrollDelta.LengthSquared() <= 0.01f)
+            return;
+
+        float elapsed = Mathf.Max((now - contentLastDragTick) / 1000.0f, 1.0f / 120.0f);
+        if (appliedDelta.LengthSquared() <= 0.01f)
+        {
+            contentScrollVelocity = Vector2.Zero;
+            contentLastDragTick = now;
+            return;
+        }
+
+        var instantVelocity = rawScrollDelta * ContentDragSensitivity / elapsed;
+        if (instantVelocity.Length() > ContentInertiaMaxVelocity)
+            instantVelocity = instantVelocity.Normalized() * ContentInertiaMaxVelocity;
+
+        contentScrollVelocity = contentScrollVelocity.Lerp(instantVelocity, 0.78f);
+        contentLastDragTick = now;
+    }
+
+    void StartContentInertia()
+    {
+        float releaseSpeed = contentScrollVelocity.Length();
+        float fastRatio = Mathf.Clamp(
+            (releaseSpeed - ContentInertiaMinVelocity) / (ContentInertiaFastVelocity - ContentInertiaMinVelocity),
+            0.0f,
+            1.0f);
+        float releaseBoost = Mathf.Lerp(ContentInertiaMinReleaseBoost, ContentInertiaMaxReleaseBoost, fastRatio);
+        contentInertiaDeceleration = Mathf.Lerp(ContentInertiaSlowDeceleration, ContentInertiaFastDeceleration, fastRatio);
+        contentScrollVelocity *= releaseBoost;
+        if (contentScrollVelocity.Length() > ContentInertiaMaxVelocity)
+            contentScrollVelocity = contentScrollVelocity.Normalized() * ContentInertiaMaxVelocity;
+        if (contentScrollVelocity.Length() >= ContentInertiaMinVelocity)
+            contentInertiaActive = true;
+        else
+            StopContentInertia();
+    }
+
+    void StopContentInertia()
+    {
+        contentInertiaActive = false;
+        contentScrollVelocity = Vector2.Zero;
+        contentInertiaRemainder = Vector2.Zero;
+        contentLastDragTick = 0;
+    }
+
+    void ProcessContentInertia(float delta)
+    {
+        if (!contentInertiaActive || contentDragActive || scrollContainer == null)
+            return;
+
+        var desiredDelta = contentScrollVelocity * delta + contentInertiaRemainder;
+        var roundedDelta = new Vector2(Mathf.Round(desiredDelta.X), Mathf.Round(desiredDelta.Y));
+        contentInertiaRemainder = desiredDelta - roundedDelta;
+        if (roundedDelta.LengthSquared() > 0.01f)
+        {
+            var appliedDelta = ApplyContentScrollDelta(roundedDelta);
+            if (appliedDelta.LengthSquared() <= 0.01f)
+            {
+                StopContentInertia();
+                return;
+            }
+        }
+
+        float speed = contentScrollVelocity.Length();
+        speed = Mathf.MoveToward(speed, 0, contentInertiaDeceleration * delta);
+        if (speed <= ContentInertiaStopVelocity)
+        {
+            StopContentInertia();
+            return;
+        }
+        contentScrollVelocity = contentScrollVelocity.Normalized() * speed;
+    }
+
+    int GetMaxContentHorizontalScroll()
+    {
+        if (scrollContainer == null)
+            return 0;
+        var hScroll = scrollContainer.GetHScrollBar();
+        return Mathf.RoundToInt(Mathf.Max(0, hScroll.MaxValue - hScroll.Page));
+    }
+
+    int GetMaxContentVerticalScroll()
+    {
+        if (scrollContainer == null)
+            return 0;
+        var vScroll = scrollContainer.GetVScrollBar();
+        return Mathf.RoundToInt(Mathf.Max(0, vScroll.MaxValue - vScroll.Page));
     }
 
     bool TryAdvanceTap(bool acceptEvent)
