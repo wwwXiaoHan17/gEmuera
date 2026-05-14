@@ -366,6 +366,18 @@ namespace MinorShift.Emuera.GameView
 			return ret;
 		}
 
+		public static ConsoleButtonString[] Html2ButtonList(string str, StringMeasure sm, EmueraConsole console)
+		{
+			ConsoleDisplayLine[] lines = Html2DisplayLine(str, sm, console);
+			List<ConsoleButtonString> buttons = new List<ConsoleButtonString>();
+			foreach (ConsoleDisplayLine line in lines)
+			{
+				foreach (ConsoleButtonString button in line.Buttons)
+					buttons.Add(button);
+			}
+			return buttons.ToArray();
+		}
+
 		public static string Html2PlainText(string str)
 		{
 			string ret = Regex.Replace(str, "\\<[^<]*\\>", "");

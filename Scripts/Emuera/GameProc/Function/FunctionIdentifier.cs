@@ -75,6 +75,71 @@ namespace MinorShift.Emuera.GameProc.Function
 		{
 			addFunction(code, new PRINT_DATA_Instruction(code.ToString()));
 		}
+
+		private static void addSnakeCompatibilityFunctions()
+		{
+			addPrintFunction(FunctionCode.PRINTN);
+			addPrintFunction(FunctionCode.PRINTVN);
+			addPrintFunction(FunctionCode.PRINTSN);
+			addPrintFunction(FunctionCode.PRINTFORMN);
+			addPrintFunction(FunctionCode.PRINTFORMSN);
+
+			addFunction(FunctionCode.INPUTANY, new WAITANYKEY_Instruction());
+			addFunction(FunctionCode.BINPUT, new INPUT_Instruction());
+			addFunction(FunctionCode.BINPUTS, new INPUTS_Instruction());
+			addFunction(FunctionCode.ONEBINPUT, new ONEINPUT_Instruction());
+			addFunction(FunctionCode.ONEBINPUTS, new ONEINPUTS_Instruction());
+
+			addFunction(FunctionCode.JUMPSTR, new CALL_Instruction(false, true, false, false));
+			addFunction(FunctionCode.CALLSTR, new CALL_Instruction(false, false, false, false));
+			addFunction(FunctionCode.TRYJUMPSTR, new CALL_Instruction(false, true, true, false), EXTENDED);
+			addFunction(FunctionCode.TRYCALLSTR, new CALL_Instruction(false, false, true, false), EXTENDED);
+			addFunction(FunctionCode.TRYCJUMPSTR, new CALL_Instruction(false, true, true, true), EXTENDED);
+			addFunction(FunctionCode.TRYCCALLSTR, new CALL_Instruction(false, false, true, true), EXTENDED);
+
+			addFunction(FunctionCode.SKIPLOG, new SNAKE_SKIPLOG_Instruction());
+			addFunction(FunctionCode.UPDATECHECK, new SNAKE_UPDATECHECK_Instruction());
+			addFunction(FunctionCode.CALLSHARP, new SNAKE_CALLSHARP_Instruction());
+			addFunction(FunctionCode.TRYCALLF, new CALLF_Instruction(false, true));
+			addFunction(FunctionCode.TRYCALLFORMF, new CALLF_Instruction(true, true));
+			addFunction(FunctionCode.FORCE_BEGIN, new FORCE_BEGIN_Instruction());
+
+			addFunction(FunctionCode.SETBGIMAGE, new SNAKE_SETBGIMAGE_Instruction());
+			addFunction(FunctionCode.CLEARBGIMAGE, new SNAKE_CLEARBGIMAGE_Instruction());
+			addFunction(FunctionCode.REMOVEBGIMAGE, new SNAKE_REMOVEBGIMAGE_Instruction());
+			addFunction(FunctionCode.SETIMAGELAYER, new SNAKE_SETIMAGELAYER_Instruction());
+			addFunction(FunctionCode.CLEARIMAGELAYER, new SNAKE_CLEARIMAGELAYER_Instruction());
+			addFunction(FunctionCode.CLEARIMAGELAYER_ALL, new SNAKE_CLEARIMAGELAYER_ALL_Instruction());
+			addFunction(FunctionCode.TEXT_BGC_OFF, new SNAKE_TEXT_BGC_OFF_Instruction());
+			addFunction(FunctionCode.TEXT_BGC_ON, new SNAKE_TEXT_BGC_ON_Instruction());
+			addFunction(FunctionCode.PLAYSOUND, new SNAKE_PLAYSOUND_Instruction());
+			addFunction(FunctionCode.STOPSOUND, new SNAKE_STOPSOUND_Instruction());
+			addFunction(FunctionCode.PLAYBGM, new SNAKE_PLAYBGM_Instruction());
+			addFunction(FunctionCode.STOPBGM, new SNAKE_STOPBGM_Instruction());
+			addFunction(FunctionCode.SETSOUNDVOLUME, new SNAKE_SETVOLUME_Instruction(false));
+			addFunction(FunctionCode.SETBGMVOLUME, new SNAKE_SETVOLUME_Instruction(true));
+			addFunction(FunctionCode.QUIT_AND_RESTART, ArgumentParser.GetArgumentBuilder(FunctionArgType.VOID));
+			addFunction(FunctionCode.FORCE_QUIT, ArgumentParser.GetArgumentBuilder(FunctionArgType.VOID));
+			addFunction(FunctionCode.FORCE_QUIT_AND_RESTART, ArgumentParser.GetArgumentBuilder(FunctionArgType.VOID));
+			addFunction(FunctionCode.TOOLTIP_SETFONT, new SNAKE_TOOLTIP_SETFONT_Instruction());
+			addFunction(FunctionCode.TOOLTIP_SETFONTSIZE, new SNAKE_TOOLTIP_INT_Instruction(FunctionCode.TOOLTIP_SETFONTSIZE));
+			addFunction(FunctionCode.TOOLTIP_CUSTOM, new SNAKE_TOOLTIP_INT_Instruction(FunctionCode.TOOLTIP_CUSTOM));
+			addFunction(FunctionCode.TOOLTIP_FORMAT, new SNAKE_TOOLTIP_INT_Instruction(FunctionCode.TOOLTIP_FORMAT));
+			addFunction(FunctionCode.TOOLTIP_IMG, new SNAKE_TOOLTIP_INT_Instruction(FunctionCode.TOOLTIP_IMG));
+			addFunction(FunctionCode.DT_COLUMN_OPTIONS, new SNAKE_DT_COLUMN_OPTIONS_Instruction());
+			addFunction(FunctionCode.VARI, new SNAKE_VARI_Instruction(false));
+			addFunction(FunctionCode.VARS, new SNAKE_VARI_Instruction(true));
+			addFunction(FunctionCode.HTML_PRINT_ISLAND, new SNAKE_HTML_PRINT_ISLAND_Instruction());
+			addFunction(FunctionCode.HTML_PRINT_ISLAND_CLEAR, new SNAKE_HTML_PRINT_ISLAND_CLEAR_Instruction());
+			addFunction(FunctionCode.HTML_PRINTC, new SNAKE_HTML_PRINTC_Instruction(true));
+			addFunction(FunctionCode.HTML_PRINTLC, new SNAKE_HTML_PRINTC_Instruction(false));
+			addFunction(FunctionCode.SETANIMETIMER, new SNAKE_SETANIMETIMER_Instruction());
+			addFunction(FunctionCode.STRICT_FONT_FALLBACK, new SNAKE_UI_SETTING_Instruction(FunctionCode.STRICT_FONT_FALLBACK));
+			addFunction(FunctionCode.SET_SKIA_QUALITY, new SNAKE_UI_SETTING_Instruction(FunctionCode.SET_SKIA_QUALITY));
+			addFunction(FunctionCode.SET_TEXT_DRAWING_MODE, new SNAKE_UI_SETTING_Instruction(FunctionCode.SET_TEXT_DRAWING_MODE));
+			addFunction(FunctionCode.BITMAP_CACHE_ENABLE, new SNAKE_UI_SETTING_Instruction(FunctionCode.BITMAP_CACHE_ENABLE));
+		}
+
 		static FunctionIdentifier()
 		{
 			Dictionary<FunctionArgType, ArgumentBuilder> argb = ArgumentParser.GetArgumentBuilderDictionary();
@@ -379,6 +444,8 @@ namespace MinorShift.Emuera.GameProc.Function
 
 			addFunction(FunctionCode.INPUTMOUSEKEY, new INPUTMOUSEKEY_Instruction());
 			addFunction(FunctionCode.AWAIT, new AWAIT_Instruction());
+			if (Program.IsSnakeProfile)
+				addSnakeCompatibilityFunctions();
 			#region 式中関数の引数違い
 			addFunction(FunctionCode.VARSIZE, argb[FunctionArgType.SP_VAR], METHOD_SAFE | EXTENDED);//動作が違うのでMETHOD化できない
 			addFunction(FunctionCode.GETTIME, argb[FunctionArgType.VOID], METHOD_SAFE | EXTENDED);//2つに代入する必要があるのでMETHOD化できない
@@ -408,6 +475,11 @@ namespace MinorShift.Emuera.GameProc.Function
 			funcMatch[FunctionCode.TRYCGOTOFORM] = "CATCH";
 			funcMatch[FunctionCode.TRYCJUMPFORM] = "CATCH";
 			funcMatch[FunctionCode.TRYCCALLFORM] = "CATCH";
+			if (Program.IsSnakeProfile)
+			{
+				funcMatch[FunctionCode.TRYCJUMPSTR] = "CATCH";
+				funcMatch[FunctionCode.TRYCCALLSTR] = "CATCH";
+			}
 			funcMatch[FunctionCode.CATCH] = "ENDCATCH";
 			funcMatch[FunctionCode.DO] = "LOOP";
 			funcMatch[FunctionCode.PRINTDATA] = "ENDDATA";

@@ -144,6 +144,8 @@ namespace MinorShift.Emuera
 			nameDic.Add("__DEBUG__", DefinedNameType.Reserved);
 			nameDic.Add("__SKIP__", DefinedNameType.Reserved);
 			nameDic.Add("_", DefinedNameType.Reserved);
+			if (Program.IsSnakeProfile)
+				nameDic.Add("VARIADIC", DefinedNameType.Reserved);
 			instructionDic = FunctionIdentifier.GetInstructionNameDic();
 
 			varTokenDic = varData.GetVarTokenDicClone();

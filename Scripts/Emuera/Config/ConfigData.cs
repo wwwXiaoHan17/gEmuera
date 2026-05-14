@@ -30,7 +30,7 @@ static ConfigData() { }
 		private ConfigData() { setDefault(); }
 
 		//適当に大き目の配列を作っておく。
-		private AConfigItem[] configArray = new AConfigItem[70];
+		private AConfigItem[] configArray = new AConfigItem[71];
 		private AConfigItem[] replaceArray = new AConfigItem[50];
 		private AConfigItem[] debugArray = new AConfigItem[20];
 		private System.Text.StringBuilder configDebugLog = new System.Text.StringBuilder();
@@ -114,6 +114,7 @@ static ConfigData() { }
 			//configArray[i++] = new ConfigItem<bool>(ConfigCode.ForbidOneCodeVariable, "一文字変数の使用を禁止する", false);
 			configArray[i++] = new ConfigItem<bool>(ConfigCode.SystemNoTarget, "キャラクタ変数の引数を補完しない", false);
 			configArray[i++] = new ConfigItem<bool>(ConfigCode.SystemIgnoreStringSet, "文字列変数の代入に文字列式を強制する", false);
+			configArray[i++] = new ConfigItem<bool>(ConfigCode.UseLazyLoading, "UseLazyLoading", false);
 
 			i = 0;
 			debugArray[i++] = new ConfigItem<bool>(ConfigCode.DebugShowWindow, "起動時にデバッグウインドウを表示する", true);
@@ -145,7 +146,7 @@ static ConfigData() { }
 
         public void Clear()
         {
-            configArray = new AConfigItem[70];
+            configArray = new AConfigItem[71];
             replaceArray = new AConfigItem[50];
             debugArray = new AConfigItem[20];
             setDefault();

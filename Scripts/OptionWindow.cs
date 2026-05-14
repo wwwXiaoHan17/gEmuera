@@ -6,6 +6,10 @@ public partial class OptionWindow : Control
     PopupPanel popup;
     Slider fontSizeSlider;
     Label fontSizeLabel;
+    Slider quickButtonWidthSlider;
+    Label quickButtonWidthLabel;
+    Slider quickFontSizeSlider;
+    Label quickFontSizeLabel;
     Slider buttonDragSensitivitySlider;
     Label buttonDragSensitivityLabel;
     OptionButton resolutionOption;
@@ -18,7 +22,7 @@ public partial class OptionWindow : Control
     public override void _Ready()
     {
         popup = new PopupPanel();
-        popup.Size = new Vector2I(400, 360);
+        popup.Size = new Vector2I(440, 460);
         AddChild(popup);
 
         var vbox = new VBoxContainer();
@@ -43,6 +47,44 @@ public partial class OptionWindow : Control
         fontSizeLabel = new Label();
         fontSizeLabel.Text = fontSizeSlider.Value.ToString();
         fontHBox.AddChild(fontSizeLabel);
+
+        // Quick button width
+        var quickWidthHBox = new HBoxContainer();
+        vbox.AddChild(quickWidthHBox);
+        var quickWidthLabel = new Label();
+        quickWidthLabel.Text = MultiLanguage.Get("OptionWindow.QuickButtonWidth", "Quick Width");
+        quickWidthHBox.AddChild(quickWidthLabel);
+        quickButtonWidthSlider = new HSlider();
+        quickButtonWidthSlider.MinValue = QuickButtons.MinQuickButtonWidth;
+        quickButtonWidthSlider.MaxValue = QuickButtons.MaxQuickButtonWidth;
+        quickButtonWidthSlider.Step = 1;
+        quickButtonWidthSlider.Value = QuickButtons.ConfiguredButtonWidth;
+        quickButtonWidthSlider.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        quickButtonWidthSlider.CustomMinimumSize = new Vector2(120, 44);
+        quickButtonWidthSlider.ValueChanged += OnQuickButtonWidthChanged;
+        quickWidthHBox.AddChild(quickButtonWidthSlider);
+        quickButtonWidthLabel = new Label();
+        quickButtonWidthLabel.Text = quickButtonWidthSlider.Value.ToString();
+        quickWidthHBox.AddChild(quickButtonWidthLabel);
+
+        // Quick font size
+        var quickFontHBox = new HBoxContainer();
+        vbox.AddChild(quickFontHBox);
+        var quickFontLabel = new Label();
+        quickFontLabel.Text = MultiLanguage.Get("OptionWindow.QuickFontSize", "Quick Font");
+        quickFontHBox.AddChild(quickFontLabel);
+        quickFontSizeSlider = new HSlider();
+        quickFontSizeSlider.MinValue = QuickButtons.MinQuickButtonFontSize;
+        quickFontSizeSlider.MaxValue = QuickButtons.MaxQuickButtonFontSize;
+        quickFontSizeSlider.Step = 1;
+        quickFontSizeSlider.Value = QuickButtons.ConfiguredFontSize;
+        quickFontSizeSlider.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        quickFontSizeSlider.CustomMinimumSize = new Vector2(120, 44);
+        quickFontSizeSlider.ValueChanged += OnQuickFontSizeChanged;
+        quickFontHBox.AddChild(quickFontSizeSlider);
+        quickFontSizeLabel = new Label();
+        quickFontSizeLabel.Text = quickFontSizeSlider.Value.ToString();
+        quickFontHBox.AddChild(quickFontSizeLabel);
 
         // Button drag sensitivity
         var sensitivityHBox = new HBoxContainer();
@@ -135,6 +177,22 @@ public partial class OptionWindow : Control
             prop.SetValue(null, size);
         }
         EmueraContent.instance?.RefreshFontSize();
+    }
+
+    void OnQuickButtonWidthChanged(double value)
+    {
+        int width = (int)value;
+        quickButtonWidthLabel.Text = width.ToString();
+        QuickButtons.ConfiguredButtonWidth = width;
+        EmueraContent.instance?.RefreshQuickButtonSettings();
+    }
+
+    void OnQuickFontSizeChanged(double value)
+    {
+        int size = (int)value;
+        quickFontSizeLabel.Text = size.ToString();
+        QuickButtons.ConfiguredFontSize = size;
+        EmueraContent.instance?.RefreshQuickButtonSettings();
     }
 
     void OnButtonDragSensitivityChanged(double value)

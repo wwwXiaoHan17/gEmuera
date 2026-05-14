@@ -180,6 +180,11 @@ namespace MinorShift.Emuera.GameView
 			public ASprite ImgB = null;
 			public int x;
 			public int y;
+			public int width;
+			public int height;
+			public float opacity = 1.0f;
+			public bool isSnakeImageLayer = false;
+			public string snakeImageName = null;
 			public readonly int zdepth;
 			public bool isButton = false;
 			public int buttonValue;
@@ -285,6 +290,212 @@ namespace MinorShift.Emuera.GameView
 				cbgList.Sort();
 			}
 			return true;
+		}
+
+		public void AddBackgroundImage(string name, long depth, float opacity)
+		{
+			ASprite sprite = GetSnakeSprite(name);
+			if (sprite == null || !sprite.IsCreated)
+				return;
+			int zdepth = normalizeSnakeDepth(depth);
+			lock (cbgLock)
+			{
+				ClientBackGroundImage cbg = new ClientBackGroundImage(zdepth);
+				cbg.Img = sprite;
+				cbg.opacity = clampOpacity(opacity);
+				cbg.snakeImageName = name;
+				cbgList.Add(cbg);
+				cbgList.Sort();
+			}
+		}
+
+		public void ClearBackgroundImage()
+		{
+			lock (cbgLock)
+			{
+				for (int i = 0; i < cbgList.Count; i++)
+				{
+					ClientBackGroundImage cimg = cbgList[i];
+					if (cimg.zdepth == 0)
+						continue;
+					if (cimg.isSnakeImageLayer)
+						continue;
+					cbgList.RemoveAt(i);
+					i--;
+				}
+			}
+		}
+
+		public void RemoveBackground(string key)
+		{
+			if (string.IsNullOrEmpty(key))
+				return;
+			lock (cbgLock)
+			{
+				for (int i = 0; i < cbgList.Count; i++)
+				{
+					ClientBackGroundImage cimg = cbgList[i];
+					if (cimg.zdepth == 0 || cimg.isSnakeImageLayer)
+						continue;
+					string name = cimg.snakeImageName ?? cimg.Img?.Name;
+					if (!string.Equals(name, key, StringComparison.OrdinalIgnoreCase))
+						continue;
+					cbgList.RemoveAt(i);
+					i--;
+				}
+			}
+		}
+
+		public void SetImageLayer(string spriteName, long depth, int x, int y, int width, int height, int opacity, float[] colorMatrix, bool followScroll)
+		{
+			ASprite sprite = GetSnakeSprite(spriteName);
+			if (sprite == null || !sprite.IsCreated)
+				return;
+			int zdepth = normalizeSnakeDepth(depth);
+			lock (cbgLock)
+			{
+				for (int i = 0; i < cbgList.Count; i++)
+				{
+					if (cbgList[i].isSnakeImageLayer && cbgList[i].zdepth == zdepth)
+					{
+						cbgList.RemoveAt(i);
+						i--;
+					}
+				}
+				ClientBackGroundImage cbg = new ClientBackGroundImage(zdepth);
+				cbg.Img = sprite;
+				cbg.x = x;
+				cbg.y = y;
+				cbg.width = width;
+				cbg.height = height;
+				cbg.opacity = clampOpacity(opacity / 255.0f);
+				cbg.isSnakeImageLayer = true;
+				cbg.snakeImageName = spriteName;
+				cbgList.Add(cbg);
+				cbgList.Sort();
+			}
+		}
+
+		public void ClearImageLayer(long depth)
+		{
+			int zdepth = normalizeSnakeDepth(depth);
+			lock (cbgLock)
+			{
+				for (int i = 0; i < cbgList.Count; i++)
+				{
+					if (cbgList[i].isSnakeImageLayer && cbgList[i].zdepth == zdepth)
+					{
+						cbgList.RemoveAt(i);
+						i--;
+					}
+				}
+			}
+		}
+
+		public void ClearImageLayerAll()
+		{
+			lock (cbgLock)
+			{
+				for (int i = 0; i < cbgList.Count; i++)
+				{
+					if (cbgList[i].isSnakeImageLayer)
+					{
+						cbgList.RemoveAt(i);
+						i--;
+					}
+				}
+			}
+		}
+
+		public bool ExistsImageLayer(long depth)
+		{
+			int zdepth = normalizeSnakeDepth(depth);
+			lock (cbgLock)
+			{
+				for (int i = 0; i < cbgList.Count; i++)
+				{
+					if (cbgList[i].isSnakeImageLayer && cbgList[i].zdepth == zdepth)
+						return true;
+				}
+			}
+			return false;
+		}
+
+		private static int normalizeSnakeDepth(long depth)
+		{
+			if (depth == 0)
+				return -1;
+			if (depth > int.MaxValue)
+				return int.MaxValue;
+			if (depth < int.MinValue)
+				return int.MinValue;
+			return (int)depth;
+		}
+
+		private static float clampOpacity(float opacity)
+		{
+			if (opacity < 0)
+				return 0;
+			if (opacity > 1)
+				return 1;
+			return opacity;
+		}
+
+		private static ASprite GetSnakeSprite(string name)
+		{
+			if (string.IsNullOrEmpty(name))
+				return null;
+			ASprite sprite = AppContents.GetSprite(name);
+			if (sprite != null && sprite.IsCreated)
+				return sprite;
+			string path = ResolveSnakeImagePath(name);
+			if (string.IsNullOrEmpty(path))
+				return null;
+			BitmapTexture bmp = new BitmapTexture(path);
+			if (bmp.Width <= 0 || bmp.Height <= 0)
+				return null;
+			ConstImage img = new ConstImage(path);
+			img.CreateFrom(bmp, false);
+			if (!img.IsCreated)
+				return null;
+			return new SpriteF(name, img, new Rectangle(0, 0, bmp.Width, bmp.Height), new Point());
+		}
+
+		private static string ResolveSnakeImagePath(string name)
+		{
+			List<string> candidates = new List<string>();
+			candidates.Add(name);
+			candidates.Add(Path.Combine(Program.ContentDir ?? "", name));
+			candidates.Add(Path.Combine(Program.ExeDir ?? "", name));
+			candidates.Add(Path.Combine(Program.ExeDir ?? "", "resources", name));
+			if (Path.GetExtension(name).Length == 0)
+			{
+				string[] exts = new[] { ".png", ".jpg", ".jpeg", ".bmp", ".webp", ".tga" };
+				foreach (string ext in exts)
+				{
+					candidates.Add(name + ext);
+					candidates.Add(Path.Combine(Program.ContentDir ?? "", name + ext));
+					candidates.Add(Path.Combine(Program.ExeDir ?? "", "resources", name + ext));
+				}
+			}
+			foreach (string candidate in candidates)
+			{
+				string resolved = uEmuera.Utils.ResolveExistingFilePath(candidate);
+				if (!string.IsNullOrEmpty(resolved) && uEmuera.Utils.FileExists(resolved))
+					return resolved;
+			}
+			if (!string.IsNullOrEmpty(Program.ContentDir))
+			{
+				if (Path.GetExtension(name).Length > 0)
+					return uEmuera.Utils.FindFileRecursive(Program.ContentDir, name);
+				foreach (string ext in new[] { ".png", ".jpg", ".jpeg", ".bmp", ".webp", ".tga" })
+				{
+					string found = uEmuera.Utils.FindFileRecursive(Program.ContentDir, name + ext);
+					if (!string.IsNullOrEmpty(found))
+						return found;
+				}
+			}
+			return null;
 		}
 
 		public bool CBG_SetButtonMap(GraphicsImage gra)
@@ -471,6 +682,12 @@ namespace MinorShift.Emuera.GameView
 		
 
         public void Quit() { state = ConsoleState.Quit; }
+        public void ForceQuit() { state = ConsoleState.Quit; }
+        public void QuitAndRestart()
+        {
+            state = ConsoleState.Quit;
+            global::GenericUtils.RestartGame();
+        }
 		public void ThrowTitleError(bool error)
 		{
 			state = ConsoleState.Error;
@@ -652,6 +869,11 @@ namespace MinorShift.Emuera.GameView
 				tickcount = 10;
 			redrawTimer.Interval = tickcount;
 			redrawTimer.Enabled = true;
+		}
+
+		public int AnimeTimer
+		{
+			get { return redrawTimer != null && redrawTimer.Enabled ? redrawTimer.Interval : 0; }
 		}
 
 
@@ -1440,6 +1662,64 @@ namespace MinorShift.Emuera.GameView
         {
             tooltip_duration = duration;
         }
+
+		public uEmuera.Drawing.Color? TextBackgroundColor { get; set; }
+		public bool BitmapCacheEnabledForNextLine { get; set; }
+		public bool StrictFontFallback { get; set; }
+		public int SnakeTextDrawingMode { get; set; }
+		public int SnakeImageQuality { get; private set; }
+		public int SnakeFontHinting { get; private set; }
+		public int SnakeFontEdging { get; private set; }
+
+		public void SetSnakeSkiaQuality(int imageQuality, int fontHinting, int fontEdging)
+		{
+			SnakeImageQuality = imageQuality;
+			SnakeFontHinting = fontHinting;
+			SnakeFontEdging = fontEdging;
+		}
+
+		public void PrintHTMLIsland(string html)
+		{
+			if (string.IsNullOrEmpty(html))
+				return;
+			global::GenericUtils.SetHtmlIsland(HtmlManager.Html2DisplayLine(html, stringMeasure, this));
+		}
+
+		public void ClearHTMLIsland()
+		{
+			global::GenericUtils.ClearHtmlIsland();
+		}
+
+		string tooltipFontName = null;
+		long tooltipFontSize = 0;
+		bool tooltipCustom = false;
+		long tooltipFormat = 0;
+		bool tooltipImg = false;
+
+		public void SetToolTipFontName(string fontName)
+		{
+			tooltipFontName = fontName;
+		}
+
+		public void SetToolTipFontSize(long fontSize)
+		{
+			tooltipFontSize = fontSize;
+		}
+
+		public void CustomToolTip(bool enabled)
+		{
+			tooltipCustom = enabled;
+		}
+
+		public void SetToolTipFormat(long format)
+		{
+			tooltipFormat = format;
+		}
+
+		public void SetToolTipImg(bool enabled)
+		{
+			tooltipImg = enabled;
+		}
 
 
         //private Graphics getGraphics()

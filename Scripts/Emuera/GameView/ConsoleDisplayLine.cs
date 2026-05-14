@@ -51,6 +51,9 @@ namespace MinorShift.Emuera.GameView
 		///論理行の最初となる場合だけtrue。表示の都合で改行された2行目以降はfalse
 		readonly public bool IsLogicalLine = true;
 		readonly public bool IsTemporary = false;
+		public bool IsLineEnd = true;
+		public Color? TextBackgroundColor = null;
+		public bool BitmapCacheEnabled = false;
 		//EmueraConsole parent;
 		ConsoleButtonString[] buttons;
 		DisplayLineAlignment align;

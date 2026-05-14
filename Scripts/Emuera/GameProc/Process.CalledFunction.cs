@@ -106,6 +106,8 @@ namespace MinorShift.Emuera.GameProc
 			CalledFunction called = new CalledFunction(label);
 			called.Finished = false;
 			FunctionLabelLine labelline = parent.LabelDictionary.GetNonEventLabel(label);
+			if (labelline == null && parent.TryLazyLoadErb(label))
+				labelline = parent.LabelDictionary.GetNonEventLabel(label);
 			if (labelline == null)
 			{
 				if (parent.LabelDictionary.GetEventLabels(label) != null)
@@ -151,8 +153,10 @@ namespace MinorShift.Emuera.GameProc
                 return null;
             }
             FunctionLabelLine func = TopLabel;
+			int variadicIndex = func.VariadicArgIndex;
+			int fixedArgCount = variadicIndex >= 0 ? variadicIndex : func.Arg.Length;
             IOperandTerm[] convertedArg = new IOperandTerm[func.Arg.Length];
-			if(convertedArg.Length < srcArgs.Length)
+			if(variadicIndex < 0 && convertedArg.Length < srcArgs.Length)
 			{
 				errMes = "引数の数が関数\"@" + func.LabelName + "\"に設定された数を超えています";
 				return null;
@@ -160,7 +164,7 @@ namespace MinorShift.Emuera.GameProc
 			IOperandTerm term;
 			VariableTerm destArg;
 			//bool isString = false;
-			for (int i = 0; i < func.Arg.Length; i++)
+			for (int i = 0; i < fixedArgCount; i++)
 			{
 				term = (i < srcArgs.Length) ? srcArgs[i] : null;
 				destArg = func.Arg[i];
@@ -218,6 +222,36 @@ namespace MinorShift.Emuera.GameProc
 				}
 				convertedArg[i] = term;
 			}
+			if (variadicIndex >= 0)
+			{
+				destArg = func.Arg[variadicIndex];
+				List<IOperandTerm> variadicArgs = new List<IOperandTerm>();
+				for (int i = variadicIndex; i < srcArgs.Length; i++)
+				{
+					term = srcArgs[i];
+					if (term.GetOperandType() != destArg.GetOperandType())
+					{
+						if (term.GetOperandType() == typeof(string))
+						{
+							errMes = "\"@" + func.LabelName + "\"の" + (i + 1).ToString() + "番目の引数を文字列型から整数型に変換できません";
+							return null;
+						}
+						else
+						{
+							if (!Config.CompatiFuncArgAutoConvert)
+							{
+								errMes = "\"@" + func.LabelName + "\"の" + (i + 1).ToString() + "番目の引数を整数型から文字列型に変換できません(この警告は互換性オプション「" + Config.GetConfigName(ConfigCode.CompatiFuncArgAutoConvert) + "」により無視できます)";
+								return null;
+							}
+							if (tostrMethod == null)
+								tostrMethod = FunctionMethodCreator.GetMethodList()["TOSTR"];
+							term = new FunctionMethodTerm(tostrMethod, new IOperandTerm[] { term });
+						}
+					}
+					variadicArgs.Add(term);
+				}
+				convertedArg[variadicIndex] = new VariadicArgTerm(variadicArgs, destArg.GetOperandType());
+			}
 			return new UserDefinedFunctionArgument(convertedArg, func.Arg);
 		}
 
@@ -254,6 +288,7 @@ namespace MinorShift.Emuera.GameProc
 		public readonly string FunctionName = "";
 		public bool IsJump { get; set; }
 		public bool Finished { get; private set; }
+		public int VariadicArgCount { get; set; }
 		public LogicalLine ReturnAddress
 		{
 			get { return returnAddress; }

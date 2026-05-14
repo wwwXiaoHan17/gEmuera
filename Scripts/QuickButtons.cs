@@ -16,6 +16,7 @@ public partial class QuickButtons : CanvasLayer
 	bool resizingWidth;
 	bool scrollingByDrag;
 	bool dragMoved;
+	bool quickInputEnabled = true;
 	bool scrollToBottomAfterLayout = true;
 	bool quickInertiaActive;
 	int quickScrollInteractionSerial;
@@ -27,15 +28,25 @@ public partial class QuickButtons : CanvasLayer
 	Vector2 quickScrollVelocity = Vector2.Zero;
 	Vector2 quickInertiaRemainder = Vector2.Zero;
 	Control dragButton;
+	bool dragPointerIsTouch;
+	int dragPointerIndex = -1;
 	ulong quickLastDragTick;
 	float userWidth = -1;
-	const int QuickButtonFontSize = 12;
-	const int QuickButtonWidth = 90;
+	const string SettingsPath = "user://settings.cfg";
+	const string SettingsSection = "Display";
+	const string QuickButtonWidthKey = "QuickButtonWidth";
+	const string QuickButtonFontSizeKey = "QuickButtonFontSize";
+	const int DefaultQuickButtonFontSize = 12;
+	const int DefaultQuickButtonWidth = 90;
+	public const int MinQuickButtonFontSize = 8;
+	public const int MaxQuickButtonFontSize = 32;
+	public const int MinQuickButtonWidth = 48;
+	public const int MaxQuickButtonWidth = 220;
 	const int QuickButtonPadding = 2;
 	const int QuickButtonSpacing = 3;
 	const int ResizeHandleWidth = 28;
 	const int ScrollBottomTolerance = 4;
-	const float DragThreshold = 3.0f;
+	const float DragThreshold = 10.0f;
 	const float QuickInertiaMinVelocity = 80.0f;
 	const float QuickInertiaFastVelocity = 4500.0f;
 	const float QuickInertiaMaxVelocity = 14000.0f;
@@ -44,9 +55,40 @@ public partial class QuickButtons : CanvasLayer
 	const float QuickInertiaSlowDeceleration = 1800.0f;
 	const float QuickInertiaFastDeceleration = 520.0f;
 	const float QuickInertiaStopVelocity = 6.0f;
+	static int configuredButtonWidth = -1;
+	static int configuredFontSize = -1;
+
+	public static int ConfiguredButtonWidth
+	{
+		get
+		{
+			EnsureSettingsLoaded();
+			return configuredButtonWidth;
+		}
+		set
+		{
+			configuredButtonWidth = Mathf.Clamp(value, MinQuickButtonWidth, MaxQuickButtonWidth);
+			SaveSetting(QuickButtonWidthKey, configuredButtonWidth);
+		}
+	}
+
+	public static int ConfiguredFontSize
+	{
+		get
+		{
+			EnsureSettingsLoaded();
+			return configuredFontSize;
+		}
+		set
+		{
+			configuredFontSize = Mathf.Clamp(value, MinQuickButtonFontSize, MaxQuickButtonFontSize);
+			SaveSetting(QuickButtonFontSizeKey, configuredFontSize);
+		}
+	}
 
 	public override void _Ready()
 	{
+		EnsureSettingsLoaded();
 		Visible = false;
 		Layer = 90;
 
@@ -102,14 +144,14 @@ public partial class QuickButtons : CanvasLayer
 		scroll.HorizontalScrollMode = ScrollContainer.ScrollMode.Auto;
 		scroll.VerticalScrollMode = ScrollContainer.ScrollMode.Auto;
 		scroll.MouseFilter = Control.MouseFilterEnum.Pass;
-		scroll.GuiInput += OnQuickGuiInput;
+		scroll.GuiInput += inputEvent => OnQuickGuiInput(inputEvent, scroll);
 		panel.AddChild(scroll);
 
 		rowsContainer = new VBoxContainer();
 		rowsContainer.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
 		rowsContainer.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
 		rowsContainer.MouseFilter = Control.MouseFilterEnum.Pass;
-		rowsContainer.GuiInput += OnQuickGuiInput;
+		rowsContainer.GuiInput += inputEvent => OnQuickGuiInput(inputEvent, rowsContainer);
 		rowsContainer.AddThemeConstantOverride("separation", QuickButtonSpacing);
 		scroll.AddChild(rowsContainer);
 
@@ -137,7 +179,7 @@ public partial class QuickButtons : CanvasLayer
 		if (@event is InputEventMouseMotion mouseMotion)
 		{
 			var viewportWidth = GetViewport().GetVisibleRect().Size.X;
-			var minWidth = QuickButtonWidth + ResizeHandleWidth;
+			var minWidth = EffectiveButtonWidth + ResizeHandleWidth;
 			var maxWidth = Mathf.Max(minWidth, viewportWidth - 40);
 			userWidth = Mathf.Clamp(resizeStartWidth + resizeStartMouseX - mouseMotion.GlobalPosition.X, minWidth, maxWidth);
 			ApplyPanelSize();
@@ -150,9 +192,9 @@ public partial class QuickButtons : CanvasLayer
 		}
 	}
 
-	void OnQuickGuiInput(InputEvent @event)
+	void OnQuickGuiInput(InputEvent @event, Control eventSource)
 	{
-		HandleQuickPointerInput(@event, true);
+		HandleQuickPointerInput(@event, true, null, null, eventSource);
 	}
 
 	void OnResizeHandleGuiInput(InputEvent @event)
@@ -161,7 +203,7 @@ public partial class QuickButtons : CanvasLayer
 		{
 			resizingWidth = mouseButton.Pressed;
 			resizeStartMouseX = mouseButton.GlobalPosition.X;
-			resizeStartWidth = panel != null ? panel.Size.X : QuickButtonWidth;
+			resizeStartWidth = panel != null ? panel.Size.X : EffectiveButtonWidth;
 			GetViewport().SetInputAsHandled();
 		}
 	}
@@ -180,14 +222,15 @@ public partial class QuickButtons : CanvasLayer
 		UpdatePanelSize(true);
 	}
 
-	public void AddButton(string text, Godot.Color color, string code)
+	public void AddButton(string text, Godot.Color color, string code, long generation)
 	{
 		var btn = new Panel();
 		btn.FocusMode = Control.FocusModeEnum.None;
 		btn.MouseForcePassScrollEvents = false;
-		btn.MouseFilter = Control.MouseFilterEnum.Stop;
+		btn.MouseFilter = quickInputEnabled ? Control.MouseFilterEnum.Stop : Control.MouseFilterEnum.Ignore;
 		StyleQuickButton(btn, color);
-		btn.CustomMinimumSize = new Vector2(QuickButtonWidth, QuickButtonHeight);
+		btn.Modulate = quickInputEnabled ? Colors.White : new Color(1, 1, 1, 0.55f);
+		btn.CustomMinimumSize = new Vector2(EffectiveButtonWidth, QuickButtonHeight);
 		btn.SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin;
 		btn.SizeFlagsVertical = Control.SizeFlags.ShrinkBegin;
 
@@ -210,6 +253,7 @@ public partial class QuickButtons : CanvasLayer
 
 		string inputCode = code;
 		btn.SetMeta("input_code", inputCode);
+		btn.SetMeta("input_generation", generation);
 		btn.GuiInput += inputEvent => OnQuickButtonGuiInput(inputEvent, btn, inputCode);
 		currentRow.AddChild(btn);
 		buttons.Add(btn);
@@ -218,22 +262,30 @@ public partial class QuickButtons : CanvasLayer
 
 	void OnQuickButtonGuiInput(InputEvent @event, Control btn, string inputCode)
 	{
-		HandleQuickPointerInput(@event, true, btn, inputCode);
+		HandleQuickPointerInput(@event, true, btn, inputCode, btn);
 	}
 
-	bool HandleQuickPointerInput(InputEvent @event, bool acceptEvent, Control button = null, string inputCode = null)
+	bool HandleQuickPointerInput(InputEvent @event, bool acceptEvent, Control button = null, string inputCode = null, Control eventSource = null)
 	{
-		if (TryGetPointer(@event, out var position, out var pressed, out var released, out var motion))
+		if (TryGetPointer(@event, out var position, out var pressed, out var released, out var motion, out var isTouch, out var pointerIndex))
 		{
 			if (scroll == null || panel == null || (!scrollingByDrag && !panel.GetGlobalRect().HasPoint(position)))
 				return false;
 
-			if (pressed && scrollingByDrag && button == null)
+			if (scrollingByDrag && motion && !IsActivePointer(isTouch, pointerIndex))
 			{
-				if (acceptEvent)
+				GetViewport().SetInputAsHandled();
+				return true;
+			}
+
+			if (pressed && scrollingByDrag)
+			{
+				if (!IsActivePointer(isTouch, pointerIndex))
+				{
 					GetViewport().SetInputAsHandled();
-				else
-					GetViewport().SetInputAsHandled();
+					return true;
+				}
+				AcceptQuickInput(acceptEvent, eventSource);
 				return true;
 			}
 
@@ -242,14 +294,20 @@ public partial class QuickButtons : CanvasLayer
 				StopQuickInertia();
 				scrollingByDrag = true;
 				dragMoved = false;
+				quickScrollInteractionSerial++;
 				scrollToBottomAfterLayout = false;
 				dragButton = button;
+				dragPointerIsTouch = isTouch;
+				dragPointerIndex = pointerIndex;
 				dragStartPosition = position;
 				dragLastPosition = position;
 				quickLastDragTick = Time.GetTicksMsec();
-				if (button != null || acceptEvent)
-					GetViewport().SetInputAsHandled();
-				return button != null || acceptEvent;
+				if (button != null)
+				{
+					AcceptQuickInput(acceptEvent, eventSource);
+					return true;
+				}
+				return false;
 			}
 
 			if (!scrollingByDrag)
@@ -265,14 +323,11 @@ public partial class QuickButtons : CanvasLayer
 				}
 				if (dragMoved && scroll != null)
 				{
-					var delta = dragLastPosition - position;
-					var appliedDelta = ScrollQuickBy(delta);
-					UpdateQuickScrollVelocity(delta, appliedDelta);
-					if (acceptEvent)
-						GetViewport().SetInputAsHandled();
-					else
-						GetViewport().SetInputAsHandled();
+					var rawScrollDelta = dragLastPosition - position;
+					var appliedDelta = ScrollQuickBy(rawScrollDelta);
+					UpdateQuickScrollVelocity(rawScrollDelta, appliedDelta);
 					dragLastPosition = position;
+					AcceptQuickInput(acceptEvent, eventSource);
 					return true;
 				}
 				dragLastPosition = position;
@@ -281,39 +336,68 @@ public partial class QuickButtons : CanvasLayer
 
 			if (released)
 			{
-				FinishQuickButtonPointer(inputCode);
-				if (acceptEvent)
-					GetViewport().SetInputAsHandled();
-				else
-					GetViewport().SetInputAsHandled();
-				return true;
+				bool handled = FinishQuickButtonPointer();
+				if (handled)
+					AcceptQuickInput(acceptEvent, eventSource);
+				return handled;
 			}
 		}
 		return false;
 	}
 
-	void FinishQuickButtonPointer(string fallbackInputCode = null)
+	void AcceptQuickInput(bool acceptEvent, Control eventSource)
+	{
+		GetViewport().SetInputAsHandled();
+	}
+
+	bool FinishQuickButtonPointer()
 	{
 		if (!scrollingByDrag)
-			return;
-		string inputCode = fallbackInputCode;
-		if (inputCode == null && dragButton != null && dragButton.HasMeta("input_code"))
+			return false;
+
+		bool handled = false;
+		string inputCode = null;
+		if (dragButton != null && dragButton.HasMeta("input_code"))
 			inputCode = dragButton.GetMeta("input_code").As<string>();
 		if (!dragMoved && !string.IsNullOrEmpty(inputCode))
-			EmueraThread.instance.Input(inputCode, true);
+		{
+			handled = true;
+			if (quickInputEnabled)
+			{
+				long generation = 0;
+				if (dragButton != null && dragButton.HasMeta("input_generation"))
+					generation = dragButton.GetMeta("input_generation").AsInt64();
+				EmueraContent.instance?.SubmitQuickButtonInput(inputCode, generation);
+			}
+		}
 		else if (dragMoved)
+		{
 			StartQuickInertia();
+			handled = true;
+		}
 		scrollingByDrag = false;
 		dragMoved = false;
 		dragButton = null;
+		dragPointerIsTouch = false;
+		dragPointerIndex = -1;
+		return handled;
 	}
 
-	static bool TryGetPointer(InputEvent @event, out Vector2 position, out bool pressed, out bool released, out bool motion)
+	bool IsActivePointer(bool isTouch, int pointerIndex)
+	{
+		if (dragPointerIsTouch != isTouch)
+			return false;
+		return !isTouch || dragPointerIndex == pointerIndex;
+	}
+
+	static bool TryGetPointer(InputEvent @event, out Vector2 position, out bool pressed, out bool released, out bool motion, out bool isTouch, out int pointerIndex)
 	{
 		position = Vector2.Zero;
 		pressed = false;
 		released = false;
 		motion = false;
+		isTouch = false;
+		pointerIndex = -1;
 
 		if (@event is InputEventMouseButton mouseButton && mouseButton.ButtonIndex == MouseButton.Left)
 		{
@@ -333,12 +417,16 @@ public partial class QuickButtons : CanvasLayer
 			position = touch.Position;
 			pressed = touch.Pressed;
 			released = !touch.Pressed;
+			isTouch = true;
+			pointerIndex = touch.Index;
 			return true;
 		}
 		if (@event is InputEventScreenDrag drag)
 		{
 			position = drag.Position;
 			motion = true;
+			isTouch = true;
+			pointerIndex = drag.Index;
 			return true;
 		}
 		return false;
@@ -369,18 +457,45 @@ public partial class QuickButtons : CanvasLayer
 	public void ApplyFont(FontFile font, int fontSize)
 	{
 		fontFile = font;
-		this.fontSize = fontSize > 0 ? QuickButtonFontSize : 0;
-		if (font != null)
-		{
-			foreach (var btn in buttons)
-				ApplyFontToButtonLabel(btn);
-		}
+		this.fontSize = ConfiguredFontSize;
 		foreach (var btn in buttons)
-			ApplyFontToButtonLabel(btn);
+			ApplyButtonMetrics(btn);
 		UpdatePanelSize(ShouldStickToBottom());
 	}
 
-	int EffectiveFontSize => fontSize > 0 ? fontSize : QuickButtonFontSize;
+	public void RefreshSizing()
+	{
+		this.fontSize = ConfiguredFontSize;
+		foreach (var btn in buttons)
+			ApplyButtonMetrics(btn);
+		if (userWidth > 0)
+			userWidth = Mathf.Clamp(userWidth, EffectiveButtonWidth + ResizeHandleWidth, GetViewport().GetVisibleRect().Size.X - 40);
+		UpdatePanelSize(ShouldStickToBottom());
+	}
+
+	public void SetInputEnabled(bool enabled)
+	{
+		if (quickInputEnabled == enabled)
+			return;
+		quickInputEnabled = enabled;
+		if (panel != null)
+			panel.MouseFilter = enabled ? Control.MouseFilterEnum.Stop : Control.MouseFilterEnum.Ignore;
+		if (resizeHandle != null)
+			resizeHandle.MouseFilter = enabled ? Control.MouseFilterEnum.Stop : Control.MouseFilterEnum.Ignore;
+		if (scroll != null)
+			scroll.MouseFilter = enabled ? Control.MouseFilterEnum.Pass : Control.MouseFilterEnum.Ignore;
+		if (rowsContainer != null)
+			rowsContainer.MouseFilter = enabled ? Control.MouseFilterEnum.Pass : Control.MouseFilterEnum.Ignore;
+		foreach (var btn in buttons)
+		{
+			btn.MouseFilter = enabled ? Control.MouseFilterEnum.Stop : Control.MouseFilterEnum.Ignore;
+			btn.Modulate = enabled ? Colors.White : new Color(1, 1, 1, 0.55f);
+		}
+	}
+
+	int EffectiveFontSize => fontSize > 0 ? fontSize : ConfiguredFontSize;
+
+	int EffectiveButtonWidth => ConfiguredButtonWidth;
 
 	int QuickButtonHeight => EffectiveFontSize * 3 + QuickButtonPadding * 2;
 
@@ -419,6 +534,15 @@ public partial class QuickButtons : CanvasLayer
 		}
 	}
 
+	void ApplyButtonMetrics(Control btn)
+	{
+		if (btn == null)
+			return;
+		btn.CustomMinimumSize = new Vector2(EffectiveButtonWidth, QuickButtonHeight);
+		btn.Size = new Vector2(EffectiveButtonWidth, QuickButtonHeight);
+		ApplyFontToButtonLabel(btn);
+	}
+
 	bool IsMidGray(Color color)
 	{
 		return Mathf.Abs(color.R - 0.5f) <= 0.063f
@@ -442,8 +566,11 @@ public partial class QuickButtons : CanvasLayer
 		var contentSize = rowsContainer.GetCombinedMinimumSize();
 		float maxWidth = viewportSize.X * 0.6f;
 		float maxHeight = Mathf.Max(QuickButtonHeight, viewportSize.Y - 66);
-		float autoWidth = Mathf.Min(contentSize.X, maxWidth);
-		float width = userWidth > 0 ? Mathf.Min(userWidth, viewportSize.X - 40) : autoWidth;
+		float minWidth = EffectiveButtonWidth;
+		float autoWidth = Mathf.Min(Mathf.Max(contentSize.X, minWidth), maxWidth);
+		float width = userWidth > 0
+			? Mathf.Clamp(userWidth, minWidth, Mathf.Max(minWidth, viewportSize.X - 40))
+			: autoWidth;
 		float height = Mathf.Min(contentSize.Y, maxHeight);
 		ApplyPanelSize(width, height);
 		if (scrollToBottomAfterLayout && !scrollingByDrag && !quickInertiaActive && autoScrollInteractionSerial == quickScrollInteractionSerial)
@@ -459,7 +586,10 @@ public partial class QuickButtons : CanvasLayer
 		var viewportSize = GetViewport().GetVisibleRect().Size;
 		var contentSize = rowsContainer.GetCombinedMinimumSize();
 		float maxHeight = Mathf.Max(QuickButtonHeight, viewportSize.Y - 66);
-		float width = userWidth > 0 ? userWidth : Mathf.Min(contentSize.X, viewportSize.X * 0.6f);
+		float minWidth = EffectiveButtonWidth;
+		float width = userWidth > 0
+			? Mathf.Clamp(userWidth, minWidth, Mathf.Max(minWidth, viewportSize.X - 40))
+			: Mathf.Min(Mathf.Max(contentSize.X, minWidth), viewportSize.X * 0.6f);
 		float height = Mathf.Min(contentSize.Y, maxHeight);
 		ApplyPanelSize(width, height);
 	}
@@ -477,6 +607,14 @@ public partial class QuickButtons : CanvasLayer
 	}
 
 	Vector2 ScrollQuickBy(Vector2 delta)
+	{
+		if (scroll == null)
+			return Vector2.Zero;
+		delta *= EmueraContent.ButtonDragSensitivity;
+		return ApplyQuickScrollDelta(delta);
+	}
+
+	Vector2 ApplyQuickScrollDelta(Vector2 delta)
 	{
 		if (scroll == null)
 			return Vector2.Zero;
@@ -523,7 +661,7 @@ public partial class QuickButtons : CanvasLayer
 			return;
 		}
 
-		var instantVelocity = rawScrollDelta / elapsed;
+		var instantVelocity = rawScrollDelta * EmueraContent.ButtonDragSensitivity / elapsed;
 		if (instantVelocity.Length() > QuickInertiaMaxVelocity)
 			instantVelocity = instantVelocity.Normalized() * QuickInertiaMaxVelocity;
 
@@ -567,7 +705,7 @@ public partial class QuickButtons : CanvasLayer
 		quickInertiaRemainder = desiredDelta - roundedDelta;
 		if (roundedDelta.LengthSquared() > 0.01f)
 		{
-			var appliedDelta = ScrollQuickBy(roundedDelta);
+			var appliedDelta = ApplyQuickScrollDelta(roundedDelta);
 			if (appliedDelta.LengthSquared() <= 0.01f)
 			{
 				StopQuickInertia();
@@ -599,5 +737,29 @@ public partial class QuickButtons : CanvasLayer
 			return 0;
 		float contentHeight = Mathf.Max(rowsContainer.Size.Y, rowsContainer.GetCombinedMinimumSize().Y);
 		return Mathf.RoundToInt(Mathf.Max(0, contentHeight - scroll.Size.Y));
+	}
+
+	static void EnsureSettingsLoaded()
+	{
+		if (configuredButtonWidth > 0 && configuredFontSize > 0)
+			return;
+		var cfg = new ConfigFile();
+		cfg.Load(SettingsPath);
+		configuredButtonWidth = Mathf.Clamp(
+			Mathf.RoundToInt((float)(double)cfg.GetValue(SettingsSection, QuickButtonWidthKey, DefaultQuickButtonWidth)),
+			MinQuickButtonWidth,
+			MaxQuickButtonWidth);
+		configuredFontSize = Mathf.Clamp(
+			Mathf.RoundToInt((float)(double)cfg.GetValue(SettingsSection, QuickButtonFontSizeKey, DefaultQuickButtonFontSize)),
+			MinQuickButtonFontSize,
+			MaxQuickButtonFontSize);
+	}
+
+	static void SaveSetting(string key, int value)
+	{
+		var cfg = new ConfigFile();
+		cfg.Load(SettingsPath);
+		cfg.SetValue(SettingsSection, key, value);
+		cfg.Save(SettingsPath);
 	}
 }

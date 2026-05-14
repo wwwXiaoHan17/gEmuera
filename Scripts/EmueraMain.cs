@@ -204,7 +204,7 @@ public partial class EmueraMain : Node
         UpdateStartupStatus("正在准备游戏目录...");
 
         // Setup path resolution
-        string eraPath = FirstWindow.SelectedGamePath;
+        string eraPath = FirstWindow.ResolveStartupGamePath();
         if (string.IsNullOrEmpty(eraPath) || !uEmuera.Utils.DirectoryExists(eraPath))
         {
             eraPath = ProjectSettings.GlobalizePath("res://eraAkumaMaid0.305-CH-正式版");

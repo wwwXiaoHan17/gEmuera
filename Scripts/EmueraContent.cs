@@ -12,6 +12,7 @@ public partial class EmueraContent : Control
     ScrollContainer scrollContainer;
     Control scaledContentRoot;
     VBoxContainer lineContainer;
+    VBoxContainer htmlIslandContainer;
     HBoxContainer menuBar;
     Inputpad inputpad;
     QuickButtons quickButtons;
@@ -19,6 +20,10 @@ public partial class EmueraContent : Control
     ColorRect bgRect;
     Control cbgContainer;
     OptionWindow optionWindow;
+    AudioStreamPlayer bgmPlayer;
+    List<AudioStreamPlayer> soundPlayers = new List<AudioStreamPlayer>();
+    float soundVolume = 1.0f;
+    float bgmVolume = 1.0f;
 
     Dictionary<int, ConsoleDisplayLine> lineObjects = new Dictionary<int, ConsoleDisplayLine>();
     HashSet<string> failedTextureSearches = new HashSet<string>();
@@ -32,6 +37,12 @@ public partial class EmueraContent : Control
     int displayRevision = 0;
     int quickRenderedGeneration = int.MinValue;
     int quickRenderedRevision = -1;
+    bool quickInputGateActive = false;
+    bool quickAutoHiddenUntilNextButtons = false;
+    int quickAutoHiddenGeneration = int.MinValue;
+    long quickInputGateGeneration = -1;
+    int quickInputGateRevision = -1;
+    ulong quickInputGateTick = 0;
     uint lastClickTick = 0;
     bool contentDragActive = false;
     bool contentDragMoved = false;
@@ -63,6 +74,7 @@ public partial class EmueraContent : Control
     const string SettingsSection = "Display";
     const string ContentDragSensitivityKey = "ContentDragSensitivity";
     const string ButtonDragSensitivityKey = "ButtonDragSensitivity";
+    const ulong QuickInputGateFallbackMs = 500;
     static float contentDragSensitivity = -1.0f;
 
     Label inProcessLabel;
@@ -256,6 +268,12 @@ public partial class EmueraContent : Control
         lineContainer.AddThemeConstantOverride("separation", 4);
         scaledContentRoot.AddChild(lineContainer);
 
+        htmlIslandContainer = new VBoxContainer();
+        htmlIslandContainer.MouseFilter = MouseFilterEnum.Ignore;
+        htmlIslandContainer.ClipContents = false;
+        htmlIslandContainer.AddThemeConstantOverride("separation", 4);
+        scaledContentRoot.AddChild(htmlIslandContainer);
+
         // Message box popup
         msgBox = new PopupPanel();
         msgBox.Size = new Vector2I(400, 220);
@@ -320,6 +338,7 @@ public partial class EmueraContent : Control
         lineObjects.Clear();
         failedTextureSearches.Clear();
         displayRevision++;
+        RefreshQuickInputGate();
         quickRenderedRevision = -1;
         if (quickButtons != null && quickButtons.IsShow)
             quickButtons.Clear();
@@ -462,6 +481,7 @@ public partial class EmueraContent : Control
         var lineControl = new Control();
         lineControl.MouseFilter = MouseFilterEnum.Pass;
         lineControl.ClipContents = false;
+        AddLineBackground(line, lineControl);
         int maxLineRight = 0;
 
         foreach(var button in line.Buttons)
@@ -549,6 +569,7 @@ public partial class EmueraContent : Control
         lineControl.SetMeta("line_no", line.LineNo);
         lineObjects[line.LineNo] = line;
         displayRevision++;
+        RefreshQuickInputGate();
 
         // Enforce node cap to prevent unbounded memory growth
         if (lineContainer.GetChildCount() > MaxVisibleLines)
@@ -563,6 +584,55 @@ public partial class EmueraContent : Control
         }
     }
 
+    void AddLineBackground(ConsoleDisplayLine line, Control lineControl)
+    {
+        if (line.TextBackgroundColor == null)
+            return;
+        var c = line.TextBackgroundColor.Value;
+        var bg = new ColorRect();
+        bg.MouseFilter = MouseFilterEnum.Ignore;
+        bg.Color = new Godot.Color(c.r, c.g, c.b, c.a);
+        bg.Position = Vector2.Zero;
+        bg.Size = new Vector2(Config.DrawableWidth, EffectiveLineHeight);
+        bg.CustomMinimumSize = new Vector2(Config.DrawableWidth, EffectiveLineHeight);
+        bg.ZIndex = -1;
+        lineControl.AddChild(bg);
+    }
+
+    internal void SetHtmlIsland(ConsoleDisplayLine[] lines)
+    {
+        ClearHtmlIsland();
+        if (htmlIslandContainer == null || lines == null)
+            return;
+        foreach (var line in lines)
+        {
+            var lineControl = new Control();
+            lineControl.MouseFilter = MouseFilterEnum.Ignore;
+            lineControl.ClipContents = false;
+            AddLineBackground(line, lineControl);
+            foreach (var button in line.Buttons)
+            {
+                foreach (var part in button.StrArray)
+                    AddPartToContainer(part, lineControl, 0);
+            }
+            lineControl.CustomMinimumSize = new Vector2(0, EffectiveLineHeight);
+            htmlIslandContainer.AddChild(lineControl);
+        }
+        displayRevision++;
+        RefreshQuickInputGate();
+        QueueScaleBoundsUpdate();
+    }
+
+    internal void ClearHtmlIsland()
+    {
+        if (htmlIslandContainer == null)
+            return;
+        foreach (var child in htmlIslandContainer.GetChildren())
+            SafeQueueFree(child);
+        displayRevision++;
+        RefreshQuickInputGate();
+    }
+
     async void DeferredScrollToBottom(int interactionSerial)
     {
         if (scrollContainer != null)
@@ -574,8 +644,7 @@ public partial class EmueraContent : Control
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             if (!contentDragActive && !contentInertiaActive && interactionSerial == contentScrollInteractionSerial)
             {
-                var vScroll = scrollContainer.GetVScrollBar();
-                scrollContainer.ScrollVertical = (int)Mathf.Ceil(Mathf.Max(0, vScroll.MaxValue - vScroll.Page));
+                scrollContainer.ScrollVertical = GetMaxContentVerticalScroll();
             }
         }
         pendingScroll = false;
@@ -994,7 +1063,10 @@ public partial class EmueraContent : Control
             SafeQueueFree(child);
         }
         if (removedAny)
+        {
             displayRevision++;
+            RefreshQuickInputGate();
+        }
     }
 
     public void RemoveBottomLines(int count)
@@ -1012,7 +1084,10 @@ public partial class EmueraContent : Control
             SafeQueueFree(child);
         }
         if (removedAny)
+        {
             displayRevision++;
+            RefreshQuickInputGate();
+        }
     }
 
     static void SafeQueueFree(Node node)
@@ -1067,9 +1142,10 @@ public partial class EmueraContent : Control
             }
             emuImg.DrawOffset = new Vector2(0, 0);
             emuImg.Position = new Vector2(cbg.x, cbg.y);
-            int w = cbg.Img.DestBaseSize.Width > 0 ? cbg.Img.DestBaseSize.Width : texture.GetWidth();
-            int h = cbg.Img.DestBaseSize.Height > 0 ? cbg.Img.DestBaseSize.Height : texture.GetHeight();
+            int w = cbg.width > 0 ? cbg.width : (cbg.Img.DestBaseSize.Width > 0 ? cbg.Img.DestBaseSize.Width : texture.GetWidth());
+            int h = cbg.height > 0 ? cbg.height : (cbg.Img.DestBaseSize.Height > 0 ? cbg.Img.DestBaseSize.Height : texture.GetHeight());
             emuImg.Size = new Vector2(w, h);
+            emuImg.Modulate = new Godot.Color(1, 1, 1, cbg.opacity);
             emuImg.Visible = true;
             nodeIndex++;
         }
@@ -1088,6 +1164,149 @@ public partial class EmueraContent : Control
         return cbgNodes[index];
     }
 
+    public void PlaySoundFile(string path, bool loop)
+    {
+        var stream = LoadAudioStream(path, loop);
+        if (stream == null)
+            return;
+        AudioStreamPlayer player = null;
+        foreach (var candidate in soundPlayers)
+        {
+            if (!candidate.Playing)
+            {
+                player = candidate;
+                break;
+            }
+        }
+        if (player == null)
+        {
+            player = new AudioStreamPlayer();
+            soundPlayers.Add(player);
+            AddChild(player);
+        }
+        player.Stream = stream;
+        player.VolumeDb = LinearToDb(soundVolume);
+        player.Play();
+    }
+
+    public void StopSounds()
+    {
+        foreach (var player in soundPlayers)
+            player.Stop();
+    }
+
+    public void StopSoundChannel(int channel)
+    {
+        if (channel < 0 || channel >= soundPlayers.Count)
+            return;
+        soundPlayers[channel].Stop();
+    }
+
+    public void PauseSoundChannel(int channel, bool paused)
+    {
+        if (channel < 0 || channel >= soundPlayers.Count)
+            return;
+        soundPlayers[channel].StreamPaused = paused;
+    }
+
+    public void SetSoundChannelSpeed(int channel, float speed)
+    {
+        if (channel < 0 || channel >= soundPlayers.Count)
+            return;
+        soundPlayers[channel].PitchScale = Mathf.Max(0.01f, speed);
+    }
+
+    public void PlayBgmFile(string path)
+    {
+        var stream = LoadAudioStream(path, true);
+        if (stream == null)
+            return;
+        if (bgmPlayer == null)
+        {
+            bgmPlayer = new AudioStreamPlayer();
+            AddChild(bgmPlayer);
+        }
+        bgmPlayer.Stream = stream;
+        bgmPlayer.VolumeDb = LinearToDb(bgmVolume);
+        bgmPlayer.Play();
+    }
+
+    public void StopBgm()
+    {
+        bgmPlayer?.Stop();
+    }
+
+    public void PauseBgm(bool paused)
+    {
+        if (bgmPlayer == null)
+            return;
+        bgmPlayer.StreamPaused = paused;
+    }
+
+    public void SetBgmSpeed(float speed)
+    {
+        if (bgmPlayer == null)
+            return;
+        bgmPlayer.PitchScale = Mathf.Max(0.01f, speed);
+    }
+
+    public void SetSoundVolume(int volume)
+    {
+        soundVolume = NormalizeEraVolume(volume);
+        foreach (var player in soundPlayers)
+            player.VolumeDb = LinearToDb(soundVolume);
+    }
+
+    public void SetBgmVolume(int volume)
+    {
+        bgmVolume = NormalizeEraVolume(volume);
+        if (bgmPlayer != null)
+            bgmPlayer.VolumeDb = LinearToDb(bgmVolume);
+    }
+
+    AudioStream LoadAudioStream(string path, bool loop)
+    {
+        if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path))
+            return null;
+        string ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
+        switch (ext)
+        {
+            case ".wav":
+                var wav = AudioStreamWav.LoadFromFile(path);
+                if (wav != null)
+                    wav.LoopMode = loop ? AudioStreamWav.LoopModeEnum.Forward : AudioStreamWav.LoopModeEnum.Disabled;
+                return wav;
+            case ".ogg":
+                var ogg = AudioStreamOggVorbis.LoadFromFile(path);
+                if (ogg != null)
+                    ogg.Loop = loop;
+                return ogg;
+            case ".mp3":
+                var mp3 = AudioStreamMP3.LoadFromFile(path);
+                if (mp3 != null)
+                    mp3.Loop = loop;
+                return mp3;
+            default:
+                return null;
+        }
+    }
+
+    static float NormalizeEraVolume(int volume)
+    {
+        if (volume <= 0)
+            return 0.0f;
+        if (volume >= 100)
+            return 1.0f;
+        return volume / 100.0f;
+    }
+
+    static float LinearToDb(float linear)
+    {
+        if (linear <= 0.0001f)
+            return -80.0f;
+        return Mathf.LinearToDb(linear);
+    }
+
     void TrimCbgNodes(int keepCount)
     {
         for (int i = cbgNodes.Count - 1; i >= keepCount; i--)
@@ -1100,12 +1319,25 @@ public partial class EmueraContent : Control
 
     public void SetLastButtonGeneration(int generation)
     {
+        bool shouldAutoShowQuick = quickAutoHiddenUntilNextButtons
+            && generation >= 0
+            && generation != quickAutoHiddenGeneration;
         lastButtonGeneration = generation;
+        RefreshQuickInputGate();
 
-        if (quickButtons != null && quickButtons.IsShow)
+        if (quickButtons != null && (quickButtons.IsShow || shouldAutoShowQuick))
         {
             if (quickRenderedGeneration == lastButtonGeneration && quickRenderedRevision == displayRevision)
+            {
+                if (shouldAutoShowQuick)
+                {
+                    quickAutoHiddenUntilNextButtons = false;
+                    quickAutoHiddenGeneration = int.MinValue;
+                    quickButtons.ShowPad();
+                    UpdateSystemButtonVisuals();
+                }
                 return;
+            }
 
             quickButtons.Clear();
             quickRenderedGeneration = lastButtonGeneration;
@@ -1137,16 +1369,81 @@ public partial class EmueraContent : Control
 
             lineGroups.Sort((a, b) => a.lineNo.CompareTo(b.lineNo));
 
+            if (lineGroups.Count == 0)
+                return;
+
+            if (shouldAutoShowQuick)
+            {
+                quickAutoHiddenUntilNextButtons = false;
+                quickAutoHiddenGeneration = int.MinValue;
+                quickButtons.ShowPad();
+                quickButtons.SetInputEnabled(true);
+                UpdateSystemButtonVisuals();
+            }
+
             for (int i = 0; i < lineGroups.Count; i++)
             {
                 foreach (var btn in lineGroups[i].buttons)
                 {
-                    quickButtons.AddButton(btn.text, btn.color, btn.code);
+                    quickButtons.AddButton(btn.text, btn.color, btn.code, lastButtonGeneration);
                 }
                 if (i < lineGroups.Count - 1)
                     quickButtons.ShiftLine();
             }
         }
+    }
+
+    public void SubmitQuickButtonInput(string input, long generation)
+    {
+        if (quickInputGateActive && quickInputGateGeneration == generation && quickInputGateRevision == displayRevision)
+            return;
+
+        if (generation >= lastButtonGeneration)
+        {
+            quickInputGateActive = true;
+            quickInputGateGeneration = generation;
+            quickInputGateRevision = displayRevision;
+            quickInputGateTick = Time.GetTicksMsec();
+            quickAutoHiddenUntilNextButtons = true;
+            quickAutoHiddenGeneration = (int)generation;
+            quickButtons?.SetInputEnabled(true);
+            quickButtons?.HidePad();
+            UpdateSystemButtonVisuals();
+        }
+
+        OnButtonPressed(input, generation);
+    }
+
+    public void RefreshQuickButtonSettings()
+    {
+        quickButtons?.RefreshSizing();
+    }
+
+    void RefreshQuickInputGate()
+    {
+        if (!quickInputGateActive)
+        {
+            quickButtons?.SetInputEnabled(true);
+            return;
+        }
+
+        if (quickInputGateGeneration != lastButtonGeneration || quickInputGateRevision != displayRevision)
+        {
+            quickInputGateActive = false;
+            quickInputGateGeneration = -1;
+            quickInputGateRevision = -1;
+            quickInputGateTick = 0;
+            quickButtons?.SetInputEnabled(true);
+        }
+    }
+
+    void RestoreQuickInputGate()
+    {
+        quickInputGateActive = false;
+        quickInputGateGeneration = -1;
+        quickInputGateRevision = -1;
+        quickInputGateTick = 0;
+        quickButtons?.SetInputEnabled(true);
     }
 
     Godot.Color GetQuickButtonColor(ConsoleButtonString button)
@@ -1251,6 +1548,12 @@ public partial class EmueraContent : Control
         GetTree().ReloadCurrentScene();
     }
 
+    public void RequestRestartFromErb()
+    {
+        EmueraThread.instance.End();
+        CallDeferred(nameof(RestartScene));
+    }
+
     void OnOptionsPressed()
     {
         optionWindow?.ShowPopup();
@@ -1275,10 +1578,14 @@ public partial class EmueraContent : Control
     {
         if (quickButtons.IsShow)
         {
+            quickAutoHiddenUntilNextButtons = false;
+            quickAutoHiddenGeneration = int.MinValue;
             quickButtons.HidePad();
         }
         else
         {
+            quickAutoHiddenUntilNextButtons = false;
+            quickAutoHiddenGeneration = int.MinValue;
             inputpad?.HidePad();
             scalepad?.HidePad();
             quickButtons.ShowPad();
@@ -1482,6 +1789,11 @@ public partial class EmueraContent : Control
     public override void _Process(double delta)
     {
         ProcessContentInertia((float)delta);
+        RefreshQuickInputGate();
+        if (quickInputGateActive && Time.GetTicksMsec() - quickInputGateTick >= QuickInputGateFallbackMs && !EmueraThread.instance.Running())
+        {
+            RestoreQuickInputGate();
+        }
 
         if (!autoClickSkipEnabled)
             return;
@@ -1595,11 +1907,14 @@ public partial class EmueraContent : Control
         else if (contentDragStartedOnButton)
         {
             OnButtonPressed(contentDragButtonInput, contentDragButtonGeneration);
+            RestoreQuickInputGate();
             handled = true;
         }
         else if (!contentDragStartedOnButton)
         {
             handled = TryAdvanceTap(acceptEvent);
+            if (handled)
+                RestoreQuickInputGate();
         }
 
         ResetContentDragState();
@@ -1722,7 +2037,7 @@ public partial class EmueraContent : Control
         if (scrollContainer == null)
             return 0;
         var hScroll = scrollContainer.GetHScrollBar();
-        return Mathf.RoundToInt(Mathf.Max(0, hScroll.MaxValue - hScroll.Page));
+        return Mathf.RoundToInt(Mathf.Max(0, hScroll.MaxValue));
     }
 
     int GetMaxContentVerticalScroll()
@@ -1730,7 +2045,7 @@ public partial class EmueraContent : Control
         if (scrollContainer == null)
             return 0;
         var vScroll = scrollContainer.GetVScrollBar();
-        return Mathf.RoundToInt(Mathf.Max(0, vScroll.MaxValue - vScroll.Page));
+        return Mathf.RoundToInt(Mathf.Max(0, vScroll.MaxValue));
     }
 
     bool TryAdvanceTap(bool acceptEvent)

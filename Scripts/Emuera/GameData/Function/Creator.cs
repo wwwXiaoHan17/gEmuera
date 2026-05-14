@@ -210,11 +210,124 @@ namespace MinorShift.Emuera.GameData.Function
                 ["SETANIMETIMER"] = new SetAnimeTimerMethod()
             };
 
+            if (Program.UseLegacySnakeCompatibilityFallbacks)
+                AddSnakeCompatibilityMethods(methodList);
 
             //1823 自分の関数名を知っていた方が何かと便利なので覚えさせることにした
             foreach (var pair in methodList)
 				pair.Value.SetMethodName(pair.Key);
         }
+
+		private static void AddSnakeCompatibilityMethods(Dictionary<string, FunctionMethod> methods)
+		{
+			methods["GETANIMETIMER"] = new GetAnimeTimerMethod();
+			methods["HTML_STRINGLEN"] = new HtmlStringLenMethod();
+			methods["HTML_SUBSTRING"] = new HtmlSubstringMethod();
+			methods["HTML_STRINGLINES"] = new HtmlStringLinesMethod();
+			methods["EXISTSOUND"] = new ExistSoundMethod();
+			methods["EXISTSIMAGELAYER"] = new ExistsImageLayerMethod();
+			methods["GETSOUNDORBGMINFO"] = new GetSoundOrBgmInfoMethod();
+			methods["ISPLAYINGSOUND"] = new IsPlayingSoundMethod();
+			methods["SOUNDCONTROL"] = new SoundControlMethod();
+			methods["ISPLAYINGBGM"] = new IsPlayingBgmMethod();
+			methods["BGMCONTROL"] = new BgmControlMethod();
+			methods["GET_TEXT_DRAWING_MODE"] = new GetTextDrawingModeMethod();
+			methods["GET_SKIA_QUALITY"] = new GetSkiaQualityMethod();
+			methods["SIN"] = new SnakeTrigMethod("SIN");
+			methods["COS"] = new SnakeTrigMethod("COS");
+			methods["TAN"] = new SnakeTrigMethod("TAN");
+			methods["ASIN"] = new SnakeTrigMethod("ASIN");
+			methods["ACOS"] = new SnakeTrigMethod("ACOS");
+			methods["ATAN"] = new SnakeTrigMethod("ATAN");
+			methods["FLOOR"] = new SnakeUnaryMathMethod("FLOOR");
+			methods["CEIL"] = new SnakeUnaryMathMethod("CEIL");
+			methods["ROUND"] = new SnakeUnaryMathMethod("ROUND");
+			methods["ARGLEN"] = new SnakeArgLenMethod();
+			methods["TOFLOAT"] = new ToIntMethod();
+			methods["TOSTRF"] = new ToStrMethod();
+			methods["UNCHECKED_ADD"] = new SnakeUncheckedMathMethod("ADD");
+			methods["UNCHECKED_SUB"] = new SnakeUncheckedMathMethod("SUB");
+			methods["UNCHECKED_MUL"] = new SnakeUncheckedMathMethod("MUL");
+			methods["UNCHECKED_NEG"] = new SnakeUncheckedMathMethod("NEG");
+			methods["BITSET"] = new SnakeBitMethod("SET");
+			methods["BITGET"] = new SnakeBitMethod("GET");
+			methods["BITTOGGLE"] = new SnakeBitMethod("TOGGLE");
+			methods["BITINDEXOFFIRST"] = new SnakeBitMethod("INDEX");
+			methods["SQL_CONNECTION_OPEN"] = new SnakeSqlIntMethod("CONNECTION_OPEN");
+			methods["SQL_CONNECT"] = new SnakeSqlIntMethod("CONNECT");
+			methods["SQL_DISCONNECT"] = new SnakeSqlIntMethod("DISCONNECT");
+			methods["SQL_EXECUTE_NONQUERY"] = new SnakeSqlIntMethod("EXECUTE_NONQUERY");
+			methods["SQL_EXECUTE_READER"] = new SnakeSqlIntMethod("EXECUTE_READER");
+			methods["SQL_READER_READ"] = new SnakeSqlIntMethod("READER_READ");
+			methods["SQL_READER_GET_LONG"] = new SnakeSqlIntMethod("READER_GET_LONG");
+			methods["SQL_READER_GET_FLOAT"] = new SnakeSqlIntMethod("READER_GET_FLOAT");
+			methods["SQL_READER_ISNULL"] = new SnakeSqlIntMethod("READER_ISNULL");
+			methods["SQL_READER_CLOSE"] = new SnakeSqlIntMethod("READER_CLOSE");
+			methods["SQL_EXECUTE_SCALAR_LONG"] = new SnakeSqlIntMethod("EXECUTE_SCALAR_LONG");
+			methods["SQL_EXECUTE_SCALAR_FLOAT"] = new SnakeSqlIntMethod("EXECUTE_SCALAR_FLOAT");
+			methods["SQL_P_EXECUTE_NONQUERY"] = new SnakeSqlIntMethod("P_EXECUTE_NONQUERY");
+			methods["SQL_P_EXECUTE_READER"] = new SnakeSqlIntMethod("P_EXECUTE_READER");
+			methods["SQL_P_EXECUTE_SCALAR_LONG"] = new SnakeSqlIntMethod("P_EXECUTE_SCALAR_LONG");
+			methods["SQL_P_EXECUTE_SCALAR_FLOAT"] = new SnakeSqlIntMethod("P_EXECUTE_SCALAR_FLOAT");
+			methods["SQL_ESCAPE"] = new SnakeSqlStringMethod("ESCAPE");
+			methods["SQL_EXECUTE_SCALAR_STRING"] = new SnakeSqlStringMethod("EXECUTE_SCALAR_STRING");
+			methods["SQL_P_EXECUTE_SCALAR_STRING"] = new SnakeSqlStringMethod("P_EXECUTE_SCALAR_STRING");
+			methods["SQL_READER_GET_STRING"] = new SnakeSqlStringMethod("READER_GET_STRING");
+
+			string[] intFallbacks =
+			{
+				"ACOS", "ARGLEN", "ARRAYMSORTEX", "ASIN", "ATAN", "CEIL", "CLEARMEMORY", "COS",
+				"DT_CELL_GET", "DT_CELL_GETF", "DT_CELL_ISNULL", "DT_CELL_SET", "DT_CELL_SETF",
+				"DT_CLEAR", "DT_COLUMN_ADD", "DT_COLUMN_EXIST", "DT_COLUMN_LENGTH", "DT_COLUMN_REMOVE",
+				"DT_CREATE", "DT_EXIST", "DT_FROMXML", "DT_NOCASE", "DT_RELEASE", "DT_ROW_ADD",
+				"DT_ROW_LENGTH", "DT_ROW_REMOVE", "DT_ROW_SET", "DT_SELECT", "DT_TOXML",
+				"ENUMFUNCBEGINSWITH", "ENUMFUNCENDSWITH", "ENUMFUNCWITH", "ENUMMACROBEGINSWITH",
+				"ENUMMACROENDSWITH", "ENUMMACROWITH", "ENUMVARBEGINSWITH", "ENUMVARENDSWITH",
+				"ENUMVARWITH", "EVAL", "EVALF", "EXISTFILE", "EXISTFUNCTION", "EXISTMETH",
+				"EXISTVAR", "FLOOR", "FLOWINPUT", "FLOWINPUTS", "G_POLYGON_DRAW", "G_POLYGON_FILL",
+				"G_POLYGON_POINT_ADD", "G_POLYGON_POINT_CLEAR", "GDASHSTYLE", "GDRAWGWITHROTATE",
+				"GDRAWLINE", "GDRAWTEXT", "GETCSVNOBYCALLNAME", "GETCSVNOBYMASTERNAME",
+				"GETCSVNOBYNAME", "GETCSVNOBYNICKNAME", "GETMEMORYUSAGE", "GETMETH", "GETMETHF",
+				"GGETBRUSH", "GGETFONTSIZE", "GGETFONTSTYLE", "GGETPEN", "GGETPENWIDTH",
+				"GGETTEXTSIZE", "GROTATE", "HOTKEY_STATE", "HOTKEY_STATE_INIT", "ISDEFINED",
+				"MAP_CLEAR", "MAP_CREATE", "MAP_EXIST", "MAP_FINDKEY", "MAP_FROMSTRING",
+				"MAP_FROMXML", "MAP_HAS", "MAP_MERGE", "MAP_RELEASE", "MAP_REMOVE",
+				"MAP_REMOVEIF", "MAP_SET", "MAP_SIZE", "MATCHALL", "MATCHALLEX", "MOUSEB",
+				"MOVETEXTBOX", "OUTPUTLOG", "REGEXPMATCH", "RESUMETEXTBOX", "ROUND", "SETTEXTBOX",
+				"SETVAR", "SIN", "SPRITECREATEFROMFILE", "SPRITEDISPOSEALL", "SQL_CONNECT",
+				"SQL_CONNECTION_OPEN", "SQL_DISCONNECT", "SQL_EXECUTE_NONQUERY", "SQL_EXECUTE_READER",
+				"SQL_EXECUTE_SCALAR_FLOAT", "SQL_EXECUTE_SCALAR_LONG",
+				"SQL_EXPORT_DT_XML", "SQL_EXPORT_MAP_XML", "SQL_IMPORT_DT_XML", "SQL_IMPORT_MAP_XML",
+				"SQL_IMPORT_XML_CUSTOM", "SQL_P_EXECUTE_NONQUERY", "SQL_P_EXECUTE_READER",
+				"SQL_P_EXECUTE_SCALAR_FLOAT", "SQL_P_EXECUTE_SCALAR_LONG",
+				"SQL_READER_CLOSE", "SQL_READER_GET_FLOAT", "SQL_READER_GET_LONG", "SQL_READER_ISNULL",
+				"SQL_READER_READ", "TAN", "UNCHECKED_ADD", "UNCHECKED_MUL", "UNCHECKED_NEG",
+				"UNCHECKED_SUB", "VARSETEX", "XML_ADDATTRIBUTE", "XML_ADDATTRIBUTE_BYNAME",
+				"XML_ADDNODE", "XML_ADDNODE_BYNAME", "XML_DOCUMENT", "XML_EXIST", "XML_GET",
+				"XML_GET_BYNAME", "XML_RELEASE", "XML_REMOVEATTRIBUTE", "XML_REMOVEATTRIBUTE_BYNAME",
+				"XML_REMOVENODE", "XML_REMOVENODE_BYNAME", "XML_REPLACE", "XML_REPLACE_BYNAME",
+				"XML_SET", "XML_SET_BYNAME"
+			};
+			foreach (string name in intFallbacks)
+			{
+				if (!methods.ContainsKey(name))
+					methods[name] = new SnakeIntFallbackMethod();
+			}
+
+			string[] strFallbacks =
+			{
+				"DT_CELL_GETS", "DT_COLUMN_NAMES", "ENUMFILES", "ERDNAME", "EVALS", "GETDISPLAYLINE",
+				"GETDOINGFUNCTION", "GETMETHS", "GETTEXTBOX", "GETVAR", "GETVARF", "GETVARS",
+				"GGETFONT", "MAP_GET", "MAP_GETKEYS", "MAP_TOSTRING", "MAP_TOXML", "MAP_VALUES",
+				"SQL_ESCAPE", "SQL_EXECUTE_SCALAR_STRING", "SQL_P_EXECUTE_SCALAR_STRING",
+				"SQL_READER_GET_STRING", "TOSTRF", "XML_TOSTR"
+			};
+			foreach (string name in strFallbacks)
+			{
+				if (!methods.ContainsKey(name))
+					methods[name] = new SnakeStringFallbackMethod();
+			}
+		}
 
 		private static readonly Dictionary<string, FunctionMethod> methodList;
 		public static Dictionary<string, FunctionMethod> GetMethodList()

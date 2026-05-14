@@ -149,7 +149,13 @@ namespace MinorShift.Emuera.GameProc
 				console.ThrowTitleError(false);
 				return;
 			}
-			if ((!noError) && (!Config.CompatiErrorLine))
+			if ((!noError) && (!Config.CompatiErrorLine) && Program.IsSnakeProfile)
+			{
+				console.PrintSystemLine("Snake互換モード: ERB解析警告がありますが起動を継続します");
+				console.PrintSystemLine("emuera.logにログを出力します");
+				console.OutputLog(Program.ExeDir + "emuera.log");
+			}
+			else if ((!noError) && (!Config.CompatiErrorLine))
 			{
 				console.PrintSystemLine("ERBコードに解釈不可能な行があるためEmueraを終了します");
 				console.PrintSystemLine("※互換性オプション「" + Config.GetConfigName(ConfigCode.CompatiErrorLine) + "」により強制的に動作させることができます");

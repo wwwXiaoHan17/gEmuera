@@ -13,6 +13,13 @@ using uEmuera.Window;
 
 namespace MinorShift.Emuera
 {
+	public enum EmueraCoreProfile
+	{
+		Emuera1824V18,
+		Snake,
+		SnakeModernMobile,
+	}
+
 	public static class Program
 	{
 		/*
@@ -45,6 +52,7 @@ namespace MinorShift.Emuera
 		{
 
 			ExeDir = Sys.ExeDir;
+			CoreProfile = DetectCoreProfile(ExeDir);
 #if UEMUERA_DEBUG
 			//debugMode = true;
 
@@ -54,7 +62,10 @@ namespace MinorShift.Emuera
 			ExeDir = @"";
 
 #endif
+			WorkingDir = ExeDir;
 			GenericUtils.Info($"[LOAD] ExeDir={ExeDir}");
+			GenericUtils.Info($"[LOAD] CoreProfile={CoreProfile}");
+			ResetSnakeStartupErrorLog();
 			CsvDir = ExeDir + "csv/";
 			if (!uEmuera.Utils.DirectoryExists(CsvDir)){
 				CsvDir = ExeDir + "CSV/";
@@ -198,6 +209,7 @@ namespace MinorShift.Emuera
 		/// 実行ファイルのディレクトリ。最後に\を付けたstring
 		/// </summary>
 		public static string ExeDir { get; private set; }
+		public static string WorkingDir { get; private set; }
 		public static string CsvDir { get; private set; }
 		public static string ErbDir { get; private set; }
 		public static string DebugDir { get; private set; }
@@ -216,9 +228,97 @@ namespace MinorShift.Emuera
 
 		public static bool debugMode = false;
 		public static bool DebugMode { get { return debugMode; } }
+		public static EmueraCoreProfile CoreProfile { get; private set; } = EmueraCoreProfile.Emuera1824V18;
+		public static bool IsSnakeProfile
+		{
+			get { return CoreProfile == EmueraCoreProfile.Snake || CoreProfile == EmueraCoreProfile.SnakeModernMobile; }
+		}
+		public static bool IsSnakeModernMobileProfile { get { return CoreProfile == EmueraCoreProfile.SnakeModernMobile; } }
+		public static bool UseLegacySnakeCompatibilityFallbacks { get { return CoreProfile == EmueraCoreProfile.Snake; } }
+
+		public static void AppendSnakeStartupErrorLog(string text)
+		{
+			if (!IsSnakeProfile || string.IsNullOrEmpty(ExeDir) || string.IsNullOrEmpty(text))
+				return;
+
+			try
+			{
+				File.AppendAllText(Path.Combine(ExeDir, "emuera_startup_errors.log"), text + Environment.NewLine);
+			}
+			catch
+			{
+			}
+		}
+
+		private static void ResetSnakeStartupErrorLog()
+		{
+			if (!IsSnakeProfile || string.IsNullOrEmpty(ExeDir))
+				return;
+
+			try
+			{
+				File.WriteAllText(Path.Combine(ExeDir, "emuera_startup_errors.log"),
+					"Snake startup errors: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + Environment.NewLine);
+			}
+			catch
+			{
+			}
+		}
 
 
 		public static uint StartTime { get; private set; }
+
+		private static EmueraCoreProfile DetectCoreProfile(string exeDir)
+		{
+			if (string.IsNullOrEmpty(exeDir))
+				return EmueraCoreProfile.Emuera1824V18;
+
+			if (IsModernSnakeCoreRequested(exeDir))
+				return EmueraCoreProfile.SnakeModernMobile;
+
+			string trimmed = exeDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+			string current = trimmed;
+			while (!string.IsNullOrEmpty(current))
+			{
+				string folderName = Path.GetFileName(current);
+				if (string.Equals(folderName, "snake", StringComparison.OrdinalIgnoreCase))
+					return EmueraCoreProfile.Snake;
+				string parent = Path.GetDirectoryName(current);
+				if (string.IsNullOrEmpty(parent) || string.Equals(parent, current, StringComparison.Ordinal))
+					break;
+				current = parent;
+			}
+
+			return EmueraCoreProfile.Emuera1824V18;
+		}
+
+		private static bool IsModernSnakeCoreRequested(string exeDir)
+		{
+			try
+			{
+				string normalized = uEmuera.Utils.NormalizePath(exeDir);
+				if (uEmuera.Utils.FileExists(Path.Combine(normalized, "modern_core.txt"))
+					|| uEmuera.Utils.FileExists(Path.Combine(normalized, "snake_modern_core.txt")))
+					return true;
+
+				string trimmed = normalized.TrimEnd('/', '\\');
+				while (!string.IsNullOrEmpty(trimmed))
+				{
+					string folderName = Path.GetFileName(trimmed);
+					if (string.Equals(folderName, "snake-modern", StringComparison.OrdinalIgnoreCase)
+						|| string.Equals(folderName, "snake_modern", StringComparison.OrdinalIgnoreCase))
+						return true;
+					string parent = Path.GetDirectoryName(trimmed);
+					if (string.IsNullOrEmpty(parent) || string.Equals(parent, trimmed, StringComparison.Ordinal))
+						break;
+					trimmed = parent;
+				}
+			}
+			catch
+			{
+			}
+			return false;
+		}
 
 	}
 }

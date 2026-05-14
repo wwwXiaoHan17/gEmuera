@@ -29,6 +29,7 @@ namespace MinorShift.Emuera.GameView
 		List<AConsoleDisplayPart> m_stringList = new List<AConsoleDisplayPart>();
 		StringStyle lastStringStyle = new StringStyle();
 		List<ConsoleButtonString> m_buttonList = new List<ConsoleButtonString>();
+		bool isLastLineEnd = true;
 
 		public int BufferStrLength
 		{
@@ -67,6 +68,12 @@ namespace MinorShift.Emuera.GameView
 
 		public void Append(string str, StringStyle style, bool force_button)
 		{
+			Append(str, style, force_button, true);
+		}
+
+		public void Append(string str, StringStyle style, bool force_button, bool lineEnd)
+		{
+			isLastLineEnd = lineEnd;
 			if (BufferStrLength > 2000)
 				return;
 			if (force_button)
@@ -111,6 +118,12 @@ namespace MinorShift.Emuera.GameView
 				return;
 			m_buttonList.Add(createButton(m_stringList, input));
 			m_stringList.Clear();
+		}
+
+		public void AppendButton(ConsoleButtonString button)
+		{
+			fromCssToButton();
+			m_buttonList.Add(button);
 		}
 
 		public void AppendPlainText(string str, StringStyle style)
@@ -160,6 +173,9 @@ namespace MinorShift.Emuera.GameView
 			ConsoleButtonString[] dispLineButtonArray = new ConsoleButtonString[m_buttonList.Count];
 			m_buttonList.CopyTo(dispLineButtonArray);
 			ConsoleDisplayLine line = new ConsoleDisplayLine(dispLineButtonArray, true, temporary);
+			line.TextBackgroundColor = parent.TextBackgroundColor;
+			line.BitmapCacheEnabled = parent.BitmapCacheEnabledForNextLine;
+			parent.BitmapCacheEnabledForNextLine = false;
 			this.clearBuffer();
 			return line;
 		}
@@ -168,6 +184,16 @@ namespace MinorShift.Emuera.GameView
 		{
 			fromCssToButton();
 			ConsoleDisplayLine[] ret = PrintStringBuffer.ButtonsToDisplayLines(m_buttonList, stringMeasure, false, temporary);
+			if (ret.Length > 0)
+			{
+				ret[ret.Length - 1].IsLineEnd = isLastLineEnd;
+				foreach (ConsoleDisplayLine line in ret)
+				{
+					line.TextBackgroundColor = parent.TextBackgroundColor;
+					line.BitmapCacheEnabled = parent.BitmapCacheEnabledForNextLine;
+				}
+				parent.BitmapCacheEnabledForNextLine = false;
+			}
 			this.clearBuffer();
 			return ret;
 		}

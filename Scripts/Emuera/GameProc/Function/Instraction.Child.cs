@@ -18,6 +18,7 @@ namespace MinorShift.Emuera.GameProc.Function
 		#region normalFunction
 		private sealed class PRINT_Instruction : AbstractInstruction
 		{
+			bool isLineEnd = true;
 			public PRINT_Instruction(string name)
 			{
 				//PRINT(|V|S|FORM|FORMS)(|K)(|D)(|L|W) コレと
@@ -80,6 +81,12 @@ namespace MinorShift.Emuera.GameProc.Function
 				if (st.CurrentEqualTo("D"))
 				{
 					flag |= ISPRINTDFUNC | EXTENDED;
+					st.Jump(1);
+				}
+				if (st.CurrentEqualTo("N"))
+				{
+					isLineEnd = false;
+					flag |= PRINT_WAITINPUT;
 					st.Jump(1);
 				}
 				if (st.CurrentEqualTo("L"))
@@ -145,7 +152,7 @@ namespace MinorShift.Emuera.GameProc.Function
 				else if (isLC)
 					exm.Console.PrintC(str, false);
 				else
-					exm.OutputToConsole(str, func.Function);
+					exm.OutputToConsole(str, func.Function, isLineEnd);
 				exm.Console.UseSetColorStyle = true;
 			}
 		}
@@ -242,7 +249,7 @@ namespace MinorShift.Emuera.GameProc.Function
 			public HTML_PRINT_Instruction()
 			{
 				flag = EXTENDED | METHOD_SAFE;
-				ArgBuilder = ArgumentParser.GetArgumentBuilder(FunctionArgType.STR_EXPRESSION);
+				ArgBuilder = Program.IsSnakeProfile ? SNAKE_HTML_PRINT_ArgumentBuilder.Instance : ArgumentParser.GetArgumentBuilder(FunctionArgType.STR_EXPRESSION);
 			}
 
 			public override void DoInstruction(ExpressionMediator exm, InstructionLine func, ProcessState state)
@@ -250,6 +257,15 @@ namespace MinorShift.Emuera.GameProc.Function
                 if (GlobalStatic.Process.SkipPrint)
                     return;
                 string str;
+				if (func.Argument is ExpressionArrayArgument snakeArg)
+				{
+					if (snakeArg.TermList.Length == 0 || snakeArg.TermList[0] == null)
+						return;
+					str = snakeArg.TermList[0].GetStrValue(exm);
+					bool toPrintBuffer = snakeArg.TermList.Length > 1 && snakeArg.TermList[1] != null && snakeArg.TermList[1].GetIntValue(exm) != 0;
+					exm.Console.PrintHtml(str, toPrintBuffer);
+					return;
+				}
 				if (func.Argument.IsConst)
 					str = func.Argument.ConstStr;
 				else
@@ -803,13 +819,22 @@ namespace MinorShift.Emuera.GameProc.Function
 		private sealed class CALLF_Instruction : AbstractInstruction
 		{
 			public CALLF_Instruction(bool form)
+				: this(form, false)
+			{
+			}
+
+			public CALLF_Instruction(bool form, bool isTry)
 			{
 				if (form)
 					ArgBuilder = ArgumentParser.GetArgumentBuilder(FunctionArgType.SP_CALLFORMF);
 				else
 					ArgBuilder = ArgumentParser.GetArgumentBuilder(FunctionArgType.SP_CALLF);
 				flag = EXTENDED | METHOD_SAFE | FORCE_SETARG;
+				if (isTry)
+					flag |= IS_TRY;
+				this.isTry = isTry;
 			}
+			readonly bool isTry;
 
 			public override void SetJumpTo(ref bool useCallForm, InstructionLine func, int currentDepth, ref string FunctionoNotFoundName)
 			{
@@ -827,15 +852,19 @@ namespace MinorShift.Emuera.GameProc.Function
 				}
 				catch (CodeEE e)
 				{
-					ParserMediator.Warn(e.Message, func, 2, true, false);
+					if (!isTry)
+						ParserMediator.Warn(e.Message, func, 2, true, false);
 					return;
 				}
 				if (callfArg.FuncTerm == null)
 				{
-					if (!Program.AnalysisMode)
-						ParserMediator.Warn("指定された関数名\"@" + callfArg.ConstStr + "\"は存在しません", func, 2, true, false);
-					else
-						ParserMediator.Warn(callfArg.ConstStr, func, 2, true, false);
+					if (!isTry)
+					{
+						if (!Program.AnalysisMode)
+							ParserMediator.Warn("指定された関数名\"@" + callfArg.ConstStr + "\"は存在しません", func, 2, true, false);
+						else
+							ParserMediator.Warn(callfArg.ConstStr, func, 2, true, false);
+					}
 					return;
 				}
 			}
@@ -856,7 +885,11 @@ namespace MinorShift.Emuera.GameProc.Function
 					mToken = ((SpCallFArgment)func.Argument).FuncTerm;
 				}
 				if (mToken == null)
+				{
+					if (isTry)
+						return;
 					throw new CodeEE("式中関数\"@" + labelName + "\"が見つかりません");
+				}
 				mToken.GetValue(exm);
 			}
 		}
@@ -1468,6 +1501,775 @@ namespace MinorShift.Emuera.GameProc.Function
 			}
 		}
 
+		private sealed class SNAKE_COMPAT_NOOP_Instruction : AbstractInstruction
+		{
+			public SNAKE_COMPAT_NOOP_Instruction()
+				: this(METHOD_SAFE | EXTENDED)
+			{
+			}
+
+			public SNAKE_COMPAT_NOOP_Instruction(int instFlag)
+			{
+				ArgBuilder = RawArgBuilder.Instance;
+				flag = instFlag;
+			}
+
+			public override void DoInstruction(ExpressionMediator exm, InstructionLine func, ProcessState state)
+			{
+			}
+
+			public sealed class RawArgBuilder : ArgumentBuilder
+			{
+				public static readonly RawArgBuilder Instance = new RawArgBuilder();
+
+				public override Argument CreateArgument(InstructionLine line, ExpressionMediator exm)
+				{
+					line.PopArgumentPrimitive();
+					return new VoidArgument();
+				}
+			}
+		}
+
+		private sealed class SNAKE_ARGS_ArgumentBuilder : ArgumentBuilder
+		{
+			public static readonly SNAKE_ARGS_ArgumentBuilder Instance = new SNAKE_ARGS_ArgumentBuilder();
+
+			public override Argument CreateArgument(InstructionLine line, ExpressionMediator exm)
+			{
+				IOperandTerm[] terms = popTerms(line);
+				List<IOperandTerm> list = new List<IOperandTerm>(terms.Length);
+				for (int i = 0; i < terms.Length; i++)
+				{
+					if (terms[i] != null)
+						terms[i] = terms[i].Restructure(exm);
+					list.Add(terms[i]);
+				}
+				return new ExpressionArrayArgument(list);
+			}
+		}
+
+		private sealed class SNAKE_TEXT_BGC_ON_Instruction : AbstractInstruction
+		{
+			public SNAKE_TEXT_BGC_ON_Instruction()
+			{
+				ArgBuilder = SNAKE_ARGS_ArgumentBuilder.Instance;
+				flag = METHOD_SAFE | EXTENDED;
+			}
+
+			public override void DoInstruction(ExpressionMediator exm, InstructionLine func, ProcessState state)
+			{
+				ExpressionArrayArgument arg = (ExpressionArrayArgument)func.Argument;
+				if (arg.TermList.Length == 0 || arg.TermList[0] == null)
+					return;
+				long rgb = arg.TermList[0].GetIntValue(exm);
+				long alphaPercent = arg.TermList.Length > 1 && arg.TermList[1] != null ? arg.TermList[1].GetIntValue(exm) : 100;
+				if (rgb < 0 || rgb > 0xFFFFFF)
+					throw new CodeEE("TEXT_BGC_ONの第１引数が色を表す整数の範囲外です");
+				if (alphaPercent < 0 || alphaPercent > 100)
+					throw new CodeEE("TEXT_BGC_ONの第２引数が透明度の範囲外です");
+				int a = (int)(alphaPercent * 255 / 100);
+				exm.Console.TextBackgroundColor = Color.FromArgb(a, (int)(rgb >> 16) & 0xFF, (int)(rgb >> 8) & 0xFF, (int)rgb & 0xFF);
+			}
+		}
+
+		private sealed class SNAKE_TEXT_BGC_OFF_Instruction : AbstractInstruction
+		{
+			public SNAKE_TEXT_BGC_OFF_Instruction()
+			{
+				ArgBuilder = ArgumentParser.GetArgumentBuilder(FunctionArgType.VOID);
+				flag = METHOD_SAFE | EXTENDED;
+			}
+
+			public override void DoInstruction(ExpressionMediator exm, InstructionLine func, ProcessState state)
+			{
+				exm.Console.TextBackgroundColor = null;
+			}
+		}
+
+		private sealed class SNAKE_HTML_PRINT_ArgumentBuilder : ArgumentBuilder
+		{
+			public static readonly SNAKE_HTML_PRINT_ArgumentBuilder Instance = new SNAKE_HTML_PRINT_ArgumentBuilder();
+
+			public override Argument CreateArgument(InstructionLine line, ExpressionMediator exm)
+			{
+				IOperandTerm[] terms = popTerms(line);
+				if (terms.Length < 1 || terms.Length > 2)
+				{
+					warn(terms.Length < 1 ? "引数が足りません" : "引数が多すぎます", line, 2, false);
+					return null;
+				}
+				if (terms[0] == null || terms[0].GetOperandType() != typeof(string))
+				{
+					warn("第１引数が文字列ではありません", line, 2, false);
+					return null;
+				}
+				if (terms.Length > 1 && terms[1] != null && terms[1].GetOperandType() != typeof(Int64))
+				{
+					warn("第２引数が数値ではありません", line, 2, false);
+					return null;
+				}
+				List<IOperandTerm> list = new List<IOperandTerm>(terms.Length);
+				for (int i = 0; i < terms.Length; i++)
+					list.Add(terms[i] == null ? null : terms[i].Restructure(exm));
+				return new ExpressionArrayArgument(list);
+			}
+		}
+
+		private sealed class SNAKE_CALLSHARP_ArgumentBuilder : ArgumentBuilder
+		{
+			public static readonly SNAKE_CALLSHARP_ArgumentBuilder Instance = new SNAKE_CALLSHARP_ArgumentBuilder();
+
+			public override Argument CreateArgument(InstructionLine line, ExpressionMediator exm)
+			{
+				StringStream st = line.PopArgumentPrimitive();
+				string str = LexicalAnalyzer.ReadString(st, StrEndWith.LeftParenthesis_Bracket_Comma_Semicolon);
+				str = str.Trim(new char[] { ' ', '\t' });
+				IOperandTerm funcname = new SingleTerm(str);
+				char cur = st.Current;
+				WordCollection wc = LexicalAnalyzer.Analyse(st, LexEndWith.EoL, LexAnalyzeFlag.None);
+				wc.ShiftNext();
+
+				IOperandTerm[] subNames = null;
+				IOperandTerm[] args = null;
+				if (cur == '[')
+				{
+					subNames = ExpressionParser.ReduceArguments(wc, ArgsEndWith.RightBracket, false);
+					if (!wc.EOL)
+					{
+						if (wc.Current.Type != '(')
+							wc.ShiftNext();
+						args = ExpressionParser.ReduceArguments(wc, ArgsEndWith.RightParenthesis, false);
+					}
+				}
+				if ((cur == '(') || (cur == ','))
+				{
+					if (cur == '(')
+						args = ExpressionParser.ReduceArguments(wc, ArgsEndWith.RightParenthesis, false);
+					else
+						args = ExpressionParser.ReduceArguments(wc, ArgsEndWith.EoL, false);
+					if (!wc.EOL)
+					{
+						warn("書式が間違っています", line, 2, false);
+						return null;
+					}
+				}
+				if (subNames == null)
+					subNames = new IOperandTerm[0];
+				if (args == null)
+					args = new IOperandTerm[0];
+				for (int i = 0; i < subNames.Length; i++)
+					if (subNames[i] != null)
+						subNames[i] = subNames[i].Restructure(exm);
+				for (int i = 0; i < args.Length; i++)
+					if (args[i] != null)
+						args[i] = args[i].Restructure(exm);
+
+				SpCallSharpArgment ret = new SpCallSharpArgment(funcname, subNames, args);
+				if (funcname is SingleTerm)
+				{
+					ret.IsConst = true;
+					ret.ConstStr = funcname.GetStrValue(null);
+					if (ret.ConstStr == "")
+					{
+						warn("関数名が指定されていません", line, 2, false);
+						return null;
+					}
+				}
+				return ret;
+			}
+		}
+
+		private sealed class SNAKE_CALLSHARP_Instruction : AbstractInstruction
+		{
+			public SNAKE_CALLSHARP_Instruction()
+			{
+				ArgBuilder = SNAKE_CALLSHARP_ArgumentBuilder.Instance;
+				flag = EXTENDED | METHOD_SAFE | FORCE_SETARG;
+			}
+
+			public override void SetJumpTo(ref bool useCallForm, InstructionLine func, int currentDepth, ref string FunctionoNotFoundName)
+			{
+				if (!func.Argument.IsConst)
+				{
+					useCallForm = true;
+					return;
+				}
+				SpCallSharpArgment arg = (SpCallSharpArgment)func.Argument;
+				MinorShift.Emuera.Runtime.Utils.PluginSystem.PluginManager manager = MinorShift.Emuera.Runtime.Utils.PluginSystem.PluginManager.GetInstance();
+				if (!manager.HasMethod(arg.ConstStr))
+				{
+					ParserMediator.Warn("No native method " + arg.ConstStr + " found", func, 2, true, false);
+					return;
+				}
+				arg.CallFunc = manager.GetMethod(arg.ConstStr);
+			}
+
+			public override void DoInstruction(ExpressionMediator exm, InstructionLine func, ProcessState state)
+			{
+				SpCallSharpArgment arg = (SpCallSharpArgment)func.Argument;
+				MinorShift.Emuera.Runtime.Utils.PluginSystem.PluginManager manager = MinorShift.Emuera.Runtime.Utils.PluginSystem.PluginManager.GetInstance();
+				MinorShift.Emuera.Runtime.Utils.PluginSystem.IPluginMethod method = arg.CallFunc;
+				string methodName = arg.ConstStr;
+				if (method == null)
+				{
+					methodName = arg.FuncnameTerm.GetStrValue(exm);
+					if (!manager.HasMethod(methodName))
+						throw new CodeEE("No native method " + methodName + " found");
+					method = manager.GetMethod(methodName);
+				}
+
+				MinorShift.Emuera.Runtime.Utils.PluginSystem.PluginMethodParameter[] pluginArgs = new MinorShift.Emuera.Runtime.Utils.PluginSystem.PluginMethodParameter[arg.RowArgs.Length];
+				for (int i = 0; i < arg.RowArgs.Length; i++)
+				{
+					if (arg.RowArgs[i] == null)
+						pluginArgs[i] = new MinorShift.Emuera.Runtime.Utils.PluginSystem.PluginMethodParameter(0L);
+					else
+						pluginArgs[i] = MinorShift.Emuera.Runtime.Utils.PluginSystem.PluginMethodParameterBuilder.ConvertTerm(arg.RowArgs[i], exm);
+				}
+				method.Execute(pluginArgs);
+				for (int i = 0; i < arg.RowArgs.Length; i++)
+				{
+					if (arg.RowArgs[i] is VariableTerm varTerm)
+					{
+						if (varTerm.GetOperandType() == typeof(string))
+							varTerm.SetValue(pluginArgs[i].strValue, exm);
+						else
+							varTerm.SetValue(pluginArgs[i].intValue, exm);
+					}
+				}
+			}
+		}
+
+		private sealed class SNAKE_SETBGIMAGE_Instruction : AbstractInstruction
+		{
+			public SNAKE_SETBGIMAGE_Instruction()
+			{
+				ArgBuilder = SNAKE_ARGS_ArgumentBuilder.Instance;
+				flag = METHOD_SAFE | EXTENDED;
+			}
+
+			public override void DoInstruction(ExpressionMediator exm, InstructionLine func, ProcessState state)
+			{
+				ExpressionArrayArgument arg = (ExpressionArrayArgument)func.Argument;
+				if (arg.TermList.Length == 0 || arg.TermList[0] == null)
+					return;
+				string name = arg.TermList[0].GetStrValue(exm);
+				long depth = arg.TermList.Length > 1 && arg.TermList[1] != null ? arg.TermList[1].GetIntValue(exm) : 0;
+				float opacity = arg.TermList.Length > 2 && arg.TermList[2] != null ? arg.TermList[2].GetIntValue(exm) / 255.0f : 1.0f;
+				exm.Console.AddBackgroundImage(name, depth, opacity);
+			}
+		}
+
+		private sealed class SNAKE_CLEARBGIMAGE_Instruction : AbstractInstruction
+		{
+			public SNAKE_CLEARBGIMAGE_Instruction()
+			{
+				ArgBuilder = ArgumentParser.GetArgumentBuilder(FunctionArgType.VOID);
+				flag = METHOD_SAFE | EXTENDED;
+			}
+
+			public override void DoInstruction(ExpressionMediator exm, InstructionLine func, ProcessState state)
+			{
+				exm.Console.ClearBackgroundImage();
+			}
+		}
+
+		private sealed class SNAKE_REMOVEBGIMAGE_Instruction : AbstractInstruction
+		{
+			public SNAKE_REMOVEBGIMAGE_Instruction()
+			{
+				ArgBuilder = SNAKE_ARGS_ArgumentBuilder.Instance;
+				flag = METHOD_SAFE | EXTENDED;
+			}
+
+			public override void DoInstruction(ExpressionMediator exm, InstructionLine func, ProcessState state)
+			{
+				ExpressionArrayArgument arg = (ExpressionArrayArgument)func.Argument;
+				if (arg.TermList.Length == 0 || arg.TermList[0] == null)
+					return;
+				exm.Console.RemoveBackground(arg.TermList[0].GetStrValue(exm));
+			}
+		}
+
+		private sealed class SNAKE_SETIMAGELAYER_Instruction : AbstractInstruction
+		{
+			public SNAKE_SETIMAGELAYER_Instruction()
+			{
+				ArgBuilder = SNAKE_ARGS_ArgumentBuilder.Instance;
+				flag = METHOD_SAFE | EXTENDED;
+			}
+
+			public override void DoInstruction(ExpressionMediator exm, InstructionLine func, ProcessState state)
+			{
+				ExpressionArrayArgument arg = (ExpressionArrayArgument)func.Argument;
+				if (arg.TermList.Length < 2 || arg.TermList[0] == null || arg.TermList[1] == null)
+					return;
+				string name = arg.TermList[0].GetStrValue(exm);
+				long depth = arg.TermList[1].GetIntValue(exm);
+				int x = getOptionalInt(arg, exm, 2, 0);
+				int y = getOptionalInt(arg, exm, 3, 0);
+				int width = getOptionalInt(arg, exm, 4, 0);
+				int height = getOptionalInt(arg, exm, 5, 0);
+				int opacity = getOptionalInt(arg, exm, 6, 255);
+				bool followScroll = getOptionalInt(arg, exm, 8, 0) != 0;
+				exm.Console.SetImageLayer(name, depth, x, y, width, height, opacity, null, followScroll);
+			}
+		}
+
+		private sealed class SNAKE_CLEARIMAGELAYER_Instruction : AbstractInstruction
+		{
+			public SNAKE_CLEARIMAGELAYER_Instruction()
+			{
+				ArgBuilder = ArgumentParser.GetArgumentBuilder(FunctionArgType.INT_EXPRESSION);
+				flag = METHOD_SAFE | EXTENDED;
+			}
+
+			public override void DoInstruction(ExpressionMediator exm, InstructionLine func, ProcessState state)
+			{
+				ExpressionArgument arg = (ExpressionArgument)func.Argument;
+				exm.Console.ClearImageLayer(arg.Term.GetIntValue(exm));
+			}
+		}
+
+		private sealed class SNAKE_CLEARIMAGELAYER_ALL_Instruction : AbstractInstruction
+		{
+			public SNAKE_CLEARIMAGELAYER_ALL_Instruction()
+			{
+				ArgBuilder = ArgumentParser.GetArgumentBuilder(FunctionArgType.VOID);
+				flag = METHOD_SAFE | EXTENDED;
+			}
+
+			public override void DoInstruction(ExpressionMediator exm, InstructionLine func, ProcessState state)
+			{
+				exm.Console.ClearImageLayerAll();
+			}
+		}
+
+		private sealed class SNAKE_PLAYSOUND_Instruction : AbstractInstruction
+		{
+			public SNAKE_PLAYSOUND_Instruction()
+			{
+				ArgBuilder = SNAKE_ARGS_ArgumentBuilder.Instance;
+				flag = METHOD_SAFE | EXTENDED;
+			}
+
+			public override void DoInstruction(ExpressionMediator exm, InstructionLine func, ProcessState state)
+			{
+				ExpressionArrayArgument arg = (ExpressionArrayArgument)func.Argument;
+				if (arg.TermList.Length == 0 || arg.TermList[0] == null)
+					return;
+				string path = global::GenericUtils.ResolveSoundPath(arg.TermList[0].GetStrValue(exm));
+				bool loop = false;
+				global::GenericUtils.PlaySoundFile(path, loop);
+			}
+		}
+
+		private sealed class SNAKE_STOPSOUND_Instruction : AbstractInstruction
+		{
+			public SNAKE_STOPSOUND_Instruction()
+			{
+				ArgBuilder = ArgumentParser.GetArgumentBuilder(FunctionArgType.VOID);
+				flag = METHOD_SAFE | EXTENDED;
+			}
+
+			public override void DoInstruction(ExpressionMediator exm, InstructionLine func, ProcessState state)
+			{
+				global::GenericUtils.StopSounds();
+			}
+		}
+
+		private sealed class SNAKE_PLAYBGM_Instruction : AbstractInstruction
+		{
+			public SNAKE_PLAYBGM_Instruction()
+			{
+				ArgBuilder = ArgumentParser.GetArgumentBuilder(FunctionArgType.STR_EXPRESSION);
+				flag = METHOD_SAFE | EXTENDED;
+			}
+
+			public override void DoInstruction(ExpressionMediator exm, InstructionLine func, ProcessState state)
+			{
+				ExpressionArgument arg = (ExpressionArgument)func.Argument;
+				string name = arg.IsConst ? arg.ConstStr : arg.Term.GetStrValue(exm);
+				global::GenericUtils.PlayBgmFile(global::GenericUtils.ResolveSoundPath(name));
+			}
+		}
+
+		private sealed class SNAKE_STOPBGM_Instruction : AbstractInstruction
+		{
+			public SNAKE_STOPBGM_Instruction()
+			{
+				ArgBuilder = ArgumentParser.GetArgumentBuilder(FunctionArgType.VOID);
+				flag = METHOD_SAFE | EXTENDED;
+			}
+
+			public override void DoInstruction(ExpressionMediator exm, InstructionLine func, ProcessState state)
+			{
+				global::GenericUtils.StopBgm();
+			}
+		}
+
+		private sealed class SNAKE_SETVOLUME_Instruction : AbstractInstruction
+		{
+			public SNAKE_SETVOLUME_Instruction(bool bgm)
+			{
+				this.bgm = bgm;
+				ArgBuilder = ArgumentParser.GetArgumentBuilder(FunctionArgType.INT_EXPRESSION);
+				flag = METHOD_SAFE | EXTENDED;
+			}
+
+			readonly bool bgm;
+
+			public override void DoInstruction(ExpressionMediator exm, InstructionLine func, ProcessState state)
+			{
+				ExpressionArgument arg = (ExpressionArgument)func.Argument;
+				int volume = (int)arg.Term.GetIntValue(exm);
+				if (bgm)
+					global::GenericUtils.SetBgmVolume(volume);
+				else
+					global::GenericUtils.SetSoundVolume(volume);
+			}
+		}
+
+		private sealed class SNAKE_HTML_PRINTC_Instruction : AbstractInstruction
+		{
+			public SNAKE_HTML_PRINTC_Instruction(bool alignRight)
+			{
+				this.alignRight = alignRight;
+				ArgBuilder = SNAKE_HTML_PRINT_ArgumentBuilder.Instance;
+				flag = IS_PRINT | METHOD_SAFE | EXTENDED;
+			}
+
+			readonly bool alignRight;
+
+			public override void DoInstruction(ExpressionMediator exm, InstructionLine func, ProcessState state)
+			{
+				if (GlobalStatic.Process.SkipPrint)
+					return;
+				ExpressionArrayArgument arg = (ExpressionArrayArgument)func.Argument;
+				if (arg.TermList.Length == 0 || arg.TermList[0] == null)
+					return;
+				string html = arg.TermList[0].GetStrValue(exm);
+				int cellWidth = getOptionalInt(arg, exm, 1, 0);
+				exm.Console.PrintHtmlC(html, alignRight, cellWidth);
+			}
+		}
+
+		private sealed class SNAKE_HTML_PRINT_ISLAND_Instruction : AbstractInstruction
+		{
+			public SNAKE_HTML_PRINT_ISLAND_Instruction()
+			{
+				ArgBuilder = SNAKE_HTML_PRINT_ArgumentBuilder.Instance;
+				flag = METHOD_SAFE | EXTENDED;
+			}
+
+			public override void DoInstruction(ExpressionMediator exm, InstructionLine func, ProcessState state)
+			{
+				if (GlobalStatic.Process.SkipPrint)
+					return;
+				ExpressionArrayArgument arg = (ExpressionArrayArgument)func.Argument;
+				if (arg.TermList.Length == 0 || arg.TermList[0] == null)
+					return;
+				exm.Console.PrintHTMLIsland(arg.TermList[0].GetStrValue(exm));
+			}
+		}
+
+		private sealed class SNAKE_HTML_PRINT_ISLAND_CLEAR_Instruction : AbstractInstruction
+		{
+			public SNAKE_HTML_PRINT_ISLAND_CLEAR_Instruction()
+			{
+				ArgBuilder = ArgumentParser.GetArgumentBuilder(FunctionArgType.VOID);
+				flag = METHOD_SAFE | EXTENDED;
+			}
+
+			public override void DoInstruction(ExpressionMediator exm, InstructionLine func, ProcessState state)
+			{
+				exm.Console.ClearHTMLIsland();
+			}
+		}
+
+		private sealed class SNAKE_UPDATECHECK_Instruction : AbstractInstruction
+		{
+			public SNAKE_UPDATECHECK_Instruction()
+			{
+				ArgBuilder = ArgumentParser.GetArgumentBuilder(FunctionArgType.VOID);
+				flag = METHOD_SAFE | EXTENDED;
+			}
+
+			public override void DoInstruction(ExpressionMediator exm, InstructionLine func, ProcessState state)
+			{
+				exm.VEvaluator.RESULT = 3;
+			}
+		}
+
+		private sealed class SNAKE_SETANIMETIMER_Instruction : AbstractInstruction
+		{
+			public SNAKE_SETANIMETIMER_Instruction()
+			{
+				ArgBuilder = ArgumentParser.GetArgumentBuilder(FunctionArgType.INT_EXPRESSION);
+				flag = METHOD_SAFE | EXTENDED;
+			}
+
+			public override void DoInstruction(ExpressionMediator exm, InstructionLine func, ProcessState state)
+			{
+				ExpressionArgument arg = (ExpressionArgument)func.Argument;
+				long value = arg.IsConst ? arg.ConstInt : arg.Term.GetIntValue(exm);
+				if (value < int.MinValue || value > short.MaxValue)
+					throw new CodeEE("SETANIMETIMERの第１引数が範囲外です");
+				exm.Console.setRedrawTimer((int)value);
+			}
+		}
+
+		private sealed class SNAKE_UI_SETTING_Instruction : AbstractInstruction
+		{
+			public SNAKE_UI_SETTING_Instruction(FunctionCode code)
+			{
+				this.code = code;
+				ArgBuilder = code == FunctionCode.SET_SKIA_QUALITY ? SNAKE_ARGS_ArgumentBuilder.Instance : ArgumentParser.GetArgumentBuilder(FunctionArgType.INT_EXPRESSION);
+				flag = METHOD_SAFE | EXTENDED;
+			}
+
+			readonly FunctionCode code;
+
+			public override void DoInstruction(ExpressionMediator exm, InstructionLine func, ProcessState state)
+			{
+				if (code == FunctionCode.SET_SKIA_QUALITY)
+				{
+					ExpressionArrayArgument arg = (ExpressionArrayArgument)func.Argument;
+					exm.Console.SetSnakeSkiaQuality(
+						getOptionalInt(arg, exm, 0, exm.Console.SnakeImageQuality),
+						getOptionalInt(arg, exm, 1, exm.Console.SnakeFontHinting),
+						getOptionalInt(arg, exm, 2, exm.Console.SnakeFontEdging));
+					return;
+				}
+				ExpressionArgument exp = (ExpressionArgument)func.Argument;
+				long value = exp.IsConst ? exp.ConstInt : exp.Term.GetIntValue(exm);
+				switch (code)
+				{
+					case FunctionCode.STRICT_FONT_FALLBACK:
+						exm.Console.StrictFontFallback = value != 0;
+						break;
+					case FunctionCode.SET_TEXT_DRAWING_MODE:
+						exm.Console.SnakeTextDrawingMode = (int)value;
+						break;
+					case FunctionCode.BITMAP_CACHE_ENABLE:
+						exm.Console.BitmapCacheEnabledForNextLine = value != 0;
+						break;
+				}
+			}
+		}
+
+		private sealed class SNAKE_SKIPLOG_Instruction : AbstractInstruction
+		{
+			public SNAKE_SKIPLOG_Instruction()
+			{
+				ArgBuilder = ArgumentParser.GetArgumentBuilder(FunctionArgType.INT_EXPRESSION);
+				flag = METHOD_SAFE | EXTENDED;
+			}
+
+			public override void DoInstruction(ExpressionMediator exm, InstructionLine func, ProcessState state)
+			{
+				ExpressionArgument arg = (ExpressionArgument)func.Argument;
+				long value = arg.IsConst ? arg.ConstInt : arg.Term.GetIntValue(exm);
+				exm.Console.MesSkip = value != 0;
+			}
+		}
+
+		private sealed class SNAKE_DT_COLUMN_OPTIONS_Instruction : AbstractInstruction
+		{
+			public SNAKE_DT_COLUMN_OPTIONS_Instruction()
+			{
+				ArgBuilder = SNAKE_COMPAT_NOOP_Instruction.RawArgBuilder.Instance;
+				flag = METHOD_SAFE | EXTENDED;
+			}
+
+			public override void DoInstruction(ExpressionMediator exm, InstructionLine func, ProcessState state)
+			{
+				exm.VEvaluator.RESULT = -1;
+			}
+		}
+
+		private sealed class SNAKE_VARI_Instruction : AbstractInstruction
+		{
+			public SNAKE_VARI_Instruction(bool isString)
+			{
+				this.isString = isString;
+				ArgBuilder = new SNAKE_VARI_ArgumentBuilder(isString);
+				flag = METHOD_SAFE | EXTENDED | FORCE_SETARG;
+			}
+
+			readonly bool isString;
+
+			public override void DoInstruction(ExpressionMediator exm, InstructionLine func, ProcessState state)
+			{
+				if (isString)
+				{
+					SnakeVarsArgument arg = (SnakeVarsArgument)func.Argument;
+					UserDefinedVariableToken token = func.ParentLabelLine.GetPrivateVariable(arg.Name);
+					if (token != null && token.GetLength(0) == 1)
+						token.SetValue(arg.InitialValue ?? "", new long[] { 0 });
+					return;
+				}
+				SnakeVariArgument iarg = (SnakeVariArgument)func.Argument;
+				UserDefinedVariableToken itoken = func.ParentLabelLine.GetPrivateVariable(iarg.Name);
+				if (itoken != null && itoken.GetLength(0) == 1)
+					itoken.SetValue(iarg.InitialValue == null ? 0 : iarg.InitialValue.GetIntValue(exm), new long[] { 0 });
+			}
+		}
+
+		private sealed class SNAKE_VARI_ArgumentBuilder : ArgumentBuilder
+		{
+			public SNAKE_VARI_ArgumentBuilder(bool isString)
+			{
+				this.isString = isString;
+			}
+
+			readonly bool isString;
+
+			public override Argument CreateArgument(InstructionLine line, ExpressionMediator exm)
+			{
+				StringStream st = line.PopArgumentPrimitive();
+				string statement = st == null ? "" : st.Substring();
+				int comment = statement.IndexOf(';');
+				if (comment >= 0)
+					statement = statement.Substring(0, comment);
+				int equal = statement.IndexOf('=');
+				string left = equal >= 0 ? statement.Substring(0, equal) : statement;
+				string right = equal >= 0 ? statement.Substring(equal + 1) : "";
+				string[] leftParts = left.Split(',');
+				string name = leftParts[0].Trim();
+				if (string.IsNullOrEmpty(name))
+				{
+					warn("変数名が指定されていません", line, 2, false);
+					return null;
+				}
+				int[] lengths = new int[Math.Max(1, leftParts.Length - 1)];
+				if (leftParts.Length == 1)
+				{
+					lengths[0] = 1;
+				}
+				else
+				{
+					for (int i = 1; i < leftParts.Length; i++)
+					{
+						if (!int.TryParse(leftParts[i].Trim(), out lengths[i - 1]) || lengths[i - 1] <= 0)
+						{
+							warn("VARI/VARSの配列長が不正です", line, 2, false);
+							return null;
+						}
+					}
+				}
+				UserDefinedVariableData varData = new UserDefinedVariableData
+				{
+					Name = name,
+					Static = false,
+					Lengths = lengths,
+					Dimension = lengths.Length,
+					TypeIsStr = isString
+				};
+				if (line.ParentLabelLine != null)
+					line.ParentLabelLine.AddPrivateVariable(varData);
+				if (isString)
+					return new SnakeVarsArgument(name, parseStringInitialValue(right));
+				IOperandTerm initial = null;
+				if (!string.IsNullOrWhiteSpace(right) && lengths.Length == 1 && lengths[0] == 1)
+				{
+					WordCollection wc = LexicalAnalyzer.Analyse(new StringStream(right), LexEndWith.EoL, LexAnalyzeFlag.None);
+					initial = ExpressionParser.ReduceIntegerTerm(wc, TermEndWith.EoL);
+					if (initial != null)
+						initial = initial.Restructure(exm);
+				}
+				return new SnakeVariArgument(name, initial ?? new SingleTerm(0));
+			}
+
+			static string parseStringInitialValue(string right)
+			{
+				if (string.IsNullOrWhiteSpace(right))
+					return null;
+				int start = right.IndexOf('"');
+				int end = right.LastIndexOf('"');
+				if (start >= 0 && end > start)
+					return right.Substring(start + 1, end - start - 1);
+				return right.Trim();
+			}
+		}
+
+		private sealed class SNAKE_TOOLTIP_SETFONT_Instruction : AbstractInstruction
+		{
+			public SNAKE_TOOLTIP_SETFONT_Instruction()
+			{
+				ArgBuilder = ArgumentParser.GetArgumentBuilder(FunctionArgType.STR_EXPRESSION);
+				flag = METHOD_SAFE | EXTENDED;
+			}
+
+			public override void DoInstruction(ExpressionMediator exm, InstructionLine func, ProcessState state)
+			{
+				ExpressionArgument arg = (ExpressionArgument)func.Argument;
+				exm.Console.SetToolTipFontName(arg.IsConst ? arg.ConstStr : arg.Term.GetStrValue(exm));
+			}
+		}
+
+		private sealed class SNAKE_TOOLTIP_INT_Instruction : AbstractInstruction
+		{
+			public SNAKE_TOOLTIP_INT_Instruction(FunctionCode code)
+			{
+				this.code = code;
+				ArgBuilder = ArgumentParser.GetArgumentBuilder(FunctionArgType.INT_EXPRESSION);
+				flag = METHOD_SAFE | EXTENDED;
+			}
+
+			readonly FunctionCode code;
+
+			public override void DoInstruction(ExpressionMediator exm, InstructionLine func, ProcessState state)
+			{
+				ExpressionArgument arg = (ExpressionArgument)func.Argument;
+				long value = arg.IsConst ? arg.ConstInt : arg.Term.GetIntValue(exm);
+				switch (code)
+				{
+					case FunctionCode.TOOLTIP_SETFONTSIZE:
+						exm.Console.SetToolTipFontSize(value);
+						break;
+					case FunctionCode.TOOLTIP_CUSTOM:
+						exm.Console.CustomToolTip(value != 0);
+						break;
+					case FunctionCode.TOOLTIP_FORMAT:
+						exm.Console.SetToolTipFormat(value);
+						break;
+					case FunctionCode.TOOLTIP_IMG:
+						exm.Console.SetToolTipImg(value != 0);
+						break;
+				}
+			}
+		}
+
+		private static int getOptionalInt(ExpressionArrayArgument arg, ExpressionMediator exm, int index, int defaultValue)
+		{
+			if (arg.TermList.Length <= index || arg.TermList[index] == null)
+				return defaultValue;
+			return (int)arg.TermList[index].GetIntValue(exm);
+		}
+
+		private static string resolveSoundPath(string filename)
+		{
+			if (string.IsNullOrEmpty(filename))
+				return filename;
+			if (Path.IsPathRooted(filename) && File.Exists(filename))
+				return filename;
+			string[] candidates = new string[]
+			{
+				Path.Combine(Program.ExeDir ?? "", "sound", filename),
+				Path.Combine(Program.ExeDir ?? "", "Sound", filename),
+				Path.Combine(Program.ExeDir ?? "", filename),
+				filename,
+			};
+			foreach (string candidate in candidates)
+			{
+				string resolved = uEmuera.Utils.ResolveExistingFilePath(candidate);
+				if (!string.IsNullOrEmpty(resolved) && File.Exists(resolved))
+					return resolved;
+			}
+			return candidates[0];
+		}
+
 		private sealed class REF_Instruction : AbstractInstruction
 		{
 			public REF_Instruction(bool byname)
@@ -1672,7 +2474,7 @@ namespace MinorShift.Emuera.GameProc.Function
 
         #region flowControlFunction
 
-        private sealed class BEGIN_Instruction : AbstractInstruction
+		private sealed class BEGIN_Instruction : AbstractInstruction
 		{
 			public BEGIN_Instruction()
 			{
@@ -1685,6 +2487,25 @@ namespace MinorShift.Emuera.GameProc.Function
 				if (Config.ICFunction)//1756 BEGINのキーワードは関数扱いらしい
 					keyword = keyword.ToUpper();
 				state.SetBegin(keyword);
+				state.Return(0);
+				exm.Console.ResetStyle();
+			}
+		}
+
+		private sealed class FORCE_BEGIN_Instruction : AbstractInstruction
+		{
+			public FORCE_BEGIN_Instruction()
+			{
+				ArgBuilder = ArgumentParser.GetArgumentBuilder(FunctionArgType.STR);
+				flag = FLOW_CONTROL | EXTENDED;
+			}
+
+			public override void DoInstruction(ExpressionMediator exm, InstructionLine func, ProcessState state)
+			{
+				string keyword = func.Argument.ConstStr;
+				if (Config.ICFunction)
+					keyword = keyword.ToUpper();
+				state.SetBegin(keyword, true);
 				state.Return(0);
 				exm.Console.ResetStyle();
 			}

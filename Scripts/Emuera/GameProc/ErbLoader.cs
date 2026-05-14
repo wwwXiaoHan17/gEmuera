@@ -35,7 +35,7 @@ namespace MinorShift.Emuera.GameProc
 		/// 複数のファイルを読む
 		/// </summary>
 		/// <param name="filepath"></param>
-		public bool LoadErbFiles(string erbDir, bool displayReport, LabelDictionary labelDictionary)
+		public bool LoadErbFiles(string erbDir, bool displayReport, LabelDictionary labelDictionary, bool useLazyLoading = false)
 		{
 			//1.713 labelDicをnewする位置を変更。
 			//checkScript();の時点でExpressionPerserがProcess.instance.LabelDicを必要とするから。
@@ -53,10 +53,25 @@ namespace MinorShift.Emuera.GameProc
 			try
 			{
 				labelDic.RemoveAll();
+				if (useLazyLoading)
+				{
+					parentProcess.LoadLazyLoadingTable(erbFiles);
+					if (parentProcess.LazyCurrentLazyStatus == Process.LazyStatus.Loaded ||
+						parentProcess.LazyCurrentLazyStatus == Process.LazyStatus.UpdateTable)
+					{
+						output.PrintSystemLine("LazyLoading: " + parentProcess.LazyLoadingFiles.Count.ToString() + " files indexed");
+					}
+					else if (parentProcess.LazyCurrentLazyStatus == Process.LazyStatus.BuildTable)
+					{
+						output.PrintSystemLine("LazyLoading: index not found; building a new table");
+					}
+				}
 				for (int i = 0; i < erbFiles.Count; i++)
 				{
 					string filename = erbFiles[i].Key;
 					string file = erbFiles[i].Value;
+					if (useLazyLoading && parentProcess.IsLazyLoadingFile(file))
+						continue;
 #if UEMUERA_DEBUG
 					if (displayReport)
 						output.PrintSystemLine("経過時間:" + (WinmmTimer.TickCount - starttime).ToString("D4") + "ms:" + filename + "読み込み中・・・");
@@ -83,6 +98,21 @@ namespace MinorShift.Emuera.GameProc
 					output.PrintSystemLine("スクリプトの構文チェック中・・・");
 				checkScript();
 				ParserMediator.FlushWarningList();
+				if (parentProcess.LazyCurrentLazyStatus == Process.LazyStatus.BuildTable)
+				{
+					parentProcess.SaveLazyLoadingList(labelDic.GetAllLabels(false), erbFiles);
+					if (parentProcess.LazyCurrentLazyStatus == Process.LazyStatus.Loaded)
+						output.PrintSystemLine("LazyLoading: index table created");
+					else if (parentProcess.LazyCurrentLazyStatus == Process.LazyStatus.NoLazy)
+						output.PrintSystemLine("LazyLoading: no valid lazy-load files");
+					else if (parentProcess.LazyCurrentLazyStatus == Process.LazyStatus.Error)
+						output.PrintSystemLine("LazyLoading: failed to create index table");
+				}
+				else if (parentProcess.LazyCurrentLazyStatus == Process.LazyStatus.UpdateTable)
+				{
+					if (parentProcess.SavePartialLazyLoadingList(labelDic.GetAllLabels(false)))
+						output.PrintSystemLine("LazyLoading: index table updated");
+				}
 
 #if UEMUERA_DEBUG
 				output.PrintSystemLine("経過時間:" + (WinmmTimer.TickCount - starttime).ToString("D4") + "ms:");
@@ -495,6 +525,10 @@ namespace MinorShift.Emuera.GameProc
 			SingleTerm[] defs = new SingleTerm[0];
 			int maxArg = -1;
 			int maxArgs = -1;
+			bool hasVariadic = false;
+			int variadicArgIndex = -1;
+			if (Program.IsSnakeProfile)
+				RemoveSnakeVariadicMarker(wc, out hasVariadic, out variadicArgIndex);
 			//1807 非イベント関数のシステム関数については警告レベル低下＆エラー解除＆引数を設定するように。
 			if (label.IsEvent)
 			{
@@ -612,6 +646,35 @@ namespace MinorShift.Emuera.GameProc
 			if (!wc.EOL)
 			{ errMes = "引数の書式が間違っています"; goto err; }
 
+			if (hasVariadic)
+			{
+				if (args.Length == 0)
+				{
+					ParserMediator.Warn("VARIADICが指定されていますが関数引数がありません", label, 2, true, false);
+					return;
+				}
+				if (variadicArgIndex != args.Length - 1)
+				{
+					ParserMediator.Warn("VARIADIC引数は最後の引数として宣言してください", label, 2, true, false);
+					return;
+				}
+				VariableCode code = args[args.Length - 1].Identifier.Code;
+				if (code != VariableCode.ARG && code != VariableCode.ARGS)
+				{
+					ParserMediator.Warn("VARIADICはARGまたはARGSだけを修飾できます", label, 2, true, false);
+					return;
+				}
+				for (int i = 0; i < args.Length - 1; i++)
+				{
+					if (args[i].Identifier.Code == code)
+					{
+						ParserMediator.Warn("VARIADICに指定したARG/ARGSは固定引数側では使用できません: " + args[i].GetFullString(), label, 2, true, false);
+						return;
+					}
+				}
+				label.VariadicArgIndex = args.Length - 1;
+			}
+
             //label.SubNames = subNames;
 			label.Arg = args;
 			label.Def = defs;
@@ -621,6 +684,32 @@ namespace MinorShift.Emuera.GameProc
 		err:
 			ParserMediator.Warn("関数@" + label.LabelName + " の引数のエラー:" + errMes, label, 2, true, false);
 			return;
+		}
+
+		private void RemoveSnakeVariadicMarker(WordCollection wc, out bool hasVariadic, out int variadicArgIndex)
+		{
+			hasVariadic = false;
+			variadicArgIndex = -1;
+			if (wc == null)
+				return;
+
+			int originalPointer = wc.Pointer;
+			int commaCount = 0;
+			wc.Pointer = 0;
+			while (!wc.EOL)
+			{
+				if (wc.Current is IdentifierWord idw && string.Equals(idw.Code, "VARIADIC", StringComparison.OrdinalIgnoreCase))
+				{
+					hasVariadic = true;
+					variadicArgIndex = commaCount;
+					wc.Remove();
+					continue;
+				}
+				if (wc.Current is SymbolWord sym && sym.Type == ',')
+					commaCount++;
+				wc.ShiftNext();
+			}
+			wc.Pointer = Math.Min(originalPointer, wc.Collection.Count);
 		}
 
 
@@ -1198,7 +1287,9 @@ namespace MinorShift.Emuera.GameProc
 							&& (pairLine.FunctionCode != FunctionCode.TRYCJUMP)
 							&& (pairLine.FunctionCode != FunctionCode.TRYCGOTOFORM)
 							&& (pairLine.FunctionCode != FunctionCode.TRYCCALLFORM)
-							&& (pairLine.FunctionCode != FunctionCode.TRYCJUMPFORM)))
+							&& (pairLine.FunctionCode != FunctionCode.TRYCJUMPFORM)
+							&& (pairLine.FunctionCode != FunctionCode.TRYCCALLSTR)
+							&& (pairLine.FunctionCode != FunctionCode.TRYCJUMPSTR)))
 						{
 							ParserMediator.Warn("対応するTRYC系命令がありません", func, 2, true, false);
 							break;

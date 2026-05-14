@@ -2914,6 +2914,89 @@ namespace MinorShift.Emuera.GameData.Function
 				return HtmlManager.Escape(arguments[0].GetStrValue(exm));
 			}
 		}
+
+		private sealed class HtmlStringLenMethod : FunctionMethod
+		{
+			public HtmlStringLenMethod()
+			{
+				ReturnType = typeof(Int64);
+				argumentTypeArray = null;
+				CanRestructure = false;
+			}
+			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+			{
+				if (arguments.Length < 1 || arguments.Length > 2)
+					return name + "関数の引数の数が間違っています";
+				if (arguments[0] == null || arguments[0].GetOperandType() != typeof(string))
+					return name + "関数の1番目の引数の型が正しくありません";
+				if (arguments.Length == 2 && arguments[1] != null && arguments[1].GetOperandType() != typeof(Int64))
+					return name + "関数の2番目の引数の型が正しくありません";
+				return null;
+			}
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				string plain = HtmlManager.Html2PlainText(arguments[0].GetStrValue(exm));
+				return plain == null ? 0 : plain.Length;
+			}
+		}
+
+		private sealed class HtmlSubstringMethod : FunctionMethod
+		{
+			public HtmlSubstringMethod()
+			{
+				ReturnType = typeof(string);
+				argumentTypeArray = null;
+				CanRestructure = false;
+			}
+			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+			{
+				if (arguments.Length < 2 || arguments.Length > 3)
+					return name + "関数の引数の数が正しくありません";
+				if (arguments[0] == null || arguments[0].GetOperandType() != typeof(string))
+					return name + "関数の1番目の引数の型が正しくありません";
+				if (arguments[1] == null || arguments[1].GetOperandType() != typeof(Int64))
+					return name + "関数の2番目の引数の型が正しくありません";
+				if (arguments.Length == 3 && arguments[2] != null && arguments[2].GetOperandType() != typeof(Int64))
+					return name + "関数の3番目の引数の型が正しくありません";
+				return null;
+			}
+			public override string GetStrValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				string plain = HtmlManager.Html2PlainText(arguments[0].GetStrValue(exm)) ?? "";
+				int start = (int)Math.Max(0, arguments[1].GetIntValue(exm));
+				if (start >= plain.Length)
+					return "";
+				int length = arguments.Length >= 3 && arguments[2] != null ? (int)arguments[2].GetIntValue(exm) : plain.Length - start;
+				if (length <= 0)
+					return "";
+				if (start + length > plain.Length)
+					length = plain.Length - start;
+				return plain.Substring(start, length);
+			}
+		}
+
+		private sealed class HtmlStringLinesMethod : FunctionMethod
+		{
+			public HtmlStringLinesMethod()
+			{
+				ReturnType = typeof(Int64);
+				argumentTypeArray = new Type[] { typeof(string) };
+				CanRestructure = false;
+			}
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				string plain = HtmlManager.Html2PlainText(arguments[0].GetStrValue(exm)) ?? "";
+				if (plain.Length == 0)
+					return 0;
+				int lines = 1;
+				for (int i = 0; i < plain.Length; i++)
+				{
+					if (plain[i] == '\n')
+						lines++;
+				}
+				return lines;
+			}
+		}
 		#endregion
 
 		#region 画像処理系
@@ -4125,6 +4208,624 @@ namespace MinorShift.Emuera.GameData.Function
 					throw new CodeEE(string.Format(Properties.Resources.RuntimeErrMesMethodDefaultArgumentOutOfRange0, Name, i64, 1));
 				exm.Console.setRedrawTimer((int)i64);
 				return 1;
+			}
+		}
+
+		private sealed class GetAnimeTimerMethod : FunctionMethod
+		{
+			public GetAnimeTimerMethod()
+			{
+				ReturnType = typeof(Int64);
+				argumentTypeArray = new Type[] { };
+				CanRestructure = false;
+			}
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				return exm.Console.AnimeTimer;
+			}
+		}
+
+		private sealed class ExistSoundMethod : FunctionMethod
+		{
+			public ExistSoundMethod()
+			{
+				ReturnType = typeof(Int64);
+				argumentTypeArray = new Type[] { typeof(string) };
+				CanRestructure = false;
+			}
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				return global::GenericUtils.SoundFileExists(arguments[0].GetStrValue(exm)) ? 1 : 0;
+			}
+		}
+
+		private sealed class ExistsImageLayerMethod : FunctionMethod
+		{
+			public ExistsImageLayerMethod()
+			{
+				ReturnType = typeof(Int64);
+				argumentTypeArray = new Type[] { typeof(Int64) };
+				CanRestructure = false;
+			}
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				return exm.Console.ExistsImageLayer(arguments[0].GetIntValue(exm)) ? 1 : 0;
+			}
+		}
+
+		private sealed class GetSoundOrBgmInfoMethod : FunctionMethod
+		{
+			public GetSoundOrBgmInfoMethod()
+			{
+				ReturnType = typeof(Int64);
+				argumentTypeArray = null;
+				CanRestructure = false;
+			}
+			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+			{
+				if (arguments.Length < 1 || arguments.Length > 2)
+					return name + "関数の引数の数が正しくありません";
+				if (arguments[0] == null || arguments[0].GetOperandType() != typeof(Int64))
+					return name + "関数の1番目の引数の型が正しくありません";
+				if (arguments.Length == 2 && arguments[1] != null && arguments[1].GetOperandType() != typeof(Int64))
+					return name + "関数の2番目の引数の型が正しくありません";
+				return null;
+			}
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				var info = global::GenericUtils.GetAudioInfo((int)arguments[0].GetIntValue(exm));
+				if (arguments.Length < 2 || arguments[1] == null)
+				{
+					exm.VEvaluator.RESULT_ARRAY[0] = info.TotalMs;
+					exm.VEvaluator.RESULT_ARRAY[1] = info.CurrentMs;
+					exm.VEvaluator.RESULT_ARRAY[2] = info.Playing;
+					exm.VEvaluator.RESULT_ARRAY[3] = info.Volume;
+					exm.VEvaluator.RESULT_ARRAY[4] = info.Speed;
+					return info.TotalMs;
+				}
+				switch ((int)arguments[1].GetIntValue(exm))
+				{
+					case 1:
+						return info.TotalMs;
+					case 2:
+						return info.CurrentMs;
+					case 3:
+						return info.Playing;
+					case 4:
+						return info.Volume;
+					case 5:
+						return info.Speed;
+					default:
+						return 0;
+				}
+			}
+		}
+
+		private sealed class IsPlayingSoundMethod : FunctionMethod
+		{
+			public IsPlayingSoundMethod()
+			{
+				ReturnType = typeof(Int64);
+				argumentTypeArray = null;
+				CanRestructure = false;
+			}
+			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+			{
+				if (arguments.Length > 1)
+					return name + "関数の引数が多すぎます";
+				if (arguments.Length == 1 && arguments[0] != null && arguments[0].GetOperandType() != typeof(Int64))
+					return name + "関数の1番目の引数の型が正しくありません";
+				return null;
+			}
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				int channel = arguments.Length == 0 || arguments[0] == null ? -1 : (int)arguments[0].GetIntValue(exm);
+				return global::GenericUtils.FindPlayingSound(channel);
+			}
+		}
+
+		private sealed class SoundControlMethod : FunctionMethod
+		{
+			public SoundControlMethod()
+			{
+				ReturnType = typeof(Int64);
+				argumentTypeArray = null;
+				CanRestructure = false;
+			}
+			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+			{
+				if (arguments.Length < 2 || arguments.Length > 4)
+					return name + "関数の引数の数が正しくありません";
+				for (int i = 0; i < arguments.Length; i++)
+				{
+					if (arguments[i] == null || arguments[i].GetOperandType() != typeof(Int64))
+						return name + "関数の引数の型が正しくありません";
+				}
+				return null;
+			}
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				int channel = (int)arguments[0].GetIntValue(exm);
+				int action = (int)arguments[1].GetIntValue(exm);
+				int speed = arguments.Length >= 3 ? (int)arguments[2].GetIntValue(exm) : 100;
+				return global::GenericUtils.ControlSound(channel, action, speed);
+			}
+		}
+
+		private sealed class IsPlayingBgmMethod : FunctionMethod
+		{
+			public IsPlayingBgmMethod()
+			{
+				ReturnType = typeof(Int64);
+				argumentTypeArray = new Type[] { };
+				CanRestructure = false;
+			}
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				return global::GenericUtils.IsPlayingBgm() ? 1 : 0;
+			}
+		}
+
+		private sealed class BgmControlMethod : FunctionMethod
+		{
+			public BgmControlMethod()
+			{
+				ReturnType = typeof(Int64);
+				argumentTypeArray = null;
+				CanRestructure = false;
+			}
+			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+			{
+				if (arguments.Length < 1 || arguments.Length > 3)
+					return name + "関数の引数の数が正しくありません";
+				for (int i = 0; i < arguments.Length; i++)
+				{
+					if (arguments[i] == null || arguments[i].GetOperandType() != typeof(Int64))
+						return name + "関数の引数の型が正しくありません";
+				}
+				return null;
+			}
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				int action = (int)arguments[0].GetIntValue(exm);
+				int speed = arguments.Length >= 2 ? (int)arguments[1].GetIntValue(exm) : 100;
+				return global::GenericUtils.ControlBgm(action, speed);
+			}
+		}
+
+		private sealed class GetTextDrawingModeMethod : FunctionMethod
+		{
+			public GetTextDrawingModeMethod()
+			{
+				ReturnType = typeof(Int64);
+				argumentTypeArray = new Type[] { };
+				CanRestructure = false;
+			}
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				return exm.Console.SnakeTextDrawingMode;
+			}
+		}
+
+		private sealed class GetSkiaQualityMethod : FunctionMethod
+		{
+			public GetSkiaQualityMethod()
+			{
+				ReturnType = typeof(Int64);
+				argumentTypeArray = new Type[] { typeof(Int64) };
+				CanRestructure = false;
+			}
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				switch (arguments[0].GetIntValue(exm))
+				{
+					case 0:
+						return exm.Console.SnakeImageQuality;
+					case 1:
+						return exm.Console.SnakeFontHinting;
+					case 2:
+						return exm.Console.SnakeFontEdging;
+					default:
+						return -1;
+				}
+			}
+		}
+
+		private sealed class SnakeSqlIntMethod : FunctionMethod
+		{
+			public SnakeSqlIntMethod(string operation)
+			{
+				this.operation = operation;
+				ReturnType = typeof(Int64);
+				argumentTypeArray = null;
+				CanRestructure = false;
+			}
+
+			readonly string operation;
+
+			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+			{
+				switch (operation)
+				{
+					case "CONNECTION_OPEN":
+						return CheckSqlArgs(name, arguments, 1, 1, typeof(string), typeof(string));
+					case "CONNECT":
+						return CheckSqlArgs(name, arguments, 1, 2, typeof(string), typeof(string));
+					case "DISCONNECT":
+						return CheckSqlArgs(name, arguments, 1, 1, typeof(string), typeof(string));
+					case "EXECUTE_NONQUERY":
+					case "EXECUTE_READER":
+					case "EXECUTE_SCALAR_LONG":
+					case "EXECUTE_SCALAR_FLOAT":
+						return CheckSqlArgs(name, arguments, 2, 2, typeof(string), typeof(string));
+					case "P_EXECUTE_NONQUERY":
+					case "P_EXECUTE_READER":
+					case "P_EXECUTE_SCALAR_LONG":
+					case "P_EXECUTE_SCALAR_FLOAT":
+						return CheckSqlArgs(name, arguments, 2, int.MaxValue, typeof(string), typeof(string));
+					case "READER_READ":
+					case "READER_CLOSE":
+						return CheckSqlArgs(name, arguments, 1, 1, typeof(Int64), typeof(Int64));
+					case "READER_GET_LONG":
+					case "READER_GET_FLOAT":
+					case "READER_ISNULL":
+						return CheckSqlArgs(name, arguments, 2, 2, typeof(Int64), typeof(Int64));
+					default:
+						return null;
+				}
+			}
+
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				try
+				{
+					switch (operation)
+					{
+						case "CONNECTION_OPEN":
+							return SnakeSqlManager.ConnectionOpen(arguments[0].GetStrValue(exm));
+						case "CONNECT":
+							return SnakeSqlManager.Connect(
+								arguments[0].GetStrValue(exm),
+								arguments.Length > 1 && arguments[1] != null ? arguments[1].GetStrValue(exm) : "Data Source=:memory:",
+								false);
+						case "DISCONNECT":
+							return SnakeSqlManager.Disconnect(arguments[0].GetStrValue(exm));
+						case "EXECUTE_NONQUERY":
+							return SnakeSqlManager.ExecuteNonQuery(arguments[0].GetStrValue(exm), arguments[1].GetStrValue(exm));
+						case "EXECUTE_READER":
+							return SnakeSqlManager.ExecuteReader(arguments[0].GetStrValue(exm), arguments[1].GetStrValue(exm));
+						case "READER_READ":
+							return SnakeSqlManager.ReaderRead(arguments[0].GetIntValue(exm));
+						case "READER_GET_LONG":
+							return SnakeSqlManager.ReaderGetLong(arguments[0].GetIntValue(exm), (int)arguments[1].GetIntValue(exm));
+						case "READER_GET_FLOAT":
+							return SnakeSqlManager.ReaderGetFloatAsLong(arguments[0].GetIntValue(exm), (int)arguments[1].GetIntValue(exm));
+						case "READER_ISNULL":
+							return SnakeSqlManager.ReaderIsNull(arguments[0].GetIntValue(exm), (int)arguments[1].GetIntValue(exm));
+						case "READER_CLOSE":
+							return SnakeSqlManager.ReaderClose(arguments[0].GetIntValue(exm));
+						case "EXECUTE_SCALAR_LONG":
+							return SnakeSqlManager.ExecuteScalarLong(arguments[0].GetStrValue(exm), arguments[1].GetStrValue(exm));
+						case "EXECUTE_SCALAR_FLOAT":
+							return SnakeSqlManager.ExecuteScalarFloatAsLong(arguments[0].GetStrValue(exm), arguments[1].GetStrValue(exm));
+						case "P_EXECUTE_NONQUERY":
+							return SnakeSqlManager.ExecuteNonQuery(arguments[0].GetStrValue(exm), arguments[1].GetStrValue(exm), ReadSqlParameters(exm, arguments, 2));
+						case "P_EXECUTE_READER":
+							return SnakeSqlManager.ExecuteReader(arguments[0].GetStrValue(exm), arguments[1].GetStrValue(exm), ReadSqlParameters(exm, arguments, 2));
+						case "P_EXECUTE_SCALAR_LONG":
+							return SnakeSqlManager.ExecuteScalarLong(arguments[0].GetStrValue(exm), arguments[1].GetStrValue(exm), ReadSqlParameters(exm, arguments, 2));
+						case "P_EXECUTE_SCALAR_FLOAT":
+							return SnakeSqlManager.ExecuteScalarFloatAsLong(arguments[0].GetStrValue(exm), arguments[1].GetStrValue(exm), ReadSqlParameters(exm, arguments, 2));
+					}
+				}
+				catch (CodeEE)
+				{
+					throw;
+				}
+				catch (Exception ex)
+				{
+					throw new CodeEE(Name + ": " + ex.Message);
+				}
+				return 0;
+			}
+		}
+
+		private sealed class SnakeSqlStringMethod : FunctionMethod
+		{
+			public SnakeSqlStringMethod(string operation)
+			{
+				this.operation = operation;
+				ReturnType = typeof(string);
+				argumentTypeArray = null;
+				CanRestructure = operation == "ESCAPE";
+			}
+
+			readonly string operation;
+
+			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+			{
+				switch (operation)
+				{
+					case "ESCAPE":
+						return CheckSqlArgs(name, arguments, 1, 1, typeof(string), typeof(string));
+					case "EXECUTE_SCALAR_STRING":
+						return CheckSqlArgs(name, arguments, 2, 2, typeof(string), typeof(string));
+					case "P_EXECUTE_SCALAR_STRING":
+						return CheckSqlArgs(name, arguments, 2, int.MaxValue, typeof(string), typeof(string));
+					case "READER_GET_STRING":
+						return CheckSqlArgs(name, arguments, 2, 2, typeof(Int64), typeof(Int64));
+					default:
+						return null;
+				}
+			}
+
+			public override string GetStrValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				try
+				{
+					switch (operation)
+					{
+						case "ESCAPE":
+							return SnakeSqlManager.Escape(arguments[0].GetStrValue(exm));
+						case "EXECUTE_SCALAR_STRING":
+							return SnakeSqlManager.ExecuteScalarString(arguments[0].GetStrValue(exm), arguments[1].GetStrValue(exm));
+						case "P_EXECUTE_SCALAR_STRING":
+							return SnakeSqlManager.ExecuteScalarString(arguments[0].GetStrValue(exm), arguments[1].GetStrValue(exm), ReadSqlParameters(exm, arguments, 2));
+						case "READER_GET_STRING":
+							return SnakeSqlManager.ReaderGetString(arguments[0].GetIntValue(exm), (int)arguments[1].GetIntValue(exm));
+					}
+				}
+				catch (CodeEE)
+				{
+					throw;
+				}
+				catch (Exception ex)
+				{
+					throw new CodeEE(Name + ": " + ex.Message);
+				}
+				return "";
+			}
+		}
+
+		private static string CheckSqlArgs(string name, IOperandTerm[] arguments, int min, int max, Type firstType, Type secondType)
+		{
+			if (arguments.Length < min)
+				return name + "関数には少なくとも" + min.ToString() + "個の引数が必要です";
+			if (arguments.Length > max)
+				return name + "関数の引数が多すぎます";
+			if (arguments.Length >= 1 && (arguments[0] == null || arguments[0].GetOperandType() != firstType))
+				return name + "関数の1番目の引数の型が正しくありません";
+			if (arguments.Length >= 2 && (arguments[1] == null || arguments[1].GetOperandType() != secondType))
+				return name + "関数の2番目の引数の型が正しくありません";
+			for (int i = 2; i < arguments.Length; i++)
+			{
+				if (arguments[i] == null)
+					continue;
+				Type type = arguments[i].GetOperandType();
+				if (type != typeof(Int64) && type != typeof(string))
+					return name + "関数の" + (i + 1).ToString() + "番目の引数の型が正しくありません";
+			}
+			return null;
+		}
+
+		private static object[] ReadSqlParameters(ExpressionMediator exm, IOperandTerm[] arguments, int start)
+		{
+			if (arguments.Length <= start)
+				return null;
+			object[] parameters = new object[arguments.Length - start];
+			for (int i = start; i < arguments.Length; i++)
+			{
+				if (arguments[i] == null)
+				{
+					parameters[i - start] = null;
+					continue;
+				}
+				if (arguments[i].GetOperandType() == typeof(string))
+					parameters[i - start] = arguments[i].GetStrValue(exm);
+				else
+					parameters[i - start] = arguments[i].GetIntValue(exm);
+			}
+			return parameters;
+		}
+
+		private sealed class SnakeIntFallbackMethod : FunctionMethod
+		{
+			public SnakeIntFallbackMethod()
+			{
+				ReturnType = typeof(Int64);
+				argumentTypeArray = null;
+				CanRestructure = false;
+			}
+			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+			{
+				return null;
+			}
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				return 0;
+			}
+		}
+
+		private sealed class SnakeStringFallbackMethod : FunctionMethod
+		{
+			public SnakeStringFallbackMethod()
+			{
+				ReturnType = typeof(string);
+				argumentTypeArray = null;
+				CanRestructure = false;
+			}
+			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+			{
+				return null;
+			}
+			public override string GetStrValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				return "";
+			}
+		}
+
+		private sealed class SnakeTrigMethod : FunctionMethod
+		{
+			public SnakeTrigMethod(string kind)
+			{
+				this.kind = kind;
+				ReturnType = typeof(Int64);
+				argumentTypeArray = new Type[] { typeof(Int64) };
+				CanRestructure = true;
+			}
+			readonly string kind;
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				double value = arguments[0].GetIntValue(exm) * Math.PI / 180.0d;
+				switch (kind)
+				{
+					case "SIN":
+						return (long)Math.Round(Math.Sin(value) * 1000.0d);
+					case "COS":
+						return (long)Math.Round(Math.Cos(value) * 1000.0d);
+					case "TAN":
+						return (long)Math.Round(Math.Tan(value) * 1000.0d);
+					case "ASIN":
+						return (long)Math.Round(Math.Asin(arguments[0].GetIntValue(exm) / 1000.0d) * 180.0d / Math.PI);
+					case "ACOS":
+						return (long)Math.Round(Math.Acos(arguments[0].GetIntValue(exm) / 1000.0d) * 180.0d / Math.PI);
+					case "ATAN":
+						return (long)Math.Round(Math.Atan(arguments[0].GetIntValue(exm) / 1000.0d) * 180.0d / Math.PI);
+					default:
+						return 0;
+				}
+			}
+		}
+
+		private sealed class SnakeUnaryMathMethod : FunctionMethod
+		{
+			public SnakeUnaryMathMethod(string kind)
+			{
+				this.kind = kind;
+				ReturnType = typeof(Int64);
+				argumentTypeArray = new Type[] { typeof(Int64) };
+				CanRestructure = true;
+			}
+			readonly string kind;
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				long value = arguments[0].GetIntValue(exm);
+				switch (kind)
+				{
+					case "FLOOR":
+					case "CEIL":
+					case "ROUND":
+						return value;
+					default:
+						return 0;
+				}
+			}
+		}
+
+		private sealed class SnakeArgLenMethod : FunctionMethod
+		{
+			public SnakeArgLenMethod()
+			{
+				ReturnType = typeof(Int64);
+				argumentTypeArray = new Type[0];
+				CanRestructure = false;
+			}
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				return exm.Process.getCurrentState.CurrentVariadicArgCount;
+			}
+		}
+
+		private sealed class SnakeUncheckedMathMethod : FunctionMethod
+		{
+			public SnakeUncheckedMathMethod(string kind)
+			{
+				this.kind = kind;
+				ReturnType = typeof(Int64);
+				argumentTypeArray = null;
+				CanRestructure = true;
+			}
+			readonly string kind;
+			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+			{
+				if ((kind == "NEG" && arguments.Length != 1) || (kind != "NEG" && arguments.Length != 2))
+					return name + "関数の引数の数が正しくありません";
+				for (int i = 0; i < arguments.Length; i++)
+				{
+					if (arguments[i] == null || arguments[i].GetOperandType() != typeof(Int64))
+						return name + "関数の引数の型が正しくありません";
+				}
+				return null;
+			}
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				unchecked
+				{
+					long left = arguments[0].GetIntValue(exm);
+					if (kind == "NEG")
+						return -left;
+					long right = arguments[1].GetIntValue(exm);
+					switch (kind)
+					{
+						case "ADD":
+							return left + right;
+						case "SUB":
+							return left - right;
+						case "MUL":
+							return left * right;
+						default:
+							return 0;
+					}
+				}
+			}
+		}
+
+		private sealed class SnakeBitMethod : FunctionMethod
+		{
+			public SnakeBitMethod(string kind)
+			{
+				this.kind = kind;
+				ReturnType = typeof(Int64);
+				argumentTypeArray = null;
+				CanRestructure = true;
+			}
+			readonly string kind;
+			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+			{
+				if (arguments.Length < 1 || arguments.Length > 2)
+					return name + "関数の引数の数が正しくありません";
+				for (int i = 0; i < arguments.Length; i++)
+				{
+					if (arguments[i] == null || arguments[i].GetOperandType() != typeof(Int64))
+						return name + "関数の引数の型が正しくありません";
+				}
+				return null;
+			}
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				long value = arguments[0].GetIntValue(exm);
+				int bit = arguments.Length >= 2 ? (int)arguments[1].GetIntValue(exm) : 0;
+				if (bit < 0 || bit >= 63)
+					return kind == "INDEX" ? -1 : value;
+				long mask = 1L << bit;
+				switch (kind)
+				{
+					case "SET":
+						return value | mask;
+					case "GET":
+						return (value & mask) != 0 ? 1 : 0;
+					case "TOGGLE":
+						return value ^ mask;
+					case "INDEX":
+						for (int i = 0; i < 63; i++)
+						{
+							if ((value & (1L << i)) != 0)
+								return i;
+						}
+						return -1;
+					default:
+						return 0;
+				}
 			}
 		}
 

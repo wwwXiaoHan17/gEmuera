@@ -217,63 +217,17 @@ internal static class SpriteManager
 		if(string.IsNullOrEmpty(filename))
 			return null;
 
-				if(!uEmuera.Utils.FileExists(filename))
+		if(!uEmuera.Utils.FileExists(filename))
 		{
 			GD.PushWarning($"[SpriteManager.GetTextureInfo] file not found: {filename}");
-			return null;
+			ti = CreatePlaceholderTextureInfo(name, filename, "file not found");
+			CacheTextureInfo(name, filename, ti);
+			return ti;
 		}
 
-		byte[] content = uEmuera.Utils.ReadAllBytes(filename);
-
-		var extname = uEmuera.Utils.GetSuffix(filename).ToLower();
-		Image img = new Image();
-
-		Error err = Error.Failed;
-		if (extname == "png")
-			err = img.LoadPngFromBuffer(content);
-		else if (extname == "jpg" || extname == "jpeg")
-			err = img.LoadJpgFromBuffer(content);
-		else if (extname == "webp")
-			err = img.LoadWebpFromBuffer(content);
-		else if (extname == "bmp")
-			err = img.LoadBmpFromBuffer(content);
-		else if (extname == "tga")
-			err = img.LoadTgaFromBuffer(content);
-		else
-		{
-			GD.PushWarning($"[SpriteManager.GetTextureInfo] unknown extension '{extname}' for {filename}, trying automatic detection");
-		}
-
-		if (err != Error.Ok)
-		{
-			// fallback: try Godot's automatic format detection via Load
-			img.Dispose();
-			img = new Image();
-			var loadErr = img.Load(filename);
-			if (loadErr != Error.Ok)
-			{
-				GD.PushWarning($"[SpriteManager.GetTextureInfo] {filename} failed to load: buffer err={err} / fallback err={loadErr}");
-				img.Dispose();
-				return null;
-			}
-		}
-
+		Image img = LoadImageOrPlaceholder(filename, name);
 		ti = new TextureInfo(name, img);
-		lock(dictLock)
-		{
-			// Double-check: another thread may have loaded it while we were reading the file
-			if(texture_dict.TryGetValue(name, out var existing))
-			{
-				ti.Dispose();
-				return existing;
-			}
-			texture_dict[name] = ti;
-			// Also index by filename for lookup consistency
-			var fileOnly = System.IO.Path.GetFileName(filename);
-			if (!string.IsNullOrEmpty(fileOnly) && fileOnly != name && !texture_dict.ContainsKey(fileOnly))
-				texture_dict[fileOnly] = ti;
-		}
-		return ti;
+		return CacheTextureInfo(name, filename, ti);
 	}
 
 	public static TextureInfoOtherThread GetTextureInfoOtherThread(
@@ -306,35 +260,18 @@ internal static class SpriteManager
 	static void Loading(uEmuera.Drawing.Bitmap baseimage)
 	{
 		TextureInfo ti = null;
-				if(uEmuera.Utils.FileExists(baseimage.path))
+		if(uEmuera.Utils.FileExists(baseimage.path))
 		{
-			byte[] content = uEmuera.Utils.ReadAllBytes(baseimage.path);
-
-			var extname = uEmuera.Utils.GetSuffix(baseimage.path).ToLower();
-			Image img = new Image();
-			Error err = Error.Failed;
-
-			if (extname == "png")
-				err = img.LoadPngFromBuffer(content);
-			else if (extname == "jpg" || extname == "jpeg")
-				err = img.LoadJpgFromBuffer(content);
-			else if (extname == "webp")
-				err = img.LoadWebpFromBuffer(content);
-			else if (extname == "bmp")
-				err = img.LoadBmpFromBuffer(content);
-			else if (extname == "tga")
-				err = img.LoadTgaFromBuffer(content);
-
-			if (err == Error.Ok)
-			{
-				ti = new TextureInfo(baseimage.filename, img);
-				baseimage.size.Width = img.GetWidth();
-				baseimage.size.Height = img.GetHeight();
-			}
-			else
-			{
-				GD.PushWarning($"{baseimage.path} failed to load: {err}");
-			}
+			Image img = LoadImageOrPlaceholder(baseimage.path, baseimage.filename);
+			ti = new TextureInfo(baseimage.filename, img);
+			baseimage.size.Width = img.GetWidth();
+			baseimage.size.Height = img.GetHeight();
+		}
+		else
+		{
+			ti = CreatePlaceholderTextureInfo(baseimage.filename, baseimage.path, "file not found");
+			baseimage.size.Width = ti.width;
+			baseimage.size.Height = ti.height;
 		}
 
 		List<CallbackInfo> callbacks = null;
@@ -364,6 +301,75 @@ internal static class SpriteManager
 				item.DoCallback(GetSpriteInfo(ti, item.src));
 			}
 		}
+	}
+
+	static Image LoadImageOrPlaceholder(string filename, string name)
+	{
+		try
+		{
+			byte[] content = uEmuera.Utils.ReadAllBytes(filename);
+			var extname = uEmuera.Utils.GetSuffix(filename).ToLower();
+			Image img = new Image();
+			Error err = Error.Failed;
+
+			if (extname == "png")
+				err = img.LoadPngFromBuffer(content);
+			else if (extname == "jpg" || extname == "jpeg")
+				err = img.LoadJpgFromBuffer(content);
+			else if (extname == "webp")
+				err = img.LoadWebpFromBuffer(content);
+			else if (extname == "bmp")
+				err = img.LoadBmpFromBuffer(content);
+			else if (extname == "tga")
+				err = img.LoadTgaFromBuffer(content);
+			else
+			{
+				err = img.Load(filename);
+			}
+
+			if (err == Error.Ok && img.GetWidth() > 0 && img.GetHeight() > 0)
+				return img;
+
+			img.Dispose();
+			GD.PushWarning($"[SpriteManager] image decode failed, using transparent placeholder: {filename}, err={err}");
+		}
+		catch (Exception ex)
+		{
+			GD.PushWarning($"[SpriteManager] image load exception, using transparent placeholder: {filename}, error={ex.Message}");
+		}
+		return CreatePlaceholderImage();
+	}
+
+	static TextureInfo CreatePlaceholderTextureInfo(string name, string filename, string reason)
+	{
+		GD.PushWarning($"[SpriteManager] using transparent placeholder for {filename}: {reason}");
+		return new TextureInfo(name, CreatePlaceholderImage());
+	}
+
+	static Image CreatePlaceholderImage()
+	{
+		Image img = Image.CreateEmpty(1, 1, false, Image.Format.Rgba8);
+		img.SetPixel(0, 0, new Godot.Color(0, 0, 0, 0));
+		return img;
+	}
+
+	static TextureInfo CacheTextureInfo(string name, string filename, TextureInfo ti)
+	{
+		lock(dictLock)
+		{
+			if(texture_dict.TryGetValue(name, out var existing))
+			{
+				ti.Dispose();
+				return existing;
+			}
+			texture_dict[name] = ti;
+			if (!string.IsNullOrEmpty(filename) && filename != name && !texture_dict.ContainsKey(filename))
+				texture_dict[filename] = ti;
+			var fileOnly = System.IO.Path.GetFileName(filename);
+			if (!string.IsNullOrEmpty(fileOnly) && fileOnly != name && !texture_dict.ContainsKey(fileOnly))
+				texture_dict[fileOnly] = ti;
+		}
+		return ti;
 	}
 
 	static SpriteInfo GetSpriteInfo(TextureInfo textinfo, ASprite src)

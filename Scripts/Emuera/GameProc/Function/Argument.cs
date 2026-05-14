@@ -202,6 +202,42 @@ namespace MinorShift.Emuera.GameProc.Function
 		public CalledFunction CallFunc;
 	}
 
+	internal sealed class SpCallSharpArgment : Argument
+	{
+		public SpCallSharpArgment(IOperandTerm funcname, IOperandTerm[] subNames, IOperandTerm[] args)
+		{
+			FuncnameTerm = funcname;
+			SubNames = subNames;
+			RowArgs = args;
+		}
+		readonly public IOperandTerm FuncnameTerm;
+		readonly public IOperandTerm[] SubNames;
+		readonly public IOperandTerm[] RowArgs;
+		public MinorShift.Emuera.Runtime.Utils.PluginSystem.IPluginMethod CallFunc;
+	}
+
+	internal sealed class SnakeVariArgument : Argument
+	{
+		public SnakeVariArgument(string name, IOperandTerm initialValue)
+		{
+			Name = name;
+			InitialValue = initialValue;
+		}
+		public readonly string Name;
+		public readonly IOperandTerm InitialValue;
+	}
+
+	internal sealed class SnakeVarsArgument : Argument
+	{
+		public SnakeVarsArgument(string name, string initialValue)
+		{
+			Name = name;
+			InitialValue = initialValue;
+		}
+		public readonly string Name;
+		public readonly string InitialValue;
+	}
+
 	internal sealed class SpForNextArgment : Argument
 	{
 		public SpForNextArgment(VariableTerm var, IOperandTerm start, IOperandTerm end, IOperandTerm step)

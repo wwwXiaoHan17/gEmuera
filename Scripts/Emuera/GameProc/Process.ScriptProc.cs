@@ -298,6 +298,15 @@ namespace MinorShift.Emuera.GameProc
 				case FunctionCode.QUIT://ゲームを終了
 					exm.Console.Quit();
 					break;
+				case FunctionCode.QUIT_AND_RESTART:
+					exm.Console.QuitAndRestart();
+					break;
+				case FunctionCode.FORCE_QUIT:
+					exm.Console.ForceQuit();
+					break;
+				case FunctionCode.FORCE_QUIT_AND_RESTART:
+					exm.Console.QuitAndRestart();
+					break;
 
 				case FunctionCode.VARSIZE:
 					{

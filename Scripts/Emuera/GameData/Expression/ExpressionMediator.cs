@@ -50,11 +50,16 @@ namespace MinorShift.Emuera.GameData.Expression
 
 		public void OutputToConsole(string str, FunctionIdentifier func)
 		{
+			OutputToConsole(str, func, true);
+		}
+
+		public void OutputToConsole(string str, FunctionIdentifier func, bool lineEnd)
+		{
 			if (func.IsPrintSingle())
 				Console.PrintSingleLine(str, false);
 			else
 			{
-				Console.Print(str);
+				Console.Print(str, lineEnd);
 				if (func.IsNewLine() || func.IsWaitInput())
 				{
 					Console.NewLine();
@@ -145,5 +150,3 @@ namespace MinorShift.Emuera.GameData.Expression
 		}
 	}
 }
-
-

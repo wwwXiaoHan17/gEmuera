@@ -150,6 +150,15 @@ namespace MinorShift.Emuera.GameProc
 				return functionList[functionList.Count - 1];
 			}
 		}
+		public int CurrentVariadicArgCount
+		{
+			get
+			{
+				if (functionList.Count == 0)
+					return 0;
+				return functionList[functionList.Count - 1].VariadicArgCount;
+			}
+		}
 		public SystemStateCode SystemState
 		{
 			get { return sysStateCode; }
@@ -179,28 +188,38 @@ namespace MinorShift.Emuera.GameProc
 		}
 
 		public void SetBegin(string keyword)
+		{
+			SetBegin(keyword, false);
+		}
+
+		public void SetBegin(string keyword, bool force)
 		{//TrimとToUpper済みのはず
 			switch (keyword)
 			{
 				case "SHOP":
-					SetBegin(BeginType.SHOP); return;
+					SetBegin(BeginType.SHOP, force); return;
 				case "TRAIN":
-					SetBegin(BeginType.TRAIN); return;
+					SetBegin(BeginType.TRAIN, force); return;
 				case "AFTERTRAIN":
-					SetBegin(BeginType.AFTERTRAIN); return;
+					SetBegin(BeginType.AFTERTRAIN, force); return;
 				case "ABLUP":
-					SetBegin(BeginType.ABLUP); return;
+					SetBegin(BeginType.ABLUP, force); return;
 				case "TURNEND":
-					SetBegin(BeginType.TURNEND); return;
+					SetBegin(BeginType.TURNEND, force); return;
 				case "FIRST":
-					SetBegin(BeginType.FIRST); return;
+					SetBegin(BeginType.FIRST, force); return;
 				case "TITLE":
-					SetBegin(BeginType.TITLE); return;
+					SetBegin(BeginType.TITLE, force); return;
 			}
 			throw new CodeEE("BEGINのキーワード\"" + keyword + "\"は未定義です");
 		}
 
 		public void SetBegin(BeginType type)
+		{
+			SetBegin(type, false);
+		}
+
+		public void SetBegin(BeginType type, bool force)
 		{
 			string errmes;
 			switch (type)
@@ -211,7 +230,7 @@ namespace MinorShift.Emuera.GameProc
 				case BeginType.ABLUP:
 				case BeginType.TURNEND:
 				case BeginType.FIRST:
-					if ((sysStateCode & SystemStateCode.__CAN_BEGIN__) != SystemStateCode.__CAN_BEGIN__)
+					if (!force && (sysStateCode & SystemStateCode.__CAN_BEGIN__) != SystemStateCode.__CAN_BEGIN__)
 					{
 						errmes = "BEGIN";
 						goto err;
@@ -468,6 +487,30 @@ namespace MinorShift.Emuera.GameProc
                     {
 						if (call.TopLabel.Arg[i].Identifier.IsReference)
 							((ReferenceToken)(call.TopLabel.Arg[i].Identifier)).SetRef(srcArgs.TransporterRef[i]);
+						else if (srcArgs.Arguments[i] is VariadicArgTerm variadic)
+						{
+							int baseIndex = call.TopLabel.Arg[i].getEl1forArg;
+							int requiredSize = baseIndex + variadic.Count;
+							if (requiredSize > call.TopLabel.Arg[i].Identifier.GetLength())
+							{
+								if (call.TopLabel.Arg[i].Identifier.Code == VariableCode.ARG)
+									GlobalStatic.IdentifierDictionary.resizeLocalVars("ARG", call.TopLabel.LabelName, requiredSize);
+								else if (call.TopLabel.Arg[i].Identifier.Code == VariableCode.ARGS)
+									GlobalStatic.IdentifierDictionary.resizeLocalVars("ARGS", call.TopLabel.LabelName, requiredSize);
+							}
+							call.VariadicArgCount = variadic.Count;
+							for (int j = 0; j < variadic.Count; j++)
+							{
+								IOperandTerm value = variadic[j];
+								if (value == null)
+									continue;
+								long[] index = new long[] { baseIndex + j };
+								if (call.TopLabel.Arg[i].Identifier.VariableType == typeof(Int64))
+									call.TopLabel.Arg[i].Identifier.SetValue(value.GetIntValue(exm), index);
+								else
+									call.TopLabel.Arg[i].Identifier.SetValue(value.GetStrValue(exm), index);
+							}
+						}
                         else if (srcArgs.Arguments[i].GetOperandType() == typeof(Int64))
                             call.TopLabel.Arg[i].SetValue(srcArgs.TransporterInt[i], exm);
                         else

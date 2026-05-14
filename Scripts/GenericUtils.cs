@@ -18,9 +18,40 @@ internal static class GenericUtils
     const ulong DesktopUiBudgetUsec = 7000;
     const int AndroidMaxUiActionsPerFrame = 32;
     const int DesktopMaxUiActionsPerFrame = 96;
+    const int SnakeSoundChannelCount = 10;
+    static readonly object snakeAudioLock = new object();
+    static readonly SnakeAudioState[] snakeSounds = CreateSnakeAudioStates();
+    static readonly SnakeAudioState snakeBgm = new SnakeAudioState();
 
     public static bool HasPendingUIWork => Volatile.Read(ref pendingUiActions) > 0;
     public static bool HasPendingDisplayWork => Volatile.Read(ref pendingDisplayActions) > 0;
+
+    sealed class SnakeAudioState
+    {
+        public string Path;
+        public bool Playing;
+        public bool Paused;
+        public int Volume = 100;
+        public int Speed = 100;
+        public long StartedAtMs;
+    }
+
+    public struct SnakeAudioInfo
+    {
+        public long TotalMs;
+        public long CurrentMs;
+        public long Playing;
+        public long Volume;
+        public long Speed;
+    }
+
+    static SnakeAudioState[] CreateSnakeAudioStates()
+    {
+        var states = new SnakeAudioState[SnakeSoundChannelCount];
+        for (int i = 0; i < states.Length; i++)
+            states[i] = new SnakeAudioState();
+        return states;
+    }
 
     public static void SetMainThread()
     {
@@ -238,5 +269,242 @@ internal static class GenericUtils
             return;
         var cbgList = console.GetCBGList();
         EnqueueUI(() => EmueraContent.instance?.RefreshCBG(cbgList), true);
+    }
+
+    public static void PlaySoundFile(string path, bool loop)
+    {
+        lock (snakeAudioLock)
+        {
+            int channel = 0;
+            for (int i = 0; i < snakeSounds.Length; i++)
+            {
+                if (!snakeSounds[i].Playing)
+                {
+                    channel = i;
+                    break;
+                }
+            }
+            var state = snakeSounds[channel];
+            state.Path = path;
+            state.Playing = true;
+            state.Paused = false;
+            state.StartedAtMs = GetTickMs();
+        }
+        EnqueueUI(() => EmueraContent.instance?.PlaySoundFile(path, loop));
+    }
+
+    public static void StopSounds()
+    {
+        lock (snakeAudioLock)
+        {
+            foreach (var state in snakeSounds)
+            {
+                state.Playing = false;
+                state.Paused = false;
+            }
+        }
+        EnqueueUI(() => EmueraContent.instance?.StopSounds());
+    }
+
+    public static void PlayBgmFile(string path)
+    {
+        lock (snakeAudioLock)
+        {
+            snakeBgm.Path = path;
+            snakeBgm.Playing = true;
+            snakeBgm.Paused = false;
+            snakeBgm.StartedAtMs = GetTickMs();
+        }
+        EnqueueUI(() => EmueraContent.instance?.PlayBgmFile(path));
+    }
+
+    public static void StopBgm()
+    {
+        lock (snakeAudioLock)
+        {
+            snakeBgm.Playing = false;
+            snakeBgm.Paused = false;
+        }
+        EnqueueUI(() => EmueraContent.instance?.StopBgm());
+    }
+
+    public static void SetSoundVolume(int volume)
+    {
+        lock (snakeAudioLock)
+        {
+            foreach (var state in snakeSounds)
+                state.Volume = ClampEraVolume(volume);
+        }
+        EnqueueUI(() => EmueraContent.instance?.SetSoundVolume(volume));
+    }
+
+    public static void SetBgmVolume(int volume)
+    {
+        lock (snakeAudioLock)
+            snakeBgm.Volume = ClampEraVolume(volume);
+        EnqueueUI(() => EmueraContent.instance?.SetBgmVolume(volume));
+    }
+
+    public static bool SoundFileExists(string name)
+    {
+        string path = ResolveSoundPath(name);
+        return !string.IsNullOrEmpty(path) && System.IO.File.Exists(path);
+    }
+
+    public static int FindPlayingSound(int channel)
+    {
+        lock (snakeAudioLock)
+        {
+            if (channel >= 0)
+                return channel < snakeSounds.Length && snakeSounds[channel].Playing && !snakeSounds[channel].Paused ? channel : -1;
+            for (int i = 0; i < snakeSounds.Length; i++)
+            {
+                if (snakeSounds[i].Playing && !snakeSounds[i].Paused)
+                    return i;
+            }
+        }
+        return -1;
+    }
+
+    public static bool IsPlayingBgm()
+    {
+        lock (snakeAudioLock)
+            return snakeBgm.Playing && !snakeBgm.Paused;
+    }
+
+    public static int ControlSound(int channel, int action, int speed = 100)
+    {
+        if (channel < 0 || channel >= SnakeSoundChannelCount)
+            return -1;
+        lock (snakeAudioLock)
+        {
+            SnakeAudioState state = snakeSounds[channel];
+            switch (action)
+            {
+                case 0:
+                    state.Paused = true;
+                    EnqueueUI(() => EmueraContent.instance?.PauseSoundChannel(channel, true));
+                    return 1;
+                case 1:
+                    state.Paused = false;
+                    if (!string.IsNullOrEmpty(state.Path))
+                        state.Playing = true;
+                    EnqueueUI(() => EmueraContent.instance?.PauseSoundChannel(channel, false));
+                    return 1;
+                case 2:
+                    state.Playing = false;
+                    state.Paused = false;
+                    EnqueueUI(() => EmueraContent.instance?.StopSoundChannel(channel));
+                    return 1;
+                case 3:
+                    state.Speed = Math.Max(1, speed);
+                    EnqueueUI(() => EmueraContent.instance?.SetSoundChannelSpeed(channel, state.Speed / 100.0f));
+                    return 1;
+                default:
+                    return -2;
+            }
+        }
+    }
+
+    public static int ControlBgm(int action, int speed = 100)
+    {
+        lock (snakeAudioLock)
+        {
+            switch (action)
+            {
+                case 0:
+                    snakeBgm.Paused = true;
+                    EnqueueUI(() => EmueraContent.instance?.PauseBgm(true));
+                    return 1;
+                case 1:
+                    snakeBgm.Paused = false;
+                    if (!string.IsNullOrEmpty(snakeBgm.Path))
+                        snakeBgm.Playing = true;
+                    EnqueueUI(() => EmueraContent.instance?.PauseBgm(false));
+                    return 1;
+                case 2:
+                    snakeBgm.Playing = false;
+                    snakeBgm.Paused = false;
+                    EnqueueUI(() => EmueraContent.instance?.StopBgm());
+                    return 1;
+                case 3:
+                    snakeBgm.Speed = Math.Max(1, speed);
+                    EnqueueUI(() => EmueraContent.instance?.SetBgmSpeed(snakeBgm.Speed / 100.0f));
+                    return 1;
+                default:
+                    return -2;
+            }
+        }
+    }
+
+    public static SnakeAudioInfo GetAudioInfo(int channel)
+    {
+        lock (snakeAudioLock)
+        {
+            SnakeAudioState state = channel == -1 ? snakeBgm : channel >= 0 && channel < snakeSounds.Length ? snakeSounds[channel] : null;
+            if (state == null)
+                return default;
+            return new SnakeAudioInfo
+            {
+                TotalMs = 0,
+                CurrentMs = state.Playing && !state.Paused ? Math.Max(0, GetTickMs() - state.StartedAtMs) : 0,
+                Playing = state.Playing && !state.Paused ? 1 : 0,
+                Volume = state.Volume,
+                Speed = state.Speed
+            };
+        }
+    }
+
+    public static string ResolveSoundPath(string name)
+    {
+        if (string.IsNullOrEmpty(name))
+            return name;
+        if (System.IO.Path.IsPathRooted(name))
+            return name;
+        string exeDir = MinorShift.Emuera.Program.ExeDir ?? "";
+        string[] candidates =
+        {
+            System.IO.Path.Combine(exeDir, "sound", name),
+            System.IO.Path.Combine(exeDir, "Sound", name),
+            System.IO.Path.Combine(exeDir, name),
+            System.IO.Path.Combine("sound", name),
+            name
+        };
+        foreach (string candidate in candidates)
+        {
+            string resolved = uEmuera.Utils.ResolveExistingFilePath(candidate);
+            if (!string.IsNullOrEmpty(resolved) && System.IO.File.Exists(resolved))
+                return resolved;
+        }
+        return System.IO.Path.GetFullPath(candidates[0]);
+    }
+
+    static int ClampEraVolume(int volume)
+    {
+        if (volume < 0)
+            return 0;
+        if (volume > 100)
+            return 100;
+        return volume;
+    }
+
+    static long GetTickMs()
+    {
+        return DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+    }
+
+    internal static void SetHtmlIsland(MinorShift.Emuera.GameView.ConsoleDisplayLine[] lines)
+    {
+        EnqueueUI(() => EmueraContent.instance?.SetHtmlIsland(lines));
+    }
+
+    internal static void ClearHtmlIsland()
+    {
+        EnqueueUI(() => EmueraContent.instance?.ClearHtmlIsland());
+    }
+
+    public static void RestartGame()
+    {
+        EnqueueUI(() => EmueraContent.instance?.RequestRestartFromErb());
     }
 }

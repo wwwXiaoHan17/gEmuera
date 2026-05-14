@@ -45,6 +45,7 @@ namespace MinorShift.Emuera
 #endif
 		public static void Reset()
 		{
+			MinorShift.Emuera.GameData.Function.SnakeSqlManager.CloseAll();
 			Process = null;
 			ConstantData = null;
 			GameBaseData = null;

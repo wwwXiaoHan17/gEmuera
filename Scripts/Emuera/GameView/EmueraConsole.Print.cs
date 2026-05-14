@@ -283,6 +283,7 @@ namespace MinorShift.Emuera.GameView
 		{
 			if (string.IsNullOrEmpty(str))
 				return;
+			Program.AppendSnakeStartupErrorLog(str);
 			if (Program.DebugMode)
 			{
 				this.DebugPrint(str);
@@ -301,6 +302,7 @@ namespace MinorShift.Emuera.GameView
 		{
 			if (string.IsNullOrEmpty(str))
 				return;
+			Program.AppendSnakeStartupErrorLog(str);
 			if (Program.DebugMode)
 			{
 				this.DebugPrint(str);
@@ -334,6 +336,11 @@ namespace MinorShift.Emuera.GameView
 
 		public void Print(string str)
 		{
+			Print(str, true);
+		}
+
+		public void Print(string str, bool lineEnd)
+		{
 			if (string.IsNullOrEmpty(str))
 				return;
 			if (str.Contains("\n"))
@@ -349,7 +356,7 @@ namespace MinorShift.Emuera.GameView
 				}
 				return;
 			}
-			printBuffer.Append(str, Style);
+			printBuffer.Append(str, Style, false, lineEnd);
 			return;
 		}
 
@@ -367,17 +374,70 @@ namespace MinorShift.Emuera.GameView
 
 		public void PrintHtml(string str)
 		{
+			PrintHtml(str, false);
+		}
+
+		public void PrintHtml(string str, bool toPrintBuffer)
+		{
 			if (string.IsNullOrEmpty(str))
 				return;
 			if (!this.Enabled)
 				return;
-			if (!printBuffer.IsEmpty)
+			if (toPrintBuffer)
 			{
-				ConsoleDisplayLine[] dispList = printBuffer.Flush(stringMeasure, force_temporary);
-				addRangeDisplayLine(dispList);
+				foreach (ConsoleButtonString button in HtmlManager.Html2ButtonList(str, stringMeasure, this))
+					printBuffer.AppendButton(button);
 			}
-			addRangeDisplayLine(HtmlManager.Html2DisplayLine(str, stringMeasure, this));
+			else
+			{
+				if (!printBuffer.IsEmpty)
+				{
+					ConsoleDisplayLine[] dispList = printBuffer.Flush(stringMeasure, force_temporary);
+					addRangeDisplayLine(dispList);
+				}
+				addRangeDisplayLine(HtmlManager.Html2DisplayLine(str, stringMeasure, this));
+			}
 			RefreshStrings(false);
+		}
+
+		public void PrintHtmlC(string str, bool alignmentRight, int cellWidthPx)
+		{
+			if (string.IsNullOrEmpty(str))
+				return;
+			if (!this.Enabled)
+				return;
+
+			if (cellWidthPx <= 0)
+				cellWidthPx = Config.PrintCLength * Config.FontSize / 2;
+
+			ConsoleButtonString[] buttons = HtmlManager.Html2ButtonList(str, stringMeasure, this);
+			if (buttons.Length == 0)
+				return;
+
+			int contentWidth = 0;
+			foreach (ConsoleButtonString button in buttons)
+			{
+				button.CalcWidth(stringMeasure, 0);
+				contentWidth += Math.Max(0, button.Width);
+			}
+
+			int padPx = cellWidthPx - contentWidth;
+			if (padPx > 0 && alignmentRight)
+				appendHtmlCellSpace(padPx);
+			foreach (ConsoleButtonString button in buttons)
+				printBuffer.AppendButton(button);
+			if (padPx > 0 && !alignmentRight)
+				appendHtmlCellSpace(padPx);
+		}
+
+		private void appendHtmlCellSpace(int width)
+		{
+			RectangleF spaceRect = new RectangleF(0, 0, width, Config.FontSize);
+			ConsoleSpacePart spacePart = new ConsoleSpacePart(spaceRect);
+			spacePart.SetWidth(stringMeasure, 0);
+			ConsoleButtonString spaceButton = new ConsoleButtonString(this, new AConsoleDisplayPart[] { spacePart });
+			spaceButton.CalcWidth(stringMeasure, 0);
+			printBuffer.AppendButton(spaceButton);
 		}
 
 		private int printCWidth = -1;

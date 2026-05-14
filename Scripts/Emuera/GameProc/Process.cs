@@ -12,6 +12,7 @@ using MinorShift.Emuera.GameProc.Function;
 using MinorShift.Emuera.GameData.Function;
 using System.Linq;
 using uEmuera.Forms;
+using MinorShift.Emuera.Runtime.Utils.PluginSystem;
 
 namespace MinorShift.Emuera.GameProc
 {
@@ -163,6 +164,12 @@ namespace MinorShift.Emuera.GameProc
 
 				LexicalAnalyzer.UseMacro = false;
 
+				if (Program.IsSnakeProfile)
+				{
+					PluginManager.GetInstance().SetParent(this, state, exm);
+					PluginManager.GetInstance().LoadPlugins();
+				}
+
 				//ERH読込
 				GenericUtils.Info($"[LOAD] Loading ERH from: {Program.ErbDir}");
 				if (!hLoader.LoadHeaderFiles(Program.ErbDir, Config.DisplayReport))
@@ -183,7 +190,7 @@ namespace MinorShift.Emuera.GameProc
                 if (Program.AnalysisMode)
                     noError = loader.loadErbs(Program.AnalysisFiles, labelDic);
                 else
-                    noError = loader.LoadErbFiles(Program.ErbDir, Config.DisplayReport, labelDic);
+                    noError = loader.LoadErbFiles(Program.ErbDir, Config.DisplayReport, labelDic, Config.UseLazyLoading);
 				GenericUtils.Info($"[LOAD] ERB loaded, noError={noError}");
                 initSystemProcess();
                 initialiing = false;
@@ -210,7 +217,7 @@ namespace MinorShift.Emuera.GameProc
 			saveCurrentState(false);
 			state.SystemState = SystemStateCode.System_Reloaderb;
 			ErbLoader loader = new ErbLoader(console, exm, this);
-            loader.LoadErbFiles(Program.ErbDir, false, labelDic);
+            loader.LoadErbFiles(Program.ErbDir, false, labelDic, Config.UseLazyLoading);
 			console.ReadAnyKey();
 		}
 

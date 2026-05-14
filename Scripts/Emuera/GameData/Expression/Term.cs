@@ -135,4 +135,34 @@ namespace MinorShift.Emuera.GameData.Expression
         }
 	}
 
+	internal sealed class VariadicArgTerm : IOperandTerm
+	{
+		public VariadicArgTerm(List<IOperandTerm> args, Type type)
+			: base(type)
+		{
+			this.args = args;
+		}
+
+		readonly List<IOperandTerm> args;
+
+		public int Count { get { return args.Count; } }
+
+		public IOperandTerm this[int index]
+		{
+			get
+			{
+				if (index < 0 || index >= args.Count)
+					return null;
+				return args[index];
+			}
+		}
+
+		public override IOperandTerm Restructure(ExpressionMediator exm)
+		{
+			for (int i = 0; i < args.Count; i++)
+				args[i] = args[i].Restructure(exm);
+			return this;
+		}
+	}
+
 }
