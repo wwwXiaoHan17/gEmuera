@@ -8,6 +8,8 @@ using MinorShift.Emuera.GameProc.Function;
 using MinorShift._Library;
 using MinorShift.Emuera.GameData;
 using MinorShift.Emuera.GameData.Function;
+using System.Text.RegularExpressions;
+using System.IO;
 
 namespace MinorShift.Emuera.GameProc
 {
@@ -25,6 +27,7 @@ namespace MinorShift.Emuera.GameProc
 
 		bool noError = true;
 		Queue<DimLineWC> dimlines;
+		Dictionary<string, List<string>> erdFileNames;
 		/// <summary>
 		/// 
 		/// </summary>
@@ -39,6 +42,8 @@ namespace MinorShift.Emuera.GameProc
 #endif
             bool noError = true;
 			dimlines = new Queue<DimLineWC>();
+			if (Program.IsSnakeProfile)
+				PrepareERDFileNames();
 			try
 			{
 				for (int i = 0; i < headerFiles.Count; i++)
@@ -112,12 +117,30 @@ namespace MinorShift.Emuera.GameProc
 						case "FUNCTIONS":
 							analyzeSharpFunction(st, position, sharpID == "FUNCTIONS");
 							break;
+						case "FUNCTIONF":
+							if (!Program.IsSnakeProfile)
+								throw new CodeEE("#" + sharpID + "は解釈できないプリプロセッサです", position);
+							analyzeSharpFunction(st, position, sharpID == "FUNCTIONS");
+							break;
 						case "DIM":
 						case "DIMS":
 							//1822 #DIMは保留しておいて後でまとめてやる
 							{
 								WordCollection wc = LexicalAnalyzer.Analyse(st, LexEndWith.EoL, LexAnalyzeFlag.AllowAssignment);
 								dimlines.Enqueue(new DimLineWC(wc, sharpID == "DIMS", false, position));
+							}
+							//analyzeSharpDim(st, position, sharpID == "DIMS");
+							break;
+						case "DIMF":
+							if (!Program.IsSnakeProfile)
+								throw new CodeEE("#" + sharpID + "は解釈できないプリプロセッサです", position);
+							//1822 #DIMは保留しておいて後でまとめてやる
+							{
+								WordCollection wc = LexicalAnalyzer.Analyse(
+									new StringStream(NormalizeSnakeFloatLiterals(st.Substring())),
+									LexEndWith.EoL,
+									LexAnalyzeFlag.AllowAssignment);
+								dimlines.Enqueue(new DimLineWC(wc, false, false, position));
 							}
 							//analyzeSharpDim(st, position, sharpID == "DIMS");
 							break;
@@ -286,6 +309,8 @@ namespace MinorShift.Emuera.GameProc
 						else
 							var = parentProcess.VEvaluator.VariableData.CreateUserDefVariable(data);
 						idDic.AddUseDefinedVariable(var);
+						if (Program.IsSnakeProfile)
+							LoadUserDefinedNameData(data, dimline.SC);
 					}
 					catch (IdentifierNotFoundCodeEE e)
 					{
@@ -319,6 +344,62 @@ namespace MinorShift.Emuera.GameProc
 			//WordCollection wc = LexicalAnalyzer.Analyse(st, LexEndWith.EoL, LexAnalyzeFlag.AllowAssignment);
 			//UserDefinedFunctionData data = UserDefinedFunctionData.Create(wc, funcs, position);
 			//idDic.AddRefMethod(UserDefinedRefMethod.Create(data));
+		}
+
+		private void PrepareERDFileNames()
+		{
+			erdFileNames = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+			AddERDFileNames(uEmuera.Utils.GetFilePaths(Program.ErbDir, "*.ERD", SearchOption.AllDirectories));
+			AddERDFileNames(uEmuera.Utils.GetFilePaths(Program.ErbDir, "*.erd", SearchOption.AllDirectories));
+			AddERDFileNames(uEmuera.Utils.GetFilePaths(Program.CsvDir, "*.CSV", SearchOption.TopDirectoryOnly));
+			AddERDFileNames(uEmuera.Utils.GetFilePaths(Program.CsvDir, "*.csv", SearchOption.TopDirectoryOnly));
+		}
+
+		private void AddERDFileNames(List<string> paths)
+		{
+			if (paths == null)
+				return;
+			for (int i = 0; i < paths.Count; i++)
+			{
+				string key = Path.GetFileNameWithoutExtension(paths[i]);
+				if (string.IsNullOrEmpty(key))
+					continue;
+				List<string> list;
+				if (!erdFileNames.TryGetValue(key, out list))
+				{
+					list = new List<string>();
+					erdFileNames.Add(key, list);
+				}
+				if (!list.Contains(paths[i]))
+					list.Add(paths[i]);
+			}
+		}
+
+		private void LoadUserDefinedNameData(UserDefinedVariableData data, ScriptPosition position)
+		{
+			if (data == null || erdFileNames == null || data.Lengths == null)
+				return;
+			if (data.Dimension == 1)
+			{
+				List<string> info;
+				if (erdFileNames.TryGetValue(data.Name, out info))
+					GlobalStatic.ConstantData.UserDefineLoadData(info, data.Name, data.Lengths[0], Config.DisplayReport, position);
+				return;
+			}
+			for (int dim = 1; dim <= data.Dimension && dim <= data.Lengths.Length; dim++)
+			{
+				string key = data.Name + "@" + dim.ToString();
+				List<string> info;
+				if (erdFileNames.TryGetValue(key, out info))
+					GlobalStatic.ConstantData.UserDefineLoadData(info, key, data.Lengths[dim - 1], Config.DisplayReport, position);
+			}
+		}
+
+		private static string NormalizeSnakeFloatLiterals(string source)
+		{
+			if (string.IsNullOrEmpty(source))
+				return source;
+			return Regex.Replace(source, @"(?<![A-Za-z0-9_])([+-]?\d+)\.\d+(?![A-Za-z0-9_])", "$1");
 		}
 	}
 }

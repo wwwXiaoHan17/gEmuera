@@ -128,7 +128,12 @@ namespace MinorShift.Emuera.GameView
 			//setStBar(StaticConfig.DrawLineString);
 			state = ConsoleState.Initializing;
 			if (Config.FPS > 0)
-				msPerFrame = 1000 / (uint)Config.FPS;
+			{
+				int effectiveFps = Config.FPS;
+				if (Program.IsSnakeProfile && effectiveFps < 60)
+					effectiveFps = 60;
+				msPerFrame = 1000 / (uint)effectiveFps;
+			}
 			//displayLineList = new List<ConsoleDisplayLine>();
             displayLineList = new DisplayLineList();
             //if (Program.DebugMode)
@@ -786,13 +791,37 @@ namespace MinorShift.Emuera.GameView
 				this.Quit();
 				return;
 			}
+			uint awaitStart = WinmmTimer.TickCount;
+			int refreshWaitMs = Program.IsSnakeProfile ? 4 : 40;
+			int frameWaitMs = Program.IsSnakeProfile ? (time > 0 ? Math.Min(8, time) : 0) : 20;
+			int uiFrame = global::GenericUtils.UiFrameGeneration;
 			RefreshStrings(true);
+			int refreshGeneration = window.RefreshRequestGeneration;
+			window.WaitForRefreshProcessed(refreshGeneration, refreshWaitMs);
+			global::GenericUtils.WaitForDisplayWorkDrained(refreshWaitMs);
+			if (frameWaitMs > 0)
+				global::GenericUtils.WaitForUiFrameAfter(uiFrame, frameWaitMs);
 			state = ConsoleState.Sleep;
 			emuera.UpdateCheckInfiniteLoopState();
 
-			//System.Windows.Forms.Application.DoEvents();
-			//if (time > 0)
-			//	System.Threading.Thread.Sleep(time);
+			if (time > 0)
+			{
+				if (Program.IsSnakeProfile)
+				{
+					int elapsed = (int)(WinmmTimer.TickCount - awaitStart);
+					int remaining = time - elapsed;
+					if (remaining > 0)
+						System.Threading.Thread.Sleep(remaining);
+					else
+						System.Threading.Thread.Yield();
+				}
+				else
+				{
+					System.Threading.Thread.Sleep(time);
+				}
+			}
+			else if (Program.IsSnakeProfile)
+				System.Threading.Thread.Yield();
 
 			////DoEvents()の間にウインドウが閉じられたらおしまい。
 			//if (!Enabled || state != ConsoleState.Sleep)
@@ -1506,6 +1535,18 @@ namespace MinorShift.Emuera.GameView
 			return window.Text;
 		}
 
+		public string GetTextBoxText()
+		{
+			return window?.TextBox?.Text ?? "";
+		}
+
+		public void SetTextBoxText(string text)
+		{
+			if (window?.TextBox == null)
+				return;
+			window.TextBox.Text = text ?? "";
+		}
+
 
 		/// <summary>
 		/// 1818以前のRefreshStringsからselectingButton部分を抽出
@@ -1932,14 +1973,11 @@ namespace MinorShift.Emuera.GameView
 
 		internal Point GetMousePosition()
 		{
-            //if (window == null || !window.Created)
-            //	return new Point();
-            ////クライアント左上基準の座標取得
-            //Point pos = window.MainPicBox.PointToClient(Cursor.Position);
-            ////クライアント左下基準の座標に置き換え
-            //pos.Y = pos.Y - ClientHeight;
-            //return pos;
-            return Point.Empty;
+            if (window == null || !window.Created)
+                return new Point();
+            Point pos = window.MainPicBox.PointToClient(global::GenericUtils.GetPointerPosition());
+            pos.Y = pos.Y - ClientHeight;
+            return pos;
 		}
 
 		/// <summary>

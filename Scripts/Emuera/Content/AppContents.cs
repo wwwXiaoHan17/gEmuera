@@ -17,7 +17,17 @@ namespace MinorShift.Emuera.Content
 		}
 		static readonly Dictionary<string, AContentFile> resourceDic = new Dictionary<string, AContentFile>();
 		static readonly Dictionary<string, ASprite> imageDictionary = new Dictionary<string, ASprite>();
+		static readonly Dictionary<string, LazySpriteDefinition> lazyImageDictionary = new Dictionary<string, LazySpriteDefinition>();
 		static readonly Dictionary<int, GraphicsImage> gList;
+
+		private sealed class LazySpriteDefinition
+		{
+			public string[] Tokens;
+			public string Directory;
+			public ScriptPosition Position;
+			public bool IsAnime;
+			public List<LazySpriteDefinition> Frames;
+		}
 
 		//static public T GetContent<T>(string name)where T :AContentItem
 		//{
@@ -48,6 +58,12 @@ namespace MinorShift.Emuera.Content
 	            ASprite result = null;
 	            if (imageDictionary.TryGetValue(name, out result))
 	                return result;
+	            if (lazyImageDictionary.TryGetValue(name, out var definition))
+	            {
+	                result = RealizeLazySprite(name, definition);
+	                if (result != null)
+	                    return result;
+	            }
 	            if (name.IndexOf("褐", StringComparison.Ordinal) >= 0 || name.IndexOf("CIP正面", StringComparison.Ordinal) >= 0 && name.IndexOf("色", StringComparison.Ordinal) >= 0)
 	                Godot.GD.Print($"[GetSprite] NOT FOUND: '{name}' (len={name.Length}, bytes={BitConverter.ToString(System.Text.Encoding.UTF8.GetBytes(name), 0, Math.Min(40, System.Text.Encoding.UTF8.GetByteCount(name)))})");
 	            if (name.StartsWith("CUTIN") && int.TryParse(name.Substring(5), out int graphicsId))
@@ -76,6 +92,36 @@ namespace MinorShift.Emuera.Content
             }
 		}
 
+		static public long SpriteDisposeAll(bool delCsvImage)
+		{
+			long count = imageDictionary.Count;
+			foreach (var sprite in imageDictionary.Values)
+				sprite.Dispose();
+			imageDictionary.Clear();
+			return count;
+		}
+
+		static public bool CreateSpriteFromFileDynamic(string imgName, string filepath)
+		{
+			if (string.IsNullOrEmpty(imgName) || string.IsNullOrEmpty(filepath))
+				return false;
+			if (!uEmuera.Utils.FileExists(filepath))
+				return false;
+			imgName = imgName.ToUpper();
+			if (imageDictionary.ContainsKey(imgName))
+				return false;
+
+			BitmapTexture bmp = new BitmapTexture(filepath);
+			if (bmp.Width <= 0 || bmp.Height <= 0)
+				return false;
+			ConstImage img = new ConstImage(imgName + "_DYN");
+			img.CreateFrom(bmp, false);
+			if (!img.IsCreated)
+				return false;
+			imageDictionary[imgName] = new SpriteF(imgName, img, new Rectangle(0, 0, bmp.Width, bmp.Height), Point.Empty);
+			return true;
+		}
+
 		static public void CreateSpriteG(string imgName, GraphicsImage parent,Rectangle rect)
 		{
 			if (string.IsNullOrEmpty(imgName))
@@ -102,6 +148,11 @@ namespace MinorShift.Emuera.Content
 				//resourcesフォルダ内の全てのcsvファイルを探索する
 				List<string> csvFiles = uEmuera.Utils.GetFilePaths(Program.ContentDir, "*.csv", SearchOption.AllDirectories);
                 Godot.GD.Print($"[AppContents] Found {csvFiles.Count} CSV files in {Program.ContentDir}");
+                if (UseLazyResourceIndex)
+                {
+                    BuildLazyResourceIndex(csvFiles);
+                    return true;
+                }
                 var count = csvFiles.Count;
                 for(var i=0; i<count; ++i)
 				{
@@ -120,7 +171,7 @@ namespace MinorShift.Emuera.Content
 						lineNo++;
 						if (line.Length == 0)
 							continue;
-						string str = line.Trim();
+						string str = NormalizeResourceCsvLine(line, directory);
 						if (str.Length == 0 || str.StartsWith(";"))
 							continue;
 						string[] tokens = str.Split(',');
@@ -163,6 +214,7 @@ namespace MinorShift.Emuera.Content
 				iter.Current.Dispose();
 			resourceDic.Clear();
 			imageDictionary.Clear();
+			lazyImageDictionary.Clear();
 			foreach (var graph in gList.Values)
 				graph.GDispose();
 			gList.Clear();
@@ -221,31 +273,20 @@ namespace MinorShift.Emuera.Content
 				return null;
 			}
 			string parentName = dir + arg2;
-						string filepath = uEmuera.Utils.ResolveExistingFilePath(parentName);
 
 			//親画像のロードConstImage
 			if (!resourceDic.ContainsKey(parentName))
 			{
+				string filepath = uEmuera.Utils.ResolveExistingFilePath(parentName);
 				if (!uEmuera.Utils.FileExists(filepath))
 				{
 					ParserMediator.Warn("指定された画像ファイルが見つかりませんでした:" + arg2, sp, 1);
 					return null;
 				}
-				// BitmapTexture preloads via SpriteManager and sets size automatically.
+				// BitmapTexture only reads image dimensions here. Actual decoding is lazy so
+				// Android exports do not load every CSV-referenced texture at startup.
 				BitmapTexture bmp = new BitmapTexture(filepath);
                 bmp.name = name;
-				// Fallback dimension load if SpriteManager failed to read the image.
-				if (bmp.size.Width == 0 || bmp.size.Height == 0)
-				{
-					var tempImg = new Godot.Image();
-					var err = tempImg.Load(filepath);
-					if (err == Godot.Error.Ok)
-					{
-						bmp.size.Width = tempImg.GetWidth();
-						bmp.size.Height = tempImg.GetHeight();
-					}
-					tempImg.Dispose();
-				}
 				if (bmp.Width > AbstractImage.MAX_IMAGESIZE || bmp.Height > AbstractImage.MAX_IMAGESIZE)
 				{
 					//1824-2 すでに8192以上の幅を持つ画像を利用したバリアントが存在してしまっていたため、警告しつつ許容するように変更
@@ -326,6 +367,145 @@ namespace MinorShift.Emuera.Content
 			//新規スプライト定義
 			ASprite image = new SpriteF(name, parentImage, rect, pos);
 			return image;
+		}
+
+		private static bool UseLazyResourceIndex
+		{
+			get { return Program.IsSnakeProfile && Godot.OS.GetName() == "Android"; }
+		}
+
+		private static void BuildLazyResourceIndex(List<string> csvFiles)
+		{
+			lazyImageDictionary.Clear();
+			int indexedCount = 0;
+			for (int i = 0; i < csvFiles.Count; i++)
+			{
+				string filepath = csvFiles[i];
+				string directory = Path.GetDirectoryName(filepath) + "/";
+				string filename = Path.GetFileName(filepath);
+				string[] lines = uEmuera.Utils.GetResourceCSVLines(filepath, Config.Encode);
+				LazySpriteDefinition currentAnime = null;
+				for (int l = 0; l < lines.Length; l++)
+				{
+					string str = NormalizeResourceCsvLineForIndex(lines[l]);
+					if (str.Length == 0 || str.StartsWith(";"))
+						continue;
+					string[] tokens = str.Split(',');
+					if (tokens.Length < 2)
+						continue;
+					string spriteName = tokens[0].Trim().ToUpper();
+					string arg2 = tokens[1].Trim();
+					if (spriteName.Length == 0 || arg2.Length == 0)
+						continue;
+
+					var definition = new LazySpriteDefinition
+					{
+						Tokens = tokens,
+						Directory = directory,
+						Position = new ScriptPosition(filename, l + 1),
+						IsAnime = arg2.Equals("ANIME", StringComparison.OrdinalIgnoreCase)
+					};
+
+					if (definition.IsAnime)
+					{
+						if (!lazyImageDictionary.ContainsKey(spriteName))
+						{
+							definition.Frames = new List<LazySpriteDefinition>();
+							lazyImageDictionary.Add(spriteName, definition);
+							indexedCount++;
+							currentAnime = definition;
+						}
+						else
+							currentAnime = lazyImageDictionary[spriteName];
+						continue;
+					}
+
+					if (currentAnime != null && currentAnime.Tokens[0].Trim().Equals(spriteName, StringComparison.OrdinalIgnoreCase))
+					{
+						currentAnime.Frames.Add(definition);
+						continue;
+					}
+
+					currentAnime = null;
+					if (!lazyImageDictionary.ContainsKey(spriteName))
+					{
+						lazyImageDictionary.Add(spriteName, definition);
+						indexedCount++;
+					}
+				}
+			}
+			Godot.GD.Print($"[AppContents] Lazy indexed {indexedCount} sprites from {csvFiles.Count} CSV files");
+		}
+
+		private static ASprite RealizeLazySprite(string name, LazySpriteDefinition definition)
+		{
+			if (definition == null)
+				return null;
+			if (definition.IsAnime)
+			{
+				SpriteAnime anime = CreateFromCsv(definition.Tokens, definition.Directory, null, definition.Position) as SpriteAnime;
+				if (anime == null)
+					return null;
+				if (definition.Frames != null)
+				{
+					for (int i = 0; i < definition.Frames.Count; i++)
+					{
+						var frame = definition.Frames[i];
+						CreateFromCsv(frame.Tokens, frame.Directory, anime, frame.Position);
+					}
+				}
+				imageDictionary[name] = anime;
+				return anime;
+			}
+
+			ASprite sprite = CreateFromCsv(definition.Tokens, definition.Directory, null, definition.Position) as ASprite;
+			if (sprite != null)
+				imageDictionary[name] = sprite;
+			return sprite;
+		}
+
+		private static string NormalizeResourceCsvLineForIndex(string line)
+		{
+			string str = line.Trim();
+			if (str.Length == 0)
+				return str;
+			if (!Program.IsSnakeProfile || str[0] != ';')
+				return str;
+
+			string candidate = str.Substring(1).Trim();
+			string[] tokens = candidate.Split(',');
+			if (tokens.Length < 2)
+				return str;
+			string name = tokens[0].Trim();
+			string filename = tokens[1].Trim();
+			if (name.Length == 0)
+				return str;
+			if (filename.Equals("ANIME", StringComparison.OrdinalIgnoreCase) || filename.IndexOf('.') >= 0)
+				return candidate;
+			return str;
+		}
+
+		static private string NormalizeResourceCsvLine(string line, string directory)
+		{
+			string str = line.Trim();
+			if (str.Length == 0)
+				return str;
+			if (!Program.IsSnakeProfile || str[0] != ';')
+				return str;
+
+			// Some Snake resource packs keep optional sprite definitions behind a leading
+			// semicolon while still referencing those names from ERB HTML.
+			string candidate = str.Substring(1).Trim();
+			string[] tokens = candidate.Split(',');
+			if (tokens.Length < 6)
+				return str;
+			string name = tokens[0].Trim();
+			string filename = tokens[1].Trim();
+			if (name.Length == 0 || filename.IndexOf('.') < 0)
+				return str;
+			if (!uEmuera.Utils.FileExists(uEmuera.Utils.ResolveExistingFilePath(directory + filename)))
+				return str;
+			return candidate;
 		}
 
 

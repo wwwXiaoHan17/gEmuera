@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using MinorShift.Emuera.Sub;
 
 namespace MinorShift.Emuera.GameProc
 {
@@ -101,6 +102,8 @@ namespace MinorShift.Emuera.GameProc
 				return;
 			if (!File.Exists(LazyLoadingDataFilePath) || !File.Exists(LazyLoadingFilesFilePath))
 			{
+				if (IsAndroid() && TryBuildMobileLazyLoadingTable(erbFiles))
+					return;
 				LazyCurrentLazyStatus = LazyStatus.BuildTable;
 				return;
 			}
@@ -201,6 +204,130 @@ namespace MinorShift.Emuera.GameProc
 				}
 			}
 			return files;
+		}
+
+		private bool TryBuildMobileLazyLoadingTable(List<KeyValuePair<string, string>> erbFiles)
+		{
+			HashSet<string> files = GetLazyFiles(erbFiles);
+			if (files.Count == 0)
+			{
+				LazyCurrentLazyStatus = LazyStatus.NoLazy;
+				return true;
+			}
+
+			var validLabels = new List<KeyValuePair<string, string>>();
+			var validFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+			try
+			{
+				foreach (string relative in files)
+				{
+					string path = ErbPath(relative);
+					if (!uEmuera.Utils.FileExists(path))
+						continue;
+					if (!TryScanLazyFileLabels(path, relative, validLabels, out bool canLazyLoad))
+						return false;
+					if (canLazyLoad)
+						validFiles.Add(relative);
+				}
+
+				if (validLabels.Count == 0 || validFiles.Count == 0)
+				{
+					LazyCurrentLazyStatus = LazyStatus.NoLazy;
+					return true;
+				}
+
+				EnsureLazyLoadingWorkingDir();
+				using (var dataStream = new FileStream(LazyLoadingDataFilePath, FileMode.Create, FileAccess.Write, FileShare.None, 65536))
+				using (var dataWriter = new BinaryWriter(dataStream, Encoding.UTF8))
+				{
+					dataWriter.Write(LazyMagicNumber);
+					dataWriter.Write(LazyVersion);
+					dataWriter.Write(validLabels.Count);
+					foreach (var label in validLabels)
+					{
+						dataWriter.Write(label.Key);
+						dataWriter.Write(label.Value);
+					}
+				}
+
+				WriteLazyFileMeta(validFiles);
+				foreach (var label in validLabels)
+				{
+					if (!lazyLoadingTable.TryGetValue(label.Key, out List<string> paths))
+					{
+						paths = new List<string>();
+						lazyLoadingTable.Add(label.Key, paths);
+					}
+
+					string path = ErbPath(label.Value);
+					paths.Add(path);
+					LazyLoadingFiles.Add(NormalizeFullPath(path));
+					lazyLoadingFilesTable[label.Value] = GetLazyFileTimestamp(path);
+				}
+
+				console.PrintSystemLine("LazyLoading: mobile index table created without full ERB load");
+				LazyCurrentLazyStatus = LazyStatus.Loaded;
+				return true;
+			}
+			catch (Exception e)
+			{
+				console.PrintSystemLine("LazyLoading: failed to create mobile index table: " + e.Message);
+				lazyLoadingTable.Clear();
+				lazyLoadingFilesTable.Clear();
+				LazyLoadingFiles.Clear();
+				return false;
+			}
+		}
+
+		private bool TryScanLazyFileLabels(
+			string path,
+			string relativePath,
+			List<KeyValuePair<string, string>> labels,
+			out bool canLazyLoad)
+		{
+			canLazyLoad = true;
+			var fileLabels = new List<string>();
+			var onlyEvents = new List<string>();
+			FunctionLabelLine currentLabel = null;
+			using (var reader = new EraStreamReader(Config.UseRenameFile && ParserMediator.RenameDic != null))
+			{
+				if (!reader.Open(path, relativePath))
+					return false;
+
+				StringStream line;
+				while ((line = reader.ReadEnabledLine()) != null)
+				{
+					var position = new ScriptPosition(reader.Filename, reader.LineNo);
+					if (line.Current == '@')
+					{
+						var parsed = LogicalLineParser.ParseLabelLine(line, position, console);
+						currentLabel = parsed as FunctionLabelLine;
+						if (currentLabel == null || currentLabel is InvalidLabelLine)
+							continue;
+						if (currentLabel.IsEvent)
+						{
+							canLazyLoad = false;
+							break;
+						}
+						fileLabels.Add(currentLabel.LabelName);
+					}
+					else if (line.Current == '#' && currentLabel != null)
+					{
+						LogicalLineParser.ParseSharpLine(currentLabel, line, position, onlyEvents);
+						if (currentLabel.IsMethod || currentLabel.IsEvent)
+						{
+							canLazyLoad = false;
+							break;
+						}
+					}
+				}
+			}
+
+			if (!canLazyLoad)
+				return true;
+			foreach (string label in fileLabels)
+				labels.Add(new KeyValuePair<string, string>(label, NormalizeRelativePath(relativePath)));
+			return true;
 		}
 
 		public void SaveLazyLoadingList(List<FunctionLabelLine> labels, List<KeyValuePair<string, string>> erbFiles)

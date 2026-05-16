@@ -115,6 +115,8 @@ namespace MinorShift.Emuera.GameData.Function
 		{
 			for (int i = 0; i < srcArgs.Length; i++)
 			{
+				if (srcArgs[i] == null)
+					continue;
 				if ((reffunc.ArgTypeList[i] & UserDifinedFunctionDataArgType.__Ref) == UserDifinedFunctionDataArgType.__Ref)
 					srcArgs[i].Restructure(exm);
 				else

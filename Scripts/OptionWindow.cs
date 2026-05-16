@@ -12,6 +12,8 @@ public partial class OptionWindow : Control
     Label quickFontSizeLabel;
     Slider buttonDragSensitivitySlider;
     Label buttonDragSensitivityLabel;
+    Slider maxVisibleLinesSlider;
+    Label maxVisibleLinesLabel;
     OptionButton resolutionOption;
     OptionButton languageOption;
     OptionButton frameRateOption;
@@ -22,7 +24,7 @@ public partial class OptionWindow : Control
     public override void _Ready()
     {
         popup = new PopupPanel();
-        popup.Size = new Vector2I(440, 460);
+        popup.Size = new Vector2I(460, 520);
         AddChild(popup);
 
         var vbox = new VBoxContainer();
@@ -104,6 +106,25 @@ public partial class OptionWindow : Control
         buttonDragSensitivityLabel = new Label();
         buttonDragSensitivityLabel.Text = buttonDragSensitivitySlider.Value.ToString("0.00") + "x";
         sensitivityHBox.AddChild(buttonDragSensitivityLabel);
+
+        // Max visible lines
+        var maxLinesHBox = new HBoxContainer();
+        vbox.AddChild(maxLinesHBox);
+        var maxLinesTextLabel = new Label();
+        maxLinesTextLabel.Text = MultiLanguage.Get("OptionWindow.MaxVisibleLines", "Max Lines");
+        maxLinesHBox.AddChild(maxLinesTextLabel);
+        maxVisibleLinesSlider = new HSlider();
+        maxVisibleLinesSlider.MinValue = EmueraContent.MinMaxVisibleLines;
+        maxVisibleLinesSlider.MaxValue = EmueraContent.MaxMaxVisibleLines;
+        maxVisibleLinesSlider.Step = 20;
+        maxVisibleLinesSlider.Value = EmueraContent.ConfiguredMaxVisibleLines;
+        maxVisibleLinesSlider.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        maxVisibleLinesSlider.CustomMinimumSize = new Vector2(120, 44);
+        maxVisibleLinesSlider.ValueChanged += OnMaxVisibleLinesChanged;
+        maxLinesHBox.AddChild(maxVisibleLinesSlider);
+        maxVisibleLinesLabel = new Label();
+        maxVisibleLinesLabel.Text = ((int)maxVisibleLinesSlider.Value).ToString();
+        maxLinesHBox.AddChild(maxVisibleLinesLabel);
 
         // Resolution
         var resHBox = new HBoxContainer();
@@ -200,6 +221,13 @@ public partial class OptionWindow : Control
         float sensitivity = (float)value;
         buttonDragSensitivityLabel.Text = sensitivity.ToString("0.00") + "x";
         EmueraContent.ContentDragSensitivity = sensitivity;
+    }
+
+    void OnMaxVisibleLinesChanged(double value)
+    {
+        int lines = (int)value;
+        maxVisibleLinesLabel.Text = lines.ToString();
+        EmueraContent.ConfiguredMaxVisibleLines = lines;
     }
 
     void OnResolutionSelected(long index)

@@ -497,6 +497,8 @@ namespace MinorShift.Emuera.GameProc
 									GlobalStatic.IdentifierDictionary.resizeLocalVars("ARG", call.TopLabel.LabelName, requiredSize);
 								else if (call.TopLabel.Arg[i].Identifier.Code == VariableCode.ARGS)
 									GlobalStatic.IdentifierDictionary.resizeLocalVars("ARGS", call.TopLabel.LabelName, requiredSize);
+								else if (call.TopLabel.Arg[i].Identifier.Code == VariableCode.ARGF)
+									GlobalStatic.IdentifierDictionary.resizeLocalVars("ARGF", call.TopLabel.LabelName, requiredSize);
 							}
 							call.VariadicArgCount = variadic.Count;
 							for (int j = 0; j < variadic.Count; j++)

@@ -21,15 +21,14 @@ namespace MinorShift.Emuera.GameProc
 			if (Config.ICFunction)
 				token = token.ToUpper();
             //#行として不正な行でもAnalyzeに行って引っかかることがあるので、先に存在しない#～は弾いてしまう
-            if (token == null || (token != "SINGLE" && token != "LATER" && token != "PRI" && token != "ONLY" && token != "FUNCTION" && token != "FUNCTIONS" 
-                && token != "LOCALSIZE" && token != "LOCALSSIZE" && token != "DIM" && token != "DIMS"))
+            if (!IsAllowedSharpToken(token))
             {
                 ParserMediator.Warn("解釈できない#行です", position, 1);
                 return false;
             }
 			try
 			{
-				WordCollection wc = LexicalAnalyzer.Analyse(st, LexEndWith.EoL, LexAnalyzeFlag.AllowAssignment);
+				WordCollection wc = AnalyzeSharpArguments(st, token);
 				switch (token)
 				{
 					case "SINGLE":
@@ -143,6 +142,7 @@ namespace MinorShift.Emuera.GameProc
 						break;
 					case "FUNCTION":
 					case "FUNCTIONS":
+					case "FUNCTIONF":
 						if (!string.IsNullOrEmpty(label.LabelName) && char.IsDigit(label.LabelName[0]))
 						{
 							ParserMediator.Warn("#" + token + "属性は関数名が数字で始まる関数には指定できません", position, 1);
@@ -152,7 +152,7 @@ namespace MinorShift.Emuera.GameProc
 						}
 						if (label.IsMethod)
 						{
-							if ((label.MethodType == typeof(Int64) && token == "FUNCTION") || (label.MethodType == typeof(string) && token == "FUNCTIONS"))
+							if ((label.MethodType == typeof(Int64) && (token == "FUNCTION" || token == "FUNCTIONF")) || (label.MethodType == typeof(string) && token == "FUNCTIONS"))
 							{
 								ParserMediator.Warn("関数" + label.LabelName + "にはすでに#" + token + "が宣言されています(この行は無視されます)", position, 1);
 								return false;
@@ -252,6 +252,7 @@ namespace MinorShift.Emuera.GameProc
 						break;
 					case "DIM":
 					case "DIMS":
+					case "DIMF":
 						{
 							UserDefinedVariableData data = UserDefinedVariableData.Create(wc, token == "DIMS", true, position);
 							if (!label.AddPrivateVariable(data))
@@ -276,6 +277,32 @@ namespace MinorShift.Emuera.GameProc
 			return true;
 		err:
 			return false;
+		}
+
+		private static WordCollection AnalyzeSharpArguments(StringStream st, string token)
+		{
+			if (Program.IsSnakeProfile && string.Equals(token, "DIMF", StringComparison.OrdinalIgnoreCase))
+				return LexicalAnalyzer.Analyse(new StringStream(NormalizeSnakeFloatLiterals(st.Substring())), LexEndWith.EoL, LexAnalyzeFlag.AllowAssignment);
+			return LexicalAnalyzer.Analyse(st, LexEndWith.EoL, LexAnalyzeFlag.AllowAssignment);
+		}
+
+		private static bool IsAllowedSharpToken(string token)
+		{
+			if (token == null)
+				return false;
+			if (token == "SINGLE" || token == "LATER" || token == "PRI" || token == "ONLY"
+				|| token == "FUNCTION" || token == "FUNCTIONS"
+				|| token == "LOCALSIZE" || token == "LOCALSSIZE"
+				|| token == "DIM" || token == "DIMS")
+				return true;
+			return Program.IsSnakeProfile && (token == "FUNCTIONF" || token == "DIMF");
+		}
+
+		private static string NormalizeSnakeFloatLiterals(string source)
+		{
+			if (string.IsNullOrEmpty(source))
+				return source;
+			return Regex.Replace(source, @"(?<![A-Za-z0-9_])([+-]?\d+)\.\d+(?![A-Za-z0-9_])", "$1");
 		}
 		
 		public static LogicalLine ParseLine(string str, EmueraConsole console)

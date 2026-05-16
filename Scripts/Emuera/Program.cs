@@ -66,6 +66,17 @@ namespace MinorShift.Emuera
 			GenericUtils.Info($"[LOAD] ExeDir={ExeDir}");
 			GenericUtils.Info($"[LOAD] CoreProfile={CoreProfile}");
 			ResetSnakeStartupErrorLog();
+			try
+			{
+				MinorShift.Emuera.Runtime.Utils.SqliteRuntime.EnsureInitialized();
+				GenericUtils.Info("[LOAD] SQLite runtime initialized");
+			}
+			catch (Exception ex)
+			{
+				GenericUtils.Warn("[LOAD] SQLite runtime initialization deferred: "
+					+ MinorShift.Emuera.Runtime.Utils.SqliteRuntime.FormatException(ex));
+			}
+			ConfigureModernMobileCoreAdapters();
 			CsvDir = ExeDir + "csv/";
 			if (!uEmuera.Utils.DirectoryExists(CsvDir)){
 				CsvDir = ExeDir + "CSV/";
@@ -265,6 +276,25 @@ namespace MinorShift.Emuera
 			}
 		}
 
+		private static void ConfigureModernMobileCoreAdapters()
+		{
+			if (!IsSnakeModernMobileProfile)
+				return;
+
+			try
+			{
+				string userRoot = Godot.OS.GetUserDataDir();
+				if (string.IsNullOrEmpty(userRoot))
+					userRoot = Godot.ProjectSettings.GlobalizePath("user://");
+				Modern.Script.Functions.ModernSqlManager.StorageDirectory = Path.Combine(userRoot, "modern_sql");
+				GenericUtils.Info($"[LOAD] Modern SQL dir={Modern.Script.Functions.ModernSqlManager.StorageDirectory}");
+			}
+			catch (Exception ex)
+			{
+				GenericUtils.Warn($"[LOAD] Failed to configure modern mobile adapters: {ex.Message}");
+			}
+		}
+
 
 		public static uint StartTime { get; private set; }
 
@@ -273,23 +303,30 @@ namespace MinorShift.Emuera
 			if (string.IsNullOrEmpty(exeDir))
 				return EmueraCoreProfile.Emuera1824V18;
 
+			string launcherProfile = global::FirstWindow.SelectedCoreProfileName;
+			if (string.Equals(launcherProfile, global::FirstWindow.CoreProfileSnake, StringComparison.OrdinalIgnoreCase))
+				return EmueraCoreProfile.Snake;
+
 			if (IsModernSnakeCoreRequested(exeDir))
 				return EmueraCoreProfile.SnakeModernMobile;
-
-			string trimmed = exeDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-			string current = trimmed;
-			while (!string.IsNullOrEmpty(current))
-			{
-				string folderName = Path.GetFileName(current);
-				if (string.Equals(folderName, "snake", StringComparison.OrdinalIgnoreCase))
-					return EmueraCoreProfile.Snake;
-				string parent = Path.GetDirectoryName(current);
-				if (string.IsNullOrEmpty(parent) || string.Equals(parent, current, StringComparison.Ordinal))
-					break;
-				current = parent;
-			}
+			if (IsLegacySnakeCoreRequested(exeDir))
+				return EmueraCoreProfile.Snake;
 
 			return EmueraCoreProfile.Emuera1824V18;
+		}
+
+		private static bool IsLegacySnakeCoreRequested(string exeDir)
+		{
+			try
+			{
+				string normalized = uEmuera.Utils.NormalizePath(exeDir);
+				return uEmuera.Utils.FileExists(Path.Combine(normalized, "snake_core.txt"))
+					|| uEmuera.Utils.FileExists(Path.Combine(normalized, "legacy_snake_core.txt"));
+			}
+			catch
+			{
+			}
+			return false;
 		}
 
 		private static bool IsModernSnakeCoreRequested(string exeDir)
@@ -300,19 +337,6 @@ namespace MinorShift.Emuera
 				if (uEmuera.Utils.FileExists(Path.Combine(normalized, "modern_core.txt"))
 					|| uEmuera.Utils.FileExists(Path.Combine(normalized, "snake_modern_core.txt")))
 					return true;
-
-				string trimmed = normalized.TrimEnd('/', '\\');
-				while (!string.IsNullOrEmpty(trimmed))
-				{
-					string folderName = Path.GetFileName(trimmed);
-					if (string.Equals(folderName, "snake-modern", StringComparison.OrdinalIgnoreCase)
-						|| string.Equals(folderName, "snake_modern", StringComparison.OrdinalIgnoreCase))
-						return true;
-					string parent = Path.GetDirectoryName(trimmed);
-					if (string.IsNullOrEmpty(parent) || string.Equals(parent, trimmed, StringComparison.Ordinal))
-						break;
-					trimmed = parent;
-				}
 			}
 			catch
 			{

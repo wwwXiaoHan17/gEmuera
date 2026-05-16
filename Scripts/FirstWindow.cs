@@ -9,6 +9,9 @@ public partial class FirstWindow : Control
 	const string LauncherSettingsPath = "user://launcher.cfg";
 	const string LauncherSettingsSection = "launcher";
 	const string LauncherLastGamePathKey = "last_game_path";
+	const string LauncherLastCoreProfileKey = "last_core_profile";
+	public const string CoreProfileV18 = "v18";
+	public const string CoreProfileSnake = "snake";
 
 	enum LauncherGameCategory
 	{
@@ -18,6 +21,7 @@ public partial class FirstWindow : Control
 	}
 
 	public static string SelectedGamePath { get; private set; }
+	public static string SelectedCoreProfileName { get; private set; } = CoreProfileV18;
 
 	ItemList gameList;
 	Button startButton;
@@ -657,7 +661,7 @@ public partial class FirstWindow : Control
 	{
 		if (gameList.IsItemDisabled((int)index))
 			return;
-		SetSelectedGamePath(gameList.GetItemMetadata((int)index).As<string>());
+		SetSelectedGamePath(gameList.GetItemMetadata((int)index).As<string>(), GetSelectedCoreProfileName());
 		GetTree().ChangeSceneToFile("res://main.tscn");
 	}
 
@@ -666,7 +670,7 @@ public partial class FirstWindow : Control
 		var selected = gameList.GetSelectedItems();
 		if (selected.Length == 0)
 			return;
-		SetSelectedGamePath(gameList.GetItemMetadata(selected[0]).As<string>());
+		SetSelectedGamePath(gameList.GetItemMetadata(selected[0]).As<string>(), GetSelectedCoreProfileName());
 		GetTree().ChangeSceneToFile("res://main.tscn");
 	}
 
@@ -679,29 +683,33 @@ public partial class FirstWindow : Control
 		if (IsUsableEraGameDirectory(saved))
 		{
 			SelectedGamePath = saved;
+			SelectedCoreProfileName = LoadLastCoreProfileName();
 			return saved;
-		}
-
-		if (OS.GetName() == "Android")
-		{
-			string snakeGame = FindFirstEraGameDirectory("/storage/emulated/0/emuera/snake", 3);
-			if (IsUsableEraGameDirectory(snakeGame))
-			{
-				SetSelectedGamePath(snakeGame);
-				return snakeGame;
-			}
 		}
 
 		return null;
 	}
 
-	static void SetSelectedGamePath(string path)
+	string GetSelectedCoreProfileName()
+	{
+		return currentCategory == LauncherGameCategory.Snake ? CoreProfileSnake : CoreProfileV18;
+	}
+
+	static void SetSelectedGamePath(string path, string coreProfileName = CoreProfileV18)
 	{
 		if (string.IsNullOrEmpty(path))
 			return;
 
 		SelectedGamePath = path.TrimEnd('/', '\\');
-		SaveLastGamePath(SelectedGamePath);
+		SelectedCoreProfileName = NormalizeCoreProfileName(coreProfileName);
+		SaveLastGamePath(SelectedGamePath, SelectedCoreProfileName);
+	}
+
+	static string NormalizeCoreProfileName(string coreProfileName)
+	{
+		return string.Equals(coreProfileName, CoreProfileSnake, System.StringComparison.OrdinalIgnoreCase)
+			? CoreProfileSnake
+			: CoreProfileV18;
 	}
 
 	static string LoadLastGamePath()
@@ -713,7 +721,16 @@ public partial class FirstWindow : Control
 		return config.GetValue(LauncherSettingsSection, LauncherLastGamePathKey, "").As<string>();
 	}
 
-	static void SaveLastGamePath(string path)
+	static string LoadLastCoreProfileName()
+	{
+		var config = new ConfigFile();
+		if (config.Load(LauncherSettingsPath) != Error.Ok)
+			return CoreProfileV18;
+
+		return NormalizeCoreProfileName(config.GetValue(LauncherSettingsSection, LauncherLastCoreProfileKey, CoreProfileV18).As<string>());
+	}
+
+	static void SaveLastGamePath(string path, string coreProfileName)
 	{
 		if (string.IsNullOrEmpty(path))
 			return;
@@ -721,6 +738,7 @@ public partial class FirstWindow : Control
 		var config = new ConfigFile();
 		config.Load(LauncherSettingsPath);
 		config.SetValue(LauncherSettingsSection, LauncherLastGamePathKey, path);
+		config.SetValue(LauncherSettingsSection, LauncherLastCoreProfileKey, NormalizeCoreProfileName(coreProfileName));
 		config.Save(LauncherSettingsPath);
 	}
 

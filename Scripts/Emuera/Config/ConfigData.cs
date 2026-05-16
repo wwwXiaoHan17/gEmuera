@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 using System.IO;
+using System.Globalization;
 //using System.Windows.Forms;
 //using System.Drawing;
 using MinorShift.Emuera.Sub;
@@ -34,6 +35,115 @@ static ConfigData() { }
 		private AConfigItem[] replaceArray = new AConfigItem[50];
 		private AConfigItem[] debugArray = new AConfigItem[20];
 		private System.Text.StringBuilder configDebugLog = new System.Text.StringBuilder();
+
+		private static readonly Dictionary<string, ConfigCode> englishConfigAliases = new Dictionary<string, ConfigCode>(StringComparer.OrdinalIgnoreCase)
+		{
+			{ "IGNORE CASE", ConfigCode.IgnoreCase },
+			{ "USE _RENAME.CSV FILE", ConfigCode.UseRenameFile },
+			{ "USE _REPLACE.CSV FILE", ConfigCode.UseReplaceFile },
+			{ "USE MOUSE", ConfigCode.UseMouse },
+			{ "SHOW MENU", ConfigCode.UseMenu },
+			{ "ALLOW DEBUG COMMANDS", ConfigCode.UseDebugCommand },
+			{ "ALLOW MULTIPLE INSTANCES", ConfigCode.AllowMultipleInstances },
+			{ "MAKE AUTOSAVES", ConfigCode.AutoSave },
+			{ "USE KEYBOARD MACROS", ConfigCode.UseKeyMacro },
+			{ "CHANGEABLE WINDOW HEIGHT", ConfigCode.SizableWindow },
+			{ "DRAWING INTERFACE", ConfigCode.TextDrawingMode },
+			{ "WINDOW WIDTH", ConfigCode.WindowX },
+			{ "WINDOW HEIGHT", ConfigCode.WindowY },
+			{ "WINDOW X POSITION", ConfigCode.WindowPosX },
+			{ "WINDOW Y POSITION", ConfigCode.WindowPosY },
+			{ "FIXED WINDOW STARTING POSITION", ConfigCode.SetWindowPos },
+			{ "MAXIMIZE WINDOW ON STARTUP", ConfigCode.WindowMaximixed },
+			{ "MAX HISTORY LOG LINES", ConfigCode.MaxLog },
+			{ "ITEMS PER LINE FOR PRINTC", ConfigCode.PrintCPerLine },
+			{ "NUMBER OF ITEM CHARACTERS FOR PRINTC", ConfigCode.PrintCLength },
+			{ "FONT NAME", ConfigCode.FontName },
+			{ "FONT SIZE", ConfigCode.FontSize },
+			{ "LINE HEIGHT", ConfigCode.LineHeight },
+			{ "TEXT COLOR", ConfigCode.ForeColor },
+			{ "BACKGROUND COLOR", ConfigCode.BackColor },
+			{ "HIGHLIGHT COLOR", ConfigCode.FocusColor },
+			{ "HISTORY LOG COLOR", ConfigCode.LogColor },
+			{ "FPS", ConfigCode.FPS },
+			{ "SKIP FRAMES", ConfigCode.SkipFrame },
+			{ "LINES PER SCROLL", ConfigCode.ScrollHeight },
+			{ "MILLISECONDS FOR INFINITE LOOP WARNING", ConfigCode.InfiniteLoopAlertTime },
+			{ "MINIMUM WARNING LEVEL", ConfigCode.DisplayWarningLevel },
+			{ "DISPLAY LOADING REPORT", ConfigCode.DisplayReport },
+			{ "REDUCE ARGUMENT ON LOAD", ConfigCode.ReduceArgumentOnLoad },
+			{ "IGNORE UNCALLED FUNCTIONS", ConfigCode.IgnoreUncalledFunction },
+			{ "FUNCTION IS NOT FOUND WARNING", ConfigCode.FunctionNotFoundWarning },
+			{ "FUNCTION NOT CALLED WARNING", ConfigCode.FunctionNotCalledWarning },
+			{ "CHANGE MASTER NAME IN DEBUG", ConfigCode.ChangeMasterNameIfDebug },
+			{ "CHANGE MASTER MAME IN DEBUG", ConfigCode.ChangeMasterNameIfDebug },
+			{ "BUTTON WRAPPING", ConfigCode.ButtonWrap },
+			{ "SEARCH SUBFOLDERS", ConfigCode.SearchSubdirectory },
+			{ "SORT FILENAMES", ConfigCode.SortWithFilename },
+			{ "LATEST IDENTIFY CODE", ConfigCode.LastKey },
+			{ "SAVE DATA COUNT PER PAGE", ConfigCode.SaveDataNos },
+			{ "ERAMAKER COMPATIBILITY WARNING", ConfigCode.WarnBackCompatibility },
+			{ "ALLOW OVERRIDING SYSTEM FUNCTIONS", ConfigCode.AllowFunctionOverloading },
+			{ "SYSTEM FUNCTION OVERRIDE WARNING", ConfigCode.WarnFunctionOverloading },
+			{ "TEXT EDITOR", ConfigCode.TextEditor },
+			{ "TEXT EDITOR COMMAND LINE SETTING", ConfigCode.EditorType },
+			{ "TEXT EDITOR COMMAND LINE ARGUMENTS", ConfigCode.EditorArgument },
+			{ "DUPLICATED FUNCTIONS WARNING", ConfigCode.WarnNormalFunctionOverloading },
+			{ "EXECUTE ERROR LINES", ConfigCode.CompatiErrorLine },
+			{ "USE NAME IF CALLNAME IS EMPTY", ConfigCode.CompatiCALLNAME },
+			{ "USE SAV FOLDER", ConfigCode.UseSaveFolder },
+			{ "IMITATE BEHAVIOR FOR RAND", ConfigCode.CompatiRAND },
+			{ "ALWAYS START DRAWLINE IN A NEW LINE", ConfigCode.CompatiDRAWLINE },
+			{ "DO NOT IGNORE CASE FOR FUNCTIONS AND ATTRIBUTES", ConfigCode.CompatiFunctionNoignoreCase },
+			{ "WHITESPACE INCLUDES FULL-WIDTH SPACE", ConfigCode.SystemAllowFullSpace },
+			{ "SAVE DATA IN UTF-8", ConfigCode.SystemSaveInUTF8 },
+			{ "REPRODUCE WRAPPING BEHAVIOR LIKE IN PRE VER1739", ConfigCode.CompatiLinefeedAs1739 },
+			{ "DEFAULT ANSI ENCODING", ConfigCode.useLanguage },
+			{ "ALLOW LONG INPUT BY MOUSE FOR ONEINPUT", ConfigCode.AllowLongInputByMouse },
+			{ "ALLOW CALL ON EVENT FUNCTIONS", ConfigCode.CompatiCallEvent },
+			{ "ALLOW SP CHARACTERS", ConfigCode.CompatiSPChara },
+			{ "USE THE BINARY FORMAT FOR SAVING DATA", ConfigCode.SystemSaveInBinary },
+			{ "ALLOW ARGUMENTS OMISSION FOR USER FUNCTIONS", ConfigCode.CompatiFuncArgOptional },
+			{ "AUTO TOSTR CONVERSION FOR USER FUNCTION ARGUMENTS", ConfigCode.CompatiFuncArgAutoConvert },
+			{ "DO NOT PROCESS TRIPLE SYMBOLS INSIDE FORM", ConfigCode.SystemIgnoreTripleSymbol },
+			{ "IMITATE BEHAVIOR FOR TIMES", ConfigCode.TimesNotRigorousCalculation },
+			{ "DO NOT AUTO-COMPLETE ARGUMENTS FOR CHARACTER VARIABLES", ConfigCode.SystemNoTarget },
+			{ "STRING VARIABLE ASSIGNMENT ON VALID WITH STRING EXPRESSION", ConfigCode.SystemIgnoreStringSet },
+			{ "USELAZYLOADING", ConfigCode.UseLazyLoading },
+		};
+
+		private static readonly Dictionary<string, ConfigCode> englishReplaceAliases = new Dictionary<string, ConfigCode>(StringComparer.OrdinalIgnoreCase)
+		{
+			{ "MONEY LABEL", ConfigCode.MoneyLabel },
+			{ "UNIT OF MONEY", ConfigCode.MoneyLabel },
+			{ "MONEY UNIT", ConfigCode.MoneyLabel },
+			{ "POSITION OF MONEY UNIT", ConfigCode.MoneyFirst },
+			{ "NOW LOADING MESSAGE", ConfigCode.LoadLabel },
+			{ "STARTUP SHORT DISPLAY", ConfigCode.LoadLabel },
+			{ "DRAWLINE CHARACTER", ConfigCode.DrawLineString },
+			{ "BAR CHARACTER 1", ConfigCode.BarChar1 },
+			{ "BAR CHARACTER 2", ConfigCode.BarChar2 },
+			{ "SYSTEM MENU 0", ConfigCode.TitleMenuString0 },
+			{ "SYSTEM MENU 1", ConfigCode.TitleMenuString1 },
+			{ "DEFAULT COM_ABLE", ConfigCode.ComAbleDefault },
+			{ "DEFAULT STAIN", ConfigCode.StainDefault },
+			{ "TIME UP MESSAGE", ConfigCode.TimeupLabel },
+			{ "DEFAULT EXPLV", ConfigCode.ExpLvDef },
+			{ "DEFAULT PALAMLV", ConfigCode.PalamLvDef },
+			{ "DEFAULT PBAND", ConfigCode.pbandDef },
+			{ "DEFAULT RELATION", ConfigCode.RelationDef },
+		};
+
+		private static readonly Dictionary<string, ConfigCode> englishDebugAliases = new Dictionary<string, ConfigCode>(StringComparer.OrdinalIgnoreCase)
+		{
+			{ "SHOW DEBUG WINDOW ON STARTUP", ConfigCode.DebugShowWindow },
+			{ "DEBUG WINDOW TOPMOST", ConfigCode.DebugWindowTopMost },
+			{ "DEBUG WINDOW WIDTH", ConfigCode.DebugWindowWidth },
+			{ "DEBUG WINDOW HEIGHT", ConfigCode.DebugWindowHeight },
+			{ "FIXED DEBUG WINDOW STARTING POSITION", ConfigCode.DebugSetWindowPos },
+			{ "DEBUG WINDOW X POSITION", ConfigCode.DebugWindowPosX },
+			{ "DEBUG WINDOW Y POSITION", ConfigCode.DebugWindowPosY },
+		};
 
 		private void setDefault()
 		{
@@ -227,15 +337,21 @@ static ConfigData() { }
 		}
 		public AConfigItem GetConfigItem(string key)
 		{
+			if (key == null)
+				return null;
+			key = key.Trim();
 			foreach (AConfigItem item in configArray)
 			{
 				if (item == null)
 					continue;
-				if (item.Name == key)
+				if (string.Equals(item.Name, key, StringComparison.OrdinalIgnoreCase))
 					return item;
-				if (item.Text == key)
+				if (string.Equals(item.Text, key, StringComparison.OrdinalIgnoreCase))
 					return item;
 			}
+			ConfigCode aliasCode;
+			if (TryGetEnglishConfigAlias(key, englishConfigAliases, out aliasCode))
+				return GetConfigItem(aliasCode);
 			return null;
 		}
 
@@ -252,15 +368,21 @@ static ConfigData() { }
 		}
 		public AConfigItem GetReplaceItem(string key)
 		{
+			if (key == null)
+				return null;
+			key = key.Trim();
 			foreach (AConfigItem item in replaceArray)
 			{
 				if (item == null)
 					continue;
-				if (item.Name == key)
+				if (string.Equals(item.Name, key, StringComparison.OrdinalIgnoreCase))
 					return item;
-				if (item.Text == key)
+				if (string.Equals(item.Text, key, StringComparison.OrdinalIgnoreCase))
 					return item;
 			}
+			ConfigCode aliasCode;
+			if (TryGetEnglishConfigAlias(key, englishReplaceAliases, out aliasCode))
+				return GetReplaceItem(aliasCode);
 			return null;
 		}
 		
@@ -277,16 +399,39 @@ static ConfigData() { }
 		}
 		public AConfigItem GetDebugItem(string key)
 		{
+			if (key == null)
+				return null;
+			key = key.Trim();
 			foreach (AConfigItem item in debugArray)
 			{
 				if (item == null)
 					continue;
-				if (item.Name == key)
+				if (string.Equals(item.Name, key, StringComparison.OrdinalIgnoreCase))
 					return item;
-				if (item.Text == key)
+				if (string.Equals(item.Text, key, StringComparison.OrdinalIgnoreCase))
 					return item;
 			}
+			ConfigCode aliasCode;
+			if (TryGetEnglishConfigAlias(key, englishDebugAliases, out aliasCode))
+				return GetDebugItem(aliasCode);
 			return null;
+		}
+
+		private static bool TryGetEnglishConfigAlias(string key, Dictionary<string, ConfigCode> aliases, out ConfigCode code)
+		{
+			code = default(ConfigCode);
+			if (string.IsNullOrWhiteSpace(key))
+				return false;
+			string normalized = NormalizeEnglishConfigKey(key);
+			return aliases.TryGetValue(normalized, out code);
+		}
+
+		private static string NormalizeEnglishConfigKey(string key)
+		{
+			string normalized = key.Trim().Replace('\t', ' ');
+			while (normalized.Contains("  "))
+				normalized = normalized.Replace("  ", " ");
+			return normalized.ToUpper(CultureInfo.InvariantCulture);
 		}
 		
 		public SingleTerm GetConfigValueInERB(string text, ref string errMes)
@@ -314,6 +459,7 @@ static ConfigData() { }
 				case ConfigCode.PrintCLength:// "PRINTCの文字数"
 				case ConfigCode.FontSize:// "フォントサイズ"
 				case ConfigCode.LineHeight:// "一行の高さ"
+				case ConfigCode.FPS:// "フレーム毎秒"
 				case ConfigCode.SaveDataNos:// "表示するセーブデータ数"
 				case ConfigCode.MaxShopItem:// "販売アイテム数"
 				case ConfigCode.ComAbleDefault:// "COM_ABLE初期値"

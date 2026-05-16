@@ -13,6 +13,7 @@ using MinorShift.Emuera.GameData.Function;
 using System.Linq;
 using uEmuera.Forms;
 using MinorShift.Emuera.Runtime.Utils.PluginSystem;
+using System.Diagnostics;
 
 namespace MinorShift.Emuera.GameProc
 {
@@ -55,6 +56,12 @@ namespace MinorShift.Emuera.GameProc
             state = new ProcessState(console);
             originalState = state;
             initialiing = true;
+            Stopwatch loadStopwatch = Stopwatch.StartNew();
+            void MarkLoad(string stage)
+            {
+                if (Program.IsSnakeProfile)
+                    GenericUtils.Info($"[LOADTIME] {stage}: {loadStopwatch.ElapsedMilliseconds}ms");
+            }
             try
             {
 				ParserMediator.Initialize(console);
@@ -76,6 +83,7 @@ namespace MinorShift.Emuera.GameProc
 					console.PrintSystemLine("リソースフォルダ読み込み中に異常が発見されたため処理を終了します");
 					return false;
 				}
+				MarkLoad("resources");
 				ParserMediator.FlushWarningList();
 				//キーマクロ読み込み
                 if (Config.UseKeyMacro && !Program.AnalysisMode)
@@ -130,19 +138,21 @@ namespace MinorShift.Emuera.GameProc
 				}
 				//gamebase.csv読み込み
 				gamebase = new GameBase();
-                if (!gamebase.LoadGameBaseCsv(Program.CsvDir + "GAMEBASE.CSV"))
+				if (!gamebase.LoadGameBaseCsv(Program.CsvDir + "GAMEBASE.CSV"))
                 {
 					ParserMediator.FlushWarningList();
                     console.PrintSystemLine("GAMEBASE.CSVの読み込み中に問題が発生したため処理を終了しました");
                     return false;
                 }
 				GenericUtils.Info($"[LOAD] GAMEBASE loaded: {gamebase.ScriptWindowTitle}");
+				MarkLoad("gamebase");
 				console.SetWindowTitle(gamebase.ScriptWindowTitle);
 				GlobalStatic.GameBaseData = gamebase;
 
 				//前記以外のcsvを全て読み込み
 				ConstantData constant = new ConstantData();
 				constant.LoadData(Program.CsvDir, console, Config.DisplayReport);
+				MarkLoad("csv");
 				GlobalStatic.ConstantData = constant;
 				TrainName = constant.GetCsvNameList(VariableCode.TRAINNAME);
 
@@ -180,6 +190,7 @@ namespace MinorShift.Emuera.GameProc
 					return false;
 				}
 				GenericUtils.Info("[LOAD] ERH loaded OK");
+				MarkLoad("erh");
 				LexicalAnalyzer.UseMacro = idDic.UseMacro();
 
 				//TODO:ユーザー定義変数用のcsvの適用
@@ -192,6 +203,7 @@ namespace MinorShift.Emuera.GameProc
                 else
                     noError = loader.LoadErbFiles(Program.ErbDir, Config.DisplayReport, labelDic, Config.UseLazyLoading);
 				GenericUtils.Info($"[LOAD] ERB loaded, noError={noError}");
+				MarkLoad("erb");
                 initSystemProcess();
                 initialiing = false;
             }
@@ -207,6 +219,7 @@ namespace MinorShift.Emuera.GameProc
 				return false;
 			}
 			GenericUtils.Info("[LOAD] Initialization complete, starting TITLE");
+			MarkLoad("total-before-title");
 			state.Begin(BeginType.TITLE);
 			GC.Collect();
             return true;

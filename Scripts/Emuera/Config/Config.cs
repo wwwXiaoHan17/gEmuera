@@ -190,7 +190,7 @@ namespace MinorShift.Emuera
 				int contentWidth = EmueraContent.ContentWidth;
 				if (contentWidth > 0)
 				{
-					WindowX = contentWidth;
+					WindowX = Math.Max(WindowX, contentWidth);
 					DrawableWidth = WindowX - DrawingParam_ShapePositionShift;
 				}
 			}

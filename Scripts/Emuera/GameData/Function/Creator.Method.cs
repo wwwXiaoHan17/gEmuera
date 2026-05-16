@@ -1652,7 +1652,7 @@ namespace MinorShift.Emuera.GameData.Function
                 VariableTerm vToken = (VariableTerm)arguments[0];
                 VariableCode varCode = vToken.Identifier.Code;
                 string key = arguments[1].GetStrValue(exm);
-                if (exm.VEvaluator.Constant.TryKeywordToInteger(out int ret, varCode, key, -1))
+                if (exm.VEvaluator.Constant.TryKeywordToInteger(out int ret, varCode, key, -1, vToken.Identifier.Name))
                     return ret;
                 else
                     return -1;
@@ -1693,7 +1693,7 @@ namespace MinorShift.Emuera.GameData.Function
 				if (var == null)
 					throw new CodeEE("GETNUMBの1番目の引数(\"" + arguments[0].GetStrValue(exm) + "\")が変数名ではありません");
 				string key = arguments[1].GetStrValue(exm);
-                if (exm.VEvaluator.Constant.TryKeywordToInteger(out int ret, var.Code, key, -1))
+                if (exm.VEvaluator.Constant.TryKeywordToInteger(out int ret, var.Code, key, -1, arguments[0].GetStrValue(exm)))
                     return ret;
                 else
                     return -1;
@@ -2935,8 +2935,14 @@ namespace MinorShift.Emuera.GameData.Function
 			}
 			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
 			{
-				string plain = HtmlManager.Html2PlainText(arguments[0].GetStrValue(exm));
-				return plain == null ? 0 : plain.Length;
+				int len = HtmlManager.HtmlLength(arguments[0].GetStrValue(exm));
+				if (arguments.Length >= 2 && arguments[1] != null && arguments[1].GetIntValue(exm) != 0)
+					return len;
+				if (Config.FontSize <= 0)
+					return len;
+				if (len >= 0)
+					return 2 * len / Config.FontSize + ((2 * len % Config.FontSize != 0) ? 1 : 0);
+				return 2 * len / Config.FontSize - ((2 * len % Config.FontSize != 0) ? 1 : 0);
 			}
 		}
 
@@ -3440,13 +3446,16 @@ namespace MinorShift.Emuera.GameData.Function
 				{
 					string filepath = filename;
 					if(!System.IO.Path.IsPathRooted(filepath))
-						filepath = Program.ContentDir + filename;
-					if (!System.IO.File.Exists(filepath))
+						filepath = System.IO.Path.Combine(Program.ContentDir ?? "", filename);
+					string resolved = uEmuera.Utils.ResolveExistingFilePath(filepath);
+					if (!string.IsNullOrEmpty(resolved))
+						filepath = resolved;
+					if (!uEmuera.Utils.FileExists(filepath))
 						return 0;
 					bmp = new BitmapTexture(filepath);
 					if (bmp.Width > AbstractImage.MAX_IMAGESIZE || bmp.Height > AbstractImage.MAX_IMAGESIZE)
-					if (bmp.Width == 0 || bmp.Height == 0)
 						return 0;
+					if (bmp.Width == 0 || bmp.Height == 0)
 						return 0;
 					g.GCreateFromF(bmp, (Config.TextDrawingMode == TextDrawingMode.WINAPI));
 				}
@@ -3546,12 +3555,37 @@ namespace MinorShift.Emuera.GameData.Function
 				if(arguments.Length == 6)
 				{//四角形は正でも負でもよいが親画像の外を指してはいけない
 					rect = ReadRectangle(Name, exm, arguments, 2);
+					if (TryClipPositiveRectangleToGraphics(g, ref rect))
+					{
+						if (rect.Width <= 0 || rect.Height <= 0)
+							return 0;
+					}
+					else
 					if (rect.X + rect.Width < 0 || rect.X + rect.Width > g.Width || rect.Y + rect.Height < 0 || rect.Y + rect.Height > g.Height)
 						throw new CodeEE(string.Format(Properties.Resources.RuntimeErrMesMethodCIMGCreateOutOfRange0, Name));
 				}
 				AppContents.CreateSpriteG(imgname, g, rect);
 				return 1;
 			}
+		}
+
+		private static bool TryClipPositiveRectangleToGraphics(GraphicsImage g, ref Rectangle rect)
+		{
+			if (rect.Width <= 0 || rect.Height <= 0)
+				return false;
+			int left = Math.Max(0, rect.X);
+			int top = Math.Max(0, rect.Y);
+			int right = Math.Min(g.Width, rect.X + rect.Width);
+			int bottom = Math.Min(g.Height, rect.Y + rect.Height);
+			if (right <= left || bottom <= top)
+			{
+				rect = new Rectangle(0, 0, 0, 0);
+				return true;
+			}
+			if (left == rect.X && top == rect.Y && right == rect.X + rect.Width && bottom == rect.Y + rect.Height)
+				return false;
+			rect = new Rectangle(left, top, right - left, bottom - top);
+			return true;
 		}
 
 		public sealed class SpriteDisposeMethod : FunctionMethod
@@ -4463,6 +4497,14 @@ namespace MinorShift.Emuera.GameData.Function
 					case "P_EXECUTE_SCALAR_LONG":
 					case "P_EXECUTE_SCALAR_FLOAT":
 						return CheckSqlArgs(name, arguments, 2, int.MaxValue, typeof(string), typeof(string));
+					case "IMPORT_MAP_XML":
+					case "EXPORT_MAP_XML":
+						return CheckSqlArgs(name, arguments, 3, 3, typeof(string), typeof(string));
+					case "IMPORT_DT_XML":
+					case "EXPORT_DT_XML":
+						return CheckSqlArgs(name, arguments, 4, 4, typeof(string), typeof(string));
+					case "IMPORT_XML_CUSTOM":
+						return CheckSqlArgs(name, arguments, 5, 5, typeof(string), typeof(string));
 					case "READER_READ":
 					case "READER_CLOSE":
 						return CheckSqlArgs(name, arguments, 1, 1, typeof(Int64), typeof(Int64));
@@ -4516,6 +4558,16 @@ namespace MinorShift.Emuera.GameData.Function
 							return SnakeSqlManager.ExecuteScalarLong(arguments[0].GetStrValue(exm), arguments[1].GetStrValue(exm), ReadSqlParameters(exm, arguments, 2));
 						case "P_EXECUTE_SCALAR_FLOAT":
 							return SnakeSqlManager.ExecuteScalarFloatAsLong(arguments[0].GetStrValue(exm), arguments[1].GetStrValue(exm), ReadSqlParameters(exm, arguments, 2));
+						case "IMPORT_MAP_XML":
+							return SnakeSqlManager.ImportMapXml(arguments[0].GetStrValue(exm), arguments[1].GetStrValue(exm), arguments[2].GetStrValue(exm));
+						case "IMPORT_DT_XML":
+							return SnakeSqlManager.ImportDtXml(arguments[0].GetStrValue(exm), arguments[1].GetStrValue(exm), arguments[2].GetStrValue(exm), arguments[3].GetStrValue(exm));
+						case "IMPORT_XML_CUSTOM":
+							return SnakeSqlManager.ImportXmlCustom(arguments[0].GetStrValue(exm), arguments[1].GetStrValue(exm), arguments[2].GetStrValue(exm), arguments[3].GetStrValue(exm), arguments[4].GetStrValue(exm));
+						case "EXPORT_MAP_XML":
+							return SnakeSqlManager.ExportMapXml(arguments[0].GetStrValue(exm), arguments[1].GetStrValue(exm), arguments[2].GetStrValue(exm));
+						case "EXPORT_DT_XML":
+							return SnakeSqlManager.ExportDtXml(arguments[0].GetStrValue(exm), arguments[1].GetStrValue(exm), arguments[2].GetStrValue(exm), arguments[3].GetStrValue(exm));
 					}
 				}
 				catch (CodeEE)
@@ -4626,6 +4678,103 @@ namespace MinorShift.Emuera.GameData.Function
 					parameters[i - start] = arguments[i].GetIntValue(exm);
 			}
 			return parameters;
+		}
+
+		private sealed class SnakeGetVarIntMethod : FunctionMethod
+		{
+			public SnakeGetVarIntMethod(string operation)
+			{
+				this.operation = operation;
+				ReturnType = typeof(Int64);
+				argumentTypeArray = null;
+				CanRestructure = false;
+			}
+
+			readonly string operation;
+
+			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+			{
+				if (arguments.Length < 1 || arguments.Length > 2)
+					return name + "関数の引数の数が正しくありません";
+				if (arguments[0] == null || arguments[0].GetOperandType() != typeof(string))
+					return name + "関数の1番目の引数の型が正しくありません";
+				if (arguments.Length == 2 && arguments[1] != null && arguments[1].GetOperandType() != typeof(Int64))
+					return name + "関数の2番目の引数の型が正しくありません";
+				return null;
+			}
+
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				long defaultValue = arguments.Length > 1 && arguments[1] != null ? arguments[1].GetIntValue(exm) : 0;
+				if (!TryParseSnakeVariable(arguments[0].GetStrValue(exm), out VariableTerm term))
+					return defaultValue;
+				if (term.GetOperandType() != typeof(Int64))
+				{
+					if (arguments.Length > 1)
+						return defaultValue;
+					throw new CodeEE(operation + " target " + term.Identifier.Name + " is not integer.");
+				}
+				return term.GetIntValue(exm);
+			}
+		}
+
+		private sealed class SnakeGetVarStringMethod : FunctionMethod
+		{
+			public SnakeGetVarStringMethod()
+			{
+				ReturnType = typeof(string);
+				argumentTypeArray = null;
+				CanRestructure = false;
+			}
+
+			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+			{
+				if (arguments.Length < 1 || arguments.Length > 2)
+					return name + "関数の引数の数が正しくありません";
+				if (arguments[0] == null || arguments[0].GetOperandType() != typeof(string))
+					return name + "関数の1番目の引数の型が正しくありません";
+				if (arguments.Length == 2 && arguments[1] != null && arguments[1].GetOperandType() != typeof(string))
+					return name + "関数の2番目の引数の型が正しくありません";
+				return null;
+			}
+
+			public override string GetStrValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				string defaultValue = arguments.Length > 1 && arguments[1] != null ? arguments[1].GetStrValue(exm) : "";
+				if (!TryParseSnakeVariable(arguments[0].GetStrValue(exm), out VariableTerm term))
+					return defaultValue;
+				if (term.GetOperandType() != typeof(string))
+				{
+					if (arguments.Length > 1)
+						return defaultValue;
+					throw new CodeEE("GETVARS target " + term.Identifier.Name + " is not string.");
+				}
+				return term.GetStrValue(exm);
+			}
+		}
+
+		private static bool TryParseSnakeVariable(string source, out VariableTerm term)
+		{
+			term = null;
+			if (string.IsNullOrWhiteSpace(source))
+				return false;
+			try
+			{
+				WordCollection wc = LexicalAnalyzer.Analyse(new StringStream(source), LexEndWith.EoL, LexAnalyzeFlag.None);
+				IdentifierWord id = wc.Current as IdentifierWord;
+				if (id == null)
+					return false;
+				wc.ShiftNext();
+				VariableToken token = ExpressionParser.ReduceVariableIdentifier(wc, id.Code);
+				if (token == null)
+					return false;
+				term = VariableParser.ReduceVariable(token, wc);
+				return term != null;
+			}
+			catch
+			{
+				return false;
+			}
 		}
 
 		private sealed class SnakeIntFallbackMethod : FunctionMethod
@@ -4852,6 +5001,8 @@ namespace MinorShift.Emuera.GameData.Function
 					if (arguments[i] == null)
 						return string.Format(Properties.Resources.SyntaxErrMesMethodDefaultArgumentNotNullable0, name, i + 1);
 
+					if (i == 1 && arguments[i].GetOperandType() == typeof(string))
+						continue;
 					if (i < argumentTypeArray.Length && argumentTypeArray[i] != arguments[i].GetOperandType())
 						return string.Format(Properties.Resources.SyntaxErrMesMethodDefaultArgumentType0, name, i + 1);
 				}
@@ -4859,25 +5010,29 @@ namespace MinorShift.Emuera.GameData.Function
 			}
 			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
 			{
-				string savText = arguments[0].GetStrValue(exm);
-				Int64 i64 = arguments[1].GetIntValue(exm);
-				if (i64 < 0 || i64 > int.MaxValue)
-					return 0;
 				bool forceSavdir = arguments.Length > 2 && (arguments[2].GetIntValue(exm) != 0);
 				bool forceUTF8 = arguments.Length > 3 && (arguments[3].GetIntValue(exm) != 0);
-				int fileIndex = (int)i64;
-				string filepath = forceSavdir ?
-					GetSaveDataPathText(fileIndex, Config.ForceSavDir) :
-					GetSaveDataPathText(fileIndex, Config.SavDir);
+				string savText = arguments[0].GetStrValue(exm);
+				if (!TryGetTextPath(arguments[1], exm, forceSavdir, true, out string filepath, out bool indexedPath))
+					return 0;
 				Encoding encoding = forceUTF8 ?
 					Encoding.GetEncoding("UTF-8") :
 					Config.SaveEncode;
 				try
 				{
-					if (forceSavdir)
-						Config.ForceCreateSavDir();
+					if (indexedPath)
+					{
+						if (forceSavdir)
+							Config.ForceCreateSavDir();
+						else
+							Config.CreateSavDir();
+					}
 					else
-						Config.CreateSavDir();
+					{
+						string directory = System.IO.Path.GetDirectoryName(filepath);
+						if (!string.IsNullOrEmpty(directory) && !System.IO.Directory.Exists(directory))
+							System.IO.Directory.CreateDirectory(directory);
+					}
 					System.IO.File.WriteAllText(filepath, savText, encoding);
 				}
 				catch { return 0; }
@@ -4906,6 +5061,8 @@ namespace MinorShift.Emuera.GameData.Function
 				{
 					if (arguments[i] == null)
 						return string.Format(Properties.Resources.SyntaxErrMesMethodDefaultArgumentNotNullable0, name, i + 1);
+					if (i == 0 && arguments[i].GetOperandType() == typeof(string))
+						continue;
 					if (i < argumentTypeArray.Length && argumentTypeArray[i] != arguments[i].GetOperandType())
 						return string.Format(Properties.Resources.SyntaxErrMesMethodDefaultArgumentType0, name, i + 1);
 				}
@@ -4913,24 +5070,17 @@ namespace MinorShift.Emuera.GameData.Function
 			}
 			public override string GetStrValue(ExpressionMediator exm, IOperandTerm[] arguments)
 			{
-                Int64 i64 = arguments[0].GetIntValue(exm);
-                if (i64 < 0 || i64 > int.MaxValue)
-					return "";
 				bool forceSavdir = arguments.Length > 1 && (arguments[1].GetIntValue(exm) != 0);
 				bool forceUTF8 = arguments.Length > 2 && (arguments[2].GetIntValue(exm) != 0);
-				int fileIndex = (int)i64;
-				string filepath = forceSavdir ?
-					GetSaveDataPathText(fileIndex, Config.ForceSavDir) :
-					GetSaveDataPathText(fileIndex, Config.SavDir);
-				Encoding encoding = forceUTF8 ?
-					Encoding.GetEncoding("UTF-8") :
-					Config.SaveEncode;
+				if (!TryGetTextPath(arguments[0], exm, forceSavdir, false, out string filepath, out _))
+					return "";
+				Encoding encoding = forceUTF8 ? Encoding.GetEncoding("UTF-8") : null;
 				if (!System.IO.File.Exists(filepath))
 					return "";
                 string ret;
                 try
                 {
-                    ret = System.IO.File.ReadAllText(filepath, encoding);
+                    ret = encoding != null ? System.IO.File.ReadAllText(filepath, encoding) : ReadAllTextWithDetectedEncoding(filepath);
                 }
                 catch { return ""; }
                 //一貫性の観点で\rには死んでもらう
@@ -4939,6 +5089,83 @@ namespace MinorShift.Emuera.GameData.Function
 		}
 
 
+
+		private static bool TryGetTextPath(IOperandTerm pathTerm, ExpressionMediator exm, bool forceSavdir, bool forSave, out string filepath, out bool indexedPath)
+		{
+			filepath = null;
+			indexedPath = false;
+			if (pathTerm.GetOperandType() == typeof(Int64))
+			{
+				Int64 i64 = pathTerm.GetIntValue(exm);
+				if (i64 < 0 || i64 > int.MaxValue)
+					return false;
+				int fileIndex = (int)i64;
+				filepath = forceSavdir ?
+					GetSaveDataPathText(fileIndex, Config.ForceSavDir) :
+					GetSaveDataPathText(fileIndex, Config.SavDir);
+				indexedPath = true;
+				return true;
+			}
+			if (pathTerm.GetOperandType() != typeof(string))
+				return false;
+			if (!TryGetSafeRelativeTextPath(pathTerm.GetStrValue(exm), out filepath))
+				return false;
+			string extension = System.IO.Path.HasExtension(filepath) ? System.IO.Path.GetExtension(filepath).TrimStart('.').ToLowerInvariant() : "";
+			if (!string.Equals(extension, "txt", StringComparison.OrdinalIgnoreCase))
+			{
+				if (!forSave)
+					return false;
+				filepath = System.IO.Path.ChangeExtension(filepath, "txt");
+			}
+			return true;
+		}
+
+		private static bool TryGetSafeRelativeTextPath(string relativePath, out string filepath)
+		{
+			filepath = null;
+			if (string.IsNullOrWhiteSpace(relativePath))
+				return false;
+			string sanitized = relativePath.Replace('\\', System.IO.Path.DirectorySeparatorChar).Replace('/', System.IO.Path.DirectorySeparatorChar);
+			try
+			{
+				if (System.IO.Path.IsPathRooted(sanitized))
+					return false;
+				string baseDir = System.IO.Path.GetFullPath(Program.ExeDir);
+				if (!baseDir.EndsWith(System.IO.Path.DirectorySeparatorChar.ToString()))
+					baseDir += System.IO.Path.DirectorySeparatorChar;
+				string candidate = System.IO.Path.GetFullPath(System.IO.Path.Combine(baseDir, sanitized));
+				if (!candidate.StartsWith(baseDir, StringComparison.OrdinalIgnoreCase))
+					return false;
+				filepath = candidate;
+				return true;
+			}
+			catch
+			{
+				return false;
+			}
+		}
+
+		private static string ReadAllTextWithDetectedEncoding(string filepath)
+		{
+			try
+			{
+				byte[] bytes = System.IO.File.ReadAllBytes(filepath);
+				if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
+					return new UTF8Encoding(true, true).GetString(bytes);
+				try
+				{
+					return new UTF8Encoding(false, true).GetString(bytes);
+				}
+				catch
+				{
+					return Config.SaveEncode.GetString(bytes);
+				}
+			}
+			catch
+			{
+				return "";
+			}
+		}
 
 		private static string GetSaveDataPathText(int index, string dir) { return string.Format("{0}txt{1:00}.txt", dir, index); }
 		private static string GetSaveDataPathGraphics(int index) { return string.Format("{0}img{1:0000}.png", Config.SavDir, index); }

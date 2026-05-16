@@ -160,7 +160,8 @@ namespace MinorShift.Emuera.GameData.Expression
 		public override IOperandTerm Restructure(ExpressionMediator exm)
 		{
 			for (int i = 0; i < args.Count; i++)
-				args[i] = args[i].Restructure(exm);
+				if (args[i] != null)
+					args[i] = args[i].Restructure(exm);
 			return this;
 		}
 	}

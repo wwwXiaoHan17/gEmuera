@@ -42,6 +42,14 @@ internal class ModernVariableTerm : AExpression
 		return true;
 	}
 
+	public long[] GetArgumentValues(ModernExpressionContext context)
+	{
+		UpdateArguments(context);
+		var values = new long[argumentValues.Length];
+		Array.Copy(argumentValues, values, argumentValues.Length);
+		return values;
+	}
+
 	public ModernVariableReference CaptureReference(ModernExpressionContext context)
 	{
 		UpdateArguments(context);

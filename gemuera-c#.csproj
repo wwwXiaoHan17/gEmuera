@@ -15,5 +15,14 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.0" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.6" />
   </ItemGroup>
+
+  <ItemGroup Condition=" '$(GodotTargetPlatform)' == 'android' ">
+    <None Include="NativeLibs\android\arm64-v8a\libe_sqlite3.so" CopyToOutputDirectory="PreserveNewest" TargetPath="libe_sqlite3.so" />
+  </ItemGroup>
+
+  <Target Name="CopyAndroidSqliteNativeLibrary" AfterTargets="Build" Condition=" '$(GodotTargetPlatform)' == 'android' And Exists('NativeLibs\android\arm64-v8a\libe_sqlite3.so') ">
+    <Copy SourceFiles="NativeLibs\android\arm64-v8a\libe_sqlite3.so" DestinationFiles="$(OutputPath)libe_sqlite3.so" SkipUnchangedFiles="true" />
+  </Target>
 </Project>

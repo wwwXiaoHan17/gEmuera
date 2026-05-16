@@ -659,12 +659,22 @@ namespace MinorShift.Emuera.GameView
 		#endregion
 
 
-		private bool outputLog(string fullpath)
+		private bool outputLog(string fullpath, bool hideInfo)
 		{
 			StreamWriter writer = null;
 			try
 			{
 				writer = new StreamWriter(fullpath, false, Encoding.UTF8);
+				if (!hideInfo)
+				{
+					writer.WriteLine("Environment Information");
+					writer.WriteLine("gemuera Godot runtime");
+					if (GlobalStatic.GameBaseData != null)
+						writer.WriteLine(GlobalStatic.GameBaseData.ScriptWindowTitle);
+					writer.WriteLine();
+					writer.WriteLine("Log");
+					writer.WriteLine();
+				}
 				ConsoleDisplayLine[] lines;
 					lock (displayLineLock)
 					{
@@ -692,16 +702,28 @@ namespace MinorShift.Emuera.GameView
 
 		public bool OutputLog(string filename)
 		{
-            if (filename == null)
-                filename = Program.ExeDir + "emuera.log";
+			return OutputLog(filename, false);
+		}
 
-            if (!filename.StartsWith(Program.ExeDir, StringComparison.CurrentCultureIgnoreCase))
+		public bool OutputLog(string filename, bool hideInfo)
+		{
+			string baseDir = Path.GetFullPath(Program.ExeDir ?? "");
+			if (!baseDir.EndsWith(Path.DirectorySeparatorChar.ToString()) && !baseDir.EndsWith(Path.AltDirectorySeparatorChar.ToString()))
+				baseDir += Path.DirectorySeparatorChar;
+
+			if (string.IsNullOrEmpty(filename))
+				filename = Path.Combine(baseDir, "emuera.log");
+			else if (!Path.IsPathRooted(filename))
+				filename = Path.Combine(baseDir, filename);
+			filename = Path.GetFullPath(filename);
+
+            if (!filename.StartsWith(baseDir, StringComparison.CurrentCultureIgnoreCase))
             {
                 MessageBox.Show("ログファイルは実行ファイル以下のディレクトリにのみ保存できます", "ログ出力失敗");
                 return false;
             }
 
-			if (outputLog(filename))
+			if (outputLog(filename, hideInfo))
 			{
 				if (window.Created)
 				{
@@ -757,6 +779,17 @@ namespace MinorShift.Emuera.GameView
 			list.CopyTo(ret);
 			return ret;
 		}
+
+		public string GetDisplayLineText(Int64 lineNo)
+		{
+			lock (displayLineLock)
+			{
+				if (lineNo < 0 || lineNo >= displayLineList.Count)
+					return "";
+				return displayLineList[(int)lineNo].ToString();
+			}
+		}
+
 		public ConsoleDisplayLine[] PopDisplayingLines()
 		{
 			if (!this.Enabled)

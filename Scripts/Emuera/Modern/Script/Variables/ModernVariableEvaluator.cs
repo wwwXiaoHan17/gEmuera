@@ -108,6 +108,36 @@ internal sealed class ModernVariableEvaluator
 		Register(new ModernFloatScalarVariableToken("RESULTF", VariableCode.RESULTF, VariableData));
 		RegisterLocalFloat1D("LOCALF", VariableCode.LOCALF);
 		RegisterLocalFloat1D("ARGF", VariableCode.ARGF);
+
+		RegisterCharaIntScalar("ISASSI", VariableCode.ISASSI);
+		RegisterCharaIntScalar("NO", VariableCode.NO);
+		RegisterCharaStringScalar("NAME", VariableCode.NAME);
+		RegisterCharaStringScalar("CALLNAME", VariableCode.CALLNAME);
+		RegisterCharaStringScalar("NICKNAME", VariableCode.NICKNAME);
+		RegisterCharaStringScalar("MASTERNAME", VariableCode.MASTERNAME);
+		RegisterCharaInt1D("BASE", VariableCode.BASE);
+		RegisterCharaInt1D("MAXBASE", VariableCode.MAXBASE);
+		RegisterCharaInt1D("ABL", VariableCode.ABL);
+		RegisterCharaInt1D("TALENT", VariableCode.TALENT);
+		RegisterCharaInt1D("EXP", VariableCode.EXP);
+		RegisterCharaInt1D("MARK", VariableCode.MARK);
+		RegisterCharaInt1D("PALAM", VariableCode.PALAM);
+		RegisterCharaInt1D("SOURCE", VariableCode.SOURCE);
+		RegisterCharaInt1D("EX", VariableCode.EX);
+		RegisterCharaInt1D("CFLAG", VariableCode.CFLAG);
+		RegisterCharaInt1D("JUEL", VariableCode.JUEL);
+		RegisterCharaInt1D("RELATION", VariableCode.RELATION);
+		RegisterCharaInt1D("EQUIP", VariableCode.EQUIP);
+		RegisterCharaInt1D("TEQUIP", VariableCode.TEQUIP);
+		RegisterCharaInt1D("STAIN", VariableCode.STAIN);
+		RegisterCharaInt1D("GOTJUEL", VariableCode.GOTJUEL);
+		RegisterCharaInt1D("NOWEX", VariableCode.NOWEX);
+		RegisterCharaInt1D("DOWNBASE", VariableCode.DOWNBASE);
+		RegisterCharaInt1D("CUP", VariableCode.CUP);
+		RegisterCharaInt1D("CDOWN", VariableCode.CDOWN);
+		RegisterCharaInt1D("TCVAR", VariableCode.TCVAR);
+		RegisterCharaString1D("CSTR", VariableCode.CSTR);
+		RegisterCharaInt2D("CDFLAG", VariableCode.CDFLAG);
 	}
 
 	void RegisterInt1D(string name, VariableCode code)
@@ -133,6 +163,31 @@ internal sealed class ModernVariableEvaluator
 	void RegisterLocalFloat1D(string name, VariableCode code)
 	{
 		Register(new ModernLocalFloat1DVariableToken(name, code, VariableData));
+	}
+
+	void RegisterCharaIntScalar(string name, VariableCode code)
+	{
+		Register(new ModernLegacyCharaIntScalarVariableToken(name, code, VariableData));
+	}
+
+	void RegisterCharaStringScalar(string name, VariableCode code)
+	{
+		Register(new ModernLegacyCharaStringScalarVariableToken(name, code, VariableData));
+	}
+
+	void RegisterCharaInt1D(string name, VariableCode code)
+	{
+		Register(new ModernLegacyCharaInt1DVariableToken(name, code, VariableData));
+	}
+
+	void RegisterCharaString1D(string name, VariableCode code)
+	{
+		Register(new ModernLegacyCharaString1DVariableToken(name, code, VariableData));
+	}
+
+	void RegisterCharaInt2D(string name, VariableCode code)
+	{
+		Register(new ModernLegacyCharaInt2DVariableToken(name, code, VariableData));
 	}
 
 	public void Register(ModernVariableToken token)

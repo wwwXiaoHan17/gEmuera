@@ -1,4 +1,7 @@
+using System;
 using System.Collections.Generic;
+using System.Data;
+using System.Xml;
 
 namespace MinorShift.Emuera.Modern.Script.Variables;
 
@@ -37,6 +40,8 @@ internal sealed class ModernVariableData
 			DataFloatArray[i] = new SparseArray<double>();
 			DataFloatArray[i].Length = sizing.DefaultFloatArrayLength;
 		}
+
+		SetDefaultLevelArrays();
 	}
 
 	public long[] DataInteger { get; }
@@ -46,6 +51,23 @@ internal sealed class ModernVariableData
 	public SparseArray<string>[] DataStringArray { get; }
 	public SparseArray<double>[] DataFloatArray { get; }
 	public Dictionary<string, Dictionary<string, string>> DataStringMaps { get; } = new();
+	public Dictionary<string, XmlDocument> DataXmlDocuments { get; } = new();
+	public Dictionary<string, DataTable> DataTables { get; } = new();
+	public long NextDataTableRowId { get; set; } = 1;
+
+	void SetDefaultLevelArrays()
+	{
+		CopyDefaults(DataIntegerArray[(int)(VariableCode.PALAMLV & VariableCode.__LOWERCASE__)], Config.PalamLvDef, new long[] { 0, 100, 500, 3000, 10000, 30000, 60000, 100000, 150000, 250000 });
+		CopyDefaults(DataIntegerArray[(int)(VariableCode.EXPLV & VariableCode.__LOWERCASE__)], Config.ExpLvDef, new long[] { 0, 1, 4, 20, 50, 200 });
+	}
+
+	static void CopyDefaults(SparseArray<long> destination, IReadOnlyList<long> configured, IReadOnlyList<long> fallback)
+	{
+		var source = configured != null && configured.Count > 0 ? configured : fallback;
+		int count = Math.Min((int)destination.Length, source.Count);
+		for (int i = 0; i < count; i++)
+			destination[i] = source[i];
+	}
 
 	public double RESULTF
 	{

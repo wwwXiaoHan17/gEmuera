@@ -16,6 +16,14 @@ namespace MinorShift.Emuera.GameProc
 	{
 		private void runScriptProc()
 		{
+			uint snakeStart = 0;
+			uint snakeLastLog = 0;
+			int snakeStartLineCount = state.lineCount;
+			if (Program.IsSnakeProfile)
+			{
+				snakeStart = _Library.WinmmTimer.TickCount;
+				snakeLastLog = snakeStart;
+			}
 			while (true)
 			{
 				//bool sequential = state.Sequential;
@@ -24,6 +32,17 @@ namespace MinorShift.Emuera.GameProc
 				if (Config.InfiniteLoopAlertTime > 0 && (state.lineCount % 10000 == 0))
 					checkInfiniteLoop();
 				LogicalLine line = state.CurrentLine;
+				if (Program.IsSnakeProfile && state.lineCount % 5000 == 0)
+				{
+					uint now = _Library.WinmmTimer.TickCount;
+					if (now - snakeLastLog >= 2000)
+					{
+						snakeLastLog = now;
+						string position = line?.Position == null ? "<unknown>" : $"{line.Position.Filename}:{line.Position.LineNo}";
+						string label = line?.ParentLabelLine == null ? "" : $" @{line.ParentLabelLine.LabelName}";
+						GenericUtils.Info($"[PROC] runScriptProc {(now - snakeStart)}ms lines={state.lineCount - snakeStartLineCount} at {position}{label}");
+					}
+				}
 				InstructionLine func = line as InstructionLine;
 				//これがNULLになる様な処理は現状ないはず
 				//if (line == null)

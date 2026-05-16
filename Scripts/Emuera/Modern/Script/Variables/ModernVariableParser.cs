@@ -56,6 +56,9 @@ internal static class ModernVariableParser
 			throw new ArgumentNullException(nameof(token));
 		arguments ??= Array.Empty<AExpression>();
 
+		if (token.IsCharacterData)
+			return ReduceCharacterVariable(token, arguments);
+
 		return token.Dimension switch
 		{
 			VariableDimension.Scalar => ReduceScalar(token, arguments),
@@ -71,6 +74,82 @@ internal static class ModernVariableParser
 		if (arguments.Count != 0)
 			throw new FormatException($"{token.Name} is scalar and does not accept indices.");
 		return new ModernVariableTerm(token, Array.Empty<AExpression>());
+	}
+
+	static ModernVariableTerm ReduceCharacterVariable(ModernVariableToken token, IReadOnlyList<AExpression> arguments)
+	{
+		return token.Dimension switch
+		{
+			VariableDimension.Scalar => ReduceCharacterScalar(token, arguments),
+			VariableDimension.Array1D => ReduceCharacterArray1D(token, arguments),
+			VariableDimension.Array2D => ReduceCharacterFixedDimension(token, arguments, 3),
+			VariableDimension.Array3D => ReduceCharacterFixedDimension(token, arguments, 4),
+			_ => throw new NotSupportedException($"{token.Name} has unsupported dimension {token.Dimension}."),
+		};
+	}
+
+	static ModernVariableTerm ReduceCharacterScalar(ModernVariableToken token, IReadOnlyList<AExpression> arguments)
+	{
+		if (arguments.Count > 1)
+			throw new FormatException($"{token.Name} is a character scalar and accepts only a character index.");
+		var terms = new AExpression[1];
+		terms[0] = arguments.Count == 0 ? TargetTerm() : arguments[0];
+		return new ModernVariableTerm(token, terms);
+	}
+
+	static ModernVariableTerm ReduceCharacterArray1D(ModernVariableToken token, IReadOnlyList<AExpression> arguments)
+	{
+		if (arguments.Count > 2)
+			throw new FormatException($"{token.Name} is a character array and accepts only character and element indices.");
+		var terms = new AExpression[2];
+		if (arguments.Count == 0)
+		{
+			terms[0] = TargetTerm();
+			terms[1] = ZeroTerm;
+		}
+		else if (arguments.Count == 1)
+		{
+			terms[0] = TargetTerm();
+			terms[1] = arguments[0];
+		}
+		else
+		{
+			terms[0] = arguments[0];
+			terms[1] = arguments[1];
+		}
+		return new ModernVariableTerm(token, terms);
+	}
+
+	static ModernVariableTerm ReduceCharacterFixedDimension(ModernVariableToken token, IReadOnlyList<AExpression> arguments, int requiredCount)
+	{
+		if (arguments.Count == 0)
+			throw new FormatException($"{token.Name} needs {requiredCount} indices.");
+		if (arguments.Count != requiredCount)
+			throw new FormatException($"{token.Name} needs exactly {requiredCount} indices.");
+		var terms = new AExpression[requiredCount];
+		for (int i = 0; i < requiredCount; i++)
+			terms[i] = arguments[i];
+		return new ModernVariableTerm(token, terms);
+	}
+
+	static AExpression TargetTerm()
+	{
+		return TargetCharacterTerm.Instance;
+	}
+
+	sealed class TargetCharacterTerm : AExpression
+	{
+		public static readonly TargetCharacterTerm Instance = new();
+
+		TargetCharacterTerm()
+			: base(EraType.Integer)
+		{
+		}
+
+		public override long GetIntValue(ModernExpressionContext context)
+		{
+			return GlobalStatic.VEvaluator?.TARGET ?? 0;
+		}
 	}
 
 	static ModernVariableTerm ReduceArray1D(ModernVariableToken token, IReadOnlyList<AExpression> arguments)

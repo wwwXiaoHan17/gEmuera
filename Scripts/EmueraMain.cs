@@ -23,8 +23,24 @@ public partial class EmueraMain : Node
         public ManualResetEventSlim Completed = new ManualResetEventSlim(false);
     }
 
+    public class TextRenderItem
+    {
+        public int Id;
+        public string Text;
+        public string FontName;
+        public int FontSize;
+        public int FontStyle;
+        public uEmuera.Drawing.Color Color;
+        public int Width;
+        public int Height;
+        public Godot.Image ResultImage;
+        public ManualResetEventSlim Completed = new ManualResetEventSlim(false);
+    }
+
     static ConcurrentQueue<GpuWorkItem> gpuQueue = new ConcurrentQueue<GpuWorkItem>();
+    static ConcurrentQueue<TextRenderItem> textRenderQueue = new ConcurrentQueue<TextRenderItem>();
     static int gpuWorkIdCounter = 0;
+    static int textRenderIdCounter = 0;
 
     /// <summary>
     /// True once _Process has been called at least once, indicating the main loop is running
@@ -46,6 +62,25 @@ public partial class EmueraMain : Node
         return item;
     }
 
+    public static TextRenderItem SubmitTextRender(string text, string fontName, int fontSize, int fontStyle, uEmuera.Drawing.Color color, int width, int height)
+    {
+        if (GenericUtils.IsOnMainThread())
+            return null;
+        var item = new TextRenderItem
+        {
+            Id = Interlocked.Increment(ref textRenderIdCounter),
+            Text = text ?? "",
+            FontName = fontName,
+            FontSize = System.Math.Max(1, fontSize),
+            FontStyle = fontStyle,
+            Color = color,
+            Width = System.Math.Max(1, width),
+            Height = System.Math.Max(1, height)
+        };
+        textRenderQueue.Enqueue(item);
+        return item;
+    }
+
     // SubViewport-based GPU rendering for ColorMatrix
     SubViewport gpuViewport;
     TextureRect gpuTextureRect;
@@ -53,6 +88,12 @@ public partial class EmueraMain : Node
     GpuWorkItem pendingGpuItem;
     int gpuRenderFrameCount = 0;
     bool gpuWaitingForRender = false;
+    SubViewport textViewport;
+    Label textRenderLabel;
+    FontFile textRenderFont;
+    TextRenderItem pendingTextRenderItem;
+    int textRenderFrameCount = 0;
+    bool textWaitingForRender = false;
     bool startupStarted = false;
     Control startupOverlay;
     Label startupStatusLabel;
@@ -82,6 +123,81 @@ public partial class EmueraMain : Node
     static bool ShouldUseGpuRenderer()
     {
         return !OS.HasFeature("mobile");
+    }
+
+    void SetupTextRenderer()
+    {
+        if (textViewport != null)
+            return;
+
+        textRenderFont = ResourceLoader.Load<FontFile>("res://Fonts/MS Gothic.ttf");
+        textViewport = new SubViewport();
+        textViewport.TransparentBg = true;
+        textViewport.Size = new Vector2I(16, 16);
+        textViewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
+        textViewport.Name = "TextRenderViewport";
+
+        textRenderLabel = new Label();
+        textRenderLabel.Name = "TextRenderLabel";
+        textRenderLabel.Position = Vector2.Zero;
+        textRenderLabel.MouseFilter = Control.MouseFilterEnum.Ignore;
+        textRenderLabel.VerticalAlignment = VerticalAlignment.Top;
+        textRenderLabel.HorizontalAlignment = HorizontalAlignment.Left;
+        textRenderLabel.AutowrapMode = TextServer.AutowrapMode.Off;
+        textRenderLabel.ClipText = true;
+        if (textRenderFont != null)
+            textRenderLabel.AddThemeFontOverride("font", textRenderFont);
+
+        textViewport.AddChild(textRenderLabel);
+        AddChild(textViewport);
+    }
+
+    void ProcessTextRenderQueue()
+    {
+        if (textViewport == null)
+            SetupTextRenderer();
+        if (textViewport == null)
+            return;
+
+        if (textWaitingForRender)
+        {
+            textRenderFrameCount++;
+            if (textRenderFrameCount >= 2)
+            {
+                var vpTex = textViewport.GetTexture();
+                var resultImg = vpTex?.GetImage();
+                if (resultImg != null && resultImg.GetWidth() > 0 && resultImg.GetHeight() > 0)
+                {
+                    if (resultImg.GetFormat() != Godot.Image.Format.Rgba8)
+                        resultImg.Convert(Godot.Image.Format.Rgba8);
+                    pendingTextRenderItem.ResultImage = resultImg;
+                }
+                else
+                {
+                    pendingTextRenderItem.ResultImage = Godot.Image.CreateEmpty(1, 1, false, Godot.Image.Format.Rgba8);
+                }
+                pendingTextRenderItem.Completed.Set();
+                pendingTextRenderItem = null;
+                textWaitingForRender = false;
+                textViewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
+            }
+        }
+
+        if (!textWaitingForRender && textRenderQueue.TryDequeue(out var item))
+        {
+            textViewport.Size = new Vector2I(item.Width, item.Height);
+            textRenderLabel.Text = item.Text ?? "";
+            textRenderLabel.Size = new Vector2(item.Width, item.Height);
+            textRenderLabel.CustomMinimumSize = textRenderLabel.Size;
+            textRenderLabel.AddThemeFontSizeOverride("font_size", item.FontSize);
+            textRenderLabel.AddThemeColorOverride("font_color", new Color(item.Color.r, item.Color.g, item.Color.b, item.Color.a));
+            textRenderLabel.Position = Vector2.Zero;
+
+            textViewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
+            textRenderFrameCount = 0;
+            textWaitingForRender = true;
+            pendingTextRenderItem = item;
+        }
     }
 
     /// Process pending GPU work. Called from _Process on the main thread.
@@ -267,6 +383,7 @@ public partial class EmueraMain : Node
             GpuReady = true;
         GenericUtils.FlushLogs();
         GenericUtils.FlushUI();
+        ProcessTextRenderQueue();
 
         if (!working)
             return;

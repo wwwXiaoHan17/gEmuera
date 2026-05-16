@@ -1,5 +1,7 @@
 ﻿using System;
 
+using System.IO;
+
 namespace uEmuera.Drawing
 {
     public class Bitmap : IDisposable
@@ -17,15 +19,15 @@ namespace uEmuera.Drawing
 
         public void Dispose()
         { }
-        public int Width
+        public virtual int Width
         {
             get { return size.Width; }
         }
-        public int Height
+        public virtual int Height
         {
             get { return size.Height; }
         }
-        public Size Size { get { return size; } }
+        public virtual Size Size { get { return size; } }
         public Color GetPixel(int x, int y)
         {
             if (this is BitmapRenderTexture rt && rt.image != null)
@@ -73,26 +75,170 @@ namespace uEmuera.Drawing
         public BitmapTexture(string path)
             :base(path)
         {
-            // 同步加载：直接通过 SpriteManager 获取或创建 TextureInfo
-            var ti = SpriteManager.GetTextureInfo(path, path);
-            if (ti == null && !string.IsNullOrEmpty(filename))
-                ti = SpriteManager.GetTextureInfo(filename, path);
-            if (ti != null)
-            {
-                textureinfo = ti;
-                size.Width = ti.width;
-                size.Height = ti.height;
-            }
+            if (TryReadImageSize(path, out var imageSize))
+                size = imageSize;
         }
         public Godot.ImageTexture texture
         {
-            get { return textureinfo?.texture; }
+            get { return EnsureTextureInfo()?.texture; }
         }
         public Godot.Image sourceImage
         {
-            get { return textureinfo?.image; }
+            get { return EnsureTextureInfo()?.image; }
         }
         SpriteManager.TextureInfo textureinfo = null;
+
+        SpriteManager.TextureInfo EnsureTextureInfo()
+        {
+            if (textureinfo != null)
+                return textureinfo;
+            textureinfo = SpriteManager.GetTextureInfo(path, path);
+            if (textureinfo == null && !string.IsNullOrEmpty(filename))
+                textureinfo = SpriteManager.GetTextureInfo(filename, path);
+            if (textureinfo != null)
+            {
+                size.Width = textureinfo.width;
+                size.Height = textureinfo.height;
+            }
+            return textureinfo;
+        }
+
+        static bool TryReadImageSize(string path, out Size imageSize)
+        {
+            imageSize = new Size();
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+                return false;
+            try
+            {
+                string ext = Path.GetExtension(path).ToLowerInvariant();
+                using var stream = File.OpenRead(path);
+                return ext switch
+                {
+                    ".png" => TryReadPngSize(stream, out imageSize),
+                    ".jpg" or ".jpeg" => TryReadJpegSize(stream, out imageSize),
+                    ".bmp" => TryReadBmpSize(stream, out imageSize),
+                    ".webp" => TryReadWebpSize(stream, out imageSize),
+                    _ => false,
+                };
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        static bool TryReadPngSize(Stream stream, out Size imageSize)
+        {
+            imageSize = new Size();
+            Span<byte> header = stackalloc byte[24];
+            if (stream.Read(header) < header.Length)
+                return false;
+            if (header[0] != 0x89 || header[1] != 0x50 || header[2] != 0x4E || header[3] != 0x47)
+                return false;
+            imageSize.Width = ReadInt32BigEndian(header.Slice(16, 4));
+            imageSize.Height = ReadInt32BigEndian(header.Slice(20, 4));
+            return imageSize.Width > 0 && imageSize.Height > 0;
+        }
+
+        static bool TryReadBmpSize(Stream stream, out Size imageSize)
+        {
+            imageSize = new Size();
+            Span<byte> header = stackalloc byte[26];
+            if (stream.Read(header) < header.Length || header[0] != 'B' || header[1] != 'M')
+                return false;
+            imageSize.Width = Math.Abs(BitConverter.ToInt32(header.Slice(18, 4)));
+            imageSize.Height = Math.Abs(BitConverter.ToInt32(header.Slice(22, 4)));
+            return imageSize.Width > 0 && imageSize.Height > 0;
+        }
+
+        static bool TryReadWebpSize(Stream stream, out Size imageSize)
+        {
+            imageSize = new Size();
+            Span<byte> header = stackalloc byte[30];
+            if (stream.Read(header) < 30)
+                return false;
+            if (header[0] != 'R' || header[1] != 'I' || header[2] != 'F' || header[3] != 'F' ||
+                header[8] != 'W' || header[9] != 'E' || header[10] != 'B' || header[11] != 'P')
+                return false;
+            string chunk = "" + (char)header[12] + (char)header[13] + (char)header[14] + (char)header[15];
+            if (chunk == "VP8X")
+            {
+                imageSize.Width = ReadUInt24LittleEndian(header.Slice(24, 3)) + 1;
+                imageSize.Height = ReadUInt24LittleEndian(header.Slice(27, 3)) + 1;
+                return imageSize.Width > 0 && imageSize.Height > 0;
+            }
+            if (chunk == "VP8L" && header[20] == 0x2F)
+            {
+                uint bits = (uint)(header[21] | (header[22] << 8) | (header[23] << 16) | (header[24] << 24));
+                imageSize.Width = (int)((bits & 0x3FFF) + 1);
+                imageSize.Height = (int)(((bits >> 14) & 0x3FFF) + 1);
+                return imageSize.Width > 0 && imageSize.Height > 0;
+            }
+            if (chunk == "VP8 " && header[23] == 0x9D && header[24] == 0x01 && header[25] == 0x2A)
+            {
+                imageSize.Width = (header[26] | (header[27] << 8)) & 0x3FFF;
+                imageSize.Height = (header[28] | (header[29] << 8)) & 0x3FFF;
+                return imageSize.Width > 0 && imageSize.Height > 0;
+            }
+            return false;
+        }
+
+        static bool TryReadJpegSize(Stream stream, out Size imageSize)
+        {
+            imageSize = new Size();
+            if (stream.ReadByte() != 0xFF || stream.ReadByte() != 0xD8)
+                return false;
+            while (stream.Position < stream.Length)
+            {
+                int prefix;
+                do
+                {
+                    prefix = stream.ReadByte();
+                    if (prefix < 0)
+                        return false;
+                }
+                while (prefix != 0xFF);
+
+                int marker;
+                do
+                {
+                    marker = stream.ReadByte();
+                    if (marker < 0)
+                        return false;
+                }
+                while (marker == 0xFF);
+
+                if (marker == 0xD9 || marker == 0xDA)
+                    return false;
+
+                int length = (stream.ReadByte() << 8) + stream.ReadByte();
+                if (length < 2)
+                    return false;
+
+                if ((marker >= 0xC0 && marker <= 0xC3) || (marker >= 0xC5 && marker <= 0xC7) ||
+                    (marker >= 0xC9 && marker <= 0xCB) || (marker >= 0xCD && marker <= 0xCF))
+                {
+                    stream.ReadByte();
+                    int height = (stream.ReadByte() << 8) + stream.ReadByte();
+                    int width = (stream.ReadByte() << 8) + stream.ReadByte();
+                    imageSize.Width = width;
+                    imageSize.Height = height;
+                    return width > 0 && height > 0;
+                }
+                stream.Seek(length - 2, SeekOrigin.Current);
+            }
+            return false;
+        }
+
+        static int ReadInt32BigEndian(ReadOnlySpan<byte> bytes)
+        {
+            return (bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3];
+        }
+
+        static int ReadUInt24LittleEndian(ReadOnlySpan<byte> bytes)
+        {
+            return bytes[0] | (bytes[1] << 8) | (bytes[2] << 16);
+        }
     }
 
     public class BitmapRenderTexture : Bitmap
@@ -172,9 +318,36 @@ namespace uEmuera.Drawing
     public sealed class Pen
     {
         public Pen()
+            : this(Color.Black, 1)
         { }
         public Pen(Color c, Int64 width)
-        { }
+        {
+            Color = c;
+            Width = Math.Max(1, width);
+            DashStyle = DashStyle.Solid;
+            DashCap = DashCap.Flat;
+        }
+
+        public Color Color { get; set; }
+        public Int64 Width { get; set; }
+        public DashStyle DashStyle { get; set; }
+        public DashCap DashCap { get; set; }
+    }
+
+    public enum DashStyle
+    {
+        Solid = 0,
+        Dash = 1,
+        Dot = 2,
+        DashDot = 3,
+        DashDotDot = 4,
+    }
+
+    public enum DashCap
+    {
+        Flat = 0,
+        Round = 2,
+        Triangle = 3,
     }
 
     public enum FontStyle
@@ -343,30 +516,70 @@ namespace uEmuera.Drawing
         //public static Color Yellow { get { return new Color(uColor.yellow); } }
         public static Color FromName(string name)
         {
-            switch(name)
+            switch((name ?? "").Trim().ToLowerInvariant())
             {
-            case "Black":
+            case "black":
                 return Black;
-            case "Blue":
+            case "blue":
                 return Blue;
         //    case "Clear":
         //        return Clear;
-        //    case "Cyan":
-        //        return Cyan;
-            case "Gray":
+            case "aqua":
+            case "cyan":
+                return new Color(0x00, 0xFF, 0xFF);
+            case "gray":
                 return Gray;
-            case "Green":
+            case "green":
                 return Green;
-            case "Grey":
+            case "grey":
                 return Grey;
-        //    case "Magenta":
-        //        return Magenta;
-            case "Red":
+            case "fuchsia":
+            case "magenta":
+                return new Color(0xFF, 0x00, 0xFF);
+            case "red":
                 return Red;
-            case "White":
+            case "white":
                 return White;
-        //    case "Yellow":
-        //        return Yellow;
+            case "yellow":
+                return new Color(0xFF, 0xFF, 0x00);
+            case "aquamarine":
+                return new Color(0x7F, 0xFF, 0xD4);
+            case "chocolate":
+                return new Color(0xD2, 0x69, 0x1E);
+            case "darkturquoise":
+                return new Color(0x00, 0xCE, 0xD1);
+            case "deepskyblue":
+                return new Color(0x00, 0xBF, 0xFF);
+            case "dimgray":
+            case "dimgrey":
+                return new Color(0x69, 0x69, 0x69);
+            case "dodgerblue":
+                return new Color(0x1E, 0x90, 0xFF);
+            case "gold":
+                return new Color(0xFF, 0xD7, 0x00);
+            case "hotpink":
+                return new Color(0xFF, 0x69, 0xB4);
+            case "lawngreen":
+                return new Color(0x7C, 0xFC, 0x00);
+            case "lightgray":
+            case "lightgrey":
+                return new Color(0xD3, 0xD3, 0xD3);
+            case "lime":
+                return new Color(0x00, 0xFF, 0x00);
+            case "limegreen":
+                return new Color(0x32, 0xCD, 0x32);
+            case "midnightblue":
+                return new Color(0x19, 0x19, 0x70);
+            case "orange":
+                return new Color(0xFF, 0xA5, 0x00);
+            case "pink":
+                return new Color(0xFF, 0xC0, 0xCB);
+            case "plum":
+                return new Color(0xDD, 0xA0, 0xDD);
+            case "royalblue":
+                return new Color(0x41, 0x69, 0xE1);
+            case "tomato":
+                return new Color(0xFF, 0x63, 0x47);
             }
             uEmuera.Logger.Info("Not Match Color '" + name + "'");
             return Black;

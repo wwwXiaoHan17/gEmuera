@@ -150,7 +150,8 @@ namespace uEmuera.Forms
     {
         public Point PointToClient(object mousePosition)
         {
-            //throw new NotImplementedException();
+            if (mousePosition is Point point)
+                return point;
             return Point.Empty;
         }
         public Rectangle ClientRectangle;
@@ -178,5 +179,9 @@ namespace uEmuera.Forms
         public string Text { get; set; }
         public uEmuera.Drawing.Color ForeColor;
         public uEmuera.Drawing.Color BackColor;
+        public int X { get; set; }
+        public int Y { get; set; }
+        public int Width { get; set; }
+        public bool UseCustomPosition { get; set; }
     }
 }

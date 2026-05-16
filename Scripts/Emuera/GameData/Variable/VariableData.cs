@@ -329,6 +329,11 @@ namespace MinorShift.Emuera.GameData.Variable
 			localvarTokenDic.Add("LOCAL", new VariableLocal(VariableCode.LOCAL, size, CreateLocalInt));
 			size = constant.VariableIntArrayLength[(int)(VariableCode.__LOWERCASE__ & VariableCode.ARG)];
 			localvarTokenDic.Add("ARG", new VariableLocal(VariableCode.ARG, size, CreateLocalInt));
+			if (Program.IsSnakeProfile)
+			{
+				size = constant.VariableIntArrayLength[(int)(VariableCode.__LOWERCASE__ & VariableCode.ARGF)];
+				localvarTokenDic.Add("ARGF", new VariableLocal(VariableCode.ARGF, size, CreateLocalInt));
+			}
 			size = constant.VariableStrArrayLength[(int)(VariableCode.__LOWERCASE__ & VariableCode.LOCALS)];
 			localvarTokenDic.Add("LOCALS", new VariableLocal(VariableCode.LOCALS, size, CreateLocalStr));
 			size = constant.VariableStrArrayLength[(int)(VariableCode.__LOWERCASE__ & VariableCode.ARGS)];

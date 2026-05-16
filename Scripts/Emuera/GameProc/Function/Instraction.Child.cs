@@ -256,6 +256,8 @@ namespace MinorShift.Emuera.GameProc.Function
 			{
                 if (GlobalStatic.Process.SkipPrint)
                     return;
+				if (func.Argument == null)
+					return;
                 string str;
 				if (func.Argument is ExpressionArrayArgument snakeArg)
 				{

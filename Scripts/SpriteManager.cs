@@ -331,19 +331,27 @@ internal static class SpriteManager
 				return img;
 
 			img.Dispose();
-			GD.PushWarning($"[SpriteManager] image decode failed, using transparent placeholder: {filename}, err={err}");
+			LogSpriteWarning($"[SpriteManager] image decode failed, using transparent placeholder: {filename}, err={err}");
 		}
 		catch (Exception ex)
 		{
-			GD.PushWarning($"[SpriteManager] image load exception, using transparent placeholder: {filename}, error={ex.Message}");
+			LogSpriteWarning($"[SpriteManager] image load exception, using transparent placeholder: {filename}, error={ex.Message}");
 		}
 		return CreatePlaceholderImage();
 	}
 
 	static TextureInfo CreatePlaceholderTextureInfo(string name, string filename, string reason)
 	{
-		GD.PushWarning($"[SpriteManager] using transparent placeholder for {filename}: {reason}");
+		LogSpriteWarning($"[SpriteManager] using transparent placeholder for {filename}: {reason}");
 		return new TextureInfo(name, CreatePlaceholderImage());
+	}
+
+	static void LogSpriteWarning(string message)
+	{
+		if (OS.GetName() == "Android")
+			uEmuera.Logger.Info(message);
+		else
+			GD.PushWarning(message);
 	}
 
 	static Image CreatePlaceholderImage()

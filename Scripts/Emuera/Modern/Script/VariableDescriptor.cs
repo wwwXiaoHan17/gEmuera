@@ -181,6 +181,23 @@ internal static class VariableDescriptorTable
         Register("EX", VariableCode.EX, VariableKind.Integer, VariableDimension.Array1D, VariableAttribute.CanForbid | VariableAttribute.CharacterData);
         Register("CFLAG", VariableCode.CFLAG, VariableKind.Integer, VariableDimension.Array1D, VariableAttribute.CanForbid | VariableAttribute.CharacterData);
         Register("JUEL", VariableCode.JUEL, VariableKind.Integer, VariableDimension.Array1D, VariableAttribute.CanForbid | VariableAttribute.CharacterData);
+        Register("RELATION", VariableCode.RELATION, VariableKind.Integer, VariableDimension.Array1D, VariableAttribute.CanForbid | VariableAttribute.CharacterData);
+        Register("EQUIP", VariableCode.EQUIP, VariableKind.Integer, VariableDimension.Array1D, VariableAttribute.CanForbid | VariableAttribute.CharacterData);
+        Register("TEQUIP", VariableCode.TEQUIP, VariableKind.Integer, VariableDimension.Array1D, VariableAttribute.CanForbid | VariableAttribute.CharacterData);
+        Register("STAIN", VariableCode.STAIN, VariableKind.Integer, VariableDimension.Array1D, VariableAttribute.CharacterData);
+        Register("GOTJUEL", VariableCode.GOTJUEL, VariableKind.Integer, VariableDimension.Array1D, VariableAttribute.CanForbid | VariableAttribute.CharacterData);
+        Register("NOWEX", VariableCode.NOWEX, VariableKind.Integer, VariableDimension.Array1D, VariableAttribute.CanForbid | VariableAttribute.CharacterData);
+        Register("DOWNBASE", VariableCode.DOWNBASE, VariableKind.Integer, VariableDimension.Array1D, VariableAttribute.CanForbid | VariableAttribute.CharacterData | VariableAttribute.Save | VariableAttribute.Extended);
+        Register("CUP", VariableCode.CUP, VariableKind.Integer, VariableDimension.Array1D, VariableAttribute.CanForbid | VariableAttribute.CharacterData | VariableAttribute.Save | VariableAttribute.Extended);
+        Register("CDOWN", VariableCode.CDOWN, VariableKind.Integer, VariableDimension.Array1D, VariableAttribute.CanForbid | VariableAttribute.CharacterData | VariableAttribute.Save | VariableAttribute.Extended);
+        Register("TCVAR", VariableCode.TCVAR, VariableKind.Integer, VariableDimension.Array1D, VariableAttribute.CanForbid | VariableAttribute.CharacterData | VariableAttribute.Save | VariableAttribute.Extended);
+
+        Register("NAME", VariableCode.NAME, VariableKind.String, VariableDimension.Scalar, VariableAttribute.CharacterData);
+        Register("CALLNAME", VariableCode.CALLNAME, VariableKind.String, VariableDimension.Scalar, VariableAttribute.CharacterData);
+        Register("NICKNAME", VariableCode.NICKNAME, VariableKind.String, VariableDimension.Scalar, VariableAttribute.CharacterData | VariableAttribute.Save | VariableAttribute.Extended);
+        Register("MASTERNAME", VariableCode.MASTERNAME, VariableKind.String, VariableDimension.Scalar, VariableAttribute.CharacterData | VariableAttribute.Save | VariableAttribute.Extended);
+        Register("CSTR", VariableCode.CSTR, VariableKind.String, VariableDimension.Array1D, VariableAttribute.CanForbid | VariableAttribute.CharacterData | VariableAttribute.Save | VariableAttribute.Extended);
+        Register("CDFLAG", VariableCode.CDFLAG, VariableKind.Integer, VariableDimension.Array2D, VariableAttribute.CanForbid | VariableAttribute.CharacterData | VariableAttribute.Save | VariableAttribute.Extended);
     }
 
     private static void Register(string name, VariableCode code, VariableKind kind,

@@ -172,7 +172,8 @@ internal sealed class ModernScriptFunctionMethod : ModernFunctionMethod
 			ResolveLength(localFloatLength, sizing.DefaultFloatArrayLength),
 			Math.Max(ResolveLength(argIntegerLength, sizing.DefaultArrayLength), requiredArgIntegers),
 			Math.Max(ResolveLength(argStringLength, sizing.DefaultStringArrayLength), requiredArgStrings),
-			Math.Max(ResolveLength(argFloatLength, sizing.DefaultFloatArrayLength), requiredArgFloats));
+			Math.Max(ResolveLength(argFloatLength, sizing.DefaultFloatArrayLength), requiredArgFloats),
+			Name);
 		return executionContext;
 	}
 

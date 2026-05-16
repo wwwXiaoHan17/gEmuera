@@ -1,4 +1,5 @@
 using System;
+using CharacterData = MinorShift.Emuera.GameData.Variable.CharacterData;
 using MinorShift.Emuera.Modern.Script.Expressions;
 
 namespace MinorShift.Emuera.Modern.Script.Variables;
@@ -36,6 +37,7 @@ internal abstract class ModernVariableToken
 	public bool IsFloat { get { return Descriptor.IsFloat; } }
 	public bool IsLocal { get { return (Descriptor.Attributes & VariableAttribute.Local) != 0; } }
 	public bool IsConst { get { return (Descriptor.Attributes & VariableAttribute.Unchangeable) != 0; } }
+	public bool IsCharacterData { get { return (Descriptor.Attributes & VariableAttribute.CharacterData) != 0; } }
 	public virtual bool IsReference { get { return false; } }
 	public virtual bool IsOut { get { return false; } }
 	protected ModernVariableData VariableData { get; }
@@ -408,6 +410,187 @@ internal sealed class ModernFloat1DVariableToken : ModernVariableToken
 	public override object GetArray(ModernExpressionContext context)
 	{
 		return array;
+	}
+}
+
+internal abstract class ModernLegacyCharaVariableToken : ModernVariableToken
+{
+	protected ModernLegacyCharaVariableToken(string name, VariableCode code, ModernVariableData variableData)
+		: base(name, code, variableData)
+	{
+	}
+
+	protected CharacterData GetChara(long[] arguments)
+	{
+		if (arguments == null || arguments.Length == 0)
+			throw new ArgumentException($"{Name} needs a character index.");
+		var legacyData = GlobalStatic.VariableData ?? GlobalStatic.VEvaluator?.VariableData;
+		if (legacyData == null)
+			throw new InvalidOperationException($"{Name} requires legacy character data.");
+		long index = arguments[0];
+		if (index < 0 || index >= legacyData.CharacterList.Count)
+			throw new IndexOutOfRangeException($"{Name}: character index {index} is outside 0..{legacyData.CharacterList.Count - 1}.");
+		return legacyData.CharacterList[(int)index];
+	}
+
+	protected static int CheckedIndex(long value, int length, string name, string label)
+	{
+		if (value < 0 || value >= length)
+			throw new IndexOutOfRangeException($"{name}: {label} index {value} is outside 0..{length - 1}.");
+		return (int)value;
+	}
+
+	public override int GetLength()
+	{
+		var legacyData = GlobalStatic.VariableData ?? GlobalStatic.VEvaluator?.VariableData;
+		return legacyData?.CharacterList.Count ?? 0;
+	}
+}
+
+internal sealed class ModernLegacyCharaIntScalarVariableToken : ModernLegacyCharaVariableToken
+{
+	public ModernLegacyCharaIntScalarVariableToken(string name, VariableCode code, ModernVariableData variableData)
+		: base(name, code, variableData)
+	{
+	}
+
+	public override long GetIntValue(ModernExpressionContext context, long[] arguments)
+	{
+		var chara = GetChara(arguments);
+		return chara.DataInteger[CodeIndex];
+	}
+
+	public override void SetValue(long value, ModernExpressionContext context, long[] arguments)
+	{
+		var chara = GetChara(arguments);
+		chara.DataInteger[CodeIndex] = value;
+	}
+}
+
+internal sealed class ModernLegacyCharaStringScalarVariableToken : ModernLegacyCharaVariableToken
+{
+	public ModernLegacyCharaStringScalarVariableToken(string name, VariableCode code, ModernVariableData variableData)
+		: base(name, code, variableData)
+	{
+	}
+
+	public override string GetStrValue(ModernExpressionContext context, long[] arguments)
+	{
+		var chara = GetChara(arguments);
+		return chara.DataString[CodeIndex] ?? "";
+	}
+
+	public override void SetValue(string value, ModernExpressionContext context, long[] arguments)
+	{
+		var chara = GetChara(arguments);
+		chara.DataString[CodeIndex] = value ?? "";
+	}
+}
+
+internal sealed class ModernLegacyCharaInt1DVariableToken : ModernLegacyCharaVariableToken
+{
+	public ModernLegacyCharaInt1DVariableToken(string name, VariableCode code, ModernVariableData variableData)
+		: base(name, code, variableData)
+	{
+	}
+
+	public override long GetIntValue(ModernExpressionContext context, long[] arguments)
+	{
+		if (arguments == null || arguments.Length < 2)
+			throw new ArgumentException($"{Name} needs character and array indices.");
+		var array = GetChara(arguments).DataIntegerArray[CodeIndex];
+		return array[CheckedIndex(arguments[1], array.Length, Name, "array")];
+	}
+
+	public override void SetValue(long value, ModernExpressionContext context, long[] arguments)
+	{
+		if (arguments == null || arguments.Length < 2)
+			throw new ArgumentException($"{Name} needs character and array indices.");
+		var array = GetChara(arguments).DataIntegerArray[CodeIndex];
+		array[CheckedIndex(arguments[1], array.Length, Name, "array")] = value;
+	}
+
+	public override long PlusValue(long value, ModernExpressionContext context, long[] arguments)
+	{
+		if (arguments == null || arguments.Length < 2)
+			throw new ArgumentException($"{Name} needs character and array indices.");
+		var array = GetChara(arguments).DataIntegerArray[CodeIndex];
+		int index = CheckedIndex(arguments[1], array.Length, Name, "array");
+		array[index] = checked(array[index] + value);
+		return array[index];
+	}
+
+	public override object GetArray(ModernExpressionContext context)
+	{
+		return Array.Empty<long>();
+	}
+}
+
+internal sealed class ModernLegacyCharaString1DVariableToken : ModernLegacyCharaVariableToken
+{
+	public ModernLegacyCharaString1DVariableToken(string name, VariableCode code, ModernVariableData variableData)
+		: base(name, code, variableData)
+	{
+	}
+
+	public override string GetStrValue(ModernExpressionContext context, long[] arguments)
+	{
+		if (arguments == null || arguments.Length < 2)
+			throw new ArgumentException($"{Name} needs character and array indices.");
+		var array = GetChara(arguments).DataStringArray[CodeIndex];
+		return array[CheckedIndex(arguments[1], array.Length, Name, "array")] ?? "";
+	}
+
+	public override void SetValue(string value, ModernExpressionContext context, long[] arguments)
+	{
+		if (arguments == null || arguments.Length < 2)
+			throw new ArgumentException($"{Name} needs character and array indices.");
+		var array = GetChara(arguments).DataStringArray[CodeIndex];
+		array[CheckedIndex(arguments[1], array.Length, Name, "array")] = value ?? "";
+	}
+
+	public override object GetArray(ModernExpressionContext context)
+	{
+		return Array.Empty<string>();
+	}
+}
+
+internal sealed class ModernLegacyCharaInt2DVariableToken : ModernLegacyCharaVariableToken
+{
+	public ModernLegacyCharaInt2DVariableToken(string name, VariableCode code, ModernVariableData variableData)
+		: base(name, code, variableData)
+	{
+	}
+
+	public override long GetIntValue(ModernExpressionContext context, long[] arguments)
+	{
+		if (arguments == null || arguments.Length < 3)
+			throw new ArgumentException($"{Name} needs character and two array indices.");
+		var array = GetChara(arguments).DataIntegerArray2D[CodeIndex];
+		int index1 = CheckedIndex(arguments[1], array.GetLength(0), Name, "array1");
+		int index2 = CheckedIndex(arguments[2], array.GetLength(1), Name, "array2");
+		return array[index1, index2];
+	}
+
+	public override void SetValue(long value, ModernExpressionContext context, long[] arguments)
+	{
+		if (arguments == null || arguments.Length < 3)
+			throw new ArgumentException($"{Name} needs character and two array indices.");
+		var array = GetChara(arguments).DataIntegerArray2D[CodeIndex];
+		int index1 = CheckedIndex(arguments[1], array.GetLength(0), Name, "array1");
+		int index2 = CheckedIndex(arguments[2], array.GetLength(1), Name, "array2");
+		array[index1, index2] = value;
+	}
+
+	public override long PlusValue(long value, ModernExpressionContext context, long[] arguments)
+	{
+		if (arguments == null || arguments.Length < 3)
+			throw new ArgumentException($"{Name} needs character and two array indices.");
+		var array = GetChara(arguments).DataIntegerArray2D[CodeIndex];
+		int index1 = CheckedIndex(arguments[1], array.GetLength(0), Name, "array1");
+		int index2 = CheckedIndex(arguments[2], array.GetLength(1), Name, "array2");
+		array[index1, index2] = checked(array[index1, index2] + value);
+		return array[index1, index2];
 	}
 }
 

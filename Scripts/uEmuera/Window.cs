@@ -4,6 +4,7 @@ using uEmuera.Drawing;
 using MinorShift.Emuera.GameProc;
 using MinorShift.Emuera.GameView;
 using MinorShift._Library;
+using System.Threading;
 
 namespace uEmuera.Window
 {
@@ -51,12 +52,11 @@ namespace uEmuera.Window
             //throw new NotImplementedException();
         }
 
-        public void Refresh()
+        public int Refresh()
         {
             //uEmuera.Logger.Info("MainWindow.Refresh");
             dirty_ = true;
-            if(console_ != null)
-                console_.NeedSetTimer();
+            return Interlocked.Increment(ref refreshRequestGeneration);
         }
 
         public void Close()
@@ -98,6 +98,8 @@ namespace uEmuera.Window
             if(GenericUtils.HasPendingDisplayWork)
                 return;
 
+            WinmmTimer.FrameStart();
+
             if(console_.IsInitializing)
             {
                 ShowProcess();
@@ -127,6 +129,7 @@ namespace uEmuera.Window
             {
                 //清空
                 GenericUtils.ClearText();
+                Volatile.Write(ref processedRefreshGeneration, Volatile.Read(ref refreshRequestGeneration));
                 return;
             }
 
@@ -166,12 +169,19 @@ namespace uEmuera.Window
                 }
                 index = Math.Max(0, clindex + 1);
             }
-            while(index < console_count)
+            if(index < console_count)
             {
-                var line = displayLines[index];
-                if(line != null)
-                    GenericUtils.AddText(line, line.LineNo <= prev);
-                index += 1;
+                var linesToAdd = new System.Collections.Generic.List<(ConsoleDisplayLine Line, bool Update)>(console_count - index);
+                while(index < console_count)
+                {
+                    var line = displayLines[index];
+                    if(line != null)
+                        linesToAdd.Add((line, line.LineNo <= prev));
+                    index += 1;
+                }
+
+                if(linesToAdd.Count > 0)
+                    GenericUtils.AddTexts(linesToAdd);
             }
 
             GenericUtils.SetLastButtonGeneration(console_.LastButtonGeneration);
@@ -180,11 +190,32 @@ namespace uEmuera.Window
 
             GenericUtils.ShowIsInProcess(false);
             GenericUtils.RefreshCBG(console_);
+            console_.NeedSetTimer();
             last_process_tic = 0;
+            Volatile.Write(ref processedRefreshGeneration, Volatile.Read(ref refreshRequestGeneration));
         }
 
         private EmueraConsole console_ = null;
         private volatile bool dirty_ = false;
+        private int refreshRequestGeneration = 0;
+        private int processedRefreshGeneration = 0;
+
+        public int RefreshRequestGeneration
+        {
+            get { return Volatile.Read(ref refreshRequestGeneration); }
+        }
+
+        public void WaitForRefreshProcessed(int generation, int timeoutMs)
+        {
+            if (GenericUtils.IsOnMainThread())
+                return;
+            long deadline = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + Math.Max(0, timeoutMs);
+            while (Volatile.Read(ref processedRefreshGeneration) < generation
+                && DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() < deadline)
+            {
+                Thread.Sleep(1);
+            }
+        }
 
         public string InternalEmueraVer { get { return uEmueraVer; } }
         public string EmueraVerText { get { return uEmueraVer; } }
@@ -197,6 +228,22 @@ namespace uEmuera.Window
         public string Text { get; set; }
         public ToolTip ToolTip = new ToolTip();
         public TextBox TextBox = new TextBox();
+
+        public void SetTextBoxPos(int x, int y, int width)
+        {
+            TextBox.X = x;
+            TextBox.Y = y;
+            TextBox.Width = Math.Max(0, width);
+            TextBox.UseCustomPosition = true;
+        }
+
+        public void ResetTextBoxPos()
+        {
+            TextBox.X = 0;
+            TextBox.Y = 0;
+            TextBox.Width = 0;
+            TextBox.UseCustomPosition = false;
+        }
 
         void ShowProcess()
         {

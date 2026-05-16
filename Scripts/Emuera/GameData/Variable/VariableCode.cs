@@ -98,7 +98,8 @@ namespace MinorShift.Emuera.GameData.Variable
 		ARG = 0x3E | __INTEGER__ | __ARRAY_1D__ | __LOCAL__ | __EXTENDED__ | __CAN_FORBID__,//関数の引数用
 		GLOBAL = 0x3F | __INTEGER__ | __ARRAY_1D__ | __GLOBAL__ | __EXTENDED__ | __CAN_FORBID__,//グローバル数値型変数
 		RANDDATA = 0x40 | __INTEGER__ | __ARRAY_1D__ | __SAVE_EXTENDED__ | __EXTENDED__,//グローバル数値型変数
-		__COUNT_INTEGER_ARRAY__ = 0x41,
+		ARGF = 0x41 | __INTEGER__ | __ARRAY_1D__ | __LOCAL__ | __EXTENDED__ | __CAN_FORBID__,//Snake互換: 浮動小数引数を整数互換で扱う
+		__COUNT_INTEGER_ARRAY__ = 0x42,
 
 
 		SAVESTR = 0x00 | __STRING__ | __ARRAY_1D__ | __CAN_FORBID__,//文字列データ。保存される
@@ -287,4 +288,3 @@ namespace MinorShift.Emuera.GameData.Variable
 		//PRIVATES3D = 0xFF | __STRING__ | __ARRAY_3D__ | __EXTENDED__,//プライベート変数
 	}
 }
-

@@ -100,11 +100,30 @@ namespace MinorShift.Emuera.GameProc
 			console.ReadAnyKey();
 		}
 
+		public long flowinputDef = 0;
+		public bool flowinput = false;
+		public bool flowinputCanSkip = false;
+		public string flowinputDefString = "";
+		public bool flowinputString = false;
+		public bool flowinputForceSkip = false;
+
 		void setWaitInput()
 		{
 			InputRequest req = new InputRequest();
-			req.InputType = InputType.IntValue;
+			if (flowinput)
+			{
+				req.HasDefValue = true;
+				req.DefIntValue = flowinputDef;
+				req.DefStrValue = flowinputDefString;
+			}
+			req.InputType = flowinputString ? InputType.StrValue : InputType.IntValue;
 			req.IsSystemInput = true;
+			if (flowinputForceSkip || (flowinputCanSkip && GlobalStatic.Console.MesSkip))
+			{
+				systemResult = req.DefIntValue;
+				if (flowinputString)
+					exm.VEvaluator.RESULTS = req.DefStrValue;
+			}
 			console.WaitInput(req);
 		}
 

@@ -32,6 +32,8 @@ namespace MinorShift.Emuera
 		public static void Initialize(EmueraConsole console)
 		{
 			ParserMediator.console = console;
+			if (Program.IsSnakeProfile && !Program.AnalysisMode)
+				snakeLoggedWarnings.Clear();
 		}
 
 		#region Rename
@@ -133,6 +135,7 @@ namespace MinorShift.Emuera
         }
         
         private static List<ParserWarning> warningList = new List<ParserWarning>();
+        private static readonly HashSet<string> snakeLoggedWarnings = new HashSet<string>();
 
 		public static bool HasWarning{get {return warningList.Count > 0;}}
 		public static void ClearWarningList()
@@ -142,6 +145,29 @@ namespace MinorShift.Emuera
 
 		public static void FlushWarningList()
 		{
+			if (Program.IsSnakeProfile && !Program.AnalysisMode)
+			{
+				for (int i = 0; i < warningList.Count; i++)
+				{
+					ParserWarning warning = warningList[i];
+					string message = FormatWarning(warning);
+					if (snakeLoggedWarnings.Add(message))
+						Program.AppendSnakeStartupErrorLog(message);
+					if (warning.StackTrace != null)
+					{
+						string[] stacks = warning.StackTrace.Split('\n');
+						for (int j = 0; j < stacks.Length; j++)
+						{
+							string stackLine = stacks[j];
+							if (snakeLoggedWarnings.Add(stackLine))
+								Program.AppendSnakeStartupErrorLog(stackLine);
+						}
+					}
+				}
+				warningList.Clear();
+				return;
+			}
+
 			for (int i = 0; i < warningList.Count; i++)
 			{
 				ParserWarning warning = warningList[i];
@@ -154,8 +180,20 @@ namespace MinorShift.Emuera
 						console.PrintSystemLine(stacks[j]);
                     }
                 }
-            }
+			}
 			warningList.Clear();
+		}
+
+		private static string FormatWarning(ParserWarning warning)
+		{
+			ScriptPosition position = warning.WarningPos;
+			if (position != null)
+			{
+				if (position.LineNo >= 0)
+					return string.Format("警告Lv{0}:{1}:{2}行目:{3}", warning.WarningLevel, position.Filename, position.LineNo, warning.WarningMes);
+				return string.Format("警告Lv{0}:{1}:{2}", warning.WarningLevel, position.Filename, warning.WarningMes);
+			}
+			return string.Format("警告Lv{0}:{1}", warning.WarningLevel, warning.WarningMes);
 		}
 
 		private class ParserWarning

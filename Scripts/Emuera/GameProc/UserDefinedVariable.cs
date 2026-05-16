@@ -89,6 +89,27 @@ namespace MinorShift.Emuera.GameProc
 						ret.Reference = true;
 						ret.Static = false;
 						break;
+					case "OUT":
+						if (!Program.IsSnakeProfile)
+						{
+							ret.Name = keyword;
+							goto whilebreak;
+						}
+						if (staticDefined && ret.Static)
+							throw new CodeEE(keyword + "とSTATICキーワードは同時に指定できません", sc);
+						if (ret.CharaData)
+							throw new CodeEE(keyword + "とCHARADATAキーワードは同時に指定できません", sc);
+						if (ret.Global)
+							throw new CodeEE(keyword + "とGLOBALキーワードは同時に指定できません", sc);
+						if (ret.Save)
+							throw new CodeEE(keyword + "とSAVEDATAキーワードは同時に指定できません", sc);
+						if (ret.Const)
+							throw new CodeEE(keyword + "とCONSTキーワードは同時に指定できません", sc);
+						if (ret.Reference)
+							throw new CodeEE(keyword + "キーワードが二重に指定されています", sc);
+						ret.Reference = true;
+						ret.Static = false;
+						break;
 					case "DYNAMIC":
 						if (!isPrivate)
 							throw new CodeEE("広域変数の宣言に" + keyword + "キーワードは指定できません", sc);

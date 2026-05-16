@@ -31,6 +31,10 @@ namespace uEmuera
 
     public static class Utils
     {
+        static readonly object recursiveFileIndexLock = new object();
+        static readonly Dictionary<string, Dictionary<string, string>> recursiveFileIndexCache =
+            new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+
         public static void SetSHIFTJIS_to_UTF8Dict(Dictionary<string, string> dict)
         {
             shiftjis_to_utf8 = dict;
@@ -144,10 +148,54 @@ namespace uEmuera
             if (string.IsNullOrEmpty(rootDir) || string.IsNullOrEmpty(targetFileName))
                 return null;
             rootDir = NormalizePath(rootDir);
-            var matches = GetFilePaths(rootDir, targetFileName, SearchOption.AllDirectories);
-            if (matches.Count > 0)
-                return matches[0];
+            targetFileName = NormalizePath(targetFileName);
+            string baseName = Path.GetFileName(targetFileName);
+            string noExtName = Path.GetFileNameWithoutExtension(baseName);
+            var index = GetOrBuildRecursiveFileIndex(rootDir);
+            if (index.TryGetValue(targetFileName, out var found))
+                return found;
+            if (!string.IsNullOrEmpty(baseName) && index.TryGetValue(baseName, out found))
+                return found;
+            if (!string.IsNullOrEmpty(noExtName) && index.TryGetValue(noExtName, out found))
+                return found;
             return null;
+        }
+
+        static Dictionary<string, string> GetOrBuildRecursiveFileIndex(string rootDir)
+        {
+            lock (recursiveFileIndexLock)
+            {
+                if (recursiveFileIndexCache.TryGetValue(rootDir, out var index))
+                    return index;
+
+                index = BuildRecursiveFileIndex(rootDir);
+                recursiveFileIndexCache[rootDir] = index;
+                return index;
+            }
+        }
+
+        static Dictionary<string, string> BuildRecursiveFileIndex(string rootDir)
+        {
+            var index = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string path in GetFilePaths(rootDir, "*", SearchOption.AllDirectories))
+            {
+                string normalizedPath = NormalizePath(path);
+                string fileName = Path.GetFileName(normalizedPath);
+                if (string.IsNullOrEmpty(fileName))
+                    continue;
+                AddRecursiveIndexEntry(index, fileName, normalizedPath);
+                AddRecursiveIndexEntry(index, normalizedPath, normalizedPath);
+            }
+            return index;
+        }
+
+        static void AddRecursiveIndexEntry(Dictionary<string, string> index, string key, string path)
+        {
+            if (!index.ContainsKey(key))
+                index[key] = path;
+            string noExt = Path.GetFileNameWithoutExtension(key);
+            if (!string.IsNullOrEmpty(noExt) && !index.ContainsKey(noExt))
+                index[noExt] = path;
         }
 
         public static void CreateDirectory(string path)
@@ -344,6 +392,8 @@ namespace uEmuera
             }
             if (string.IsNullOrEmpty(current))
                 return path;
+            if (!absolute && Godot.OS.GetName() == "Android")
+                return path;
 
             for (int i = startIdx; i < parts.Length; i++)
             {
@@ -446,6 +496,7 @@ namespace uEmuera
             '⟮', '⠮','⡮','⢮', '⣮', '║',
             '▤','▥','▦', '▧', '▨', '▩',
             '▪', '▫','~', '´', 'ﾄ', '｡', '･',
+            '─', '━', '┄', '┅', '┈', '┉',
         };
         public static bool CheckHalfSize(char c)
         {

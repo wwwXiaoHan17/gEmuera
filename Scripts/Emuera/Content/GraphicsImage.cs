@@ -20,6 +20,14 @@ namespace MinorShift.Emuera.Content
 		public readonly int ID;
 		public Godot.Image godotImage;
 		uEmuera.Drawing.Color brushColor = uEmuera.Drawing.Color.Transparent;
+		uEmuera.Drawing.Color penColor = Config.ForeColor;
+		long penWidth = 1;
+		DashStyle dashStyle = DashStyle.Solid;
+		DashCap dashCap = DashCap.Flat;
+		string fontName = Config.FontName;
+		int fontSize = Config.FontSize;
+		FontStyle fontStyle = FontStyle.Regular;
+		List<Point> polygonPoints = new List<Point>();
 		BitmapRenderTexture renderBitmap;
 
         #region Bitmap書き込み・作成
@@ -427,6 +435,10 @@ namespace MinorShift.Emuera.Content
 
         public void GSetFont(uEmuera.Drawing.Font r)
         {
+            if (r == null) return;
+            fontName = r.FontFamily?.Name ?? Config.FontName;
+            fontSize = Math.Max(1, (int)r.Size);
+            fontStyle = r.Style;
         }
         public void GSetBrush(Brush r)
         {
@@ -435,6 +447,208 @@ namespace MinorShift.Emuera.Content
         }
         public void GSetPen(Pen r)
         {
+            if (r == null) return;
+            penColor = r.Color;
+            penWidth = Math.Max(1, r.Width);
+            r.DashStyle = dashStyle;
+            r.DashCap = dashCap;
+        }
+
+        public void GDashStyle(long style, long cap)
+        {
+            dashStyle = Enum.IsDefined(typeof(DashStyle), (int)style) ? (DashStyle)(int)style : DashStyle.Solid;
+            dashCap = Enum.IsDefined(typeof(DashCap), (int)cap) ? (DashCap)(int)cap : DashCap.Flat;
+        }
+
+        public void GDrawLine(int fromX, int fromY, int destX, int destY)
+        {
+            if (godotImage == null) return;
+            int dx = Math.Abs(destX - fromX);
+            int dy = Math.Abs(destY - fromY);
+            int sx = fromX < destX ? 1 : -1;
+            int sy = fromY < destY ? 1 : -1;
+            int err = dx - dy;
+            int step = 0;
+            int x = fromX;
+            int y = fromY;
+            while (true)
+            {
+                if (DashOn(step))
+                    DrawPenPoint(x, y);
+                if (x == destX && y == destY)
+                    break;
+                int e2 = err * 2;
+                if (e2 > -dy)
+                {
+                    err -= dy;
+                    x += sx;
+                }
+                if (e2 < dx)
+                {
+                    err += dx;
+                    y += sy;
+                }
+                step++;
+            }
+        }
+
+        public void GDrawPolygonAddPoint(Point point)
+        {
+            polygonPoints.Add(point);
+        }
+
+        public void GDrawPolygonClearPoint()
+        {
+            polygonPoints.Clear();
+        }
+
+        public void GDrawPolygon()
+        {
+            if (polygonPoints.Count < 2)
+                return;
+            for (int i = 0; i < polygonPoints.Count; i++)
+            {
+                Point a = polygonPoints[i];
+                Point b = polygonPoints[(i + 1) % polygonPoints.Count];
+                GDrawLine(a.X, a.Y, b.X, b.Y);
+            }
+        }
+
+        public void GFillPolygon()
+        {
+            if (godotImage == null || polygonPoints.Count < 3)
+                return;
+            int minY = Math.Max(0, polygonPoints.Min(p => p.Y));
+            int maxY = Math.Min(height - 1, polygonPoints.Max(p => p.Y));
+            var fill = new Godot.Color(brushColor.r, brushColor.g, brushColor.b, brushColor.a);
+            for (int y = minY; y <= maxY; y++)
+            {
+                var nodes = new List<int>();
+                int j = polygonPoints.Count - 1;
+                for (int i = 0; i < polygonPoints.Count; i++)
+                {
+                    Point pi = polygonPoints[i];
+                    Point pj = polygonPoints[j];
+                    if ((pi.Y < y && pj.Y >= y) || (pj.Y < y && pi.Y >= y))
+                    {
+                        int x = pi.X + (y - pi.Y) * (pj.X - pi.X) / (pj.Y - pi.Y);
+                        nodes.Add(x);
+                    }
+                    j = i;
+                }
+                nodes.Sort();
+                for (int i = 0; i + 1 < nodes.Count; i += 2)
+                {
+                    int x1 = Math.Max(0, nodes[i]);
+                    int x2 = Math.Min(width - 1, nodes[i + 1]);
+                    for (int x = x1; x <= x2; x++)
+                        godotImage.SetPixel(x, y, fill);
+                }
+            }
+        }
+
+        public void GDrawGWithRotate(GraphicsImage srcGra, long angleDegrees, int pivotX, int pivotY)
+        {
+            if (godotImage == null || srcGra?.godotImage == null)
+                return;
+            double radians = angleDegrees * Math.PI / 180.0;
+            double cos = Math.Cos(radians);
+            double sin = Math.Sin(radians);
+            for (int sy = 0; sy < srcGra.Height; sy++)
+            {
+                for (int sx = 0; sx < srcGra.Width; sx++)
+                {
+                    var c = srcGra.godotImage.GetPixel(sx, sy);
+                    if (c.A <= 0f)
+                        continue;
+                    double dx = sx - pivotX;
+                    double dy = sy - pivotY;
+                    int tx = pivotX + (int)Math.Round(dx * cos - dy * sin);
+                    int ty = pivotY + (int)Math.Round(dx * sin + dy * cos);
+                    if (tx >= 0 && tx < width && ty >= 0 && ty < height)
+                        godotImage.SetPixel(tx, ty, c);
+                }
+            }
+        }
+
+        public void GRotate(long angleDegrees, int pivotX, int pivotY)
+        {
+            if (godotImage == null)
+                return;
+            var src = godotImage.Duplicate() as Godot.Image;
+            godotImage.Fill(new Godot.Color(0, 0, 0, 0));
+            double radians = angleDegrees * Math.PI / 180.0;
+            double cos = Math.Cos(radians);
+            double sin = Math.Sin(radians);
+            for (int sy = 0; sy < height; sy++)
+            {
+                for (int sx = 0; sx < width; sx++)
+                {
+                    var c = src.GetPixel(sx, sy);
+                    if (c.A <= 0f)
+                        continue;
+                    double dx = sx - pivotX;
+                    double dy = sy - pivotY;
+                    int tx = pivotX + (int)Math.Round(dx * cos - dy * sin);
+                    int ty = pivotY + (int)Math.Round(dx * sin + dy * cos);
+                    if (tx >= 0 && tx < width && ty >= 0 && ty < height)
+                        godotImage.SetPixel(tx, ty, c);
+                }
+            }
+            src.Dispose();
+        }
+
+        bool DashOn(int step)
+        {
+            int unit = Math.Max(1, (int)penWidth);
+            return dashStyle switch
+            {
+                DashStyle.Dash => step % (unit * 4) < unit * 3,
+                DashStyle.Dot => step % (unit * 2) < unit,
+                DashStyle.DashDot => step % (unit * 6) < unit * 3 || step % (unit * 6) >= unit * 4 && step % (unit * 6) < unit * 5,
+                DashStyle.DashDotDot => step % (unit * 8) < unit * 3 || step % (unit * 8) >= unit * 4 && step % (unit * 8) < unit * 5 || step % (unit * 8) >= unit * 6 && step % (unit * 8) < unit * 7,
+                _ => true,
+            };
+        }
+
+        void DrawPenPoint(int x, int y)
+        {
+            int radius = Math.Max(0, (int)penWidth / 2);
+            var c = new Godot.Color(penColor.r, penColor.g, penColor.b, penColor.a);
+            for (int yy = y - radius; yy <= y + radius; yy++)
+            {
+                if (yy < 0 || yy >= height) continue;
+                for (int xx = x - radius; xx <= x + radius; xx++)
+                {
+                    if (xx < 0 || xx >= width) continue;
+                    if (dashCap == DashCap.Round && radius > 0)
+                    {
+                        int rx = xx - x;
+                        int ry = yy - y;
+                        if (rx * rx + ry * ry > radius * radius)
+                            continue;
+                    }
+                    godotImage.SetPixel(xx, yy, c);
+                }
+            }
+        }
+
+        public bool GDrawString(string text, int x, int y)
+        {
+            if (godotImage == null)
+                return false;
+            text ??= "";
+            int renderWidth;
+            using (var font = new Font(Fontname, Math.Max(1, Fontsize), fontStyle, GraphicsUnit.Pixel))
+                renderWidth = Math.Max(1, (int)uEmuera.Utils.GetDisplayLength(text, font));
+            int renderHeight = Math.Max(1, Fontsize + 6);
+            var item = EmueraMain.SubmitTextRender(text, Fontname, Fontsize, Fontstyle, brushColor, renderWidth, renderHeight);
+            if (item == null || !item.Completed.Wait(500) || item.ResultImage == null)
+                return false;
+            BlendRect(godotImage, item.ResultImage,
+                new Godot.Rect2I(0, 0, item.ResultImage.GetWidth(), item.ResultImage.GetHeight()),
+                new Godot.Vector2I(x, y));
+            return true;
         }
 
         /// <summary>
@@ -497,5 +711,21 @@ namespace MinorShift.Emuera.Content
         int width = 0;
 		public int Height { get { return height; } }
         int height = 0;
+        public string Fontname { get { return fontName ?? Config.FontName; } }
+        public int Fontsize { get { return fontSize; } }
+        public int Fontstyle { get { return FontStyleToInt(fontStyle); } }
+        public long PenWidth { get { return penWidth; } }
+        public uEmuera.Drawing.Color PenColor { get { return penColor; } }
+        public uEmuera.Drawing.Color BrushColor { get { return brushColor; } }
+
+        static int FontStyleToInt(FontStyle style)
+        {
+            int value = 0;
+            if ((style & FontStyle.Bold) != 0) value |= 1;
+            if ((style & FontStyle.Italic) != 0) value |= 2;
+            if ((style & FontStyle.Strikeout) != 0) value |= 4;
+            if ((style & FontStyle.Underline) != 0) value |= 8;
+            return value;
+        }
 	}
 }

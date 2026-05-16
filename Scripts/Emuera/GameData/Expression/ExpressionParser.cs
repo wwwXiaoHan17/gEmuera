@@ -189,9 +189,9 @@ namespace MinorShift.Emuera.GameData.Expression
 			return ret;
 		}
 
-		public static IOperandTerm ReduceVariableArgument(WordCollection wc, VariableCode varCode)
+		public static IOperandTerm ReduceVariableArgument(WordCollection wc, VariableCode varCode, VariableToken varId = null)
 		{
-			IOperandTerm ret = reduceTerm(wc, false, TermEndWith.EoL, varCode);
+			IOperandTerm ret = reduceTerm(wc, false, TermEndWith.EoL, varCode, varId);
 			if(ret == null)
                 throw new CodeEE("変数の:の後に引数がありません");
 			return ret;
@@ -220,7 +220,7 @@ namespace MinorShift.Emuera.GameData.Expression
 		/// <param name="idStr">識別子文字列</param>
 		/// <param name="varCode">変数の引数の場合はその変数のCode。連想配列的につかう</param>
 		/// <returns></returns>
-		private static IOperandTerm reduceIdentifier(WordCollection wc, string idStr, VariableCode varCode)
+		private static IOperandTerm reduceIdentifier(WordCollection wc, string idStr, VariableCode varCode, VariableToken varId = null)
 		{
 			wc.ShiftNext();
 			SymbolWord symbol = wc.Current as SymbolWord;
@@ -268,9 +268,33 @@ namespace MinorShift.Emuera.GameData.Expression
 					return refToken;
 				if (varCode != VariableCode.__NULL__ && GlobalStatic.ConstantData.isDefined(varCode, idStr))//連想配列的な可能性アリ
 					return new SingleTerm(idStr);
+				if (varCode != VariableCode.__NULL__ && varId != null && Program.IsSnakeProfile && GlobalStatic.ConstantData.isUserDefined(varId.Name, idStr, varId.Dimension))
+					return new SingleTerm(idStr);
+				if (varCode != VariableCode.__NULL__ && varId != null && Program.IsSnakeProfile && isSnakeUserDefinedVariableCode(varId.Code))
+					return new SingleTerm(idStr);
 				GlobalStatic.IdentifierDictionary.ThrowException(idStr, false);
 			}
 			throw new ExeEE("エラー投げ損ねた");//ここまででthrowかreturnのどちらかをするはず。
+		}
+
+		private static bool isSnakeUserDefinedVariableCode(VariableCode code)
+		{
+			switch (code)
+			{
+				case VariableCode.VAR:
+				case VariableCode.VARS:
+				case VariableCode.VAR2D:
+				case VariableCode.VARS2D:
+				case VariableCode.VAR3D:
+				case VariableCode.VARS3D:
+				case VariableCode.CVAR:
+				case VariableCode.CVARS:
+				case VariableCode.CVAR2D:
+				case VariableCode.CVARS2D:
+					return true;
+				default:
+					return false;
+			}
 		}
 
 		#endregion
@@ -329,7 +353,7 @@ namespace MinorShift.Emuera.GameData.Expression
 		/// <param name="allowKeywordTo">TOキーワードが見つかっても良いか</param>
 		/// <param name="endWith">終端記号</param>
 		/// <returns></returns>
-        private static IOperandTerm reduceTerm(WordCollection wc, bool allowKeywordTo, TermEndWith endWith, VariableCode varCode)
+		private static IOperandTerm reduceTerm(WordCollection wc, bool allowKeywordTo, TermEndWith endWith, VariableCode varCode, VariableToken varId = null)
         {
             TermStack stack = new TermStack();
             //int termCount = 0;
@@ -364,7 +388,7 @@ namespace MinorShift.Emuera.GameData.Expression
 							}
 							else if (idStr.Equals("IS", Config.SCVariable))
 								throw new CodeEE("ISキーワードはここでは使用できません");
-							stack.Add(reduceIdentifier(wc, idStr, varCode));
+							stack.Add(reduceIdentifier(wc, idStr, varCode, varId));
 							continue;
 						}
 

@@ -14,26 +14,36 @@ internal static class GenericUtils
     static int mainThreadId = -1;
     static int pendingUiActions = 0;
     static int pendingDisplayActions = 0;
-    const ulong AndroidUiBudgetUsec = 4000;
+    static int uiFrameGeneration = 0;
+    const ulong AndroidUiBudgetUsec = 9000;
     const ulong DesktopUiBudgetUsec = 7000;
-    const int AndroidMaxUiActionsPerFrame = 32;
+    const int AndroidMaxUiActionsPerFrame = 128;
     const int DesktopMaxUiActionsPerFrame = 96;
     const int SnakeSoundChannelCount = 10;
     static readonly object snakeAudioLock = new object();
     static readonly SnakeAudioState[] snakeSounds = CreateSnakeAudioStates();
     static readonly SnakeAudioState snakeBgm = new SnakeAudioState();
+    static readonly object inputStateLock = new object();
+    static uEmuera.Drawing.Point pointerPosition = uEmuera.Drawing.Point.Empty;
+    static string pointingButtonInput = "";
+    static long pointingButtonGeneration = long.MinValue;
+    static bool pointingButtonActive = false;
 
     public static bool HasPendingUIWork => Volatile.Read(ref pendingUiActions) > 0;
     public static bool HasPendingDisplayWork => Volatile.Read(ref pendingDisplayActions) > 0;
+    public static int UiFrameGeneration => Volatile.Read(ref uiFrameGeneration);
 
     sealed class SnakeAudioState
     {
         public string Path;
         public bool Playing;
+        public bool PendingStart;
         public bool Paused;
         public int Volume = 100;
         public int Speed = 100;
         public long StartedAtMs;
+        public long TotalMs;
+        public long LastKnownCurrentMs;
     }
 
     public struct SnakeAudioInfo
@@ -61,6 +71,53 @@ internal static class GenericUtils
     static bool IsMainThread()
     {
         return mainThreadId < 0 || System.Environment.CurrentManagedThreadId == mainThreadId;
+    }
+
+    public static bool IsOnMainThread()
+    {
+        return IsMainThread();
+    }
+
+    public static void SetPointerPosition(float x, float y)
+    {
+        var point = new uEmuera.Drawing.Point((int)MathF.Round(x), (int)MathF.Round(y));
+        lock (inputStateLock)
+            pointerPosition = point;
+        uEmuera.Forms.Control.MousePosition = point;
+    }
+
+    public static uEmuera.Drawing.Point GetPointerPosition()
+    {
+        lock (inputStateLock)
+            return pointerPosition;
+    }
+
+    public static void SetPointingButton(string input, long generation)
+    {
+        lock (inputStateLock)
+        {
+            pointingButtonInput = input ?? "";
+            pointingButtonGeneration = generation;
+            pointingButtonActive = true;
+        }
+    }
+
+    public static void ClearPointingButton(long generation = long.MinValue)
+    {
+        lock (inputStateLock)
+        {
+            if (generation != long.MinValue && pointingButtonGeneration != generation)
+                return;
+            pointingButtonInput = "";
+            pointingButtonGeneration = long.MinValue;
+            pointingButtonActive = false;
+        }
+    }
+
+    public static string GetPointingButtonInput()
+    {
+        lock (inputStateLock)
+            return pointingButtonActive ? pointingButtonInput ?? "" : "";
     }
 
     public static void FlushLogs()
@@ -94,6 +151,25 @@ internal static class GenericUtils
             if (Time.GetTicksUsec() - startUsec >= budgetUsec)
                 break;
         }
+        Interlocked.Increment(ref uiFrameGeneration);
+    }
+
+    public static void WaitForUiFrameAfter(int generation, int timeoutMs)
+    {
+        if (IsMainThread())
+            return;
+        long deadline = GetTickMs() + Math.Max(0, timeoutMs);
+        while (Volatile.Read(ref uiFrameGeneration) <= generation && GetTickMs() < deadline)
+            Thread.Sleep(1);
+    }
+
+    public static void WaitForDisplayWorkDrained(int timeoutMs)
+    {
+        if (IsMainThread())
+            return;
+        long deadline = GetTickMs() + Math.Max(0, timeoutMs);
+        while (Volatile.Read(ref pendingDisplayActions) > 0 && GetTickMs() < deadline)
+            Thread.Sleep(1);
     }
 
     static void EnqueueUI(Action action, bool displayWork = false)
@@ -248,6 +324,11 @@ internal static class GenericUtils
         EnqueueUI(() => EmueraContent.instance?.AddLine(line, update), true);
     }
 
+    public static void AddTexts(IReadOnlyList<(ConsoleDisplayLine Line, bool Update)> lines)
+    {
+        EnqueueUI(() => EmueraContent.instance?.AddLines(lines), true);
+    }
+
     public static void SetLastButtonGeneration(int generation)
     {
         EnqueueUI(() => EmueraContent.instance?.SetLastButtonGeneration(generation), true);
@@ -273,9 +354,9 @@ internal static class GenericUtils
 
     public static void PlaySoundFile(string path, bool loop)
     {
+        int channel = 0;
         lock (snakeAudioLock)
         {
-            int channel = 0;
             for (int i = 0; i < snakeSounds.Length; i++)
             {
                 if (!snakeSounds[i].Playing)
@@ -287,10 +368,13 @@ internal static class GenericUtils
             var state = snakeSounds[channel];
             state.Path = path;
             state.Playing = true;
+            state.PendingStart = true;
             state.Paused = false;
-            state.StartedAtMs = GetTickMs();
+            state.StartedAtMs = 0;
+            state.TotalMs = 0;
+            state.LastKnownCurrentMs = 0;
         }
-        EnqueueUI(() => EmueraContent.instance?.PlaySoundFile(path, loop));
+        EnqueueUI(() => EmueraContent.instance?.PlaySoundFile(path, loop, channel));
     }
 
     public static void StopSounds()
@@ -300,7 +384,9 @@ internal static class GenericUtils
             foreach (var state in snakeSounds)
             {
                 state.Playing = false;
+                state.PendingStart = false;
                 state.Paused = false;
+                state.LastKnownCurrentMs = 0;
             }
         }
         EnqueueUI(() => EmueraContent.instance?.StopSounds());
@@ -312,8 +398,11 @@ internal static class GenericUtils
         {
             snakeBgm.Path = path;
             snakeBgm.Playing = true;
+            snakeBgm.PendingStart = true;
             snakeBgm.Paused = false;
-            snakeBgm.StartedAtMs = GetTickMs();
+            snakeBgm.StartedAtMs = 0;
+            snakeBgm.TotalMs = 0;
+            snakeBgm.LastKnownCurrentMs = 0;
         }
         EnqueueUI(() => EmueraContent.instance?.PlayBgmFile(path));
     }
@@ -323,7 +412,9 @@ internal static class GenericUtils
         lock (snakeAudioLock)
         {
             snakeBgm.Playing = false;
+            snakeBgm.PendingStart = false;
             snakeBgm.Paused = false;
+            snakeBgm.LastKnownCurrentMs = 0;
         }
         EnqueueUI(() => EmueraContent.instance?.StopBgm());
     }
@@ -383,21 +474,27 @@ internal static class GenericUtils
             {
                 case 0:
                     state.Paused = true;
+                    state.LastKnownCurrentMs = GetCurrentAudioMs(state);
                     EnqueueUI(() => EmueraContent.instance?.PauseSoundChannel(channel, true));
                     return 1;
                 case 1:
                     state.Paused = false;
                     if (!string.IsNullOrEmpty(state.Path))
                         state.Playing = true;
+                    state.StartedAtMs = GetTickMs() - ScaleFromPlaybackMs(state.LastKnownCurrentMs, state.Speed);
                     EnqueueUI(() => EmueraContent.instance?.PauseSoundChannel(channel, false));
                     return 1;
                 case 2:
                     state.Playing = false;
+                    state.PendingStart = false;
                     state.Paused = false;
+                    state.LastKnownCurrentMs = 0;
                     EnqueueUI(() => EmueraContent.instance?.StopSoundChannel(channel));
                     return 1;
                 case 3:
+                    state.LastKnownCurrentMs = GetCurrentAudioMs(state);
                     state.Speed = Math.Max(1, speed);
+                    state.StartedAtMs = GetTickMs() - ScaleFromPlaybackMs(state.LastKnownCurrentMs, state.Speed);
                     EnqueueUI(() => EmueraContent.instance?.SetSoundChannelSpeed(channel, state.Speed / 100.0f));
                     return 1;
                 default:
@@ -413,6 +510,7 @@ internal static class GenericUtils
             switch (action)
             {
                 case 0:
+                    snakeBgm.LastKnownCurrentMs = GetCurrentAudioMs(snakeBgm);
                     snakeBgm.Paused = true;
                     EnqueueUI(() => EmueraContent.instance?.PauseBgm(true));
                     return 1;
@@ -420,15 +518,20 @@ internal static class GenericUtils
                     snakeBgm.Paused = false;
                     if (!string.IsNullOrEmpty(snakeBgm.Path))
                         snakeBgm.Playing = true;
+                    snakeBgm.StartedAtMs = GetTickMs() - ScaleFromPlaybackMs(snakeBgm.LastKnownCurrentMs, snakeBgm.Speed);
                     EnqueueUI(() => EmueraContent.instance?.PauseBgm(false));
                     return 1;
                 case 2:
                     snakeBgm.Playing = false;
+                    snakeBgm.PendingStart = false;
                     snakeBgm.Paused = false;
+                    snakeBgm.LastKnownCurrentMs = 0;
                     EnqueueUI(() => EmueraContent.instance?.StopBgm());
                     return 1;
                 case 3:
+                    snakeBgm.LastKnownCurrentMs = GetCurrentAudioMs(snakeBgm);
                     snakeBgm.Speed = Math.Max(1, speed);
+                    snakeBgm.StartedAtMs = GetTickMs() - ScaleFromPlaybackMs(snakeBgm.LastKnownCurrentMs, snakeBgm.Speed);
                     EnqueueUI(() => EmueraContent.instance?.SetBgmSpeed(snakeBgm.Speed / 100.0f));
                     return 1;
                 default:
@@ -446,13 +549,121 @@ internal static class GenericUtils
                 return default;
             return new SnakeAudioInfo
             {
-                TotalMs = 0,
-                CurrentMs = state.Playing && !state.Paused ? Math.Max(0, GetTickMs() - state.StartedAtMs) : 0,
+                TotalMs = state.TotalMs,
+                CurrentMs = GetCurrentAudioMs(state),
                 Playing = state.Playing && !state.Paused ? 1 : 0,
                 Volume = state.Volume,
                 Speed = state.Speed
             };
         }
+    }
+
+    public static void NotifySoundPlaybackStarted(int channel, string path, long totalMs)
+    {
+        if (channel < 0 || channel >= SnakeSoundChannelCount)
+            return;
+        lock (snakeAudioLock)
+        {
+            var state = snakeSounds[channel];
+            if (!string.Equals(state.Path, path, StringComparison.OrdinalIgnoreCase))
+                return;
+            state.PendingStart = false;
+            state.Playing = true;
+            state.Paused = false;
+            state.StartedAtMs = GetTickMs();
+            state.TotalMs = Math.Max(0, totalMs);
+            state.LastKnownCurrentMs = 0;
+        }
+    }
+
+    public static void NotifySoundPlaybackFailed(int channel, string path)
+    {
+        if (channel < 0 || channel >= SnakeSoundChannelCount)
+            return;
+        lock (snakeAudioLock)
+        {
+            var state = snakeSounds[channel];
+            if (!string.Equals(state.Path, path, StringComparison.OrdinalIgnoreCase))
+                return;
+            state.Playing = false;
+            state.PendingStart = false;
+            state.Paused = false;
+            state.LastKnownCurrentMs = 0;
+        }
+    }
+
+    public static void NotifySoundPlaybackPosition(int channel, double currentSec, double totalSec, bool playing)
+    {
+        if (channel < 0 || channel >= SnakeSoundChannelCount)
+            return;
+        lock (snakeAudioLock)
+        {
+            var state = snakeSounds[channel];
+            state.LastKnownCurrentMs = Math.Max(0, (long)(currentSec * 1000.0));
+            if (totalSec > 0)
+                state.TotalMs = (long)(totalSec * 1000.0);
+            if (!state.PendingStart)
+                state.Playing = playing;
+            if (playing)
+                state.StartedAtMs = GetTickMs() - ScaleFromPlaybackMs(state.LastKnownCurrentMs, state.Speed);
+        }
+    }
+
+    public static void NotifyBgmPlaybackStarted(string path, long totalMs)
+    {
+        lock (snakeAudioLock)
+        {
+            if (!string.Equals(snakeBgm.Path, path, StringComparison.OrdinalIgnoreCase))
+                return;
+            snakeBgm.PendingStart = false;
+            snakeBgm.Playing = true;
+            snakeBgm.Paused = false;
+            snakeBgm.StartedAtMs = GetTickMs();
+            snakeBgm.TotalMs = Math.Max(0, totalMs);
+            snakeBgm.LastKnownCurrentMs = 0;
+        }
+    }
+
+    public static void NotifyBgmPlaybackFailed(string path)
+    {
+        lock (snakeAudioLock)
+        {
+            if (!string.Equals(snakeBgm.Path, path, StringComparison.OrdinalIgnoreCase))
+                return;
+            snakeBgm.Playing = false;
+            snakeBgm.PendingStart = false;
+            snakeBgm.Paused = false;
+            snakeBgm.LastKnownCurrentMs = 0;
+        }
+    }
+
+    public static void NotifyBgmPlaybackPosition(double currentSec, double totalSec, bool playing)
+    {
+        lock (snakeAudioLock)
+        {
+            snakeBgm.LastKnownCurrentMs = Math.Max(0, (long)(currentSec * 1000.0));
+            if (totalSec > 0)
+                snakeBgm.TotalMs = (long)(totalSec * 1000.0);
+            if (!snakeBgm.PendingStart)
+                snakeBgm.Playing = playing;
+            if (playing)
+                snakeBgm.StartedAtMs = GetTickMs() - ScaleFromPlaybackMs(snakeBgm.LastKnownCurrentMs, snakeBgm.Speed);
+        }
+    }
+
+    static long GetCurrentAudioMs(SnakeAudioState state)
+    {
+        if (state == null || !state.Playing)
+            return 0;
+        if (state.PendingStart || state.StartedAtMs <= 0 || state.Paused)
+            return Math.Max(0, state.LastKnownCurrentMs);
+        long elapsedMs = Math.Max(0, GetTickMs() - state.StartedAtMs);
+        return elapsedMs * Math.Max(1, state.Speed) / 100;
+    }
+
+    static long ScaleFromPlaybackMs(long playbackMs, int speed)
+    {
+        return playbackMs * 100 / Math.Max(1, speed);
     }
 
     public static string ResolveSoundPath(string name)

@@ -465,6 +465,11 @@ namespace MinorShift.Emuera
 			return null;
 		}
 
+		public IEnumerable<string> MacroNames
+		{
+			get { return macroDic.Keys; }
+		}
+
 		public VariableToken GetVariableToken(string key, string subKey, bool allowPrivate)
 		{
 			VariableToken ret = null;

@@ -9,9 +9,11 @@ internal sealed class ExecutionContext
 		int localFloatLength,
 		int argIntegerLength,
 		int argStringLength,
-		int argFloatLength)
+		int argFloatLength,
+		string currentFunctionName = null)
 	{
 		Parent = parent;
+		CurrentFunctionName = currentFunctionName ?? "";
 		LocalIntegers = new long[NormalizeLength(localIntegerLength)];
 		LocalStrings = new string[NormalizeLength(localStringLength)];
 		LocalFloats = new double[NormalizeLength(localFloatLength)];
@@ -21,6 +23,7 @@ internal sealed class ExecutionContext
 	}
 
 	public ExecutionContext Parent { get; }
+	public string CurrentFunctionName { get; }
 	public long[] LocalIntegers { get; }
 	public string[] LocalStrings { get; }
 	public double[] LocalFloats { get; }

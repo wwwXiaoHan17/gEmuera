@@ -28,9 +28,13 @@ public partial class EmueraContent : Control
     Dictionary<int, ConsoleDisplayLine> lineObjects = new Dictionary<int, ConsoleDisplayLine>();
     HashSet<string> failedTextureSearches = new HashSet<string>();
     List<EmueraImage> cbgNodes = new List<EmueraImage>();
+    bool batchingDisplayLines = false;
 
-    const int MaxVisibleLines = 1000;
-    const int LineTrimBatch = 100;
+    public const int DefaultMaxVisibleLines = 360;
+    public const int MinMaxVisibleLines = 120;
+    public const int MaxMaxVisibleLines = 3000;
+    static int MaxVisibleLines => ConfiguredMaxVisibleLines;
+    static int LineTrimBatch => System.Math.Max(40, System.Math.Min(200, MaxVisibleLines / 6));
 
     FontFile mainFont;
     int lastButtonGeneration = -1;
@@ -74,8 +78,10 @@ public partial class EmueraContent : Control
     const string SettingsSection = "Display";
     const string ContentDragSensitivityKey = "ContentDragSensitivity";
     const string ButtonDragSensitivityKey = "ButtonDragSensitivity";
+    const string MaxVisibleLinesKey = "MaxVisibleLines";
     const ulong QuickInputGateFallbackMs = 500;
     static float contentDragSensitivity = -1.0f;
+    static int configuredMaxVisibleLines = -1;
 
     Label inProcessLabel;
 
@@ -101,6 +107,35 @@ public partial class EmueraContent : Control
     static readonly Color NormalSystemButtonColor = new Color(1, 1, 1, 1);
 
     public static int ContentWidth { get; private set; }
+    public static int ConfiguredMaxVisibleLines
+    {
+        get
+        {
+            if (configuredMaxVisibleLines < 0)
+            {
+                var cfg = new ConfigFile();
+                cfg.Load(SettingsPath);
+                configuredMaxVisibleLines = ClampMaxVisibleLines(
+                    (int)cfg.GetValue(SettingsSection, MaxVisibleLinesKey, DefaultMaxVisibleLines));
+            }
+            return configuredMaxVisibleLines;
+        }
+        set
+        {
+            configuredMaxVisibleLines = ClampMaxVisibleLines(value);
+            var cfg = new ConfigFile();
+            cfg.Load(SettingsPath);
+            cfg.SetValue(SettingsSection, MaxVisibleLinesKey, configuredMaxVisibleLines);
+            cfg.Save(SettingsPath);
+            instance?.TrimVisibleLinesToLimit();
+        }
+    }
+
+    static int ClampMaxVisibleLines(int value)
+    {
+        return System.Math.Max(MinMaxVisibleLines, System.Math.Min(MaxMaxVisibleLines, value));
+    }
+
     public static float ContentDragSensitivity
     {
         get
@@ -138,6 +173,8 @@ public partial class EmueraContent : Control
         instance = this;
         Size = GetViewportRect().Size;
         ContentWidth = (int)Size.X;
+        if (ContentWidth > Config.WindowX)
+            Config.UpdateWindowWidth(ContentWidth);
         GetViewport().SizeChanged += OnViewportSizeChanged;
 
         mainFont = ResourceLoader.Load<FontFile>("res://Fonts/MS Gothic.ttf");
@@ -333,6 +370,7 @@ public partial class EmueraContent : Control
 
     public void Clear()
     {
+        GenericUtils.ClearPointingButton();
         foreach(var child in lineContainer.GetChildren())
             SafeQueueFree(child);
         lineObjects.Clear();
@@ -426,7 +464,9 @@ public partial class EmueraContent : Control
         btn.CustomMinimumSize = new Vector2(36, 36);
         btn.StretchMode = TextureButton.StretchModeEnum.KeepAspectCentered;
         btn.MouseFilter = MouseFilterEnum.Stop;
-        if (ResourceLoader.Exists(iconPath))
+        if (!string.IsNullOrWhiteSpace(iconPath)
+            && !string.Equals(iconPath, "res://", System.StringComparison.OrdinalIgnoreCase)
+            && ResourceLoader.Exists(iconPath))
         {
             var tex = ResourceLoader.Load<Texture2D>(iconPath);
             btn.TextureNormal = tex;
@@ -481,13 +521,18 @@ public partial class EmueraContent : Control
         var lineControl = new Control();
         lineControl.MouseFilter = MouseFilterEnum.Pass;
         lineControl.ClipContents = false;
-        AddLineBackground(line, lineControl);
+        var metrics = MeasureLineVisualMetrics(line);
+        AddLineBackground(line, lineControl, metrics.BaselineOffset);
+        var lineLayer = CreateLineLayer(metrics);
+        lineControl.AddChild(lineLayer);
         int maxLineRight = 0;
+        bool hasVisualContent = false;
 
         foreach(var button in line.Buttons)
         {
             if(button.IsButton)
             {
+                hasVisualContent = true;
                 var btn = new Panel();
                 btn.FocusMode = FocusModeEnum.None;
                 btn.MouseForcePassScrollEvents = false;
@@ -498,6 +543,8 @@ public partial class EmueraContent : Control
                 string inputs = button.Inputs;
                 long generation = button.Generation;
                 btn.GuiInput += inputEvent => OnContentButtonGuiInput(inputEvent, btn, inputs, generation);
+                btn.MouseEntered += () => GenericUtils.SetPointingButton(inputs, generation);
+                btn.MouseExited += () => GenericUtils.ClearPointingButton(generation);
                 btn.SetMeta("generation", generation);
 
                 var contentBox = new Control();
@@ -521,29 +568,27 @@ public partial class EmueraContent : Control
                 btn.CustomMinimumSize = new Vector2(button.Width, EffectiveLineHeight);
                 btn.Position = new Vector2(button.PointX, 0);
                 btn.Size = new Vector2(button.Width, EffectiveLineHeight);
-                lineControl.AddChild(btn);
+                lineLayer.AddChild(btn);
 
                 int btnRight = button.PointX + button.Width;
                 if (btnRight > maxLineRight) maxLineRight = btnRight;
             }
             else
             {
+                if (button.StrArray.Length > 0)
+                    hasVisualContent = true;
                 foreach(var part in button.StrArray)
                 {
-                    AddPartToContainer(part, lineControl, 0);
+                    AddPartToContainer(part, lineLayer, 0);
                 }
                 int right = button.PointX + button.Width;
                 if (right > maxLineRight) maxLineRight = right;
             }
         }
 
-        // Fixed line height matching original Emuera behavior:
-        // every line is exactly EffectiveLineHeight tall, images overflow via negative Y offset
-        int lineHeight = EffectiveLineHeight;
-        if (lineControl.GetChildCount() == 0)
-            lineHeight = 0;
+        int lineHeight = hasVisualContent || line.TextBackgroundColor != null ? metrics.Height : 0;
 
-        lineControl.CustomMinimumSize = new Vector2(0, lineHeight);
+        lineControl.CustomMinimumSize = new Vector2(System.Math.Max(0, maxLineRight), lineHeight);
 
         // Handle line updates: replace existing Control if LineNo already exists
         int insertIndex = -1;
@@ -569,13 +614,48 @@ public partial class EmueraContent : Control
         lineControl.SetMeta("line_no", line.LineNo);
         lineObjects[line.LineNo] = line;
         displayRevision++;
-        RefreshQuickInputGate();
 
         // Enforce node cap to prevent unbounded memory growth
-        if (lineContainer.GetChildCount() > MaxVisibleLines)
+        if (!batchingDisplayLines && lineContainer.GetChildCount() > MaxVisibleLines)
             RemoveTopLines(LineTrimBatch);
 
-        // Auto-scroll to bottom on next frame after layout stabilizes
+        if (!batchingDisplayLines)
+        {
+            RefreshQuickInputGate();
+            QueueDisplayFollowUp();
+        }
+    }
+
+    internal void AddLines(IReadOnlyList<(ConsoleDisplayLine Line, bool Update)> lines)
+    {
+        if (lines == null || lines.Count == 0)
+            return;
+
+        batchingDisplayLines = true;
+        try
+        {
+            for (int i = 0; i < lines.Count; i++)
+            {
+                var item = lines[i];
+                if (item.Line != null)
+                    AddLine(item.Line, item.Update);
+            }
+        }
+        finally
+        {
+            batchingDisplayLines = false;
+        }
+
+        int overflow = lineContainer.GetChildCount() - MaxVisibleLines;
+        if (overflow > 0)
+            RemoveTopLines(System.Math.Max(LineTrimBatch, overflow));
+
+        RefreshQuickInputGate();
+        QueueDisplayFollowUp();
+    }
+
+    void QueueDisplayFollowUp()
+    {
         QueueScaleBoundsUpdate();
         if (!pendingScroll)
         {
@@ -584,7 +664,18 @@ public partial class EmueraContent : Control
         }
     }
 
-    void AddLineBackground(ConsoleDisplayLine line, Control lineControl)
+    Control CreateLineLayer(LineVisualMetrics metrics)
+    {
+        var lineLayer = new Control();
+        lineLayer.MouseFilter = MouseFilterEnum.Ignore;
+        lineLayer.ClipContents = false;
+        lineLayer.Position = new Vector2(0, metrics.BaselineOffset);
+        lineLayer.CustomMinimumSize = new Vector2(Config.DrawableWidth, EffectiveLineHeight);
+        lineLayer.Size = new Vector2(Config.DrawableWidth, EffectiveLineHeight);
+        return lineLayer;
+    }
+
+    void AddLineBackground(ConsoleDisplayLine line, Control lineControl, int baselineOffset)
     {
         if (line.TextBackgroundColor == null)
             return;
@@ -592,7 +683,7 @@ public partial class EmueraContent : Control
         var bg = new ColorRect();
         bg.MouseFilter = MouseFilterEnum.Ignore;
         bg.Color = new Godot.Color(c.r, c.g, c.b, c.a);
-        bg.Position = Vector2.Zero;
+        bg.Position = new Vector2(0, baselineOffset);
         bg.Size = new Vector2(Config.DrawableWidth, EffectiveLineHeight);
         bg.CustomMinimumSize = new Vector2(Config.DrawableWidth, EffectiveLineHeight);
         bg.ZIndex = -1;
@@ -609,13 +700,26 @@ public partial class EmueraContent : Control
             var lineControl = new Control();
             lineControl.MouseFilter = MouseFilterEnum.Ignore;
             lineControl.ClipContents = false;
-            AddLineBackground(line, lineControl);
+            var metrics = MeasureLineVisualMetrics(line);
+            AddLineBackground(line, lineControl, metrics.BaselineOffset);
+            var lineLayer = CreateLineLayer(metrics);
+            lineControl.AddChild(lineLayer);
+            bool hasVisualContent = false;
             foreach (var button in line.Buttons)
             {
+                if (button.StrArray.Length > 0)
+                    hasVisualContent = true;
                 foreach (var part in button.StrArray)
-                    AddPartToContainer(part, lineControl, 0);
+                    AddPartToContainer(part, lineLayer, 0);
             }
-            lineControl.CustomMinimumSize = new Vector2(0, EffectiveLineHeight);
+            int maxLineRight = 0;
+            foreach (var button in line.Buttons)
+            {
+                int right = button.PointX + button.Width;
+                if (right > maxLineRight) maxLineRight = right;
+            }
+            int lineHeight = hasVisualContent || line.TextBackgroundColor != null ? metrics.Height : 0;
+            lineControl.CustomMinimumSize = new Vector2(System.Math.Max(0, maxLineRight), lineHeight);
             htmlIslandContainer.AddChild(lineControl);
         }
         displayRevision++;
@@ -705,6 +809,44 @@ public partial class EmueraContent : Control
         if (visibleRows > 1)
             height += (visibleRows - 1) * lineContainer.GetThemeConstant("separation");
         return new Vector2(width, height);
+    }
+
+    readonly struct LineVisualMetrics
+    {
+        public LineVisualMetrics(int minTop, int maxBottom)
+        {
+            MinTop = minTop;
+            MaxBottom = maxBottom;
+            BaselineOffset = minTop < 0 ? -minTop : 0;
+            Height = System.Math.Max(0, maxBottom - minTop);
+        }
+
+        public readonly int MinTop;
+        public readonly int MaxBottom;
+        public readonly int BaselineOffset;
+        public readonly int Height;
+    }
+
+    LineVisualMetrics MeasureLineVisualMetrics(ConsoleDisplayLine line)
+    {
+        int minTop = 0;
+        int maxBottom = EffectiveLineHeight;
+        if (line != null)
+        {
+            foreach (var button in line.Buttons)
+            {
+                foreach (var part in button.StrArray)
+                {
+                    if (part == null)
+                        continue;
+                    if (part.Top < minTop)
+                        minTop = part.Top;
+                    if (part.Bottom > maxBottom)
+                        maxBottom = part.Bottom;
+                }
+            }
+        }
+        return new LineVisualMetrics(minTop, maxBottom);
     }
 
     int AddPartToContainer(AConsoleDisplayPart part, Control container, int relX)
@@ -839,8 +981,10 @@ public partial class EmueraContent : Control
                     w = texture.GetWidth() > 0 ? texture.GetWidth() : 32;
                     imgH = texture.GetHeight() > 0 ? texture.GetHeight() : 32;
                 }
-                // Ensure rendered width matches layout-allocated width to prevent gaps/overlaps
-                if (cip.Width > 0 && cip.Width != w)
+                // If the sprite was not available during parsing, cip.Width may be the
+                // fallback alt-tag text width. Do not use that as the rendered image width.
+                bool layoutWidthIsFallbackText = cip.Image == null && cip.dest_rect.Width <= 0;
+                if (!layoutWidthIsFallbackText && cip.Width > 0 && cip.Width != w)
                 {
                     int layoutW = cip.Width;
                     if (w > 0)
@@ -1051,6 +1195,8 @@ public partial class EmueraContent : Control
     public void RemoveTopLines(int count)
     {
         bool removedAny = false;
+        if (count > 0)
+            GenericUtils.ClearPointingButton();
         for(int i = 0; i < count && lineContainer.GetChildCount() > 0; i++)
         {
             var child = lineContainer.GetChild(0);
@@ -1069,9 +1215,20 @@ public partial class EmueraContent : Control
         }
     }
 
+    public void TrimVisibleLinesToLimit()
+    {
+        if (lineContainer == null)
+            return;
+        int overflow = lineContainer.GetChildCount() - MaxVisibleLines;
+        if (overflow > 0)
+            RemoveTopLines(overflow);
+    }
+
     public void RemoveBottomLines(int count)
     {
         bool removedAny = false;
+        if (count > 0)
+            GenericUtils.ClearPointingButton();
         for(int i = 0; i < count && lineContainer.GetChildCount() > 0; i++)
         {
             var child = lineContainer.GetChild(lineContainer.GetChildCount() - 1);
@@ -1164,29 +1321,26 @@ public partial class EmueraContent : Control
         return cbgNodes[index];
     }
 
-    public void PlaySoundFile(string path, bool loop)
+    public void PlaySoundFile(string path, bool loop, int channel)
     {
         var stream = LoadAudioStream(path, loop);
         if (stream == null)
+        {
+            GenericUtils.NotifySoundPlaybackFailed(channel, path);
             return;
-        AudioStreamPlayer player = null;
-        foreach (var candidate in soundPlayers)
-        {
-            if (!candidate.Playing)
-            {
-                player = candidate;
-                break;
-            }
         }
-        if (player == null)
+        while (soundPlayers.Count <= channel)
         {
-            player = new AudioStreamPlayer();
-            soundPlayers.Add(player);
-            AddChild(player);
+            var newPlayer = new AudioStreamPlayer();
+            soundPlayers.Add(newPlayer);
+            AddChild(newPlayer);
         }
+        AudioStreamPlayer player = soundPlayers[channel];
+        player.Stop();
         player.Stream = stream;
         player.VolumeDb = LinearToDb(soundVolume);
         player.Play();
+        GenericUtils.NotifySoundPlaybackStarted(channel, path, GetAudioStreamLengthMs(stream));
     }
 
     public void StopSounds()
@@ -1220,15 +1374,20 @@ public partial class EmueraContent : Control
     {
         var stream = LoadAudioStream(path, true);
         if (stream == null)
+        {
+            GenericUtils.NotifyBgmPlaybackFailed(path);
             return;
+        }
         if (bgmPlayer == null)
         {
             bgmPlayer = new AudioStreamPlayer();
             AddChild(bgmPlayer);
         }
+        bgmPlayer.Stop();
         bgmPlayer.Stream = stream;
         bgmPlayer.VolumeDb = LinearToDb(bgmVolume);
         bgmPlayer.Play();
+        GenericUtils.NotifyBgmPlaybackStarted(path, GetAudioStreamLengthMs(stream));
     }
 
     public void StopBgm()
@@ -1289,6 +1448,16 @@ public partial class EmueraContent : Control
             default:
                 return null;
         }
+    }
+
+    static long GetAudioStreamLengthMs(AudioStream stream)
+    {
+        if (stream == null)
+            return 0;
+        double length = stream.GetLength();
+        if (length <= 0 || double.IsNaN(length) || double.IsInfinity(length))
+            return 0;
+        return (long)(length * 1000.0);
     }
 
     static float NormalizeEraVolume(int volume)
@@ -1730,6 +1899,8 @@ public partial class EmueraContent : Control
     {
         Size = GetViewportRect().Size;
         ContentWidth = (int)Size.X;
+        if (ContentWidth > Config.WindowX)
+            Config.UpdateWindowWidth(ContentWidth);
         QueueScaleBoundsUpdate();
     }
 
@@ -1789,6 +1960,7 @@ public partial class EmueraContent : Control
     public override void _Process(double delta)
     {
         ProcessContentInertia((float)delta);
+        PublishAudioPlaybackPositions();
         RefreshQuickInputGate();
         if (quickInputGateActive && Time.GetTicksMsec() - quickInputGateTick >= QuickInputGateFallbackMs && !EmueraThread.instance.Running())
         {
@@ -1805,6 +1977,23 @@ public partial class EmueraContent : Control
             return;
         lastAutoClickSkipTick = now;
         EmueraThread.instance.Input("", false, true);
+    }
+
+    void PublishAudioPlaybackPositions()
+    {
+        if (bgmPlayer != null)
+        {
+            double total = bgmPlayer.Stream?.GetLength() ?? 0.0;
+            GenericUtils.NotifyBgmPlaybackPosition(bgmPlayer.GetPlaybackPosition(), total, bgmPlayer.Playing && !bgmPlayer.StreamPaused);
+        }
+        for (int i = 0; i < soundPlayers.Count; i++)
+        {
+            var player = soundPlayers[i];
+            if (player == null)
+                continue;
+            double total = player.Stream?.GetLength() ?? 0.0;
+            GenericUtils.NotifySoundPlaybackPosition(i, player.GetPlaybackPosition(), total, player.Playing && !player.StreamPaused);
+        }
     }
 
     public override void _Input(InputEvent @event)
@@ -1833,6 +2022,8 @@ public partial class EmueraContent : Control
         if (!TryGetPointer(@event, out var pointerPosition, out var pressed, out var released, out var motion))
             return false;
 
+        UpdatePointerPosition(pointerPosition);
+
         if (scrollContainer == null || (!contentDragActive && !scrollContainer.GetGlobalRect().HasPoint(pointerPosition)))
             return false;
 
@@ -1847,6 +2038,7 @@ public partial class EmueraContent : Control
 
         if (pressed)
         {
+            MinorShift._Library.WinInput.PulseVirtualKey(0x01);
             StopContentInertia();
             contentDragActive = true;
             contentDragMoved = false;
@@ -1926,6 +2118,23 @@ public partial class EmueraContent : Control
                 GetViewport().SetInputAsHandled();
         }
         return handled;
+    }
+
+    void UpdatePointerPosition(Vector2 globalPosition)
+    {
+        if (scrollContainer == null)
+        {
+            GenericUtils.SetPointerPosition(globalPosition.X, globalPosition.Y);
+            return;
+        }
+
+        var rect = scrollContainer.GetGlobalRect();
+        var contentPosition = globalPosition - rect.Position;
+        contentPosition.X += scrollContainer.ScrollHorizontal;
+        contentPosition.Y += scrollContainer.ScrollVertical;
+        if (contentScale > 0.001f)
+            contentPosition /= contentScale;
+        GenericUtils.SetPointerPosition(contentPosition.X, contentPosition.Y);
     }
 
     Vector2 ScrollContentBy(Vector2 delta)
@@ -2085,7 +2294,7 @@ public partial class EmueraContent : Control
             released = !mb.Pressed;
             return true;
         }
-        if (@event is InputEventMouseMotion mm && (mm.ButtonMask & MouseButtonMask.Left) != 0)
+        if (@event is InputEventMouseMotion mm)
         {
             position = mm.GlobalPosition;
             motion = true;
@@ -2114,6 +2323,10 @@ public partial class EmueraContent : Control
 
         if (@event is InputEventKey keyEvent && keyEvent.Pressed && !keyEvent.Echo)
         {
+            if (keyEvent.Keycode == Key.Enter || keyEvent.Keycode == Key.KpEnter)
+                MinorShift._Library.WinInput.PulseVirtualKey(0x0D);
+            else if (keyEvent.Keycode == Key.Escape)
+                MinorShift._Library.WinInput.PulseVirtualKey(0x1B);
             if (inputpad != null && inputpad.IsShow)
                 return;
             var console = GlobalStatic.Console;

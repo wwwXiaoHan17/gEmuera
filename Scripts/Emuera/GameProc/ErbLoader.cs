@@ -589,13 +589,15 @@ namespace MinorShift.Emuera.GameProc
                         //引数読み取り時点で判別されないといけない
                         //if (term == null)
                         //{ errMes = "関数定義の引数は省略できません"; goto err; }
-                        if ((!(term.Restructure(exm) is VariableTerm vTerm)) || (vTerm.Identifier.IsConst))
+						IOperandTerm reducedTerm = term?.Restructure(exm);
+                        if ((!(reducedTerm is VariableTerm vTerm)) || (vTerm.Identifier.IsConst))
                         { errMes = "関数定義の引数には代入可能な変数を指定してください"; goto err; }
                         else if (!vTerm.Identifier.IsReference)//参照型なら添え字不要
                         {
-                            if (vTerm is VariableNoArgTerm)
+							bool allowSnakePrivateArgument = Program.IsSnakeProfile && vTerm.Identifier.IsPrivate;
+                            if (vTerm is VariableNoArgTerm && !allowSnakePrivateArgument)
                             { errMes = "関数定義の参照型でない引数\"" + vTerm.Identifier.Name + "\"に添え字が指定されていません"; goto err; }
-                            if (!vTerm.isAllConst)
+                            if (!vTerm.isAllConst && !allowSnakePrivateArgument)
                             { errMes = "関数定義の引数の添え字には定数を指定してください"; goto err; }
                         }
                         for (int j = 0; j < i; j++)
@@ -613,7 +615,14 @@ namespace MinorShift.Emuera.GameProc
 							if (maxArgs < vTerm.getEl1forArg + 1)
 								maxArgs = vTerm.getEl1forArg + 1;
 						}
-						bool canDef = (vTerm.Identifier.Code == VariableCode.ARG || vTerm.Identifier.Code == VariableCode.ARGS || vTerm.Identifier.IsPrivate);
+						else if (Program.IsSnakeProfile && vTerm.Identifier.Code == VariableCode.ARGF)
+						{
+							if (maxArg < vTerm.getEl1forArg + 1)
+								maxArg = vTerm.getEl1forArg + 1;
+						}
+						bool canDef = (vTerm.Identifier.Code == VariableCode.ARG || vTerm.Identifier.Code == VariableCode.ARGS
+							|| (Program.IsSnakeProfile && vTerm.Identifier.Code == VariableCode.ARGF)
+							|| vTerm.Identifier.IsPrivate);
 						term = argsRow[i * 2 + 1];
 						if (term is NullTerm)
 						{
@@ -659,9 +668,9 @@ namespace MinorShift.Emuera.GameProc
 					return;
 				}
 				VariableCode code = args[args.Length - 1].Identifier.Code;
-				if (code != VariableCode.ARG && code != VariableCode.ARGS)
+				if (code != VariableCode.ARG && code != VariableCode.ARGS && (!Program.IsSnakeProfile || code != VariableCode.ARGF))
 				{
-					ParserMediator.Warn("VARIADICはARGまたはARGSだけを修飾できます", label, 2, true, false);
+					ParserMediator.Warn(Program.IsSnakeProfile ? "VARIADICはARG、ARGSまたはARGFだけを修飾できます" : "VARIADICはARGまたはARGSだけを修飾できます", label, 2, true, false);
 					return;
 				}
 				for (int i = 0; i < args.Length - 1; i++)

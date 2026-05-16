@@ -83,7 +83,19 @@ namespace MinorShift.Emuera.GameData
 		//private readonly GameBase gamebase;
 		private readonly string[][] names = new string[(int)VariableCode.__COUNT_CSV_STRING_ARRAY_1D__][];
 		private readonly Dictionary<string, int>[] nameToIntDics = new Dictionary<string, int>[(int)VariableCode.__COUNT_CSV_STRING_ARRAY_1D__];
+		private readonly Dictionary<string, int>[] aliases = new Dictionary<string, int>[(int)VariableCode.__COUNT_CSV_STRING_ARRAY_1D__];
+		private readonly Dictionary<string, Dictionary<string, int>> erdNameToIntDics = new Dictionary<string, Dictionary<string, int>>(StringComparer.OrdinalIgnoreCase);
 		private readonly Dictionary<string, int> relationDic = new Dictionary<string, int>();
+		private readonly Dictionary<string, Int64> nameToTemplateMap = new Dictionary<string, Int64>();
+		private readonly Dictionary<string, Int64> nicknameToTemplateMap = new Dictionary<string, Int64>();
+		private readonly Dictionary<string, Int64> callnameToTemplateMap = new Dictionary<string, Int64>();
+		private readonly Dictionary<string, Int64> masternameToTemplateMap = new Dictionary<string, Int64>();
+
+		public IReadOnlyDictionary<string, Int64> NameToTemplateMap { get { return nameToTemplateMap; } }
+		public IReadOnlyDictionary<string, Int64> NicknameToTemplateMap { get { return nicknameToTemplateMap; } }
+		public IReadOnlyDictionary<string, Int64> CallnameToTemplateMap { get { return callnameToTemplateMap; } }
+		public IReadOnlyDictionary<string, Int64> MasternameToTemplateMap { get { return masternameToTemplateMap; } }
+
 		public string[] GetCsvNameList(VariableCode code)
 		{
 			return names[(int)(code & VariableCode.__LOWERCASE__)];
@@ -583,35 +595,36 @@ check1break:
 			{
 				names[i] = new string[MaxDataList[i]];
 				nameToIntDics[i] = new Dictionary<string, int>();
+				aliases[i] = null;
 			}
 			ItemPrice = new Int64[MaxDataList[itemIndex]];
-			loadDataTo(csvDir + "ABL.CSV", ablIndex, null, disp);
-			loadDataTo(csvDir + "EXP.CSV", expIndex, null, disp);
-			loadDataTo(csvDir + "TALENT.CSV", talentIndex, null, disp);
-			loadDataTo(csvDir + "PALAM.CSV", paramIndex, null, disp);
-			loadDataTo(csvDir + "TRAIN.CSV", trainIndex, null, disp);
-			loadDataTo(csvDir + "MARK.CSV", markIndex, null, disp);
-			loadDataTo(csvDir + "ITEM.CSV", itemIndex, ItemPrice, disp);
-			loadDataTo(csvDir + "BASE.CSV", baseIndex, null, disp);
-			loadDataTo(csvDir + "SOURCE.CSV", sourceIndex, null, disp);
-			loadDataTo(csvDir + "EX.CSV", exIndex, null, disp);
-			loadDataTo(csvDir + "STR.CSV", strIndex, null, disp);
-			loadDataTo(csvDir + "EQUIP.CSV", equipIndex, null, disp);
-			loadDataTo(csvDir + "TEQUIP.CSV", tequipIndex, null, disp);
-			loadDataTo(csvDir + "FLAG.CSV", flagIndex, null, disp);
-			loadDataTo(csvDir + "TFLAG.CSV", tflagIndex, null, disp);
-			loadDataTo(csvDir + "CFLAG.CSV", cflagIndex, null, disp);
-			loadDataTo(csvDir + "TCVAR.CSV", tcvarIndex, null, disp);
-			loadDataTo(csvDir + "CSTR.CSV", cstrIndex, null, disp);
-			loadDataTo(csvDir + "STAIN.CSV", stainIndex, null, disp);
-			loadDataTo(csvDir + "CDFLAG1.CSV", cdflag1Index, null, disp);
-			loadDataTo(csvDir + "CDFLAG2.CSV", cdflag2Index, null, disp);
+			loadDataWithAliases(csvDir, "ABL", ablIndex, null, disp);
+			loadDataWithAliases(csvDir, "EXP", expIndex, null, disp);
+			loadDataWithAliases(csvDir, "TALENT", talentIndex, null, disp);
+			loadDataWithAliases(csvDir, "PALAM", paramIndex, null, disp);
+			loadDataWithAliases(csvDir, "TRAIN", trainIndex, null, disp);
+			loadDataWithAliases(csvDir, "MARK", markIndex, null, disp);
+			loadDataWithAliases(csvDir, "ITEM", itemIndex, ItemPrice, disp);
+			loadDataWithAliases(csvDir, "BASE", baseIndex, null, disp);
+			loadDataWithAliases(csvDir, "SOURCE", sourceIndex, null, disp);
+			loadDataWithAliases(csvDir, "EX", exIndex, null, disp);
+			loadDataWithAliases(csvDir, "STR", strIndex, null, disp);
+			loadDataWithAliases(csvDir, "EQUIP", equipIndex, null, disp);
+			loadDataWithAliases(csvDir, "TEQUIP", tequipIndex, null, disp);
+			loadDataWithAliases(csvDir, "FLAG", flagIndex, null, disp);
+			loadDataWithAliases(csvDir, "TFLAG", tflagIndex, null, disp);
+			loadDataWithAliases(csvDir, "CFLAG", cflagIndex, null, disp);
+			loadDataWithAliases(csvDir, "TCVAR", tcvarIndex, null, disp);
+			loadDataWithAliases(csvDir, "CSTR", cstrIndex, null, disp);
+			loadDataWithAliases(csvDir, "STAIN", stainIndex, null, disp);
+			loadDataWithAliases(csvDir, "CDFLAG1", cdflag1Index, null, disp);
+			loadDataWithAliases(csvDir, "CDFLAG2", cdflag2Index, null, disp);
 			
-			loadDataTo(csvDir + "STRNAME.CSV", strnameIndex, null, disp);
-			loadDataTo(csvDir + "TSTR.CSV", tstrnameIndex, null, disp);
-			loadDataTo(csvDir + "SAVESTR.CSV", savestrnameIndex, null, disp);
-			loadDataTo(csvDir + "GLOBAL.CSV", globalIndex, null, disp);
-			loadDataTo(csvDir + "GLOBALS.CSV", globalsIndex, null, disp);
+			loadDataWithAliases(csvDir, "STRNAME", strnameIndex, null, disp);
+			loadDataWithAliases(csvDir, "TSTR", tstrnameIndex, null, disp);
+			loadDataWithAliases(csvDir, "SAVESTR", savestrnameIndex, null, disp);
+			loadDataWithAliases(csvDir, "GLOBAL", globalIndex, null, disp);
+			loadDataWithAliases(csvDir, "GLOBALS", globalsIndex, null, disp);
 			//逆引き辞書を作成
 			for (int i = 0; i < names.Length; i++)
 			{
@@ -622,6 +635,14 @@ check1break:
 				{
 					if (!string.IsNullOrEmpty(nameArray[j]) && !nameToIntDics[i].ContainsKey(nameArray[j]))
 						nameToIntDics[i].Add(nameArray[j], j);
+				}
+				Dictionary<string, int> aliasDict = aliases[i];
+				if (aliasDict == null)
+					continue;
+				foreach (var alias in aliasDict)
+				{
+					if (!string.IsNullOrEmpty(alias.Key) && !nameToIntDics[i].ContainsKey(alias.Key))
+						nameToIntDics[i].Add(alias.Key, alias.Value);
 				}
 			}
 			//if (!Program.AnalysisMode)
@@ -661,7 +682,59 @@ check1break:
 		}
 
         
+		public void UserDefineLoadData(List<string> filepaths, string varname, int varlength, bool disp, ScriptPosition sc)
+		{
+			if (filepaths == null || filepaths.Count == 0 || string.IsNullOrEmpty(varname) || varlength <= 0)
+				return;
+
+			Dictionary<string, int> dict = new Dictionary<string, int>();
+			Dictionary<string, string> definedAt = new Dictionary<string, string>();
+			for (int i = 0; i < filepaths.Count; i++)
+			{
+				string[] nameArray = new string[varlength];
+				loadUserDefinedNameData(filepaths[i], nameArray, disp);
+				for (int j = 0; j < nameArray.Length; j++)
+				{
+					string name = nameArray[j];
+					if (string.IsNullOrEmpty(name))
+						continue;
+					if (dict.ContainsKey(name))
+					{
+						string prevPath;
+						definedAt.TryGetValue(name, out prevPath);
+						throw new CodeEE(varname + "の識別子\"" + name + "\"が重複定義されています(" + prevPath + ", " + filepaths[i] + ")", sc);
+					}
+					dict.Add(name, j);
+					definedAt[name] = filepaths[i];
+				}
+			}
+			if (erdNameToIntDics.ContainsKey(varname))
+				throw new CodeEE(varname + "は既に定義されています", sc);
+			erdNameToIntDics.Add(varname, dict);
+		}
+
+		public bool isUserDefined(string varname, string str, int dim)
+		{
+			if (!Program.IsSnakeProfile || string.IsNullOrEmpty(varname) || string.IsNullOrEmpty(str))
+				return false;
+			if (dim <= 1)
+				return erdNameToIntDics.ContainsKey(varname) && erdNameToIntDics[varname].ContainsKey(str);
+			for (int i = 1; i <= dim; i++)
+			{
+				string key = varname + "@" + i.ToString();
+				Dictionary<string, int> dic;
+				if (erdNameToIntDics.TryGetValue(key, out dic) && dic.ContainsKey(str))
+					return true;
+			}
+			return false;
+		}
+
 		public bool TryKeywordToInteger(out int ret, VariableCode code, string key, int index)
+		{
+			return TryKeywordToInteger(out ret, code, key, index, null);
+		}
+
+		public bool TryKeywordToInteger(out int ret, VariableCode code, string key, int index, string varname)
         {
             ret = 0;
             if (string.IsNullOrEmpty(key))
@@ -669,9 +742,15 @@ check1break:
             Dictionary<string, int> dic;
             try
             {
-                dic = GetKeywordDictionary(out string errPos, code, index);
+                dic = GetKeywordDictionary(out string errPos, code, index, null);
 				if (dic == null)
-					return false;
+				{
+					if (string.IsNullOrEmpty(varname))
+						return false;
+					dic = GetKeywordDictionary(out errPos, code, index, varname);
+					if (dic == null)
+						return false;
+				}
             }
             catch { return false; }
             return (dic.TryGetValue(key, out ret));
@@ -691,6 +770,11 @@ check1break:
 		}
 
 		public Dictionary<string, int> GetKeywordDictionary(out string errPos, VariableCode code, int index)
+		{
+			return GetKeywordDictionary(out errPos, code, index, null);
+		}
+
+		public Dictionary<string, int> GetKeywordDictionary(out string errPos, VariableCode code, int index, string varname)
 		{
 			errPos = null;
 			int allowIndex = -1;
@@ -875,6 +959,53 @@ check1break:
 					allowIndex = -1;
 					break;
 
+			}
+			if (ret == null && Program.IsSnakeProfile && !string.IsNullOrEmpty(varname))
+			{
+				switch (code)
+				{
+					case VariableCode.VAR:
+					case VariableCode.VARS:
+						if (erdNameToIntDics.TryGetValue(varname, out ret))
+						{
+							errPos = varname + ".csv";
+							allowIndex = 0;
+						}
+						break;
+					case VariableCode.CVAR:
+					case VariableCode.CVARS:
+						if (erdNameToIntDics.TryGetValue(varname, out ret))
+						{
+							errPos = varname + ".csv";
+							allowIndex = 1;
+						}
+						break;
+					case VariableCode.VAR2D:
+					case VariableCode.VARS2D:
+					case VariableCode.CVAR2D:
+					case VariableCode.CVARS2D:
+					{
+						int dim = ((code == VariableCode.CVAR2D) || (code == VariableCode.CVARS2D)) ? index : index + 1;
+						string key = varname + "@" + dim.ToString();
+						if (erdNameToIntDics.TryGetValue(key, out ret))
+						{
+							errPos = key + ".csv";
+							allowIndex = index;
+						}
+						break;
+					}
+					case VariableCode.VAR3D:
+					case VariableCode.VARS3D:
+					{
+						string key = varname + "@" + (index + 1).ToString();
+						if (erdNameToIntDics.TryGetValue(key, out ret))
+						{
+							errPos = key + ".csv";
+							allowIndex = index;
+						}
+						break;
+					}
+				}
 			}
 			if (index < 0)
 				return ret;
@@ -1194,6 +1325,23 @@ check1break:
             {
                 return (int)(l.No - r.No);
             });
+
+			nameToTemplateMap.Clear();
+			nicknameToTemplateMap.Clear();
+			callnameToTemplateMap.Clear();
+			masternameToTemplateMap.Clear();
+			for (int i = CharacterTmplList.Count - 1; i >= 0; i--)
+			{
+				CharacterTemplate tmpl = CharacterTmplList[i];
+				if (tmpl.Name != null)
+					nameToTemplateMap[tmpl.Name] = tmpl.No;
+				if (tmpl.Nickname != null)
+					nicknameToTemplateMap[tmpl.Nickname] = tmpl.No;
+				if (tmpl.Callname != null)
+					callnameToTemplateMap[tmpl.Callname] = tmpl.No;
+				if (tmpl.Mastername != null)
+					masternameToTemplateMap[tmpl.Mastername] = tmpl.No;
+			}
         }
 
 		private bool tryToInt64(string str, out Int64 p)
@@ -1403,9 +1551,74 @@ check1break:
 		}
 
 
+		private void loadDataWithAliases(string csvDir, string baseName, int targetIndex, Int64[] targetI, bool disp)
+		{
+			loadDataTo(Path.Combine(csvDir, baseName + ".CSV"), targetIndex, targetI, disp);
+			loadAliases(Path.Combine(csvDir, baseName + ".ALS"), targetIndex);
+		}
+
+		private void loadUserDefinedNameData(string csvPath, string[] target, bool disp)
+		{
+			string resolvedCsvPath = uEmuera.Utils.ResolveExistingFilePath(csvPath);
+			if (!string.IsNullOrEmpty(resolvedCsvPath))
+				csvPath = resolvedCsvPath;
+			if (!uEmuera.Utils.FileExists(csvPath))
+				return;
+			EraStreamReader eReader = new EraStreamReader(false);
+			if (!eReader.Open(csvPath))
+			{
+				output.PrintError(eReader.Filename + "のオープンに失敗しました");
+				return;
+			}
+			ScriptPosition position = null;
+			if (disp || Program.AnalysisMode)
+				output.PrintSystemLine(eReader.Filename + "読み込み中・・・");
+			try
+			{
+				StringStream st = null;
+				while ((st = eReader.ReadEnabledLine()) != null)
+				{
+					position = new ScriptPosition(eReader.Filename, eReader.LineNo);
+					string[] tokens = st.Substring().Split(',');
+					if (tokens.Length < 2)
+					{
+						ParserMediator.Warn("\",\"が必要です", position, 1);
+						continue;
+					}
+					int index;
+					if (!Int32.TryParse(tokens[0], out index))
+					{
+						ParserMediator.Warn("一つ目の値を整数値に変換できません", position, 1);
+						continue;
+					}
+					if ((index < 0) || (target.Length <= index))
+					{
+						ParserMediator.Warn(index.ToString() + "は配列の範囲外です", position, 1);
+						continue;
+					}
+					target[index] = tokens[1];
+				}
+			}
+			catch
+			{
+				uEmuera.Media.SystemSounds.Hand.Play();
+				if (position != null)
+					ParserMediator.Warn("予期しないエラーが発生しました", position, 3);
+				else
+					output.PrintError("予期しないエラーが発生しました");
+			}
+			finally
+			{
+				eReader.Dispose();
+			}
+		}
+
 		private void loadDataTo(string csvPath, int targetIndex, Int64[] targetI, bool disp)
 		{
 
+			string resolvedCsvPath = uEmuera.Utils.ResolveExistingFilePath(csvPath);
+			if (!string.IsNullOrEmpty(resolvedCsvPath))
+				csvPath = resolvedCsvPath;
 			if (!uEmuera.Utils.FileExists(csvPath))
 				return;
 			string[] target = names[targetIndex];
@@ -1478,6 +1691,66 @@ check1break:
 			}
 
 
+		}
+
+		private void loadAliases(string aliasPath, int targetIndex)
+		{
+			string resolvedAliasPath = uEmuera.Utils.ResolveExistingFilePath(aliasPath);
+			if (!string.IsNullOrEmpty(resolvedAliasPath))
+				aliasPath = resolvedAliasPath;
+			if (!uEmuera.Utils.FileExists(aliasPath))
+				return;
+			if (aliases[targetIndex] == null)
+				aliases[targetIndex] = new Dictionary<string, int>();
+			Dictionary<string, int> target = aliases[targetIndex];
+			EraStreamReader eReader = new EraStreamReader(false);
+			if (!eReader.Open(aliasPath))
+			{
+				output.PrintError(eReader.Filename + "のオープンに失敗しました");
+				return;
+			}
+			ScriptPosition position = null;
+			try
+			{
+				StringStream st = null;
+				while ((st = eReader.ReadEnabledLine()) != null)
+				{
+					position = new ScriptPosition(eReader.Filename, eReader.LineNo);
+					string[] tokens = st.Substring().Split(',');
+					if (tokens.Length < 2)
+					{
+						ParserMediator.Warn("\",\"が必要です", position, 1);
+						continue;
+					}
+					if (!Int32.TryParse(tokens[0], out int index))
+					{
+						ParserMediator.Warn("一つ目の値を整数値に変換できません", position, 1);
+						continue;
+					}
+					string aliasName = tokens[1].Trim();
+					if (string.IsNullOrEmpty(aliasName))
+						continue;
+					if (target.ContainsKey(aliasName))
+					{
+						ParserMediator.Warn("別名\"" + aliasName + "\"は既に定義されています", position, 1);
+						continue;
+					}
+					target.Add(aliasName, index);
+				}
+			}
+			catch
+			{
+				uEmuera.Media.SystemSounds.Hand.Play();
+				if (position != null)
+					ParserMediator.Warn("予期しないエラーが発生しました", position, 3);
+				else
+					output.PrintError("予期しないエラーが発生しました");
+				return;
+			}
+			finally
+			{
+				eReader.Close();
+			}
 		}
 	}
 

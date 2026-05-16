@@ -245,6 +245,9 @@ namespace MinorShift.Emuera.GameData.Function
 			methods["ARGLEN"] = new SnakeArgLenMethod();
 			methods["TOFLOAT"] = new ToIntMethod();
 			methods["TOSTRF"] = new ToStrMethod();
+			methods["GETVAR"] = new SnakeGetVarIntMethod("GETVAR");
+			methods["GETVARF"] = new SnakeGetVarIntMethod("GETVARF");
+			methods["GETVARS"] = new SnakeGetVarStringMethod();
 			methods["UNCHECKED_ADD"] = new SnakeUncheckedMathMethod("ADD");
 			methods["UNCHECKED_SUB"] = new SnakeUncheckedMathMethod("SUB");
 			methods["UNCHECKED_MUL"] = new SnakeUncheckedMathMethod("MUL");
@@ -269,6 +272,11 @@ namespace MinorShift.Emuera.GameData.Function
 			methods["SQL_P_EXECUTE_READER"] = new SnakeSqlIntMethod("P_EXECUTE_READER");
 			methods["SQL_P_EXECUTE_SCALAR_LONG"] = new SnakeSqlIntMethod("P_EXECUTE_SCALAR_LONG");
 			methods["SQL_P_EXECUTE_SCALAR_FLOAT"] = new SnakeSqlIntMethod("P_EXECUTE_SCALAR_FLOAT");
+			methods["SQL_IMPORT_MAP_XML"] = new SnakeSqlIntMethod("IMPORT_MAP_XML");
+			methods["SQL_IMPORT_DT_XML"] = new SnakeSqlIntMethod("IMPORT_DT_XML");
+			methods["SQL_IMPORT_XML_CUSTOM"] = new SnakeSqlIntMethod("IMPORT_XML_CUSTOM");
+			methods["SQL_EXPORT_MAP_XML"] = new SnakeSqlIntMethod("EXPORT_MAP_XML");
+			methods["SQL_EXPORT_DT_XML"] = new SnakeSqlIntMethod("EXPORT_DT_XML");
 			methods["SQL_ESCAPE"] = new SnakeSqlStringMethod("ESCAPE");
 			methods["SQL_EXECUTE_SCALAR_STRING"] = new SnakeSqlStringMethod("EXECUTE_SCALAR_STRING");
 			methods["SQL_P_EXECUTE_SCALAR_STRING"] = new SnakeSqlStringMethod("P_EXECUTE_SCALAR_STRING");
