@@ -521,18 +521,13 @@ public partial class EmueraContent : Control
         var lineControl = new Control();
         lineControl.MouseFilter = MouseFilterEnum.Pass;
         lineControl.ClipContents = false;
-        var metrics = MeasureLineVisualMetrics(line);
-        AddLineBackground(line, lineControl, metrics.BaselineOffset);
-        var lineLayer = CreateLineLayer(metrics);
-        lineControl.AddChild(lineLayer);
+        AddLineBackground(line, lineControl);
         int maxLineRight = 0;
-        bool hasVisualContent = false;
 
         foreach(var button in line.Buttons)
         {
             if(button.IsButton)
             {
-                hasVisualContent = true;
                 var btn = new Panel();
                 btn.FocusMode = FocusModeEnum.None;
                 btn.MouseForcePassScrollEvents = false;
@@ -568,27 +563,29 @@ public partial class EmueraContent : Control
                 btn.CustomMinimumSize = new Vector2(button.Width, EffectiveLineHeight);
                 btn.Position = new Vector2(button.PointX, 0);
                 btn.Size = new Vector2(button.Width, EffectiveLineHeight);
-                lineLayer.AddChild(btn);
+                lineControl.AddChild(btn);
 
                 int btnRight = button.PointX + button.Width;
                 if (btnRight > maxLineRight) maxLineRight = btnRight;
             }
             else
             {
-                if (button.StrArray.Length > 0)
-                    hasVisualContent = true;
                 foreach(var part in button.StrArray)
                 {
-                    AddPartToContainer(part, lineLayer, 0);
+                    AddPartToContainer(part, lineControl, 0);
                 }
                 int right = button.PointX + button.Width;
                 if (right > maxLineRight) maxLineRight = right;
             }
         }
 
-        int lineHeight = hasVisualContent || line.TextBackgroundColor != null ? metrics.Height : 0;
+        // Fixed line height matching original Emuera behavior:
+        // every line is exactly EffectiveLineHeight tall, images overflow via negative Y offset
+        int lineHeight = EffectiveLineHeight;
+        if (lineControl.GetChildCount() == 0)
+            lineHeight = 0;
 
-        lineControl.CustomMinimumSize = new Vector2(System.Math.Max(0, maxLineRight), lineHeight);
+        lineControl.CustomMinimumSize = new Vector2(0, lineHeight);
 
         // Handle line updates: replace existing Control if LineNo already exists
         int insertIndex = -1;
@@ -664,18 +661,7 @@ public partial class EmueraContent : Control
         }
     }
 
-    Control CreateLineLayer(LineVisualMetrics metrics)
-    {
-        var lineLayer = new Control();
-        lineLayer.MouseFilter = MouseFilterEnum.Ignore;
-        lineLayer.ClipContents = false;
-        lineLayer.Position = new Vector2(0, metrics.BaselineOffset);
-        lineLayer.CustomMinimumSize = new Vector2(Config.DrawableWidth, EffectiveLineHeight);
-        lineLayer.Size = new Vector2(Config.DrawableWidth, EffectiveLineHeight);
-        return lineLayer;
-    }
-
-    void AddLineBackground(ConsoleDisplayLine line, Control lineControl, int baselineOffset)
+    void AddLineBackground(ConsoleDisplayLine line, Control lineControl)
     {
         if (line.TextBackgroundColor == null)
             return;
@@ -683,7 +669,7 @@ public partial class EmueraContent : Control
         var bg = new ColorRect();
         bg.MouseFilter = MouseFilterEnum.Ignore;
         bg.Color = new Godot.Color(c.r, c.g, c.b, c.a);
-        bg.Position = new Vector2(0, baselineOffset);
+        bg.Position = Vector2.Zero;
         bg.Size = new Vector2(Config.DrawableWidth, EffectiveLineHeight);
         bg.CustomMinimumSize = new Vector2(Config.DrawableWidth, EffectiveLineHeight);
         bg.ZIndex = -1;
@@ -700,26 +686,13 @@ public partial class EmueraContent : Control
             var lineControl = new Control();
             lineControl.MouseFilter = MouseFilterEnum.Ignore;
             lineControl.ClipContents = false;
-            var metrics = MeasureLineVisualMetrics(line);
-            AddLineBackground(line, lineControl, metrics.BaselineOffset);
-            var lineLayer = CreateLineLayer(metrics);
-            lineControl.AddChild(lineLayer);
-            bool hasVisualContent = false;
+            AddLineBackground(line, lineControl);
             foreach (var button in line.Buttons)
             {
-                if (button.StrArray.Length > 0)
-                    hasVisualContent = true;
                 foreach (var part in button.StrArray)
-                    AddPartToContainer(part, lineLayer, 0);
+                    AddPartToContainer(part, lineControl, 0);
             }
-            int maxLineRight = 0;
-            foreach (var button in line.Buttons)
-            {
-                int right = button.PointX + button.Width;
-                if (right > maxLineRight) maxLineRight = right;
-            }
-            int lineHeight = hasVisualContent || line.TextBackgroundColor != null ? metrics.Height : 0;
-            lineControl.CustomMinimumSize = new Vector2(System.Math.Max(0, maxLineRight), lineHeight);
+            lineControl.CustomMinimumSize = new Vector2(0, EffectiveLineHeight);
             htmlIslandContainer.AddChild(lineControl);
         }
         displayRevision++;
@@ -809,44 +782,6 @@ public partial class EmueraContent : Control
         if (visibleRows > 1)
             height += (visibleRows - 1) * lineContainer.GetThemeConstant("separation");
         return new Vector2(width, height);
-    }
-
-    readonly struct LineVisualMetrics
-    {
-        public LineVisualMetrics(int minTop, int maxBottom)
-        {
-            MinTop = minTop;
-            MaxBottom = maxBottom;
-            BaselineOffset = minTop < 0 ? -minTop : 0;
-            Height = System.Math.Max(0, maxBottom - minTop);
-        }
-
-        public readonly int MinTop;
-        public readonly int MaxBottom;
-        public readonly int BaselineOffset;
-        public readonly int Height;
-    }
-
-    LineVisualMetrics MeasureLineVisualMetrics(ConsoleDisplayLine line)
-    {
-        int minTop = 0;
-        int maxBottom = EffectiveLineHeight;
-        if (line != null)
-        {
-            foreach (var button in line.Buttons)
-            {
-                foreach (var part in button.StrArray)
-                {
-                    if (part == null)
-                        continue;
-                    if (part.Top < minTop)
-                        minTop = part.Top;
-                    if (part.Bottom > maxBottom)
-                        maxBottom = part.Bottom;
-                }
-            }
-        }
-        return new LineVisualMetrics(minTop, maxBottom);
     }
 
     int AddPartToContainer(AConsoleDisplayPart part, Control container, int relX)
@@ -981,10 +916,8 @@ public partial class EmueraContent : Control
                     w = texture.GetWidth() > 0 ? texture.GetWidth() : 32;
                     imgH = texture.GetHeight() > 0 ? texture.GetHeight() : 32;
                 }
-                // If the sprite was not available during parsing, cip.Width may be the
-                // fallback alt-tag text width. Do not use that as the rendered image width.
-                bool layoutWidthIsFallbackText = cip.Image == null && cip.dest_rect.Width <= 0;
-                if (!layoutWidthIsFallbackText && cip.Width > 0 && cip.Width != w)
+                // Ensure rendered width matches layout-allocated width to prevent gaps/overlaps
+                if (cip.Width > 0 && cip.Width != w)
                 {
                     int layoutW = cip.Width;
                     if (w > 0)
@@ -1006,7 +939,9 @@ public partial class EmueraContent : Control
                 emuImg.DrawOffset = new Vector2(0, 0);
                 emuImg.Position = new Vector2(cip.PointX - relX + cip.dest_rect.X, cip.dest_rect.Y);
                 emuImg.Size = new Vector2(w, imgH);
-                emuImg.CustomMinimumSize = new Vector2(w, imgH);
+                // Inline images are absolutely positioned inside a fixed-height Emuera line.
+                // Giving them a minimum size lets Godot containers add blank vertical space.
+                emuImg.CustomMinimumSize = Vector2.Zero;
                 container.AddChild(emuImg);
                 return System.Math.Max(EffectiveLineHeight, (cip.dest_rect.Y > 0 ? cip.dest_rect.Y : 0) + imgH);
             }
