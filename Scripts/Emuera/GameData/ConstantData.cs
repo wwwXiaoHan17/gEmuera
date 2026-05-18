@@ -64,6 +64,9 @@ namespace MinorShift.Emuera.GameData
 		private const int savestrnameIndex = (int)(VariableCode.SAVESTRNAME & VariableCode.__LOWERCASE__);
 		private const int globalIndex = (int)(VariableCode.GLOBALNAME & VariableCode.__LOWERCASE__);
 		private const int globalsIndex = (int)(VariableCode.GLOBALSNAME & VariableCode.__LOWERCASE__);
+		private const int dayIndex = (int)(VariableCode.DAYNAME & VariableCode.__LOWERCASE__);
+		private const int timeIndex = (int)(VariableCode.TIMENAME & VariableCode.__LOWERCASE__);
+		private const int moneyIndex = (int)(VariableCode.MONEYNAME & VariableCode.__LOWERCASE__);
 		private const int countNameCsv = (int)VariableCode.__COUNT_CSV_STRING_ARRAY_1D__;
 		
 		public int[] MaxDataList = new int[countNameCsv];
@@ -85,6 +88,8 @@ namespace MinorShift.Emuera.GameData
 		private readonly Dictionary<string, int>[] nameToIntDics = new Dictionary<string, int>[(int)VariableCode.__COUNT_CSV_STRING_ARRAY_1D__];
 		private readonly Dictionary<string, int>[] aliases = new Dictionary<string, int>[(int)VariableCode.__COUNT_CSV_STRING_ARRAY_1D__];
 		private readonly Dictionary<string, Dictionary<string, int>> erdNameToIntDics = new Dictionary<string, Dictionary<string, int>>(StringComparer.OrdinalIgnoreCase);
+		private readonly Dictionary<string, LazyErdNameData> lazyErdNameData = new Dictionary<string, LazyErdNameData>(StringComparer.OrdinalIgnoreCase);
+		private readonly HashSet<string> lazyErdLoading = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 		private readonly Dictionary<string, int> relationDic = new Dictionary<string, int>();
 		private readonly Dictionary<string, Int64> nameToTemplateMap = new Dictionary<string, Int64>();
 		private readonly Dictionary<string, Int64> nicknameToTemplateMap = new Dictionary<string, Int64>();
@@ -105,6 +110,14 @@ namespace MinorShift.Emuera.GameData
 		
 		private readonly List<CharacterTemplate> CharacterTmplList;
 		private EmueraConsole output;
+
+		private sealed class LazyErdNameData
+		{
+			public List<string> Filepaths;
+			public int VarLength;
+			public bool DisplayReport;
+			public ScriptPosition Position;
+		}
 		
 		public ConstantData()
 		{
@@ -145,6 +158,9 @@ namespace MinorShift.Emuera.GameData
 			MaxDataList[savestrnameIndex] = 100;
 			MaxDataList[globalIndex] = 1000;
 			MaxDataList[globalsIndex] = 100;
+			MaxDataList[dayIndex] = 100;
+			MaxDataList[timeIndex] = 100;
+			MaxDataList[moneyIndex] = 100;
 
 			VariableIntArrayLength = new int[(int)VariableCode.__COUNT_INTEGER_ARRAY__];
 			VariableStrArrayLength = new int[(int)VariableCode.__COUNT_STRING_ARRAY__];
@@ -198,7 +214,7 @@ namespace MinorShift.Emuera.GameData
 			if (!uEmuera.Utils.FileExists(csvPath))
 				return;
 			EraStreamReader eReader = new EraStreamReader(false);
-			if (!eReader.Open(csvPath))
+			if (!eReader.OpenOnCache(csvPath))
 			{
 				output.PrintError(eReader.Filename + "のオープンに失敗しました");
 				return;
@@ -515,6 +531,9 @@ check1break:
 			_decideActualArraySize_sub(VariableCode.SAVESTR, VariableCode.SAVESTRNAME, VariableStrArrayLength, position);
 			_decideActualArraySize_sub(VariableCode.GLOBAL, VariableCode.GLOBALNAME, VariableIntArrayLength, position);
 			_decideActualArraySize_sub(VariableCode.GLOBALS, VariableCode.GLOBALSNAME, VariableStrArrayLength, position);
+			_decideActualArraySize_sub(VariableCode.DAY, VariableCode.DAYNAME, VariableIntArrayLength, position);
+			_decideActualArraySize_sub(VariableCode.TIME, VariableCode.TIMENAME, VariableIntArrayLength, position);
+			_decideActualArraySize_sub(VariableCode.MONEY, VariableCode.MONEYNAME, VariableIntArrayLength, position);
 
 
 			//PALAM(JUEL込み)
@@ -625,6 +644,9 @@ check1break:
 			loadDataWithAliases(csvDir, "SAVESTR", savestrnameIndex, null, disp);
 			loadDataWithAliases(csvDir, "GLOBAL", globalIndex, null, disp);
 			loadDataWithAliases(csvDir, "GLOBALS", globalsIndex, null, disp);
+			loadDataWithAliases(csvDir, "DAY", dayIndex, null, disp);
+			loadDataWithAliases(csvDir, "TIME", timeIndex, null, disp);
+			loadDataWithAliases(csvDir, "MONEY", moneyIndex, null, disp);
 			//逆引き辞書を作成
 			for (int i = 0; i < names.Length; i++)
 			{
@@ -713,15 +735,57 @@ check1break:
 			erdNameToIntDics.Add(varname, dict);
 		}
 
+		public void RegisterUserDefinedNameData(List<string> filepaths, string varname, int varlength, bool disp, ScriptPosition sc)
+		{
+			if (filepaths == null || filepaths.Count == 0 || string.IsNullOrEmpty(varname) || varlength <= 0)
+				return;
+			if (erdNameToIntDics.ContainsKey(varname) || lazyErdNameData.ContainsKey(varname))
+				throw new CodeEE(varname + "は既に定義されています", sc);
+			lazyErdNameData.Add(varname, new LazyErdNameData
+			{
+				Filepaths = new List<string>(filepaths),
+				VarLength = varlength,
+				DisplayReport = disp,
+				Position = sc
+			});
+		}
+
+		private bool EnsureUserDefinedNameDataLoaded(string varname)
+		{
+			if (string.IsNullOrEmpty(varname))
+				return false;
+			if (erdNameToIntDics.ContainsKey(varname))
+				return true;
+			LazyErdNameData data;
+			if (!lazyErdNameData.TryGetValue(varname, out data))
+				return false;
+			if (!lazyErdLoading.Add(varname))
+				return false;
+			try
+			{
+				lazyErdNameData.Remove(varname);
+				UserDefineLoadData(data.Filepaths, varname, data.VarLength, data.DisplayReport, data.Position);
+				return erdNameToIntDics.ContainsKey(varname);
+			}
+			finally
+			{
+				lazyErdLoading.Remove(varname);
+			}
+		}
+
 		public bool isUserDefined(string varname, string str, int dim)
 		{
-			if (!Program.IsSnakeProfile || string.IsNullOrEmpty(varname) || string.IsNullOrEmpty(str))
+			if (string.IsNullOrEmpty(varname) || string.IsNullOrEmpty(str))
 				return false;
 			if (dim <= 1)
+			{
+				EnsureUserDefinedNameDataLoaded(varname);
 				return erdNameToIntDics.ContainsKey(varname) && erdNameToIntDics[varname].ContainsKey(str);
+			}
 			for (int i = 1; i <= dim; i++)
 			{
 				string key = varname + "@" + i.ToString();
+				EnsureUserDefinedNameDataLoaded(key);
 				Dictionary<string, int> dic;
 				if (erdNameToIntDics.TryGetValue(key, out dic) && dic.ContainsKey(str))
 					return true;
@@ -739,22 +803,40 @@ check1break:
             ret = 0;
             if (string.IsNullOrEmpty(key))
                 return false;
-            Dictionary<string, int> dic;
             try
             {
-                dic = GetKeywordDictionary(out string errPos, code, index, null);
-				if (dic == null)
-				{
-					if (string.IsNullOrEmpty(varname))
-						return false;
-					dic = GetKeywordDictionary(out errPos, code, index, varname);
-					if (dic == null)
-						return false;
-				}
+                Dictionary<string, int> dic = GetKeywordDictionary(out string errPos, code, index, null);
+				if (dic != null && dic.TryGetValue(key, out ret))
+					return true;
+				if (string.IsNullOrEmpty(varname))
+					return false;
+				EnsureUserDefinedNameDataLoaded(varname);
+				if (erdNameToIntDics.TryGetValue(varname, out dic))
+					return dic.TryGetValue(key, out ret);
+				dic = GetKeywordDictionary(out errPos, code, index, varname);
+				return dic != null && dic.TryGetValue(key, out ret);
             }
             catch { return false; }
-            return (dic.TryGetValue(key, out ret));
         }
+
+		public bool TryIntegerToKeyword(out string ret, long value, string varname)
+		{
+			ret = "";
+			if (value < 0 || string.IsNullOrEmpty(varname))
+				return false;
+			EnsureUserDefinedNameDataLoaded(varname);
+			if (!erdNameToIntDics.TryGetValue(varname, out Dictionary<string, int> dic))
+				return false;
+			foreach (KeyValuePair<string, int> pair in dic)
+			{
+				if (pair.Value == value)
+				{
+					ret = pair.Key;
+					return true;
+				}
+			}
+			return false;
+		}
 
 		public int KeywordToInteger(VariableCode code, string key, int index)
 		{
@@ -948,6 +1030,21 @@ check1break:
 					errPos = "globals.csv";
 					allowIndex = 0;
 					break;
+				case VariableCode.DAY:
+					ret = nameToIntDics[dayIndex];
+					errPos = "day.csv";
+					allowIndex = 0;
+					break;
+				case VariableCode.TIME:
+					ret = nameToIntDics[timeIndex];
+					errPos = "time.csv";
+					allowIndex = 0;
+					break;
+				case VariableCode.MONEY:
+					ret = nameToIntDics[moneyIndex];
+					errPos = "money.csv";
+					allowIndex = 0;
+					break;
 				case VariableCode.RELATION:
 					ret = relationDic;
 					errPos = "chara*.csv";
@@ -960,12 +1057,13 @@ check1break:
 					break;
 
 			}
-			if (ret == null && Program.IsSnakeProfile && !string.IsNullOrEmpty(varname))
+			if (ret == null && !string.IsNullOrEmpty(varname))
 			{
 				switch (code)
 				{
 					case VariableCode.VAR:
 					case VariableCode.VARS:
+						EnsureUserDefinedNameDataLoaded(varname);
 						if (erdNameToIntDics.TryGetValue(varname, out ret))
 						{
 							errPos = varname + ".csv";
@@ -974,6 +1072,7 @@ check1break:
 						break;
 					case VariableCode.CVAR:
 					case VariableCode.CVARS:
+						EnsureUserDefinedNameDataLoaded(varname);
 						if (erdNameToIntDics.TryGetValue(varname, out ret))
 						{
 							errPos = varname + ".csv";
@@ -987,6 +1086,7 @@ check1break:
 					{
 						int dim = ((code == VariableCode.CVAR2D) || (code == VariableCode.CVARS2D)) ? index : index + 1;
 						string key = varname + "@" + dim.ToString();
+						EnsureUserDefinedNameDataLoaded(key);
 						if (erdNameToIntDics.TryGetValue(key, out ret))
 						{
 							errPos = key + ".csv";
@@ -998,6 +1098,7 @@ check1break:
 					case VariableCode.VARS3D:
 					{
 						string key = varname + "@" + (index + 1).ToString();
+						EnsureUserDefinedNameDataLoaded(key);
 						if (erdNameToIntDics.TryGetValue(key, out ret))
 						{
 							errPos = key + ".csv";
@@ -1123,6 +1224,35 @@ check1break:
 
         }
 
+		public Int64 GetCsvNoByCharacterStr(CharacterStrData type, string name)
+		{
+			if (string.IsNullOrEmpty(name))
+				return -1;
+			for (int i = 0; i < CharacterTmplList.Count; i++)
+			{
+				CharacterTemplate tmpl = CharacterTmplList[i];
+				string cmp = null;
+				switch (type)
+				{
+					case CharacterStrData.NAME:
+						cmp = tmpl.Name;
+						break;
+					case CharacterStrData.CALLNAME:
+						cmp = tmpl.Callname;
+						break;
+					case CharacterStrData.NICKNAME:
+						cmp = tmpl.Nickname;
+						break;
+					case CharacterStrData.MASTERNAME:
+						cmp = tmpl.Mastername;
+						break;
+				}
+				if (!string.IsNullOrEmpty(cmp) && string.Equals(cmp, name, StringComparison.OrdinalIgnoreCase))
+					return tmpl.csvNo;
+			}
+			return -1;
+		}
+
 		public CharacterTemplate GetPseudoChara()
 		{
 			return new CharacterTemplate(0, this);
@@ -1139,46 +1269,10 @@ check1break:
 		{
 			if (!uEmuera.Utils.DirectoryExists(csvDir))
 			{
-				GenericUtils.Warn($"[CHARA] csvDir not found: {csvDir}");
-				try { System.IO.File.AppendAllText(Program.ExeDir + "chara_debug.log", $"csvDir not found: {csvDir}\n"); } catch {}
+				ParserMediator.Warn("csvフォルダが見つかりません:" + csvDir, null, 1);
 				return;
 			}
 			List<KeyValuePair<string, string>> csvPaths = Config.GetFiles(csvDir, "CHARA*.CSV");
-			GenericUtils.Info($"[CHARA] Found {csvPaths.Count} CHARA*.CSV files in {csvDir} (SearchSubdirectory={Config.SearchSubdirectory})");
-			try
-			{
-				var sb = new System.Text.StringBuilder();
-				sb.AppendLine($"csvDir={csvDir}");
-				sb.AppendLine($"SearchSubdirectory={Config.SearchSubdirectory}");
-				sb.AppendLine($"Found {csvPaths.Count} CHARA*.CSV files via Config.GetFiles");
-				for (int i = 0; i < Math.Min(csvPaths.Count, 10); i++)
-					sb.AppendLine($"  [{i}] {csvPaths[i].Key}");
-				if (csvPaths.Count > 10)
-					sb.AppendLine($"  ... and {csvPaths.Count - 10} more");
-				// List subdirectories
-				var subdirs = uEmuera.Utils.GetDirectoryPaths(csvDir);
-				sb.AppendLine($"Subdirectories in csvDir: {subdirs.Count}");
-				foreach (var d in subdirs)
-					sb.AppendLine($"  dir: {System.IO.Path.GetFileName(d)}");
-				// List files directly in csvDir
-				var topFiles = System.IO.Directory.GetFiles(csvDir, "*", System.IO.SearchOption.TopDirectoryOnly);
-				sb.AppendLine($"Top-level files: {topFiles.Length}");
-				// Check CHARA subdir specifically
-				string charaSubDir = csvDir + "CHARA";
-				sb.AppendLine($"CHARA subdir exists: {System.IO.Directory.Exists(charaSubDir)}");
-				if (System.IO.Directory.Exists(charaSubDir))
-				{
-					var charaFiles = System.IO.Directory.GetFiles(charaSubDir);
-					sb.AppendLine($"Files in CHARA subdir: {charaFiles.Length}");
-					for (int i = 0; i < Math.Min(charaFiles.Length, 5); i++)
-						sb.AppendLine($"  {System.IO.Path.GetFileName(charaFiles[i])}");
-				}
-				System.IO.File.WriteAllText(Program.ExeDir + "chara_debug.log", sb.ToString());
-			}
-			catch (Exception ex)
-			{
-				GenericUtils.Error($"[CHARA] Debug log write failed: {ex.Message}");
-			}
 			for (int i = 0; i < csvPaths.Count; i++)
 				loadCharacterDataFile(csvPaths[i].Value, csvPaths[i].Key, disp);
 #if(UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
@@ -1193,8 +1287,6 @@ check1break:
                 loadCharacterDataFile(csvPaths[i].Value, csvPaths[i].Key, disp);
 #endif
             SortCharacterTmplList();
-			GenericUtils.Info($"[CHARA] Total templates loaded: {CharacterTmplList.Count}");
-			try { System.IO.File.AppendAllText(Program.ExeDir + "chara_debug.log", $"\nTotal templates loaded: {CharacterTmplList.Count}\n"); } catch {}
 
             var count = CharacterTmplList.Count;
             CharacterTemplate tmpl = null;
@@ -1239,7 +1331,7 @@ check1break:
 		{
 			CharacterTemplate tmpl = null;
 			EraStreamReader eReader = new EraStreamReader(false);
-			if (!eReader.Open(csvPath, csvName))
+			if (!eReader.OpenOnCache(csvPath, csvName))
 			{
 				output.PrintError(eReader.Filename + "のオープンに失敗しました");
 				return;
@@ -1565,7 +1657,7 @@ check1break:
 			if (!uEmuera.Utils.FileExists(csvPath))
 				return;
 			EraStreamReader eReader = new EraStreamReader(false);
-			if (!eReader.Open(csvPath))
+			if (!eReader.OpenOnCache(csvPath))
 			{
 				output.PrintError(eReader.Filename + "のオープンに失敗しました");
 				return;
@@ -1624,7 +1716,7 @@ check1break:
 			string[] target = names[targetIndex];
             HashSet<int> defined = new HashSet<int>();
 			EraStreamReader eReader = new EraStreamReader(false);
-			if (!eReader.Open(csvPath))
+			if (!eReader.OpenOnCache(csvPath))
 			{
 				output.PrintError(eReader.Filename + "のオープンに失敗しました");
 				return;
@@ -1704,7 +1796,7 @@ check1break:
 				aliases[targetIndex] = new Dictionary<string, int>();
 			Dictionary<string, int> target = aliases[targetIndex];
 			EraStreamReader eReader = new EraStreamReader(false);
-			if (!eReader.Open(aliasPath))
+			if (!eReader.OpenOnCache(aliasPath))
 			{
 				output.PrintError(eReader.Filename + "のオープンに失敗しました");
 				return;

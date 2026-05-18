@@ -155,7 +155,7 @@ public partial class Inputpad : Control
 		return inputField != null && inputField.HasFocus();
 	}
 
-	public void ApplyFont(FontFile font, int fontSize)
+	public void ApplyFont(Font font, int fontSize)
 	{
 		if (inputField == null || confirmBtn == null || repeatBtn == null)
 			return;

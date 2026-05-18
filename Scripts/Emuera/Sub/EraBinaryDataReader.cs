@@ -24,6 +24,10 @@ namespace MinorShift.Emuera.Sub
 		StrArray = 0x11,
 		StrArray2D = 0x12,
 		StrArray3D = 0x13,
+		Float = 0x20,
+		FloatArray = 0x21,
+		FloatArray2D = 0x22,
+		FloatArray3D = 0x23,
 		//SOC = 0xFD,//キャラデータ始まり
 		Separator = 0xFD,//データ区切り
 		EOC = 0xFE,//キャラデータ終わり
@@ -122,6 +126,10 @@ namespace MinorShift.Emuera.Sub
 		public abstract void ReadStrArray(string[] refArray, bool needInit);
 		public abstract void ReadStrArray2D(string[,] refArray, bool needInit);
 		public abstract void ReadStrArray3D(string[, ,] refArray, bool needInit);
+		public abstract double ReadFloat();
+		public abstract void ReadFloatArray(double[] refArray, bool needInit);
+		public abstract void ReadFloatArray2D(double[,] refArray, bool needInit);
+		public abstract void ReadFloatArray3D(double[, ,] refArray, bool needInit);
 		public abstract KeyValuePair<string, EraSaveDataType> ReadVariableCode();
 		#region IDisposable メンバ
 
@@ -608,6 +616,240 @@ namespace MinorShift.Emuera.Sub
 				}
 				return;
 			}
+			public override double ReadFloat()
+			{
+				return reader.ReadDouble();
+			}
+
+			public override void ReadFloatArray(double[] refArray, bool needInit)
+			{
+				double[] oriArray = null;
+				byte b;
+				int x = 0;
+				int saveLength0 = reader.ReadInt32();
+				if (refArray == null)
+					refArray = new double[saveLength0];
+				int length0 = refArray.Length;
+				if (length0 < saveLength0)
+				{
+					oriArray = refArray;
+					refArray = new double[Math.Max(length0, saveLength0)];
+					length0 = Math.Min(length0, saveLength0);
+				}
+				while (true)
+				{
+					b = reader.ReadByte();
+					if (b == Ebdb.EoD)
+						break;
+					if (b == Ebdb.Zero)
+					{
+						int cnt = (int)m_ReadInt();
+						if (needInit)
+							for (int i = 0; i < cnt; i++)
+								refArray[x + i] = 0;
+						x += cnt;
+						continue;
+					}
+					refArray[x] = reader.ReadDouble();
+					x++;
+				}
+				if (needInit)
+					for (; x < length0; x++)
+						refArray[x] = 0;
+				if (oriArray != null)
+				{
+					for (x = 0; x < length0; x++)
+						oriArray[x] = refArray[x];
+				}
+				return;
+			}
+
+			public override void ReadFloatArray2D(double[,] refArray, bool needInit)
+			{
+				double[,] oriArray = null;
+				byte b;
+				int x = 0;
+				int y = 0;
+				int saveLength0 = reader.ReadInt32();
+				int saveLength1 = reader.ReadInt32();
+				if (refArray == null)
+					refArray = new double[saveLength0, saveLength1];
+				int length0 = refArray.GetLength(0);
+				int length1 = refArray.GetLength(1);
+				if (length0 < saveLength0 || length1 < saveLength1)
+				{
+					oriArray = refArray;
+					refArray = new double[Math.Max(length0, saveLength0), Math.Max(length1, saveLength1)];
+					length0 = Math.Min(length0, saveLength0);
+					length1 = Math.Min(length1, saveLength1);
+				}
+				while (true)
+				{
+					b = reader.ReadByte();
+					if (b == Ebdb.EoD)
+						break;
+					if (b == Ebdb.ZeroA1)
+					{
+						int cnt = (int)m_ReadInt();
+						if (needInit)
+							for (int i = 0; i < cnt; i++)
+								for (y = 0; y < length1; y++)
+									refArray[x + i, y] = 0;
+						x += cnt;
+						y = 0;
+						continue;
+					}
+					if (b == Ebdb.EoA1)
+					{
+						if (needInit)
+							for (; y < length1; y++)
+								refArray[x, y] = 0;
+						x++;
+						y = 0;
+						continue;
+					}
+					if (b == Ebdb.Zero)
+					{
+						int cnt = (int)m_ReadInt();
+						if (needInit)
+							for (int i = 0; i < cnt; i++)
+								refArray[x, y + i] = 0;
+						y += cnt;
+						continue;
+					}
+					refArray[x, y] = reader.ReadDouble();
+					y++;
+				}
+				if (needInit)
+				{
+					for (; x < length0; x++)
+					{
+						for (; y < length1; y++)
+							refArray[x, y] = 0;
+						y = 0;
+					}
+				}
+				if (oriArray != null)
+				{
+					for (x = 0; x < length0; x++)
+						for (y = 0; y < length1; y++)
+							oriArray[x, y] = refArray[x, y];
+				}
+				return;
+			}
+
+			public override void ReadFloatArray3D(double[, ,] refArray, bool needInit)
+			{
+				double[, ,] oriArray = null;
+				byte b;
+				int x = 0;
+				int y = 0;
+				int z = 0;
+				int saveLength0 = reader.ReadInt32();
+				int saveLength1 = reader.ReadInt32();
+				int saveLength2 = reader.ReadInt32();
+				if (refArray == null)
+					refArray = new double[saveLength0, saveLength1, saveLength2];
+				int length0 = refArray.GetLength(0);
+				int length1 = refArray.GetLength(1);
+				int length2 = refArray.GetLength(2);
+				if (length0 < saveLength0 || length1 < saveLength1 || length2 < saveLength2)
+				{
+					oriArray = refArray;
+					refArray = new double[Math.Max(length0, saveLength0), Math.Max(length1, saveLength1), Math.Max(length2, saveLength2)];
+					length0 = Math.Min(length0, saveLength0);
+					length1 = Math.Min(length1, saveLength1);
+					length2 = Math.Min(length2, saveLength2);
+				}
+				while (true)
+				{
+					b = reader.ReadByte();
+					if (b == Ebdb.EoD)
+						break;
+					if (b == Ebdb.ZeroA2)
+					{
+						int cnt = (int)m_ReadInt();
+						if (needInit)
+							for (int i = 0; i < cnt; i++)
+								for (y = 0; y < length1; y++)
+									for (z = 0; z < length2; z++)
+										refArray[x + i, y, z] = 0;
+						x += cnt;
+						y = 0;
+						z = 0;
+						continue;
+					}
+					if (b == Ebdb.EoA2)
+					{
+						if (needInit)
+						{
+							for (; y < length1; y++)
+							{
+								for (; z < length2; z++)
+									refArray[x, y, z] = 0;
+								z = 0;
+							}
+						}
+						x++;
+						y = 0;
+						z = 0;
+						continue;
+					}
+					if (b == Ebdb.ZeroA1)
+					{
+						int cnt = (int)m_ReadInt();
+						if (needInit)
+							for (int i = 0; i < cnt; i++)
+								for (z = 0; z < length2; z++)
+									refArray[x, y + i, z] = 0;
+						y += cnt;
+						z = 0;
+						continue;
+					}
+					if (b == Ebdb.EoA1)
+					{
+						if (needInit)
+							for (; z < length2; z++)
+								refArray[x, y, z] = 0;
+						y++;
+						z = 0;
+						continue;
+					}
+					if (b == Ebdb.Zero)
+					{
+						int cnt = (int)m_ReadInt();
+						if (needInit)
+							for (int i = 0; i < cnt; i++)
+								refArray[x, y, z + i] = 0;
+						z += cnt;
+						continue;
+					}
+					refArray[x, y, z] = reader.ReadDouble();
+					z++;
+				}
+				if (needInit)
+				{
+					for (; x < length0; x++)
+					{
+						for (; y < length1; y++)
+						{
+							for (; z < length2; z++)
+								refArray[x, y, z] = 0;
+							z = 0;
+						}
+						y = 0;
+					}
+				}
+				if (oriArray != null)
+				{
+					for (x = 0; x < length0; x++)
+						for (y = 0; y < length1; y++)
+							for (z = 0; z < length2; z++)
+								oriArray[x, y, z] = refArray[x, y, z];
+				}
+				return;
+			}
+
 			public override void ReadStrArray3D(string[, ,] refArray, bool needInit)
 			{
 				string[, ,] oriArray = null;

@@ -1,0 +1,41 @@
+; Variadic Smoke Test
+; Purpose: verify VARIADIC ARG / ARGLEN / GETARGCOUNT.
+; Expected output (first screen):
+;   === VARIADIC SMOKE ===
+;   PASS: variadic 3 args
+;   3
+;   PASS: variadic 5 args
+;   5
+;   PASS: getargcount 4 args
+;   4
+;   PASS: variadic 0 args
+;   0
+;   [WAIT prompt]
+
+@EVENTFIRST
+PRINTL === VARIADIC SMOKE ===
+PRINTL PASS: variadic 3 args
+PRINTVL CALL(VARIADIC_SUM, 10, 20, 30)
+PRINTL PASS: variadic 5 args
+PRINTVL CALL(VARIADIC_SUM, 1, 2, 3, 4, 5)
+PRINTL PASS: getargcount 4 args
+PRINTVL CALL(GETARGCOUNT_DEMO, 7, 8, 9, 10)
+PRINTL PASS: variadic 0 args
+PRINTVL CALL(VARIADIC_SUM)
+WAIT
+RETURN 0
+
+@VARIADIC_SUM
+#FUNCTION
+#DIM VARIADIC ARG
+#DIM SUM, 1
+SUM = 0
+FOR LOCAL, 0, ARGLEN()
+	SUM += ARG:LOCAL
+NEXT
+RETURN SUM
+
+@GETARGCOUNT_DEMO
+#FUNCTION
+#DIM VARIADIC ARG
+RETURN GETARGCOUNT()

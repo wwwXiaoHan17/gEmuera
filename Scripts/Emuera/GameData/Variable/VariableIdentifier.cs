@@ -69,6 +69,13 @@ namespace MinorShift.Emuera.GameData.Variable
 				return ((code & VariableCode.__STRING__) == VariableCode.__STRING__);
 			}
 		}
+		public bool IsFloat
+		{
+			get
+			{
+				return ((code & VariableCode.__FLOAT__) == VariableCode.__FLOAT__);
+			}
+		}
 		public bool IsArray1D
 		{
 			get
@@ -159,7 +166,8 @@ namespace MinorShift.Emuera.GameData.Variable
 						throw new ExeEE("ARRAY2DとARRAY1Dは排他");
 				}
 				if (((code & VariableCode.__INTEGER__) != VariableCode.__INTEGER__)
-					&& ((code & VariableCode.__STRING__) != VariableCode.__STRING__))
+					&& ((code & VariableCode.__STRING__) != VariableCode.__STRING__)
+					&& ((code & VariableCode.__FLOAT__) != VariableCode.__FLOAT__))
 						throw new ExeEE("INTEGERとSTRINGのどちらかは必須");
 				if (((code & VariableCode.__INTEGER__) == VariableCode.__INTEGER__)
 					&& ((code & VariableCode.__STRING__) == VariableCode.__STRING__))

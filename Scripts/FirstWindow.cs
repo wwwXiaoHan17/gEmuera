@@ -10,27 +10,31 @@ public partial class FirstWindow : Control
 	const string LauncherSettingsSection = "launcher";
 	const string LauncherLastGamePathKey = "last_game_path";
 	const string LauncherLastCoreProfileKey = "last_core_profile";
-	public const string CoreProfileV18 = "v18";
+	const string LauncherPreloadThreadsKey = "preload_threads";
+	public const string CoreProfileV24Pure = "v24pure";
 	public const string CoreProfileSnake = "snake";
+	public const int PreloadThreadsUnlimited = 0;
 
 	enum LauncherGameCategory
 	{
-		V18,
+		V24Pure,
 		Snake,
 		All
 	}
 
 	public static string SelectedGamePath { get; private set; }
-	public static string SelectedCoreProfileName { get; private set; } = CoreProfileV18;
+	public static string SelectedCoreProfileName { get; private set; } = CoreProfileV24Pure;
+	public static int SelectedPreloadThreads { get; private set; } = 4;
 
 	ItemList gameList;
 	Button startButton;
 	Label statusLabel;
 	OptionButton categoryButton;
+	OptionButton preloadThreadButton;
 	Label categoryHintLabel;
 	Control announcementOverlay;
 	Label announcementStatusLabel;
-	LauncherGameCategory currentCategory = LauncherGameCategory.V18;
+	LauncherGameCategory currentCategory = LauncherGameCategory.V24Pure;
 	bool androidPermissionCheckPending = false;
 	bool androidPermissionResultReceived = false;
 
@@ -38,6 +42,7 @@ public partial class FirstWindow : Control
 	{
 		FrameRateHelper.Apply();
 		ResolutionHelper.Apply();
+		SelectedPreloadThreads = LoadPreloadThreadCount();
 
 		BuildLauncherUi();
 
@@ -201,7 +206,7 @@ public partial class FirstWindow : Control
 		var content = CreateDialogTab(MultiLanguage.Get("FirstWindow.NoticeTitle", "公告"));
 
 		var body = CreateDialogText(MultiLanguage.Get("FirstWindow.NoticeBody",
-			"如果遇到 bug、兼容性问题或游戏无法正常运行，可以加入 QQ 群反馈。\n\n选择游戏时请先确认分类：v18 用普通 emuera 游戏；snake 用蛇版 TW 等 snake 核心游戏；All 会显示所有可识别游戏。"));
+			"如果遇到 bug、兼容性问题或游戏无法正常运行，可以加入 QQ 群反馈。\n\n选择游戏时请先确认分类：v24 用普通 emuera 游戏（兼容 v18）；snake 用蛇版 TW 等 snake 核心游戏；All 会显示所有可识别游戏。"));
 		content.AddChild(body);
 
 		return content;
@@ -285,6 +290,7 @@ public partial class FirstWindow : Control
 
 		content.AddChild(CreateSectionTitle(MultiLanguage.Get("FirstWindow.SelectGame", "选择游戏")));
 		content.AddChild(CreateCategorySelector());
+		content.AddChild(CreatePreloadThreadSelector());
 
 		categoryHintLabel = new Label();
 		categoryHintLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
@@ -330,7 +336,7 @@ public partial class FirstWindow : Control
 		categoryButton.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 		categoryButton.CustomMinimumSize = new Vector2(0, 44);
 		categoryButton.AddThemeFontSizeOverride("font_size", 17);
-		categoryButton.AddItem(MultiLanguage.Get("FirstWindow.CategoryV18", "v18"), (int)LauncherGameCategory.V18);
+		categoryButton.AddItem(MultiLanguage.Get("FirstWindow.CategoryV24Pure", "v24"), (int)LauncherGameCategory.V24Pure);
 		categoryButton.AddItem(MultiLanguage.Get("FirstWindow.CategorySnake", "snake"), (int)LauncherGameCategory.Snake);
 		categoryButton.AddItem(MultiLanguage.Get("FirstWindow.CategoryAll", "All"), (int)LauncherGameCategory.All);
 		categoryButton.Select((int)currentCategory);
@@ -338,6 +344,50 @@ public partial class FirstWindow : Control
 		box.AddChild(categoryButton);
 
 		return box;
+	}
+
+	Control CreatePreloadThreadSelector()
+	{
+		var box = new VBoxContainer();
+		box.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		box.AddThemeConstantOverride("separation", 6);
+
+		var label = new Label();
+		label.Text = MultiLanguage.Get("FirstWindow.PreloadThreads", "CSV/ERB 预读线程");
+		label.AddThemeFontSizeOverride("font_size", 14);
+		label.AddThemeColorOverride("font_color", new Color(0.84f, 0.89f, 0.94f));
+		box.AddChild(label);
+
+		preloadThreadButton = new OptionButton();
+		preloadThreadButton.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		preloadThreadButton.CustomMinimumSize = new Vector2(0, 44);
+		preloadThreadButton.AddThemeFontSizeOverride("font_size", 17);
+		preloadThreadButton.AddItem("4", 4);
+		preloadThreadButton.AddItem("8", 8);
+		preloadThreadButton.AddItem("16", 16);
+		preloadThreadButton.AddItem(MultiLanguage.Get("FirstWindow.PreloadUnlimited", "不限制"), PreloadThreadsUnlimited);
+		SelectPreloadThreadItem();
+		preloadThreadButton.ItemSelected += OnPreloadThreadSelected;
+		box.AddChild(preloadThreadButton);
+
+		return box;
+	}
+
+	void SelectPreloadThreadItem()
+	{
+		if (preloadThreadButton == null)
+			return;
+		int selected = NormalizePreloadThreadCount(SelectedPreloadThreads);
+		for (int i = 0; i < preloadThreadButton.ItemCount; i++)
+		{
+			if (preloadThreadButton.GetItemId(i) == selected)
+			{
+				preloadThreadButton.Select(i);
+				return;
+			}
+		}
+		preloadThreadButton.Select(0);
+		SelectedPreloadThreads = 4;
 	}
 
 	PanelContainer CreatePanel(Color backgroundColor, Color borderColor)
@@ -402,6 +452,14 @@ public partial class FirstWindow : Control
 		ScanGames();
 	}
 
+	void OnPreloadThreadSelected(long index)
+	{
+		if (preloadThreadButton == null)
+			return;
+		SelectedPreloadThreads = NormalizePreloadThreadCount(preloadThreadButton.GetItemId((int)index));
+		SavePreloadThreadCount(SelectedPreloadThreads);
+	}
+
 	void UpdateCategoryHint()
 	{
 		if (categoryHintLabel == null)
@@ -411,7 +469,7 @@ public partial class FirstWindow : Control
 		{
 			LauncherGameCategory.Snake => MultiLanguage.Get("FirstWindow.SnakeHint", $"snake：蛇版 TW 请放入 {GetSnakeRootHint()}，启动时会使用 snake 核心。"),
 			LauncherGameCategory.All => MultiLanguage.Get("FirstWindow.AllHint", $"All：显示 {GetNormalRootHint()} 下所有可识别游戏，包括 snake 目录。"),
-			_ => MultiLanguage.Get("FirstWindow.V18Hint", $"v18：扫描 {GetNormalRootHint()} 下的普通游戏，不显示 snake 目录。")
+			_ => MultiLanguage.Get("FirstWindow.V24PureHint", $"v24：扫描 {GetNormalRootHint()} 下的普通游戏（兼容 v18），不显示 snake 目录。")
 		};
 	}
 
@@ -485,7 +543,7 @@ public partial class FirstWindow : Control
 		startButton.Disabled = true;
 
 		var roots = GetScanRoots(currentCategory);
-		bool includeSnake = currentCategory != LauncherGameCategory.V18;
+		bool includeSnake = currentCategory != LauncherGameCategory.V24Pure;
 
 		var addedPaths = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
 		foreach (var root in roots)
@@ -661,7 +719,8 @@ public partial class FirstWindow : Control
 	{
 		if (gameList.IsItemDisabled((int)index))
 			return;
-		SetSelectedGamePath(gameList.GetItemMetadata((int)index).As<string>(), GetSelectedCoreProfileName());
+		string selectedPath = gameList.GetItemMetadata((int)index).As<string>();
+		SetSelectedGamePath(selectedPath, GetSelectedCoreProfileName(selectedPath));
 		GetTree().ChangeSceneToFile("res://main.tscn");
 	}
 
@@ -670,7 +729,8 @@ public partial class FirstWindow : Control
 		var selected = gameList.GetSelectedItems();
 		if (selected.Length == 0)
 			return;
-		SetSelectedGamePath(gameList.GetItemMetadata(selected[0]).As<string>(), GetSelectedCoreProfileName());
+		string selectedPath = gameList.GetItemMetadata(selected[0]).As<string>();
+		SetSelectedGamePath(selectedPath, GetSelectedCoreProfileName(selectedPath));
 		GetTree().ChangeSceneToFile("res://main.tscn");
 	}
 
@@ -684,18 +744,38 @@ public partial class FirstWindow : Control
 		{
 			SelectedGamePath = saved;
 			SelectedCoreProfileName = LoadLastCoreProfileName();
+			SelectedPreloadThreads = LoadPreloadThreadCount();
 			return saved;
 		}
 
 		return null;
 	}
 
-	string GetSelectedCoreProfileName()
+	string GetSelectedCoreProfileName(string selectedPath)
 	{
-		return currentCategory == LauncherGameCategory.Snake ? CoreProfileSnake : CoreProfileV18;
+		if (currentCategory == LauncherGameCategory.Snake)
+			return CoreProfileSnake;
+		if (currentCategory == LauncherGameCategory.All && IsUnderSnakeRoot(selectedPath))
+			return CoreProfileSnake;
+		return CoreProfileV24Pure;
 	}
 
-	static void SetSelectedGamePath(string path, string coreProfileName = CoreProfileV18)
+	bool IsUnderSnakeRoot(string path)
+	{
+		if (string.IsNullOrEmpty(path))
+			return false;
+
+		foreach (string root in GetBaseScanRoots())
+		{
+			string snakeRoot = root.TrimEnd('/', '\\') + "/snake";
+			if (PathsEqual(path, snakeRoot)
+				|| path.TrimEnd('/', '\\').StartsWith(snakeRoot.TrimEnd('/', '\\') + "/", System.StringComparison.OrdinalIgnoreCase))
+				return true;
+		}
+		return false;
+	}
+
+	static void SetSelectedGamePath(string path, string coreProfileName = CoreProfileV24Pure)
 	{
 		if (string.IsNullOrEmpty(path))
 			return;
@@ -707,9 +787,16 @@ public partial class FirstWindow : Control
 
 	static string NormalizeCoreProfileName(string coreProfileName)
 	{
-		return string.Equals(coreProfileName, CoreProfileSnake, System.StringComparison.OrdinalIgnoreCase)
-			? CoreProfileSnake
-			: CoreProfileV18;
+		if (string.Equals(coreProfileName, CoreProfileSnake, System.StringComparison.OrdinalIgnoreCase))
+			return CoreProfileSnake;
+		return CoreProfileV24Pure;
+	}
+
+	static int NormalizePreloadThreadCount(int value)
+	{
+		if (value <= 0)
+			return PreloadThreadsUnlimited;
+		return System.Math.Max(4, value);
 	}
 
 	static string LoadLastGamePath()
@@ -725,9 +812,9 @@ public partial class FirstWindow : Control
 	{
 		var config = new ConfigFile();
 		if (config.Load(LauncherSettingsPath) != Error.Ok)
-			return CoreProfileV18;
+			return CoreProfileV24Pure;
 
-		return NormalizeCoreProfileName(config.GetValue(LauncherSettingsSection, LauncherLastCoreProfileKey, CoreProfileV18).As<string>());
+		return NormalizeCoreProfileName(config.GetValue(LauncherSettingsSection, LauncherLastCoreProfileKey, CoreProfileV24Pure).As<string>());
 	}
 
 	static void SaveLastGamePath(string path, string coreProfileName)
@@ -739,6 +826,23 @@ public partial class FirstWindow : Control
 		config.Load(LauncherSettingsPath);
 		config.SetValue(LauncherSettingsSection, LauncherLastGamePathKey, path);
 		config.SetValue(LauncherSettingsSection, LauncherLastCoreProfileKey, NormalizeCoreProfileName(coreProfileName));
+		config.SetValue(LauncherSettingsSection, LauncherPreloadThreadsKey, NormalizePreloadThreadCount(SelectedPreloadThreads));
+		config.Save(LauncherSettingsPath);
+	}
+
+	static int LoadPreloadThreadCount()
+	{
+		var config = new ConfigFile();
+		if (config.Load(LauncherSettingsPath) != Error.Ok)
+			return 4;
+		return NormalizePreloadThreadCount((int)config.GetValue(LauncherSettingsSection, LauncherPreloadThreadsKey, 4).AsInt32());
+	}
+
+	static void SavePreloadThreadCount(int value)
+	{
+		var config = new ConfigFile();
+		config.Load(LauncherSettingsPath);
+		config.SetValue(LauncherSettingsSection, LauncherPreloadThreadsKey, NormalizePreloadThreadCount(value));
 		config.Save(LauncherSettingsPath);
 	}
 

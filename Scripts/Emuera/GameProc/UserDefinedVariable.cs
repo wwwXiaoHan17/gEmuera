@@ -17,11 +17,14 @@ namespace MinorShift.Emuera.GameProc
 	{
 		public string Name = null;
 		public bool TypeIsStr = false;
+		public bool TypeIsFloat = false;
 		public bool Reference = false;
+		public bool Out = false;
 		public int Dimension = 1;
 		public int[] Lengths = null;
 		public Int64[] DefaultInt = null;
 		public string[] DefaultStr = null;
+		public double[] DefaultFloat = null;
 		public bool Global = false;
 		public bool Save = false;
 		public bool Static = true;
@@ -32,14 +35,59 @@ namespace MinorShift.Emuera.GameProc
 		//1822 Privateの方もDIMだけ遅延させようとしたけどちょっと課題がおおいのでやめとく
 		public static UserDefinedVariableData Create(DimLineWC dimline)
 		{
-			return Create(dimline.WC, dimline.Dims, dimline.IsPrivate, dimline.SC);
+			return Create(dimline.WC, dimline.Dims, dimline.IsPrivate, dimline.SC, dimline.IsFloat);
 		}
 
 		public static UserDefinedVariableData Create(WordCollection wc, bool dims, bool isPrivate, ScriptPosition sc)
 		{
+			return Create(wc, dims, isPrivate, sc, false);
+		}
+
+		public static UserDefinedVariableData Create(WordCollection wc, bool dims, bool isFloat, bool isPrivate, ScriptPosition sc)
+		{
+			return Create(wc, dims, isPrivate, sc, isFloat);
+		}
+
+		public static UserDefinedVariableData CreateRefScalar(WordCollection wc, bool isStr, bool isFloat, bool isPrivate, ScriptPosition sc)
+		{
+			UserDefinedVariableData ret = new UserDefinedVariableData();
+			ret.TypeIsStr = isStr;
+			ret.TypeIsFloat = isFloat;
+			ret.Reference = true;
+			ret.Static = false;
+			ret.Private = isPrivate;
+			ret.Dimension = 0;
+			ret.Lengths = new int[] { 1 };
+			string keyword = isStr ? "#REFS" : isFloat ? "#REFF" : "#REF";
+			if (wc.EOL || !(wc.Current is IdentifierWord idw))
+				throw new CodeEE(keyword + "の後に有効な変数名が指定されていません", sc);
+			wc.ShiftNext();
+			ret.Name = idw.Code;
+			if (Config.ICVariable)
+				ret.Name = ret.Name.ToUpper();
+			if (!wc.EOL)
+				throw new CodeEE("参照型変数にはサイズを指定できません", sc);
+			string errMes = "";
+			int errLevel = -1;
+			if (isPrivate)
+				GlobalStatic.IdentifierDictionary.CheckUserPrivateVarName(ref errMes, ref errLevel, ret.Name);
+			else
+				GlobalStatic.IdentifierDictionary.CheckUserVarName(ref errMes, ref errLevel, ret.Name);
+			if (errLevel >= 0)
+			{
+				if (errLevel >= 2)
+					throw new CodeEE(errMes, sc);
+				ParserMediator.Warn(errMes, sc, errLevel);
+			}
+			return ret;
+		}
+
+		static UserDefinedVariableData Create(WordCollection wc, bool dims, bool isPrivate, ScriptPosition sc, bool isFloat)
+		{
 			string dimtype = dims ? "#DIM" : "#DIMS";
 			UserDefinedVariableData ret = new UserDefinedVariableData();
 			ret.TypeIsStr = dims;
+			ret.TypeIsFloat = isFloat;
 
 			IdentifierWord idw;
 			bool staticDefined = false;
@@ -87,10 +135,11 @@ namespace MinorShift.Emuera.GameProc
 						if (ret.Reference)
 							throw new CodeEE(keyword + "キーワードが二重に指定されています", sc);
 						ret.Reference = true;
+						ret.Out = true;
 						ret.Static = false;
 						break;
 					case "OUT":
-						if (!Program.IsSnakeProfile)
+						if (staticDefined && !ret.Reference && (wc.EOL || wc.Current.Type == ',' || wc.Current.Type == '='))
 						{
 							ret.Name = keyword;
 							goto whilebreak;
@@ -285,7 +334,9 @@ namespace MinorShift.Emuera.GameProc
 					if (ret.Const && terms.Length != size)
 						throw new CodeEE("定数の初期値の数が配列のサイズと一致しません");
 				}
-				if (dims)
+				if (ret.TypeIsFloat)
+					ret.DefaultFloat = new double[terms.Length];
+				else if (dims)
 					ret.DefaultStr = new string[terms.Length];
 				else
 					ret.DefaultInt = new Int64[terms.Length];
@@ -298,9 +349,15 @@ namespace MinorShift.Emuera.GameProc
 					SingleTerm sTerm = terms[i] as SingleTerm;
 					if (sTerm == null)
 						throw new CodeEE("配列の初期値には定数のみ指定できます");
-					if (dims != sTerm.IsString)
+					if (ret.TypeIsFloat)
+					{
+						if (!sTerm.IsFloat && !sTerm.IsInteger)
+							throw new CodeEE("変数の型と初期値の型が一致していません");
+						ret.DefaultFloat[i] = sTerm.GetFloatValue(GlobalStatic.EMediator);
+					}
+					else if (dims != sTerm.IsString)
 						throw new CodeEE("変数の型と初期値の型が一致していません");
-					if (dims)
+					else if (dims)
 						ret.DefaultStr[i] = sTerm.Str;
 					else
 						ret.DefaultInt[i] = sTerm.Int;
@@ -348,15 +405,18 @@ namespace MinorShift.Emuera.GameProc
 	{
 		public WordCollection WC;
 		public bool Dims;
+		public bool IsFloat;
 		public bool IsPrivate;
 		public ScriptPosition SC;
-		public DimLineWC(WordCollection wc, bool isString, bool isPrivate, ScriptPosition position)
+		public DimLineWC(WordCollection wc, bool isString, bool isFloat, bool isPrivate, ScriptPosition position)
 		{
 			WC = wc;
 			Dims = isString;
+			IsFloat = isFloat;
 			IsPrivate = isPrivate;
 			SC = position;
 		}
+		public DimLineWC(WordCollection wc, bool isString, bool isPrivate, ScriptPosition position) : this(wc, isString, false, isPrivate, position) { }
 	}
 
 }

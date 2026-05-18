@@ -1,0 +1,18 @@
+; Lazyload Smoke Test
+; Purpose: verify CALLSTR can trigger on-demand loading of a delayed function.
+; Setup: place this file in erb/00_TITLE.ERB, and 99_DELAYED.ERB in erb/LAZY/.
+; lazyloading.cfg must list "LAZY" as a lazy-load subdirectory.
+; Expected output (first screen):
+;   === LAZYLOAD SMOKE ===
+;   PASS: title file loaded
+;   PASS: lazy target loaded
+;   PASS: lazyload smoke finished
+;   [WAIT prompt]
+
+@EVENTFIRST
+PRINTL === LAZYLOAD SMOKE ===
+PRINTL PASS: title file loaded
+CALLSTR "LAZY_TARGET"
+PRINTL PASS: lazyload smoke finished
+WAIT
+RETURN 0

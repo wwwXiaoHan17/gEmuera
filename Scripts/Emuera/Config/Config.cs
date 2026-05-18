@@ -120,7 +120,10 @@ namespace MinorShift.Emuera
 			SystemSaveInBinary = instance.GetConfigValue<bool>(ConfigCode.SystemSaveInBinary);
 			SystemIgnoreTripleSymbol = instance.GetConfigValue<bool>(ConfigCode.SystemIgnoreTripleSymbol);
 			SystemIgnoreStringSet = instance.GetConfigValue<bool>(ConfigCode.SystemIgnoreStringSet);
-			UseLazyLoading = Program.IsSnakeProfile || instance.GetConfigValue<bool>(ConfigCode.UseLazyLoading);
+			UseLazyLoading = instance.GetConfigValue<bool>(ConfigCode.UseLazyLoading);
+			UseERD = instance.GetConfigValue<bool>(ConfigCode.UseERD);
+			VarsizeDimConfig = instance.GetConfigValue<bool>(ConfigCode.VarsizeDimConfig);
+			CheckDuplicateIdentifier = instance.GetConfigValue<bool>(ConfigCode.CheckDuplicateIdentifier);
 			
 			CompatiFuncArgAutoConvert = instance.GetConfigValue<bool>(ConfigCode.CompatiFuncArgAutoConvert);
 			CompatiFuncArgOptional = instance.GetConfigValue<bool>(ConfigCode.CompatiFuncArgOptional);
@@ -535,6 +538,9 @@ namespace MinorShift.Emuera
 		public static bool SystemNoTarget { get; private set; }
 		public static bool SystemIgnoreStringSet { get; private set; }
 		public static bool UseLazyLoading { get; private set; }
+		public static bool UseERD { get; private set; }
+		public static bool VarsizeDimConfig { get; private set; }
+		public static bool CheckDuplicateIdentifier { get; private set; }
 
 		public static int Language { get; private set; }
 

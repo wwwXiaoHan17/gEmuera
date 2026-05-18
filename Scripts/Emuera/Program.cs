@@ -15,7 +15,7 @@ namespace MinorShift.Emuera
 {
 	public enum EmueraCoreProfile
 	{
-		Emuera1824V18,
+		V24Pure,
 		Snake,
 		SnakeModernMobile,
 	}
@@ -239,13 +239,13 @@ namespace MinorShift.Emuera
 
 		public static bool debugMode = false;
 		public static bool DebugMode { get { return debugMode; } }
-		public static EmueraCoreProfile CoreProfile { get; private set; } = EmueraCoreProfile.Emuera1824V18;
+		public static EmueraCoreProfile CoreProfile { get; private set; } = EmueraCoreProfile.V24Pure;
 		public static bool IsSnakeProfile
 		{
 			get { return CoreProfile == EmueraCoreProfile.Snake || CoreProfile == EmueraCoreProfile.SnakeModernMobile; }
 		}
+		public static bool SupportsLazyLoading { get { return true; } }
 		public static bool IsSnakeModernMobileProfile { get { return CoreProfile == EmueraCoreProfile.SnakeModernMobile; } }
-		public static bool UseLegacySnakeCompatibilityFallbacks { get { return CoreProfile == EmueraCoreProfile.Snake; } }
 
 		public static void AppendSnakeStartupErrorLog(string text)
 		{
@@ -301,7 +301,7 @@ namespace MinorShift.Emuera
 		private static EmueraCoreProfile DetectCoreProfile(string exeDir)
 		{
 			if (string.IsNullOrEmpty(exeDir))
-				return EmueraCoreProfile.Emuera1824V18;
+				return EmueraCoreProfile.V24Pure;
 
 			string launcherProfile = global::FirstWindow.SelectedCoreProfileName;
 			if (string.Equals(launcherProfile, global::FirstWindow.CoreProfileSnake, StringComparison.OrdinalIgnoreCase))
@@ -312,7 +312,7 @@ namespace MinorShift.Emuera
 			if (IsLegacySnakeCoreRequested(exeDir))
 				return EmueraCoreProfile.Snake;
 
-			return EmueraCoreProfile.Emuera1824V18;
+			return EmueraCoreProfile.V24Pure;
 		}
 
 		private static bool IsLegacySnakeCoreRequested(string exeDir)

@@ -1,0 +1,78 @@
+; SQL Smoke Test
+; Purpose: verify SQL_CONNECTION_OPEN, SQL_EXECUTE_NONQUERY, SQL_EXECUTE_READER, SQL_READER_READ, SQL_READER_GET_LONG, SQL_READER_GET_FLOAT, SQL_READER_GET_STRING.
+; Expected output (first screen):
+;   === SQL SMOKE ===
+;   PASS: connection open
+;   1
+;   PASS: table created
+;   1
+;   PASS: insert done
+;   1
+;   PASS: reader row count
+;   2
+;   PASS: reader long
+;   7
+;   PASS: reader float
+;   2.500000
+;   PASS: reader string
+;   hello
+;   PASS: scalar long
+;   7
+;   PASS: scalar float
+;   2.500000
+;   PASS: scalar string
+;   hello
+;   PASS: SQL smoke finished
+;   [WAIT prompt]
+
+@EVENTFIRST
+PRINTL === SQL SMOKE ===
+PRINTL PASS: connection open
+PRINTVL SQL_CONNECTION_OPEN("sql_smoke")
+PRINTL PASS: table created
+PRINTVL SQL_EXECUTE_NONQUERY("sql_smoke", "CREATE TABLE IF NOT EXISTS t (id INTEGER, val REAL, name TEXT)")
+PRINTL PASS: insert done
+PRINTVL SQL_EXECUTE_NONQUERY("sql_smoke", "DELETE FROM t")
+PRINTVL SQL_EXECUTE_NONQUERY("sql_smoke", "INSERT INTO t (id, val, name) VALUES (7, 2.5, 'hello')")
+PRINTVL SQL_EXECUTE_NONQUERY("sql_smoke", "INSERT INTO t (id, val, name) VALUES (8, 3.5, 'world')")
+CALL SQL_READER_SMOKE
+CALL SQL_SCALAR_SMOKE
+PRINTL PASS: SQL smoke finished
+WAIT
+RETURN 0
+
+@SQL_READER_SMOKE
+PRINTL PASS: reader row count
+PRINTVL SQL_EXECUTE_READER("sql_smoke", "SELECT * FROM t")
+#DIM ROWS
+ROWS = 0
+WHILE SQL_READER_READ("sql_smoke")
+	ROWS += 1
+WEND
+SQL_READER_CLOSE("sql_smoke")
+PRINTVL ROWS
+PRINTL PASS: reader long
+PRINTVL SQL_EXECUTE_READER("sql_smoke", "SELECT id FROM t WHERE id=7")
+SQL_READER_READ("sql_smoke")
+PRINTVL SQL_READER_GET_LONG("sql_smoke", 0)
+SQL_READER_CLOSE("sql_smoke")
+PRINTL PASS: reader float
+PRINTVL SQL_EXECUTE_READER("sql_smoke", "SELECT val FROM t WHERE id=7")
+SQL_READER_READ("sql_smoke")
+PRINTVL TOSTRF(SQL_READER_GET_FLOAT("sql_smoke", 0))
+SQL_READER_CLOSE("sql_smoke")
+PRINTL PASS: reader string
+PRINTVL SQL_EXECUTE_READER("sql_smoke", "SELECT name FROM t WHERE id=7")
+SQL_READER_READ("sql_smoke")
+PRINTSL SQL_READER_GET_STRING("sql_smoke", 0)
+SQL_READER_CLOSE("sql_smoke")
+RETURN 0
+
+@SQL_SCALAR_SMOKE
+PRINTL PASS: scalar long
+PRINTVL SQL_EXECUTE_SCALAR_LONG("sql_smoke", "SELECT id FROM t WHERE id=7")
+PRINTL PASS: scalar float
+PRINTVL TOSTRF(SQL_EXECUTE_SCALAR_FLOAT("sql_smoke", "SELECT val FROM t WHERE id=7"))
+PRINTL PASS: scalar string
+PRINTSL SQL_EXECUTE_SCALAR_STRING("sql_smoke", "SELECT name FROM t WHERE id=7")
+RETURN 0

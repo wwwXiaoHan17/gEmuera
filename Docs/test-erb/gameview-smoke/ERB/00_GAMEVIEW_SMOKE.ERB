@@ -1,0 +1,24 @@
+; GameView Smoke Test
+; Purpose: verify HTML text styles, <shape>, <div> background/border/padding, absolute positioning.
+; Expected visual output (first screen):
+;   === GAMEVIEW SMOKE ===
+;   [centered blue bold text] PASS: HTML_PRINT text style
+;   [dark rectangle with light blue border] PASS: shape rect
+;   [div with background/border/padding] PASS: div background/border/padding
+;                                            PASS: div child line
+;   [absolute-lefttop div] PASS: absolute-lefttop div
+;   [absolute-leftbottom div] PASS: absolute-leftbottom div
+;   PASS: gameview smoke finished
+;   [WAIT prompt]
+
+@EVENTFIRST
+PRINTL === GAMEVIEW SMOKE ===
+HTML_PRINT "<p align='center'><font color='DeepSkyBlue'><b>PASS: HTML_PRINT text style</b></font></p>"
+HTML_PRINT "<p align='center'><font color='DeepSkyBlue'><u>PASS: underline</u> <s>PASS: strikethrough</s> <b><i>PASS: bold+italic</i></b></font></p>"
+HTML_PRINT "<shape type='rect' param='0,0,320,12' color='#202020' bcolor='#4DA3FF'>"
+HTML_PRINT "<div rect='16px,16px,360px,120px' color='#18202A' border='2px' bcolor='#4DA3FF' padding='8px' margin='4px'><font color='#FFFFFF'>PASS: div background/border/padding</font><br><font color='#9EE493'>PASS: div child line</font></div>"
+HTML_PRINT "<div rect='24px,180px,300px,72px' display='absolute-lefttop' color='#302030' border='2px' bcolor='#FF77AA' padding='8px'><font color='#FFFFFF'>PASS: absolute-lefttop div</font></div>"
+HTML_PRINT "<div rect='24px,32px,300px,72px' display='absolute-leftbottom' color='#203020' border='2px' bcolor='#88DD77' padding='8px'><font color='#FFFFFF'>PASS: absolute-leftbottom div</font></div>"
+PRINTL PASS: gameview smoke finished
+WAIT
+RETURN 0

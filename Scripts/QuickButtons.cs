@@ -1,4 +1,5 @@
 using Godot;
+using System;
 using System.Collections.Generic;
 
 public partial class QuickButtons : CanvasLayer
@@ -10,7 +11,7 @@ public partial class QuickButtons : CanvasLayer
 	VBoxContainer rowsContainer;
 	HBoxContainer currentRow;
 	List<Control> buttons = new List<Control>();
-	FontFile fontFile;
+	Font fontFile;
 	int fontSize;
 	bool layoutUpdateQueued;
 	bool resizingWidth;
@@ -194,6 +195,8 @@ public partial class QuickButtons : CanvasLayer
 
 	void OnQuickGuiInput(InputEvent @event, Control eventSource)
 	{
+		if (!IsControlAlive(eventSource))
+			return;
 		HandleQuickPointerInput(@event, true, null, null, eventSource);
 	}
 
@@ -210,6 +213,12 @@ public partial class QuickButtons : CanvasLayer
 
 	public void Clear()
 	{
+		StopQuickInertia();
+		scrollingByDrag = false;
+		dragMoved = false;
+		dragButton = null;
+		dragPointerIsTouch = false;
+		dragPointerIndex = -1;
 		buttons.Clear();
 		foreach (var child in rowsContainer.GetChildren())
 		{
@@ -262,6 +271,8 @@ public partial class QuickButtons : CanvasLayer
 
 	void OnQuickButtonGuiInput(InputEvent @event, Control btn, string inputCode)
 	{
+		if (!IsControlAlive(btn))
+			return;
 		HandleQuickPointerInput(@event, true, btn, inputCode, btn);
 	}
 
@@ -269,7 +280,7 @@ public partial class QuickButtons : CanvasLayer
 	{
 		if (TryGetPointer(@event, out var position, out var pressed, out var released, out var motion, out var isTouch, out var pointerIndex))
 		{
-			if (scroll == null || panel == null || (!scrollingByDrag && !panel.GetGlobalRect().HasPoint(position)))
+			if (!IsControlAlive(scroll) || !IsControlAlive(panel) || (!scrollingByDrag && !panel.GetGlobalRect().HasPoint(position)))
 				return false;
 
 			if (scrollingByDrag && motion && !IsActivePointer(isTouch, pointerIndex))
@@ -357,16 +368,16 @@ public partial class QuickButtons : CanvasLayer
 
 		bool handled = false;
 		string inputCode = null;
-		if (dragButton != null && dragButton.HasMeta("input_code"))
-			inputCode = dragButton.GetMeta("input_code").As<string>();
+		Control activeButton = IsControlAlive(dragButton) ? dragButton : null;
+		if (TryGetStringMeta(activeButton, "input_code", out var storedInputCode))
+			inputCode = storedInputCode;
 		if (!dragMoved && !string.IsNullOrEmpty(inputCode))
 		{
 			handled = true;
 			if (quickInputEnabled)
 			{
 				long generation = 0;
-				if (dragButton != null && dragButton.HasMeta("input_generation"))
-					generation = dragButton.GetMeta("input_generation").AsInt64();
+				TryGetInt64Meta(activeButton, "input_generation", out generation);
 				EmueraContent.instance?.SubmitQuickButtonInput(inputCode, generation);
 			}
 		}
@@ -454,20 +465,36 @@ public partial class QuickButtons : CanvasLayer
 
 	public bool IsShow => Visible;
 
-	public void ApplyFont(FontFile font, int fontSize)
+	public void ApplyFont(Font font, int fontSize)
 	{
 		fontFile = font;
 		this.fontSize = ConfiguredFontSize;
-		foreach (var btn in buttons)
+		for (int i = buttons.Count - 1; i >= 0; i--)
+		{
+			var btn = buttons[i];
+			if (!IsControlAlive(btn))
+			{
+				buttons.RemoveAt(i);
+				continue;
+			}
 			ApplyButtonMetrics(btn);
+		}
 		UpdatePanelSize(ShouldStickToBottom());
 	}
 
 	public void RefreshSizing()
 	{
 		this.fontSize = ConfiguredFontSize;
-		foreach (var btn in buttons)
+		for (int i = buttons.Count - 1; i >= 0; i--)
+		{
+			var btn = buttons[i];
+			if (!IsControlAlive(btn))
+			{
+				buttons.RemoveAt(i);
+				continue;
+			}
 			ApplyButtonMetrics(btn);
+		}
 		if (userWidth > 0)
 			userWidth = Mathf.Clamp(userWidth, EffectiveButtonWidth + ResizeHandleWidth, GetViewport().GetVisibleRect().Size.X - 40);
 		UpdatePanelSize(ShouldStickToBottom());
@@ -486,8 +513,14 @@ public partial class QuickButtons : CanvasLayer
 			scroll.MouseFilter = enabled ? Control.MouseFilterEnum.Pass : Control.MouseFilterEnum.Ignore;
 		if (rowsContainer != null)
 			rowsContainer.MouseFilter = enabled ? Control.MouseFilterEnum.Pass : Control.MouseFilterEnum.Ignore;
-		foreach (var btn in buttons)
+		for (int i = buttons.Count - 1; i >= 0; i--)
 		{
+			var btn = buttons[i];
+			if (!IsControlAlive(btn))
+			{
+				buttons.RemoveAt(i);
+				continue;
+			}
 			btn.MouseFilter = enabled ? Control.MouseFilterEnum.Stop : Control.MouseFilterEnum.Ignore;
 			btn.Modulate = enabled ? Colors.White : new Color(1, 1, 1, 0.55f);
 		}
@@ -561,6 +594,8 @@ public partial class QuickButtons : CanvasLayer
 		layoutUpdateQueued = true;
 		int autoScrollInteractionSerial = quickScrollInteractionSerial;
 		await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+		if (!IsControlAlive(panel) || !IsControlAlive(scroll) || !IsControlAlive(rowsContainer))
+			return;
 		layoutUpdateQueued = false;
 		var viewportSize = GetViewport().GetVisibleRect().Size;
 		var contentSize = rowsContainer.GetCombinedMinimumSize();
@@ -596,6 +631,8 @@ public partial class QuickButtons : CanvasLayer
 
 	void ApplyPanelSize(float width, float height)
 	{
+		if (!IsControlAlive(panel) || !IsControlAlive(resizeHandle))
+			return;
 		panel.OffsetLeft = -20 - width;
 		panel.OffsetRight = -20;
 		panel.OffsetTop = -20 - height;
@@ -761,5 +798,55 @@ public partial class QuickButtons : CanvasLayer
 		cfg.Load(SettingsPath);
 		cfg.SetValue(SettingsSection, key, value);
 		cfg.Save(SettingsPath);
+	}
+
+	static bool IsControlAlive(Control control)
+	{
+		if (control == null)
+			return false;
+		try
+		{
+			return GodotObject.IsInstanceValid(control) && !control.IsQueuedForDeletion();
+		}
+		catch (ObjectDisposedException)
+		{
+			return false;
+		}
+	}
+
+	static bool TryGetStringMeta(Control control, string key, out string value)
+	{
+		value = null;
+		if (!IsControlAlive(control))
+			return false;
+		try
+		{
+			if (!control.HasMeta(key))
+				return false;
+			value = control.GetMeta(key).As<string>();
+			return true;
+		}
+		catch (ObjectDisposedException)
+		{
+			return false;
+		}
+	}
+
+	static bool TryGetInt64Meta(Control control, string key, out long value)
+	{
+		value = 0;
+		if (!IsControlAlive(control))
+			return false;
+		try
+		{
+			if (!control.HasMeta(key))
+				return false;
+			value = control.GetMeta(key).AsInt64();
+			return true;
+		}
+		catch (ObjectDisposedException)
+		{
+			return false;
+		}
 	}
 }

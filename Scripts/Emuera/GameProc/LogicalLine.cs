@@ -203,6 +203,7 @@ namespace MinorShift.Emuera.GameProc
 			Index = -1;
 			Depth = -1;
 			VariadicArgIndex = -1;
+			ArgFloatLength = 0;
 			IsMethod = false;
 			MethodType = typeof(void);
 		}
@@ -230,6 +231,7 @@ namespace MinorShift.Emuera.GameProc
 			LocalsLength = 0;
 			ArgLength = 0;
 			ArgsLength = 0;
+			ArgFloatLength = 0;
 			VariadicArgIndex = -1;
 			IsMethod = false;
 			MethodType = typeof(void);
@@ -258,6 +260,7 @@ namespace MinorShift.Emuera.GameProc
 		public int LocalsLength { get; set; }
 		public int ArgLength { get; set; }
 		public int ArgsLength { get; set; }
+		public int ArgFloatLength { get; set; }
 		public int VariadicArgIndex { get; set; }
 
 		//public bool ArgOptional { get; set; }

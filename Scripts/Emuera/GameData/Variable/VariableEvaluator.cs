@@ -1,12 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections;
+using System.Data;
 using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Xml;
 using MinorShift.Emuera.Sub;
 using MinorShift.Emuera.GameView;
 using MinorShift.Emuera.GameData.Expression;
+using MinorShift.Emuera.GameData.Function;
 using MinorShift.Emuera.GameProc;
 using MinorShift._Library;
 using MinorShift.Emuera.GameProc.Function;
@@ -21,14 +24,18 @@ namespace MinorShift.Emuera.GameData.Variable
 		readonly ConstantData constant;
 		readonly VariableData varData;
 		MTRandom rand = new MTRandom();
+		const string RuntimeDataStoreBinaryMarker = "__RDS__";
+		const string RuntimeDataStoreTextMarker = "__RDS_TEXT__";
+		const string RuntimeDataStoreTextEndMarker = "__RDS_TEXT_END__";
 
 		public VariableData VariableData { get { return varData; } }
-		internal ConstantData Constant { get { return constant; } }
+		public ConstantData Constant { get { return constant; } }
 
 		public VariableEvaluator(GameBase gamebase, ConstantData constant)
 		{
 			this.gamebase = gamebase;
 			this.constant = constant;
+			RuntimeDataStore.Clear();
 			varData = new VariableData(gamebase, constant);
 			GlobalStatic.VariableData = varData;
 		}
@@ -2215,7 +2222,7 @@ namespace MinorShift.Emuera.GameData.Variable
 				bWriter.WriteString(savMes);
 
 				for (int i = 0; i < vars.Length; i++)
-					bWriter.WriteWithKey(vars[i].Name, vars[i].GetArray());
+					bWriter.WriteWithKey(vars[i].Name, vars[i].GetSaveValue());
 				bWriter.WriteEOF();
 				//RESULT = 1;
 				return;
@@ -2290,6 +2297,8 @@ namespace MinorShift.Emuera.GameData.Variable
 				varData.CharacterList[i].SaveToStreamExtended(writer);
 			}
 			varData.SaveToStreamExtended(writer);
+			varData.SaveFloatToStreamExtended(writer);
+			SaveRuntimeDataStoreText(writer);
 		}
 
 		public void LoadFromStream(EraDataReader reader)
@@ -2324,6 +2333,12 @@ namespace MinorShift.Emuera.GameData.Variable
 					for (int i = 0; i < charaCount; i++)
 						varData.CharacterList[i].LoadFromStreamExtended(reader);
 				varData.LoadFromStreamExtended(reader, reader.DataVersion);
+				varData.TryLoadFloatFromStreamExtended(reader);
+				TryLoadRuntimeDataStoreText(reader);
+			}
+			else
+			{
+				RuntimeDataStore.Clear();
 			}
 		}
 
@@ -2453,6 +2468,8 @@ namespace MinorShift.Emuera.GameData.Variable
 			}
 			varData.SaveToStreamBinary(bWriter);
 			bWriter.WriteEOF();
+			SaveRuntimeDataStore(bWriter);
+			bWriter.WriteEOF();
 		}
 
 		public void LoadFromStreamBinary(EraBinaryDataReader bReader)
@@ -2481,6 +2498,209 @@ namespace MinorShift.Emuera.GameData.Variable
 				chara.LoadFromStreamBinary(bReader);
 			}
 			varData.LoadFromStreamBinary(bReader);
+			try
+			{
+				LoadRuntimeDataStore(bReader);
+			}
+			catch (EndOfStreamException)
+			{
+				RuntimeDataStore.Clear();
+			}
+		}
+
+		void SaveRuntimeDataStore(EraBinaryDataWriter bWriter)
+		{
+			bWriter.WriteString(RuntimeDataStoreBinaryMarker);
+			bWriter.WriteInt64(RuntimeDataStore.Maps.Count);
+			foreach (var mapPair in RuntimeDataStore.Maps)
+			{
+				bWriter.WriteString(mapPair.Key);
+				bWriter.WriteInt64(mapPair.Value.Count);
+				foreach (var entry in mapPair.Value)
+				{
+					bWriter.WriteString(entry.Key);
+					bWriter.WriteString(entry.Value ?? "");
+				}
+			}
+			bWriter.WriteInt64(RuntimeDataStore.XmlDocuments.Count);
+			foreach (var xmlPair in RuntimeDataStore.XmlDocuments)
+			{
+				bWriter.WriteString(xmlPair.Key);
+				bWriter.WriteString(xmlPair.Value?.OuterXml ?? "");
+			}
+			bWriter.WriteInt64(RuntimeDataStore.DataTables.Count);
+			foreach (var dtPair in RuntimeDataStore.DataTables)
+			{
+				bWriter.WriteString(dtPair.Key);
+				using (var sw = new System.IO.StringWriter())
+				{
+					dtPair.Value.WriteXml(sw, System.Data.XmlWriteMode.WriteSchema);
+					bWriter.WriteString(sw.ToString());
+				}
+			}
+			bWriter.WriteInt64(RuntimeDataStore.NextDataTableRowId);
+		}
+
+		void LoadRuntimeDataStore(EraBinaryDataReader bReader)
+		{
+			RuntimeDataStore.Clear();
+			string marker = bReader.ReadString();
+			if (marker != RuntimeDataStoreBinaryMarker)
+				throw new FileEE("セーブデータのRuntimeDataStoreマーカーが異常です");
+			long mapCount = bReader.ReadInt64();
+			for (long i = 0; i < mapCount; i++)
+			{
+				string mapName = bReader.ReadString();
+				long entryCount = bReader.ReadInt64();
+				var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+				for (long j = 0; j < entryCount; j++)
+				{
+					string key = bReader.ReadString();
+					string value = bReader.ReadString();
+					map[key] = value;
+				}
+				RuntimeDataStore.Maps[mapName] = map;
+			}
+			long xmlCount = bReader.ReadInt64();
+			for (long i = 0; i < xmlCount; i++)
+			{
+				string xmlName = bReader.ReadString();
+				string xmlContent = bReader.ReadString();
+				if (!string.IsNullOrEmpty(xmlContent))
+				{
+					var doc = new XmlDocument();
+					doc.LoadXml(xmlContent);
+					RuntimeDataStore.XmlDocuments[xmlName] = doc;
+				}
+			}
+			long dtCount = bReader.ReadInt64();
+			for (long i = 0; i < dtCount; i++)
+			{
+				string dtName = bReader.ReadString();
+				string dtXml = bReader.ReadString();
+				if (!string.IsNullOrEmpty(dtXml))
+				{
+					var dt = new DataTable();
+					using (var sr = new System.IO.StringReader(dtXml))
+						dt.ReadXml(sr);
+					RuntimeDataStore.DataTables[dtName] = dt;
+				}
+			}
+			RuntimeDataStore.NextDataTableRowId = bReader.ReadInt64();
+		}
+
+		void SaveRuntimeDataStoreText(EraDataWriter writer)
+		{
+			writer.Write(RuntimeDataStoreTextMarker);
+			writer.Write((Int64)RuntimeDataStore.Maps.Count);
+			foreach (var mapPair in RuntimeDataStore.Maps)
+			{
+				WriteEncodedString(writer, mapPair.Key);
+				writer.Write((Int64)mapPair.Value.Count);
+				foreach (var entry in mapPair.Value)
+				{
+					WriteEncodedString(writer, entry.Key);
+					WriteEncodedString(writer, entry.Value ?? "");
+				}
+			}
+			writer.Write((Int64)RuntimeDataStore.XmlDocuments.Count);
+			foreach (var xmlPair in RuntimeDataStore.XmlDocuments)
+			{
+				WriteEncodedString(writer, xmlPair.Key);
+				WriteEncodedString(writer, xmlPair.Value?.OuterXml ?? "");
+			}
+			writer.Write((Int64)RuntimeDataStore.DataTables.Count);
+			foreach (var dtPair in RuntimeDataStore.DataTables)
+			{
+				WriteEncodedString(writer, dtPair.Key);
+				using (var sw = new System.IO.StringWriter())
+				{
+					dtPair.Value.WriteXml(sw, System.Data.XmlWriteMode.WriteSchema);
+					WriteEncodedString(writer, sw.ToString());
+				}
+			}
+			writer.Write(RuntimeDataStore.NextDataTableRowId);
+			writer.Write(RuntimeDataStoreTextEndMarker);
+		}
+
+		bool TryLoadRuntimeDataStoreText(EraDataReader reader)
+		{
+			RuntimeDataStore.Clear();
+			string marker;
+			try
+			{
+				marker = reader.ReadString();
+			}
+			catch (FileEE)
+			{
+				return false;
+			}
+			if (marker != RuntimeDataStoreTextMarker)
+				return false;
+
+			long mapCount = reader.ReadInt64();
+			for (long i = 0; i < mapCount; i++)
+			{
+				string mapName = ReadEncodedString(reader);
+				long entryCount = reader.ReadInt64();
+				var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+				for (long j = 0; j < entryCount; j++)
+				{
+					string key = ReadEncodedString(reader);
+					string value = ReadEncodedString(reader);
+					map[key] = value;
+				}
+				RuntimeDataStore.Maps[mapName] = map;
+			}
+
+			long xmlCount = reader.ReadInt64();
+			for (long i = 0; i < xmlCount; i++)
+			{
+				string xmlName = ReadEncodedString(reader);
+				string xmlContent = ReadEncodedString(reader);
+				if (!string.IsNullOrEmpty(xmlContent))
+				{
+					var doc = new XmlDocument();
+					doc.LoadXml(xmlContent);
+					RuntimeDataStore.XmlDocuments[xmlName] = doc;
+				}
+			}
+
+			long dtCount = reader.ReadInt64();
+			for (long i = 0; i < dtCount; i++)
+			{
+				string dtName = ReadEncodedString(reader);
+				string dtXml = ReadEncodedString(reader);
+				if (!string.IsNullOrEmpty(dtXml))
+				{
+					var dt = new DataTable();
+					using (var sr = new System.IO.StringReader(dtXml))
+						dt.ReadXml(sr);
+					RuntimeDataStore.DataTables[dtName] = dt;
+				}
+			}
+			RuntimeDataStore.NextDataTableRowId = reader.ReadInt64();
+			string endMarker = reader.ReadString();
+			if (endMarker != RuntimeDataStoreTextEndMarker)
+				throw new FileEE("セーブデータのRuntimeDataStore終端マーカーが異常です");
+			return true;
+		}
+
+		static void WriteEncodedString(EraDataWriter writer, string value)
+		{
+			writer.Write(Convert.ToBase64String(Encoding.UTF8.GetBytes(value ?? "")));
+		}
+
+		static string ReadEncodedString(EraDataReader reader)
+		{
+			try
+			{
+				return Encoding.UTF8.GetString(Convert.FromBase64String(reader.ReadString()));
+			}
+			catch (FormatException ex)
+			{
+				throw new FileEE("セーブデータのRuntimeDataStore文字列が異常です: " + ex.Message);
+			}
 		}
 
 		public bool SaveTo(int saveIndex, string saveText)

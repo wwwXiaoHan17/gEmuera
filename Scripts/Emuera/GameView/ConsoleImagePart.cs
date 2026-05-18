@@ -1,6 +1,9 @@
 using Godot;
 using MinorShift._Library;
 using MinorShift.Emuera.Content;
+using MinorShift.Emuera.GameData.Expression;
+using MinorShift.Emuera.GameData.Variable;
+using MinorShift.Emuera.Sub;
 using System;
 using System.Collections.Generic;
 //using System.Drawing;
@@ -15,12 +18,26 @@ namespace MinorShift.Emuera.GameView
 	{
 
 		public ConsoleImagePart(string resName, string resNameb, MixedNum raw_height, MixedNum raw_width, MixedNum raw_ypos)
+			: this(resName, resNameb, raw_height, raw_width, raw_ypos, 0, DisplayMode.Relative, null)
+		{
+		}
+
+		public ConsoleImagePart(string resName, string resNameb, MixedNum raw_height, MixedNum raw_width, MixedNum raw_ypos, MixedNum raw_xpos, DisplayMode display)
+			: this(resName, resNameb, raw_height, raw_width, raw_ypos, raw_xpos, display, null)
+		{
+		}
+
+		public ConsoleImagePart(string resName, string resNameb, MixedNum raw_height, MixedNum raw_width, MixedNum raw_ypos, MixedNum raw_xpos, DisplayMode display, string colorMatrixVariableName)
 		{
 			top = 0;
 			bottom = Config.FontSize;
 			Str = "";
 			ResourceName = resName ?? "";
 			ButtonResourceName = resNameb;
+			Display = display;
+			PositionX = raw_xpos.isPx ? raw_xpos.num : (raw_xpos.num * Config.FontSize / 100);
+			ColorMatrixVariableName = colorMatrixVariableName;
+			ColorMatrix = ResolveColorMatrix(colorMatrixVariableName);
 
 			// Compute desired dimensions from HTML attributes regardless of whether sprite exists.
 			// This allows external renderers to size the image correctly even when loading dynamically.
@@ -41,17 +58,21 @@ namespace MinorShift.Emuera.GameView
 			int rectY = top;
 			int rectW = width;
 			int rectH = height;
+			FlipX = false;
+			FlipY = false;
 			if (rectW < 0)
 			{
 				rectX = -rectW;
 				width = -rectW;
 				rectW = width;
+				FlipX = true;
 			}
 			if (rectH < 0)
 			{
 				rectY = rectY - rectH;
 				height = -rectH;
 				rectH = height;
+				FlipY = true;
 			}
 			destRect = new Rectangle(rectX, rectY, rectW, rectH);
 			bottom = top + height;
@@ -97,16 +118,53 @@ namespace MinorShift.Emuera.GameView
 				if (raw_ypos.isPx)
 					sb.Append("px");
 			}
+			if(raw_xpos.num != 0)
+			{
+				sb.Append("' xpos='");
+				sb.Append(raw_xpos.num.ToString());
+				if (raw_xpos.isPx)
+					sb.Append("px");
+			}
+			if(display != DisplayMode.Relative)
+			{
+				sb.Append("' display='");
+				sb.Append(DisplayModeToHtml(display));
+			}
+			if(!string.IsNullOrEmpty(colorMatrixVariableName))
+			{
+				sb.Append("' cm='");
+				sb.Append(colorMatrixVariableName);
+			}
                 sb.Append("'>");
                 AltText = sb.ToString();
+				if (raw_width.num == 0 && TryResolveDynamicImageWidth(ResourceName, height, out int resolvedWidth, out float resolvedSubPixel))
+				{
+					Width = resolvedWidth;
+					XsubPixel = resolvedSubPixel;
+					destRect = new Rectangle(0, top, Width, height);
+					Str = "";
+				}
 #if !UNITY_EDITOR
-                Str = AltText;
+                else
+                {
+                    Str = AltText;
+                }
                 return;
             }
 #else
             if(cImage == null)
             {
-                Str = AltText;
+				if (raw_width.num == 0 && TryResolveDynamicImageWidth(ResourceName, height, out int resolvedWidth, out float resolvedSubPixel))
+				{
+					Width = resolvedWidth;
+					XsubPixel = resolvedSubPixel;
+					destRect = new Rectangle(0, top, Width, height);
+					Str = "";
+				}
+				else
+				{
+					Str = AltText;
+				}
                 return;
             }
 #endif
@@ -132,6 +190,13 @@ namespace MinorShift.Emuera.GameView
         public ASprite ImageBackground { get { return cImageB; } }
         public Rectangle rect { get { return cImage.Rectangle; } }
         public Rectangle dest_rect { get { return destRect; } }
+		public DisplayMode Display { get; private set; }
+		public int PositionX { get; private set; }
+		public int PositionY { get { return top; } }
+		public string ColorMatrixVariableName { get; private set; }
+		public float[][] ColorMatrix { get; private set; }
+		public bool FlipX { get; private set; }
+		public bool FlipY { get; private set; }
 
 		private readonly ASprite cImage;
 		private readonly ASprite cImageB;
@@ -167,6 +232,172 @@ namespace MinorShift.Emuera.GameView
 			if (AltText == null)
 				return "";
 			return AltText;
+		}
+
+		static string DisplayModeToHtml(DisplayMode display)
+		{
+			switch (display)
+			{
+				case DisplayMode.Absolute:
+					return "absolute";
+				case DisplayMode.AbsoluteLeftTop:
+					return "absolute-lefttop";
+				case DisplayMode.AbsoluteLeftBottom:
+					return "absolute-leftbottom";
+				default:
+					return "relative";
+			}
+		}
+
+		static bool TryResolveDynamicImageWidth(string resourceName, int targetHeight, out int width, out float subPixel)
+		{
+			width = 0;
+			subPixel = 0;
+			if (string.IsNullOrEmpty(resourceName) || targetHeight <= 0)
+				return false;
+
+			ASprite sprite = AppContents.GetSprite(resourceName);
+			if (sprite != null && sprite.DestBaseSize.Height > 0)
+			{
+				float rawWidth = (float)sprite.DestBaseSize.Width * targetHeight / sprite.DestBaseSize.Height;
+				width = Math.Max(1, (int)rawWidth);
+				subPixel = rawWidth - width;
+				return true;
+			}
+
+			foreach (string path in BuildImagePathCandidates(resourceName))
+			{
+				if (string.IsNullOrEmpty(path) || !uEmuera.Utils.FileExists(path))
+					continue;
+				var ti = global::SpriteManager.GetTextureInfo(resourceName, path);
+				if (ti == null || ti.height <= 0)
+					continue;
+				float rawWidth = (float)ti.width * targetHeight / ti.height;
+				width = Math.Max(1, (int)rawWidth);
+				subPixel = rawWidth - width;
+				return true;
+			}
+			return false;
+		}
+
+		static IEnumerable<string> BuildImagePathCandidates(string resourceName)
+		{
+			string resolved = uEmuera.Utils.ResolveExistingFilePath(resourceName);
+			if (!string.IsNullOrEmpty(resolved))
+				yield return resolved;
+
+			yield return resourceName;
+			if (!string.IsNullOrEmpty(Program.ContentDir))
+				yield return System.IO.Path.Combine(Program.ContentDir, resourceName);
+			if (!string.IsNullOrEmpty(Program.ExeDir))
+			{
+				yield return System.IO.Path.Combine(Program.ExeDir, resourceName);
+				yield return System.IO.Path.Combine(Program.ExeDir, "resources", resourceName);
+			}
+
+			bool hasExt = resourceName.IndexOf('.') >= 0;
+			if (!hasExt)
+			{
+				foreach (string ext in new[] { ".png", ".jpg", ".jpeg", ".bmp", ".webp", ".tga" })
+				{
+					string nameWithExt = resourceName + ext;
+					if (!string.IsNullOrEmpty(Program.ContentDir))
+						yield return System.IO.Path.Combine(Program.ContentDir, nameWithExt);
+					if (!string.IsNullOrEmpty(Program.ExeDir))
+						yield return System.IO.Path.Combine(Program.ExeDir, "resources", nameWithExt);
+					string found = uEmuera.Utils.FindFileRecursive(Program.ContentDir, nameWithExt);
+					if (!string.IsNullOrEmpty(found))
+						yield return found;
+				}
+			}
+		}
+
+		static float[][] ResolveColorMatrix(string variableName)
+		{
+			if (string.IsNullOrWhiteSpace(variableName) || GlobalStatic.EMediator == null)
+				return null;
+			try
+			{
+				WordCollection wc = LexicalAnalyzer.Analyse(new StringStream(variableName), LexEndWith.EoL, LexAnalyzeFlag.None);
+				IOperandTerm term = ExpressionParser.ReduceExpressionTerm(wc, TermEndWith.EoL);
+				if (!(term is VariableTerm variableTerm))
+					return null;
+				FixedVariableTerm fixedTerm = variableTerm.GetFixedVariableTerm(GlobalStatic.EMediator);
+				return ReadColorMatrix(fixedTerm);
+			}
+			catch
+			{
+				return null;
+			}
+		}
+
+		static float[][] ReadColorMatrix(FixedVariableTerm term)
+		{
+			float[][] matrix = new float[5][];
+			for (int i = 0; i < matrix.Length; i++)
+				matrix[i] = new float[5];
+
+			if (term.Identifier.IsArray2D)
+			{
+				long row = term.Identifier.IsCharacterData ? term.Index2 : term.Index1;
+				long col = term.Identifier.IsCharacterData ? term.Index3 : term.Index2;
+				if (row < 0 || col < 0)
+					return null;
+				if (term.Identifier.IsFloat)
+				{
+					double[,] array = term.Identifier.IsCharacterData
+						? term.Identifier.GetArrayChara((int)term.Index1) as double[,]
+						: term.Identifier.GetArray() as double[,];
+					if (array == null || row + 5 > array.GetLength(0) || col + 5 > array.GetLength(1))
+						return null;
+					for (int x = 0; x < 5; x++)
+						for (int y = 0; y < 5; y++)
+							matrix[x][y] = (float)array[row + x, col + y];
+					return matrix;
+				}
+				else
+				{
+					Int64[,] array = term.Identifier.IsCharacterData
+						? term.Identifier.GetArrayChara((int)term.Index1) as Int64[,]
+						: term.Identifier.GetArray() as Int64[,];
+					if (array == null || row + 5 > array.GetLength(0) || col + 5 > array.GetLength(1))
+						return null;
+					for (int x = 0; x < 5; x++)
+						for (int y = 0; y < 5; y++)
+							matrix[x][y] = ((float)array[row + x, col + y]) / 256f;
+					return matrix;
+				}
+			}
+
+			if (term.Identifier.IsArray3D && !term.Identifier.IsCharacterData)
+			{
+				long layer = term.Index1;
+				long row = term.Index2;
+				long col = term.Index3;
+				if (layer < 0 || row < 0 || col < 0)
+					return null;
+				if (term.Identifier.IsFloat)
+				{
+					double[,,] array = term.Identifier.GetArray() as double[,,];
+					if (array == null || layer >= array.GetLength(0) || row + 5 > array.GetLength(1) || col + 5 > array.GetLength(2))
+						return null;
+					for (int x = 0; x < 5; x++)
+						for (int y = 0; y < 5; y++)
+							matrix[x][y] = (float)array[layer, row + x, col + y];
+					return matrix;
+				}
+				else
+				{
+					Int64[,,] array = term.Identifier.GetArray() as Int64[,,];
+					if (array == null || layer >= array.GetLength(0) || row + 5 > array.GetLength(1) || col + 5 > array.GetLength(2))
+						return null;
+					for (int x = 0; x < 5; x++)
+						for (int y = 0; y < 5; y++)
+							matrix[x][y] = ((float)array[layer, row + x, col + y]) / 256f;
+					return matrix;
+				}
+			}
+			return null;
 		}
 
 		public override void DrawTo(Graphics graph, int pointY, bool isSelecting, bool isBackLog, TextDrawingMode mode)

@@ -44,6 +44,7 @@ public partial class OptionWindow : Control
         fontSizeSlider.Value = MinorShift.Emuera.Config.FontSize > 0 ? MinorShift.Emuera.Config.FontSize : 18;
         fontSizeSlider.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         fontSizeSlider.CustomMinimumSize = new Vector2(120, 44);
+        fontSizeSlider.Editable = false;
         fontSizeSlider.ValueChanged += OnFontSizeChanged;
         fontHBox.AddChild(fontSizeSlider);
         fontSizeLabel = new Label();
@@ -188,16 +189,14 @@ public partial class OptionWindow : Control
 
     void OnFontSizeChanged(double value)
     {
-        fontSizeLabel.Text = value.ToString();
-        int size = (int)value;
-        // Use reflection to set the private static setter on Config.FontSize
-        var prop = typeof(MinorShift.Emuera.Config).GetProperty("FontSize",
-            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
-        if (prop != null)
+        int coreSize = MinorShift.Emuera.Config.FontSize > 0 ? MinorShift.Emuera.Config.FontSize : 18;
+        fontSizeLabel.Text = coreSize.ToString();
+        if (fontSizeSlider != null && (int)fontSizeSlider.Value != coreSize)
         {
-            prop.SetValue(null, size);
+            fontSizeSlider.SetBlockSignals(true);
+            fontSizeSlider.Value = coreSize;
+            fontSizeSlider.SetBlockSignals(false);
         }
-        EmueraContent.instance?.RefreshFontSize();
     }
 
     void OnQuickButtonWidthChanged(double value)

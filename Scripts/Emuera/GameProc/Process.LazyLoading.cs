@@ -43,6 +43,16 @@ namespace MinorShift.Emuera.GameProc
 
 		public LazyStatus LazyCurrentLazyStatus = LazyStatus.Disabled;
 
+		public void ResetLazyLoadingState()
+		{
+			lazyLoadingTable.Clear();
+			lazyLoadingFilesTable.Clear();
+			LazyLoadingFiles.Clear();
+			DeletedFiles.Clear();
+			ChangedFiles.Clear();
+			LazyCurrentLazyStatus = LazyStatus.Disabled;
+		}
+
 		public bool TryLazyLoadErb(string functionName)
 		{
 			if (LazyCurrentLazyStatus == LazyStatus.Disabled)
@@ -56,6 +66,13 @@ namespace MinorShift.Emuera.GameProc
 
 			console.PrintSystemLine("LazyLoading: failed to load ERB for @" + functionName);
 			return false;
+		}
+
+		public bool IsFunctionInLazyLoadingTable(string functionName)
+		{
+			if (LazyCurrentLazyStatus == LazyStatus.Disabled)
+				return false;
+			return lazyLoadingTable.ContainsKey(functionName);
 		}
 
 		public bool IsLazyLoadingFile(string path)
@@ -91,12 +108,7 @@ namespace MinorShift.Emuera.GameProc
 
 		public void LoadLazyLoadingTable(List<KeyValuePair<string, string>> erbFiles)
 		{
-			lazyLoadingTable.Clear();
-			lazyLoadingFilesTable.Clear();
-			LazyLoadingFiles.Clear();
-			DeletedFiles.Clear();
-			ChangedFiles.Clear();
-			LazyCurrentLazyStatus = LazyStatus.Disabled;
+			ResetLazyLoadingState();
 
 			if (!uEmuera.Utils.FileExists(LazyLoadingConfigFilePath))
 				return;

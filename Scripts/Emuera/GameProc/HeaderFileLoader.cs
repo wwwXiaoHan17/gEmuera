@@ -40,9 +40,9 @@ namespace MinorShift.Emuera.GameProc
 #if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
             headerFiles.AddRange(Config.GetFiles(headerDir, "*.erh"));
 #endif
-            bool noError = true;
+			bool noError = true;
 			dimlines = new Queue<DimLineWC>();
-			if (Program.IsSnakeProfile)
+			if (Config.UseERD || Program.IsSnakeProfile)
 				PrepareERDFileNames();
 			try
 			{
@@ -69,6 +69,7 @@ namespace MinorShift.Emuera.GameProc
 			finally
 			{
 				ParserMediator.FlushWarningList();
+				erdFileNames = null;
 			}
 			return noError;
 		}
@@ -83,7 +84,7 @@ namespace MinorShift.Emuera.GameProc
 			//eramakerEXの仕様的には.ERHに適用するのはおかしいけど、もうEmueraの仕様になっちゃってるのでしかたないか
 			EraStreamReader eReader = new EraStreamReader(true);
 
-			if (!eReader.Open(filepath, filename))
+			if (!eReader.OpenOnCache(filepath, filename))
 			{
 				throw new CodeEE(eReader.Filename + "のオープンに失敗しました");
 				//return false;
@@ -115,12 +116,10 @@ namespace MinorShift.Emuera.GameProc
 							break;
 						case "FUNCTION":
 						case "FUNCTIONS":
-							analyzeSharpFunction(st, position, sharpID == "FUNCTIONS");
+							analyzeSharpFunction(st, position, sharpID == "FUNCTIONS", false);
 							break;
 						case "FUNCTIONF":
-							if (!Program.IsSnakeProfile)
-								throw new CodeEE("#" + sharpID + "は解釈できないプリプロセッサです", position);
-							analyzeSharpFunction(st, position, sharpID == "FUNCTIONS");
+							analyzeSharpFunction(st, position, false, true);
 							break;
 						case "DIM":
 						case "DIMS":
@@ -132,17 +131,27 @@ namespace MinorShift.Emuera.GameProc
 							//analyzeSharpDim(st, position, sharpID == "DIMS");
 							break;
 						case "DIMF":
-							if (!Program.IsSnakeProfile)
-								throw new CodeEE("#" + sharpID + "は解釈できないプリプロセッサです", position);
 							//1822 #DIMは保留しておいて後でまとめてやる
 							{
 								WordCollection wc = LexicalAnalyzer.Analyse(
 									new StringStream(NormalizeSnakeFloatLiterals(st.Substring())),
 									LexEndWith.EoL,
 									LexAnalyzeFlag.AllowAssignment);
-								dimlines.Enqueue(new DimLineWC(wc, false, false, position));
+								dimlines.Enqueue(new DimLineWC(wc, false, true, false, position));
 							}
 							//analyzeSharpDim(st, position, sharpID == "DIMS");
+							break;
+						case "REF":
+						case "REFS":
+						case "REFF":
+							{
+								WordCollection wc = LexicalAnalyzer.Analyse(st, LexEndWith.EoL, LexAnalyzeFlag.AllowAssignment);
+								bool isStr = sharpID == "REFS";
+								bool isFloat = sharpID == "REFF";
+								UserDefinedVariableData data = UserDefinedVariableData.CreateRefScalar(wc, isStr, isFloat, false, position);
+								VariableToken var = parentProcess.VEvaluator.VariableData.CreateUserDefVariable(data);
+								idDic.AddUseDefinedVariable(var);
+							}
 							break;
 						default:
 							throw new CodeEE("#" + sharpID + "は解釈できないプリプロセッサです", position);
@@ -301,15 +310,13 @@ namespace MinorShift.Emuera.GameProc
 					try
 					{
 						UserDefinedVariableData data = UserDefinedVariableData.Create(dimline);
-						if (data.Reference)
-							throw new NotImplCodeEE();
 						VariableToken var = null;
 						if (data.CharaData)
 							var = parentProcess.VEvaluator.VariableData.CreateUserDefCharaVariable(data);
 						else
 							var = parentProcess.VEvaluator.VariableData.CreateUserDefVariable(data);
 						idDic.AddUseDefinedVariable(var);
-						if (Program.IsSnakeProfile)
+						if (Config.UseERD || Program.IsSnakeProfile)
 							LoadUserDefinedNameData(data, dimline.SC);
 					}
 					catch (IdentifierNotFoundCodeEE e)
@@ -338,12 +345,11 @@ namespace MinorShift.Emuera.GameProc
 			return noError;
 		}
 
-		private void analyzeSharpFunction(StringStream st, ScriptPosition position, bool funcs)
+		private void analyzeSharpFunction(StringStream st, ScriptPosition position, bool funcs, bool funcf)
 		{
-			throw new NotImplCodeEE();
-			//WordCollection wc = LexicalAnalyzer.Analyse(st, LexEndWith.EoL, LexAnalyzeFlag.AllowAssignment);
-			//UserDefinedFunctionData data = UserDefinedFunctionData.Create(wc, funcs, position);
-			//idDic.AddRefMethod(UserDefinedRefMethod.Create(data));
+			WordCollection wc = LexicalAnalyzer.Analyse(st, LexEndWith.EoL, LexAnalyzeFlag.AllowAssignment);
+			UserDefinedFunctionData data = UserDefinedFunctionData.Create(wc, funcs, funcf, position);
+			idDic.AddRefMethod(UserDefinedRefMethod.Create(data));
 		}
 
 		private void PrepareERDFileNames()
@@ -383,7 +389,7 @@ namespace MinorShift.Emuera.GameProc
 			{
 				List<string> info;
 				if (erdFileNames.TryGetValue(data.Name, out info))
-					GlobalStatic.ConstantData.UserDefineLoadData(info, data.Name, data.Lengths[0], Config.DisplayReport, position);
+					GlobalStatic.ConstantData.RegisterUserDefinedNameData(info, data.Name, data.Lengths[0], Config.DisplayReport, position);
 				return;
 			}
 			for (int dim = 1; dim <= data.Dimension && dim <= data.Lengths.Length; dim++)
@@ -391,7 +397,7 @@ namespace MinorShift.Emuera.GameProc
 				string key = data.Name + "@" + dim.ToString();
 				List<string> info;
 				if (erdFileNames.TryGetValue(key, out info))
-					GlobalStatic.ConstantData.UserDefineLoadData(info, key, data.Lengths[dim - 1], Config.DisplayReport, position);
+					GlobalStatic.ConstantData.RegisterUserDefinedNameData(info, key, data.Lengths[dim - 1], Config.DisplayReport, position);
 			}
 		}
 

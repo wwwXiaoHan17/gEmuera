@@ -188,6 +188,9 @@ namespace MinorShift.Emuera.GameView
 			public int width;
 			public int height;
 			public float opacity = 1.0f;
+			public float[][] colorMatrix = null;
+			public bool followScroll = false;
+			public int initialScrollY = int.MinValue;
 			public bool isSnakeImageLayer = false;
 			public string snakeImageName = null;
 			public readonly int zdepth;
@@ -351,7 +354,7 @@ namespace MinorShift.Emuera.GameView
 			}
 		}
 
-		public void SetImageLayer(string spriteName, long depth, int x, int y, int width, int height, int opacity, float[] colorMatrix, bool followScroll)
+		public void SetImageLayer(string spriteName, long depth, int x, int y, int width, int height, int opacity, float[][] colorMatrix, bool followScroll)
 		{
 			ASprite sprite = GetSnakeSprite(spriteName);
 			if (sprite == null || !sprite.IsCreated)
@@ -374,6 +377,8 @@ namespace MinorShift.Emuera.GameView
 				cbg.width = width;
 				cbg.height = height;
 				cbg.opacity = clampOpacity(opacity / 255.0f);
+				cbg.colorMatrix = colorMatrix;
+				cbg.followScroll = followScroll;
 				cbg.isSnakeImageLayer = true;
 				cbg.snakeImageName = spriteName;
 				cbgList.Add(cbg);
@@ -535,8 +540,8 @@ namespace MinorShift.Emuera.GameView
 			}
 			return true;
 		}
-		public int ClientWidth { get { return (int)DisplayServer.WindowGetSize().X; } }
-		public int ClientHeight { get { return (int)DisplayServer.WindowGetSize().Y; } }
+		public int ClientWidth { get { return Math.Max(Config.WindowX, (int)DisplayServer.WindowGetSize().X); } }
+		public int ClientHeight { get { return Config.WindowY > 0 ? Config.WindowY : (int)DisplayServer.WindowGetSize().Y; } }
 #endregion
 
 		const string ErrorButtonsText = "__openFileWithDebug__";
@@ -655,7 +660,15 @@ namespace MinorShift.Emuera.GameView
 					return null;
 				if (inputReq.InputType == InputType.IntValue && (selectingButton.IsInteger))
 					return selectingButton.Input.ToString();
+				if (inputReq.InputType == InputType.IntButton && (selectingButton.IsInteger))
+					return selectingButton.Input.ToString();
 				if (inputReq.InputType == InputType.StrValue)
+					return selectingButton.Inputs;
+				if (inputReq.InputType == InputType.StrButton)
+					return selectingButton.Inputs;
+				if (inputReq.InputType == InputType.AnyValue && selectingButton.IsInteger)
+					return selectingButton.Input.ToString();
+				if (inputReq.InputType == InputType.AnyValue)
 					return selectingButton.Inputs;
 				return null;
 			}
@@ -739,7 +752,7 @@ namespace MinorShift.Emuera.GameView
                 updatedGeneration = false;
             lastInputLine = emuera.getCurrentLine;
 			//古い選択肢を選択できないように。INPUTで使った選択肢をINPUTSには流用できないように。
-			if (inputReq.InputType == InputType.IntValue)
+			if (inputReq.InputType == InputType.IntValue || inputReq.InputType == InputType.IntButton)
 			{
 				if (lastButtonGeneration == newButtonGeneration)
 					unchecked { newButtonGeneration++; }
@@ -747,7 +760,7 @@ namespace MinorShift.Emuera.GameView
 					lastButtonGeneration = newButtonGeneration;
 				lastButtonIsInput = true;
 			}
-			if (inputReq.InputType == InputType.StrValue)
+			if (inputReq.InputType == InputType.StrValue || inputReq.InputType == InputType.StrButton || inputReq.InputType == InputType.AnyValue)
 			{
 				if (lastButtonGeneration == newButtonGeneration)
 					unchecked { newButtonGeneration++; }
@@ -764,6 +777,144 @@ namespace MinorShift.Emuera.GameView
 		ConsoleButtonString lastSelectingButton = null;
 		public ConsoleButtonString SelectingButton { get { return selectingButton; } }
 		public bool ButtonIsSelected(ConsoleButtonString button) { return selectingButton == button; }
+
+		internal bool HasCurrentGenerationButton(bool integerOnly)
+		{
+			lock (displayLineLock)
+			{
+				for (int i = displayLineList.Count - 1; i >= 0; i--)
+				{
+					bool generationEnded;
+					if (LineHasCurrentGenerationButton(displayLineList[i], integerOnly, out generationEnded))
+						return true;
+					if (generationEnded)
+						return false;
+				}
+			}
+			return false;
+		}
+
+		private bool LineHasCurrentGenerationButton(ConsoleDisplayLine line, bool integerOnly, out bool generationEnded)
+		{
+			generationEnded = false;
+			if (line == null || line.Buttons == null)
+				return false;
+			foreach (ConsoleButtonString button in line.Buttons)
+			{
+				if (button.Generation != 0 && button.Generation != lastButtonGeneration)
+				{
+					generationEnded = true;
+					return false;
+				}
+				if (button.IsButton && (!integerOnly || button.IsInteger))
+					return true;
+				foreach (AConsoleDisplayPart part in button.StrArray)
+				{
+					if (!(part is ConsoleDivPart div) || div.Children == null)
+						continue;
+					for (int i = div.Children.Length - 1; i >= 0; i--)
+					{
+						if (LineHasCurrentGenerationButton(div.Children[i], integerOnly, out generationEnded))
+							return true;
+						if (generationEnded)
+							return false;
+					}
+				}
+			}
+			return false;
+		}
+
+		private bool CurrentGenerationButtonAcceptsInt(long value)
+		{
+			lock (displayLineLock)
+			{
+				for (int i = displayLineList.Count - 1; i >= 0; i--)
+				{
+					bool generationEnded;
+					if (LineAcceptsCurrentGenerationInt(displayLineList[i], value, out generationEnded))
+						return true;
+					if (generationEnded)
+						return false;
+				}
+			}
+			return false;
+		}
+
+		private bool LineAcceptsCurrentGenerationInt(ConsoleDisplayLine line, long value, out bool generationEnded)
+		{
+			generationEnded = false;
+			if (line == null || line.Buttons == null)
+				return false;
+			foreach (ConsoleButtonString button in line.Buttons)
+			{
+				if (button.Generation != 0 && button.Generation != lastButtonGeneration)
+				{
+					generationEnded = true;
+					return false;
+				}
+				if (button.IsButton && button.IsInteger && button.Input == value)
+					return true;
+				foreach (AConsoleDisplayPart part in button.StrArray)
+				{
+					if (!(part is ConsoleDivPart div) || div.Children == null)
+						continue;
+					for (int i = div.Children.Length - 1; i >= 0; i--)
+					{
+						if (LineAcceptsCurrentGenerationInt(div.Children[i], value, out generationEnded))
+							return true;
+						if (generationEnded)
+							return false;
+					}
+				}
+			}
+			return false;
+		}
+
+		private bool CurrentGenerationButtonAcceptsString(string value)
+		{
+			lock (displayLineLock)
+			{
+				for (int i = displayLineList.Count - 1; i >= 0; i--)
+				{
+					bool generationEnded;
+					if (LineAcceptsCurrentGenerationString(displayLineList[i], value, out generationEnded))
+						return true;
+					if (generationEnded)
+						return false;
+				}
+			}
+			return false;
+		}
+
+		private bool LineAcceptsCurrentGenerationString(ConsoleDisplayLine line, string value, out bool generationEnded)
+		{
+			generationEnded = false;
+			if (line == null || line.Buttons == null)
+				return false;
+			foreach (ConsoleButtonString button in line.Buttons)
+			{
+				if (button.Generation != 0 && button.Generation != lastButtonGeneration)
+				{
+					generationEnded = true;
+					return false;
+				}
+				if (button.IsButton && (button.Inputs == value || (button.IsInteger && button.Input.ToString() == value)))
+					return true;
+				foreach (AConsoleDisplayPart part in button.StrArray)
+				{
+					if (!(part is ConsoleDivPart div) || div.Children == null)
+						continue;
+					for (int i = div.Children.Length - 1; i >= 0; i--)
+					{
+						if (LineAcceptsCurrentGenerationString(div.Children[i], value, out generationEnded))
+							return true;
+						if (generationEnded)
+							return false;
+					}
+				}
+			}
+			return false;
+		}
 
 		/// <summary>
 		/// ToolTip表示したフラグ
@@ -1091,6 +1242,21 @@ namespace MinorShift.Emuera.GameView
 						else
 							emuera.InputInteger(inputValue);
 						break;
+					case InputType.IntButton:
+						if (string.IsNullOrEmpty(str) && inputReq.HasDefValue && !IsRunningTimer)
+						{
+							inputValue = inputReq.DefIntValue;
+							str = inputValue.ToString();
+						}
+						else if (!Int64.TryParse(str, out inputValue))
+							return false;
+						if (!CurrentGenerationButtonAcceptsInt(inputValue))
+							return false;
+						if (inputReq.IsSystemInput)
+							emuera.InputSystemInteger(inputValue);
+						else
+							emuera.InputInteger(inputValue);
+						break;
 					case InputType.StrValue:
 						if (string.IsNullOrEmpty(str) && inputReq.HasDefValue && !IsRunningTimer)
 							str = inputReq.DefStrValue;
@@ -1098,6 +1264,30 @@ namespace MinorShift.Emuera.GameView
 						if (str == null)
 							str = "";
 						emuera.InputString(str);
+						break;
+					case InputType.StrButton:
+						if (string.IsNullOrEmpty(str) && inputReq.HasDefValue && !IsRunningTimer)
+							str = inputReq.DefStrValue;
+						if (str == null)
+							str = "";
+						if (!CurrentGenerationButtonAcceptsString(str))
+							return false;
+						emuera.InputString(str);
+						break;
+					case InputType.AnyValue:
+						if (str == null)
+							str = "";
+						if (Int64.TryParse(str, out inputValue))
+						{
+							if (inputReq.IsSystemInput)
+								emuera.InputSystemInteger(inputValue);
+							else
+								emuera.InputInteger(inputValue);
+						}
+						else
+						{
+							emuera.InputString(str);
+						}
 						break;
 				}
 				stopTimer();
@@ -1545,6 +1735,13 @@ namespace MinorShift.Emuera.GameView
 			if (window?.TextBox == null)
 				return;
 			window.TextBox.Text = text ?? "";
+		}
+
+		public string GetDisplayLine(int index)
+		{
+			if (index < 0 || index >= displayLineList.Count)
+				return "";
+			return displayLineList[index].ToString() ?? "";
 		}
 
 

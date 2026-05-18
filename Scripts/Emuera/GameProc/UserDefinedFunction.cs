@@ -17,14 +17,23 @@ namespace MinorShift.Emuera.GameProc
 		Null,
 		Int = 0x10,
 		Str = 0x20,
+		Float = 0x30,
 
+		RefInt0 = 0x50,
 		RefInt1 = 0x51,
 		RefInt2 = 0x52,
 		RefInt3 = 0x53,
+		RefStr0 = 0x60,
 		RefStr1 = 0x61,
 		RefStr2 = 0x62,
 		RefStr3 = 0x63,
+		RefFloat0 = 0x70,
+		RefFloat1 = 0x71,
+		RefFloat2 = 0x72,
+		RefFloat3 = 0x73,
 		__Ref = 0x40,
+		__Variadic = 0x80,
+		__Out = 0x100,
 		__Dimention = 0x0F,
 	}
 
@@ -35,13 +44,20 @@ namespace MinorShift.Emuera.GameProc
 		}
 		public string Name = null;
 		public bool TypeIsStr = false;
+		public bool TypeIsFloat = false;
 		public UserDifinedFunctionDataArgType[] ArgList;
 
 		public static UserDefinedFunctionData Create(WordCollection wc, bool dims, ScriptPosition sc)
 		{
-			string dimtype = dims ? "#FUNCTION" : "#FUNCTIONS";
+			return Create(wc, dims, false, sc);
+		}
+
+		public static UserDefinedFunctionData Create(WordCollection wc, bool dims, bool isFloat, ScriptPosition sc)
+		{
+			string dimtype = isFloat ? "#FUNCTIONF" : (dims ? "#FUNCTIONS" : "#FUNCTION");
 			UserDefinedFunctionData ret = new UserDefinedFunctionData();
 			ret.TypeIsStr = dims;
+			ret.TypeIsFloat = isFloat;
 			IdentifierWord idw;
 			string keyword = dimtype;
 			while (!wc.EOL && (idw = wc.Current as IdentifierWord) != null)
@@ -86,8 +102,8 @@ namespace MinorShift.Emuera.GameProc
 
 			int state = 0;
 			//0=初期状態 1=カンマ括弧閉じ待ち 2=カンマ直後
-			//3=REF後INTorSTR待ち 4=':'or','待ち 5=':'or '0'or ','待ち
-			while (true)// REF INT STR 0 '*' ',' ')' のみで構成されるはず
+			//3=REF後INTorSTRorFLOAT待ち 4=':'or','待ち 5=':'or '0'or ','待ち 6=OUT後INTorSTRorFLOAT待ち 7=可変長引数終端待ち
+			while (true)// REF OUT INT STR FLOAT 0 ':' ',' ')' '.' のみで構成されるはず
 			{
 				wc.ShiftNext();
 				switch (wc.Current.Type)
@@ -99,12 +115,12 @@ namespace MinorShift.Emuera.GameProc
 							goto argend;
 						if (state == 4 || state == 5)
 						{
-							if ((int)(argType & UserDifinedFunctionDataArgType.__Dimention) == 0)
-								throw new CodeEE("REF引数は配列変数でなければなりません", sc);
 							//state = 2;
 							argList.Add(argType);
 							goto argend;
 						}
+						if (state == 7)
+							goto argend;
 						throw new CodeEE("予期しない括弧です", sc);
 					case '0':
 						if (((LiteralIntegerWord)wc.Current).Int != 0)
@@ -132,8 +148,6 @@ namespace MinorShift.Emuera.GameProc
 						}
 						if (state == 4 || state == 5)
 						{
-							if ((int)(argType & UserDifinedFunctionDataArgType.__Dimention) == 0)
-								throw new CodeEE("REF引数は配列変数でなければなりません", sc);
 							state = 2;
 							argList.Add(argType);
 							continue;
@@ -153,12 +167,23 @@ namespace MinorShift.Emuera.GameProc
 								}
 								goto argerr;
 							}
-							else if (str == "INT" || str == "STR")
+							else if (str == "OUT")
+							{
+								if (state == 0 || state == 2)
+								{
+									state = 6;
+									continue;
+								}
+								goto argerr;
+							}
+							else if (str == "INT" || str == "STR" || str == "FLOAT")
 							{
 								if (str == "INT")
 									argType = UserDifinedFunctionDataArgType.Int;
-								else
+								else if (str == "STR")
 									argType = UserDifinedFunctionDataArgType.Str;
+								else
+									argType = UserDifinedFunctionDataArgType.Float;
 								if (state == 0 || state == 2)
 								{
 									state = 1;
@@ -171,11 +196,30 @@ namespace MinorShift.Emuera.GameProc
 									state = 4;
 									continue;
 								}
+								if (state == 6)
+								{
+									argType = argType | UserDifinedFunctionDataArgType.__Ref | UserDifinedFunctionDataArgType.__Out;
+									state = 4;
+									continue;
+								}
 								goto argerr;
 							}
 							else
 								goto argerr;
 						}
+					case '.':
+						if (state == 1 && wc.PeekNext(1).Type == '.' && wc.PeekNext(2).Type == '.')
+						{
+							if ((argType & UserDifinedFunctionDataArgType.__Ref) != 0)
+								throw new CodeEE("REF引数は可変長引数にできません", sc);
+							argType |= UserDifinedFunctionDataArgType.__Variadic;
+							argList[argList.Count - 1] = argType;
+							wc.ShiftNext();
+							wc.ShiftNext();
+							state = 7;
+							continue;
+						}
+						goto argerr;
 					default:
 						goto argerr;
 				}

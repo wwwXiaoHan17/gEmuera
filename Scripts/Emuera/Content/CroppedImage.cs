@@ -213,6 +213,29 @@ namespace MinorShift.Emuera.Content
 			StartTime = -1;
 			lastFrameTime = 0;
 			lastFrame = -1;
+			_paused = false;
+			_pausedAt = 0;
+		}
+
+		private bool _paused;
+		private uint _pausedAt;
+
+		internal void PauseAnimation()
+		{
+			if (_paused) return;
+			_paused = true;
+			_pausedAt = MinorShift._Library.WinmmTimer.CurrentFrameTime;
+		}
+
+		internal void ResumeAnimation()
+		{
+			if (!_paused) return;
+			_paused = false;
+			if (StartTime >= 0)
+			{
+				uint pausedDuration = MinorShift._Library.WinmmTimer.CurrentFrameTime - _pausedAt;
+				StartTime += pausedDuration;
+			}
 		}
 
 		/// <summary>
@@ -297,6 +320,8 @@ namespace MinorShift.Emuera.Content
 			lastFrameTime = 0;
 			StartTime = -1;
 			lastFrame = -1;
+			_paused = false;
+			_pausedAt = 0;
 		}
 
 

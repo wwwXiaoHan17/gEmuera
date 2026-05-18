@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 using System.IO;
@@ -20,9 +20,9 @@ namespace MinorShift.Emuera
 	internal sealed class ConfigData
 	{
 		static string configPath
-        { get { return Program.ExeDir + "emuera.config"; } }
+		{ get { return Program.ExeDir + "emuera.config"; } }
 		static string configdebugPath
-        { get { return Program.DebugDir + "debug.config"; } }
+		{ get { return Program.DebugDir + "debug.config"; } }
 
 static ConfigData() { }
 		private static ConfigData instance = new ConfigData();
@@ -31,7 +31,7 @@ static ConfigData() { }
 		private ConfigData() { setDefault(); }
 
 		//適当に大き目の配列を作っておく。
-		private AConfigItem[] configArray = new AConfigItem[71];
+		private AConfigItem[] configArray = new AConfigItem[74];
 		private AConfigItem[] replaceArray = new AConfigItem[50];
 		private AConfigItem[] debugArray = new AConfigItem[20];
 		private System.Text.StringBuilder configDebugLog = new System.Text.StringBuilder();
@@ -110,6 +110,10 @@ static ConfigData() { }
 			{ "DO NOT AUTO-COMPLETE ARGUMENTS FOR CHARACTER VARIABLES", ConfigCode.SystemNoTarget },
 			{ "STRING VARIABLE ASSIGNMENT ON VALID WITH STRING EXPRESSION", ConfigCode.SystemIgnoreStringSet },
 			{ "USELAZYLOADING", ConfigCode.UseLazyLoading },
+			{ "USE ERD", ConfigCode.UseERD },
+			{ "USE ERD FUNCTION", ConfigCode.UseERD },
+			{ "IMITATE ERD TO VARSIZE DIMENSION SPECIFICATION", ConfigCode.VarsizeDimConfig },
+			{ "CHECK DUPLICATED IDENTIFIERS DEFINED BY ERD", ConfigCode.CheckDuplicateIdentifier },
 		};
 
 		private static readonly Dictionary<string, ConfigCode> englishReplaceAliases = new Dictionary<string, ConfigCode>(StringComparer.OrdinalIgnoreCase)
@@ -198,7 +202,7 @@ static ConfigData() { }
 			configArray[i++] = new ConfigItem<bool>(ConfigCode.AllowFunctionOverloading, "システム関数の上書きを許可する", true);
 			configArray[i++] = new ConfigItem<bool>(ConfigCode.WarnFunctionOverloading, "システム関数が上書きされたとき警告を表示する", true);
 			configArray[i++] = new ConfigItem<string>(ConfigCode.TextEditor, "関連づけるテキストエディタ", "notepad");
-            configArray[i++] = new ConfigItem<TextEditorType>(ConfigCode.EditorType, "テキストエディタコマンドライン指定", TextEditorType.USER_SETTING);
+			configArray[i++] = new ConfigItem<TextEditorType>(ConfigCode.EditorType, "テキストエディタコマンドライン指定", TextEditorType.USER_SETTING);
 			configArray[i++] = new ConfigItem<string>(ConfigCode.EditorArgument, "エディタに渡す行指定引数", "");
 			configArray[i++] = new ConfigItem<bool>(ConfigCode.WarnNormalFunctionOverloading, "同名の非イベント関数が複数定義されたとき警告する", false);
 			configArray[i++] = new ConfigItem<bool>(ConfigCode.CompatiErrorLine, "解釈不可能な行があっても実行する", false);
@@ -210,8 +214,8 @@ static ConfigData() { }
 			configArray[i++] = new ConfigItem<bool>(ConfigCode.SystemAllowFullSpace, "全角スペースをホワイトスペースに含める", true);
 			configArray[i++] = new ConfigItem<bool>(ConfigCode.SystemSaveInUTF8, "セーブデータをUTF-8で保存する", false);
 			configArray[i++] = new ConfigItem<bool>(ConfigCode.CompatiLinefeedAs1739, "ver1739以前の非ボタン折り返しを再現する", false);
-            configArray[i++] = new ConfigItem<UseLanguage>(ConfigCode.useLanguage, "内部で使用する東アジア言語", UseLanguage.JAPANESE);
-            configArray[i++] = new ConfigItem<bool>(ConfigCode.AllowLongInputByMouse, "ONEINPUT系命令でマウスによる2文字以上の入力を許可する", false);
+			configArray[i++] = new ConfigItem<UseLanguage>(ConfigCode.useLanguage, "内部で使用する東アジア言語", UseLanguage.JAPANESE);
+			configArray[i++] = new ConfigItem<bool>(ConfigCode.AllowLongInputByMouse, "ONEINPUT系命令でマウスによる2文字以上の入力を許可する", false);
 			configArray[i++] = new ConfigItem<bool>(ConfigCode.CompatiCallEvent, "イベント関数のCALLを許可する", false);
 			configArray[i++] = new ConfigItem<bool>(ConfigCode.CompatiSPChara, "SPキャラを使用する", false);
 			
@@ -219,12 +223,15 @@ static ConfigData() { }
 			configArray[i++] = new ConfigItem<bool>(ConfigCode.CompatiFuncArgOptional, "ユーザー関数の全ての引数の省略を許可する", false);
 			configArray[i++] = new ConfigItem<bool>(ConfigCode.CompatiFuncArgAutoConvert, "ユーザー関数の引数に自動的にTOSTRを補完する", false);
 			configArray[i++] = new ConfigItem<bool>(ConfigCode.SystemIgnoreTripleSymbol, "FORM中の三連記号を展開しない", false);
-            configArray[i++] = new ConfigItem<bool>(ConfigCode.TimesNotRigorousCalculation, "TIMESの計算をeramakerにあわせる", false);
-            //一文字変数の禁止オプションを考えた名残
+			configArray[i++] = new ConfigItem<bool>(ConfigCode.TimesNotRigorousCalculation, "TIMESの計算をeramakerにあわせる", false);
+			//一文字変数の禁止オプションを考えた名残
 			//configArray[i++] = new ConfigItem<bool>(ConfigCode.ForbidOneCodeVariable, "一文字変数の使用を禁止する", false);
 			configArray[i++] = new ConfigItem<bool>(ConfigCode.SystemNoTarget, "キャラクタ変数の引数を補完しない", false);
 			configArray[i++] = new ConfigItem<bool>(ConfigCode.SystemIgnoreStringSet, "文字列変数の代入に文字列式を強制する", false);
 			configArray[i++] = new ConfigItem<bool>(ConfigCode.UseLazyLoading, "UseLazyLoading", false);
+			configArray[i++] = new ConfigItem<bool>(ConfigCode.UseERD, "ERD機能を利用する", true);
+			configArray[i++] = new ConfigItem<bool>(ConfigCode.VarsizeDimConfig, "VARSIZEの次元指定をERD機能に合わせる", false);
+			configArray[i++] = new ConfigItem<bool>(ConfigCode.CheckDuplicateIdentifier, "ERDで定義した識別子とローカル変数の重複を確認する", false);
 
 			i = 0;
 			debugArray[i++] = new ConfigItem<bool>(ConfigCode.DebugShowWindow, "起動時にデバッグウインドウを表示する", true);
@@ -251,16 +258,16 @@ static ConfigData() { }
 			replaceArray[i++] = new ConfigItem<List<Int64>>(ConfigCode.ExpLvDef, "EXPLVの初期値", new List<long>(new Int64[] { 0, 1, 4, 20, 50, 200 }));
 			replaceArray[i++] = new ConfigItem<List<Int64>>(ConfigCode.PalamLvDef, "PALAMLVの初期値", new List<long>(new Int64[] { 0, 100, 500, 3000, 10000, 30000, 60000, 100000, 150000, 250000 }));
 			replaceArray[i++] = new ConfigItem<Int64>(ConfigCode.pbandDef, "PBANDの初期値", 4);
-            replaceArray[i++] = new ConfigItem<Int64>(ConfigCode.RelationDef, "RELATIONの初期値", 0);
+			replaceArray[i++] = new ConfigItem<Int64>(ConfigCode.RelationDef, "RELATIONの初期値", 0);
 		}
 
-        public void Clear()
-        {
-            configArray = new AConfigItem[71];
-            replaceArray = new AConfigItem[50];
-            debugArray = new AConfigItem[20];
-            setDefault();
-        }
+		public void Clear()
+		{
+			configArray = new AConfigItem[74];
+			replaceArray = new AConfigItem[50];
+			debugArray = new AConfigItem[20];
+			setDefault();
+		}
 
 		public ConfigData Copy()
 		{
@@ -291,23 +298,23 @@ static ConfigData() { }
 		public T GetConfigValue<T>(ConfigCode code)
 		{
 			AConfigItem item = GetItem(code);
-            //if ((item != null) && (item is ConfigItem<T>))
+			//if ((item != null) && (item is ConfigItem<T>))
 				return ((ConfigItem<T>)item).Value;
-            //throw new ExeEE("GetConfigValueのCodeまたは型が不適切");
+			//throw new ExeEE("GetConfigValueのCodeまたは型が不適切");
 		}
 
 #region getitem
 		public AConfigItem GetItem(ConfigCode code)
 		{
 			AConfigItem item = GetConfigItem(code);
-            if (item == null)
-            {
-                item = GetReplaceItem(code);
-	            if (item == null)
-	            {
-	                item = GetDebugItem(code);
-	            }
-            }
+			if (item == null)
+			{
+				item = GetReplaceItem(code);
+				if (item == null)
+				{
+					item = GetDebugItem(code);
+				}
+			}
 			return item;
 		}
 		public AConfigItem GetItem(string key)
@@ -316,11 +323,11 @@ static ConfigData() { }
 			if (item == null)
 			{
 				item = GetReplaceItem(key);
-	            if (item == null)
-	            {
+				if (item == null)
+				{
 					item = GetDebugItem(key);
-	            }
-	        }
+				}
+			}
 			return item;
 		}
 
@@ -555,19 +562,19 @@ static ConfigData() { }
 			return true;
 		}
 
-        public bool ReLoadConfig()
-        {
-            //_fixed.configの中身が変わった場合、非固定になったものが保持されてしまうので、ここで一旦すべて解除
-            foreach (AConfigItem item in configArray)
-            {
-                if (item == null)
-                    continue;
-                if (item.Fixed)
-                    item.Fixed = false;
-            }
-            LoadConfig();
-            return true;
-        }
+		public bool ReLoadConfig()
+		{
+			//_fixed.configの中身が変わった場合、非固定になったものが保持されてしまうので、ここで一旦すべて解除
+			foreach (AConfigItem item in configArray)
+			{
+				if (item == null)
+					continue;
+				if (item.Fixed)
+					item.Fixed = false;
+			}
+			LoadConfig();
+			return true;
+		}
 
 		public bool LoadConfig()
 		{
@@ -579,24 +586,21 @@ static ConfigData() { }
 			if (!uEmuera.Utils.FileExists(fixedConfigPath))
 				fixedConfigPath = Program.CsvDir + "fixed.config";
 
-			GenericUtils.Info($"[CONFIG] default={defaultConfigPath} exists={uEmuera.Utils.FileExists(defaultConfigPath)}");
-			GenericUtils.Info($"[CONFIG] user={configPath} exists={uEmuera.Utils.FileExists(configPath)}");
-			GenericUtils.Info($"[CONFIG] fixed={fixedConfigPath} exists={uEmuera.Utils.FileExists(fixedConfigPath)}");
-
 			loadConfig(defaultConfigPath, false);
 			loadConfig(configPath, false);
 			loadConfig(fixedConfigPath, true);
 
 			Config.SetConfig(this);
-			GenericUtils.Info($"[CONFIG] SystemSaveInBinary={Config.SystemSaveInBinary}");
 
-			// Write debug log to file for Android diagnosis
-			try
+			if (Program.DebugMode)
 			{
-				var debugPath = Program.ExeDir + "config_debug.log";
-				System.IO.File.WriteAllText(debugPath, configDebugLog.ToString());
+				try
+				{
+					var debugPath = Program.ExeDir + "config_debug.log";
+					System.IO.File.WriteAllText(debugPath, configDebugLog.ToString());
+				}
+				catch { }
 			}
-			catch { }
 
 			bool needSave = false;
 			if (!uEmuera.Utils.FileExists(configPath))
@@ -608,7 +612,7 @@ static ConfigData() { }
 			}
 			if (needSave)
 				SaveConfig();
-            return true;
+			return true;
 		}
 
 		private bool loadConfig(string confPath, bool fix)
@@ -619,14 +623,12 @@ static ConfigData() { }
 			if (!eReader.Open(confPath))
 				return false;
 
-			GenericUtils.Info($"[CONFIG] Loading: {confPath}");
 			configDebugLog.AppendLine($"=== Loading: {confPath} ===");
 
 			//加载二进制数据
 			var bytes = uEmuera.Utils.ReadAllBytes(confPath);
 			var keyOnlyMd5s = CalcKeyOnlyMd5List(bytes);
 
-			GenericUtils.Info($"[CONFIG] bytes={bytes.Length}, md5count={keyOnlyMd5s.Count}");
 			configDebugLog.AppendLine($"bytes={bytes.Length}, md5count={keyOnlyMd5s.Count}");
 
 			ScriptPosition pos = null;
@@ -657,22 +659,22 @@ static ConfigData() { }
 						configDebugLog.AppendLine($"  NO_COLON: '{line}'");
 						continue;
 					}
-                    var token_0 = tokens[0].Trim();
-                    AConfigItem item = GetConfigItem(token_0);
-                    if(item == null)
-                    {
-                        var translated = uEmuera.Utils.SHIFTJIS_to_UTF8(token_0, md5);
-                        if(!string.IsNullOrEmpty(translated))
-                        {
-                            token_0 = translated;
-                            item = GetConfigItem(token_0);
-                        }
-                        else
-                        {
-                            configDebugLog.AppendLine($"  TRANSLATE_FAIL: key='{token_0}', md5={md5}");
-                            GenericUtils.Warn($"[CONFIG] SHIFTJIS translate failed: key='{token_0}', md5={md5}");
-                        }
-                    }
+					var token_0 = tokens[0].Trim();
+					AConfigItem item = GetConfigItem(token_0);
+					if(item == null)
+					{
+						var translated = uEmuera.Utils.SHIFTJIS_to_UTF8(token_0, md5);
+						if(!string.IsNullOrEmpty(translated))
+						{
+							token_0 = translated;
+							item = GetConfigItem(token_0);
+						}
+						else
+						{
+							configDebugLog.AppendLine($"  TRANSLATE_FAIL: key='{token_0}', md5={md5}");
+							GenericUtils.Warn($"[CONFIG] SHIFTJIS translate failed: key='{token_0}', md5={md5}");
+						}
+					}
 					if (item == null)
 					{
 						configDebugLog.AppendLine($"  UNMATCHED: '{token_0}'");
@@ -684,8 +686,6 @@ static ConfigData() { }
 					}
 					if (item != null)
 					{
-						if (item.Code == ConfigCode.SystemSaveInBinary)
-							GenericUtils.Info($"[CONFIG] Found SystemSaveInBinary, value='{tokens[1]}', fix={fix}");
 						//1806beta001 CompatiDRAWLINEの廃止、CompatiLinefeedAs1739へ移行
 						if(item.Code == ConfigCode.CompatiDRAWLINE)
 						{
@@ -722,11 +722,11 @@ static ConfigData() { }
 							((ConfigItem<string>)item).Value = tokens[1];
 							continue;
 						}
-                        if (item.Code == ConfigCode.MaxLog && Program.AnalysisMode)
-                        {
-                            //解析モード時はここを上書きして十分な長さを確保する
-                            tokens[1] = "10000";
-                        }
+						if (item.Code == ConfigCode.MaxLog && Program.AnalysisMode)
+						{
+							//解析モード時はここを上書きして十分な長さを確保する
+							tokens[1] = "10000";
+						}
 						if ((item.TryParse(tokens[1])) && (fix))
 							item.Fixed = true;
 					}
@@ -747,7 +747,6 @@ static ConfigData() { }
 				ParserMediator.ConfigWarn(exc.GetType().ToString() + ":" + exc.Message, pos, 1, exc.StackTrace);
 			}
 			finally { eReader.Dispose(); }
-			GenericUtils.Info($"[CONFIG] Done: {confPath}, lines={lineCount}, md5used={md5i}");
 			return true;
 		}
 
@@ -828,16 +827,16 @@ static ConfigData() { }
 					if ((line.Length == 0) || (line[0] == ';'))
 						continue;
 					pos = new ScriptPosition(eReader.Filename, eReader.LineNo);
-                    string[] tokens = line.Split(new char[] { ',', ':' });
+					string[] tokens = line.Split(new char[] { ',', ':' });
 					if (tokens.Length < 2)
 						continue;
-                    string itemName = tokens[0].Trim();
-                    tokens[1] = line.Substring(tokens[0].Length + 1);
-                    if (string.IsNullOrEmpty(tokens[1].Trim()))
-                        continue;
-                    AConfigItem item = GetReplaceItem(itemName);
-                    if (item != null)
-                        item.TryParse(tokens[1]);
+					string itemName = tokens[0].Trim();
+					tokens[1] = line.Substring(tokens[0].Length + 1);
+					if (string.IsNullOrEmpty(tokens[1].Trim()))
+						continue;
+					AConfigItem item = GetReplaceItem(itemName);
+					if (item != null)
+						item.TryParse(tokens[1]);
 				}
 			}
 			catch (EmueraException ee)
@@ -924,7 +923,7 @@ static ConfigData() { }
 			}
 			finally { eReader.Dispose(); }
 			Config.SetDebugConfig(this);
-            return true;
+			return true;
 		err:
 			Config.SetDebugConfig(this);
 			return false;

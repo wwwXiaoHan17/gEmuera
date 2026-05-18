@@ -467,6 +467,7 @@ namespace MinorShift.Emuera.GameData.Function
 			foreach (var conn in connections.Values)
 				conn.Dispose();
 			connections.Clear();
+			nextReaderId = 1;
 		}
 
 		private static object ExecuteScalar(string dbName, string sql, object[] parameters)

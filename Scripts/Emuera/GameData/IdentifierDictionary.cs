@@ -58,6 +58,8 @@ namespace MinorShift.Emuera
 				case "EVENTCOMEND":
 				case "EVENTEND":
 				case "EVENTLOAD":
+				case "BEFORE_THROW":
+				case "BEFORE_ERROR":
 					return true;
 			}
 			return false;
@@ -144,8 +146,7 @@ namespace MinorShift.Emuera
 			nameDic.Add("__DEBUG__", DefinedNameType.Reserved);
 			nameDic.Add("__SKIP__", DefinedNameType.Reserved);
 			nameDic.Add("_", DefinedNameType.Reserved);
-			if (Program.IsSnakeProfile)
-				nameDic.Add("VARIADIC", DefinedNameType.Reserved);
+			nameDic.Add("VARIADIC", DefinedNameType.Reserved);
 			instructionDic = FunctionIdentifier.GetInstructionNameDic();
 
 			varTokenDic = varData.GetVarTokenDicClone();
@@ -293,10 +294,21 @@ namespace MinorShift.Emuera
 						warnLevel = 2;
 						break;
 					case DefinedNameType.SystemInstrument:
+						if (methodDic.ContainsKey(varName))
+						{
+							errMes = "変数名" + varName + "はEmueraの式中関数名として使われています";
+							warnLevel = 1;
+						}
+						else
+						{
+							//代入文が使えなくなるために命令名との衝突は致命的。
+							errMes = "変数名" + varName + "はEmueraの命令名として使われています";
+							warnLevel = 2;
+						}
+						break;
 					case DefinedNameType.SystemMethod:
-						//代入文が使えなくなるために命令名との衝突は致命的。
-						errMes = "変数名" + varName + "はEmueraの命令名として使われています";
-						warnLevel = 2;
+						errMes = "変数名" + varName + "はEmueraの式中関数名として使われています";
+						warnLevel = 1;
 						break;
 					case DefinedNameType.SystemVariable:
 						errMes = "変数名" + varName + "はEmueraの変数名として使われています";
@@ -393,11 +405,23 @@ namespace MinorShift.Emuera
 						warnLevel = 2;
 						return;
 					case DefinedNameType.SystemInstrument:
+						if (methodDic.ContainsKey(varName))
+						{
+							errMes = "変数名" + varName + "はEmueraの式中関数名として使われています";
+							warnLevel = 1;
+							break;
+						}
+						else
+						{
+							//代入文が使えなくなるために命令名との衝突は致命的。
+							errMes = "変数名" + varName + "はEmueraの命令名として使われています";
+							warnLevel = 2;
+							return;
+						}
 					case DefinedNameType.SystemMethod:
-						//代入文が使えなくなるために命令名との衝突は致命的。
-						errMes = "変数名" + varName + "はEmueraの命令名として使われています";
-						warnLevel = 2;
-						return;
+						errMes = "変数名" + varName + "はEmueraの式中関数名として使われています";
+						warnLevel = 1;
+						break;
 					case DefinedNameType.SystemVariable:
 						//システム変数の上書きは不可
                         errMes = "変数名" + varName + "はEmueraの変数名として使われています";
@@ -468,6 +492,20 @@ namespace MinorShift.Emuera
 		public IEnumerable<string> MacroNames
 		{
 			get { return macroDic.Keys; }
+		}
+
+		public IEnumerable<string> VarKeys
+		{
+			get
+			{
+				List<string> list = new List<string>();
+				foreach (var pair in nameDic)
+				{
+					if (pair.Value == DefinedNameType.UserGlobalVariable)
+						list.Add(pair.Key);
+				}
+				return list;
+			}
 		}
 
 		public VariableToken GetVariableToken(string key, string subKey, bool allowPrivate)

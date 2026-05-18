@@ -42,6 +42,7 @@ namespace MinorShift.Emuera.Sub
 		}
 		FileStream file;
 		StreamReader reader;
+		string peekedLine = null;
 		public const string FINISHER = "__FINISHED";
 		public const string EMU_1700_START = "__EMUERA_STRAT__";
 		public const string EMU_1708_START = "__EMUERA_1708_STRAT__";
@@ -54,17 +55,41 @@ namespace MinorShift.Emuera.Sub
 		{
 			if (reader == null)
 				throw new FileEE("無効なストリームです");
-			string str = reader.ReadLine();
+			string str = readLine();
 			if (str == null)
 				throw new FileEE("読み取るべき文字列がありません");
 			return str;
+		}
+
+		public bool TryPeekString(out string str)
+		{
+			str = null;
+			if (reader == null)
+				throw new FileEE("無効なストリームです");
+			if (peekedLine == null)
+				peekedLine = reader.ReadLine();
+			if (peekedLine == null)
+				return false;
+			str = peekedLine;
+			return true;
+		}
+
+		string readLine()
+		{
+			if (peekedLine != null)
+			{
+				string line = peekedLine;
+				peekedLine = null;
+				return line;
+			}
+			return reader.ReadLine();
 		}
 
 		public Int64 ReadInt64()
 		{
 			if (reader == null)
 				throw new FileEE("無効なストリームです");
-            string str = reader.ReadLine();
+            string str = readLine();
             if (str == null)
 				throw new FileEE("読み取るべき数値がありません");
 			if (!Int64.TryParse(str, out long ret))

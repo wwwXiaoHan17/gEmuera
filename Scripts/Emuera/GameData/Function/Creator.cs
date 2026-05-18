@@ -34,7 +34,6 @@ namespace MinorShift.Emuera.GameData.Function
                 ["FINDCHARA"] = new FindcharaMethod(false),
                 ["FINDLASTCHARA"] = new FindcharaMethod(true),
                 ["EXISTCSV"] = new ExistCsvMethod(),
-
                 //汎用処理系
                 ["VARSIZE"] = new VarsizeMethod(),
                 ["CHKFONT"] = new CheckfontMethod(),
@@ -54,14 +53,12 @@ namespace MinorShift.Emuera.GameData.Function
                 ["CURRENTREDRAW"] = new CurrentRedrawMethod(),
                 ["COLOR_FROMNAME"] = new ColorFromNameMethod(),
                 ["COLOR_FROMRGB"] = new ColorFromRGBMethod(),
-
                 //TODO:1810
                 //methodList["CHKVARDATA"] = new CheckdataStrMethod(EraSaveFileType.Var);
                 ["CHKCHARADATA"] = new CheckdataStrMethod(EraSaveFileType.CharVar),
                 //methodList["CHKGLOBALDATA"] = new CheckdataMethod(EraSaveFileType.Global);
                 //methodList["FIND_VARDATA"] = new FindFilesMethod(EraSaveFileType.Var);
                 ["FIND_CHARADATA"] = new FindFilesMethod(EraSaveFileType.CharVar),
-
                 //定数取得
                 ["MONEYSTR"] = new MoneyStrMethod(),
                 ["PRINTCPERLINE"] = new GetPrintCPerLineMethod(),
@@ -71,7 +68,6 @@ namespace MinorShift.Emuera.GameData.Function
                 ["GETTIMES"] = new GettimesMethod(),
                 ["GETMILLISECOND"] = new GetmsMethod(),
                 ["GETSECOND"] = new GetSecondMethod(),
-
                 //数学関数
                 ["RAND"] = new RandMethod(),
                 ["MIN"] = new MaxMethod(false),
@@ -85,7 +81,6 @@ namespace MinorShift.Emuera.GameData.Function
                 ["EXPONENT"] = new ExpMethod(),
                 ["SIGN"] = new SignMethod(),
                 ["LIMIT"] = new GetLimitMethod(),
-
                 //変数操作系
                 ["SUMARRAY"] = new SumArrayMethod(),
                 ["SUMCARRAY"] = new SumArrayMethod(true),
@@ -108,9 +103,8 @@ namespace MinorShift.Emuera.GameData.Function
                 ["INRANGEARRAY"] = new InRangeArrayMethod(),
                 ["INRANGECARRAY"] = new InRangeArrayMethod(true),
                 ["GETNUMB"] = new GetnumMethod(),
-
                 ["ARRAYMSORT"] = new ArrayMultiSortMethod(),
-
+                ["ARRAYMSORTEX"] = new ArrayMultiSortExMethod(),
                 //文字列操作系
                 ["STRLENS"] = new StrlenMethod(),
                 ["STRLENSU"] = new StrlenuMethod(),
@@ -137,17 +131,13 @@ namespace MinorShift.Emuera.GameData.Function
                 ["GETLINESTR"] = new GetLineStrMethod(),
                 ["STRFORM"] = new StrFormMethod(),
                 ["STRJOIN"] = new JoinMethod(),
-
                 ["GETCONFIG"] = new GetConfigMethod(true),
                 ["GETCONFIGS"] = new GetConfigMethod(false),
-
                 //html系
                 ["HTML_GETPRINTEDSTR"] = new HtmlGetPrintedStrMethod(),
                 ["HTML_POPPRINTINGSTR"] = new HtmlPopPrintingStrMethod(),
                 ["HTML_TOPLAINTEXT"] = new HtmlToPlainTextMethod(),
                 ["HTML_ESCAPE"] = new HtmlEscapeMethod(),
-
-
                 //画像処理系
                 ["SPRITECREATED"] = new SpriteStateMethod(),
                 ["SPRITEWIDTH"] = new SpriteStateMethod(),
@@ -156,10 +146,8 @@ namespace MinorShift.Emuera.GameData.Function
                 ["SPRITESETPOS"] = new SpriteSetPosMethod(),
                 ["SPRITEPOSX"] = new SpriteStateMethod(),
                 ["SPRITEPOSY"] = new SpriteStateMethod(),
-
                 ["CLIENTWIDTH"] = new ClientSizeMethod(),
                 ["CLIENTHEIGHT"] = new ClientSizeMethod(),
-
                 ["GETKEY"] = new GetKeyStateMethod(),
                 ["GETKEYTRIGGERED"] = new GetKeyStateMethod(),
                 ["MOUSEX"] = new MousePosMethod(),
@@ -167,13 +155,11 @@ namespace MinorShift.Emuera.GameData.Function
                 ["ISACTIVE"] = new IsActiveMethod(),
                 ["SAVETEXT"] = new SaveTextMethod(),
                 ["LOADTEXT"] = new LoadTextMethod(),
-
                 ["GCREATED"] = new GraphicsStateMethod(),// ("GCREATED");
                 ["GWIDTH"] = new GraphicsStateMethod(),//("GWIDTH");
                 ["GHEIGHT"] = new GraphicsStateMethod(),//("GHEIGHT");
                 ["GGETCOLOR"] = new GraphicsGetColorMethod(),
                 ["SPRITEGETCOLOR"] = new SpriteGetColorMethod(),
-
                 ["GCREATE"] = new GraphicsCreateMethod(),
                 ["GCREATEFROMFILE"] = new GraphicsCreateFromFileMethod(),
                 ["GDISPOSE"] = new GraphicsDisposeMethod(),
@@ -183,159 +169,225 @@ namespace MinorShift.Emuera.GameData.Function
                 ["GSETCOLOR"] = new GraphicsSetColorMethod(),
                 ["GDRAWG"] = new GraphicsDrawGMethod(),
                 ["GDRAWGWITHMASK"] = new GraphicsDrawGWithMaskMethod(),
-
                 ["GSETBRUSH"] = new GraphicsSetBrushMethod(),
                 ["GSETFONT"] = new GraphicsSetFontMethod(),
                 ["GSETPEN"] = new GraphicsSetPenMethod(),
-
                 ["SPRITECREATE"] = new SpriteCreateMethod(),
                 ["SPRITEDISPOSE"] = new SpriteDisposeMethod(),
-
                 ["CBGSETG"] = new CBGSetGraphicsMethod(),
                 ["CBGSETSPRITE"] = new CBGSetCIMGMethod(),
                 ["CBGCLEAR"] = new CBGClearMethod(),
-
                 ["CBGCLEARBUTTON"] = new CBGClearButtonMethod(),
                 ["CBGREMOVERANGE"] = new CBGRemoveRangeMethod(),
                 ["CBGREMOVEBMAP"] = new CBGRemoveBMapMethod(),
                 ["CBGSETBMAPG"] = new CBGSetBMapGMethod(),
                 ["CBGSETBUTTONSPRITE"] = new CBGSETButtonSpriteMethod(),
-
                 ["GSAVE"] = new GraphicsSaveMethod(),
                 ["GLOAD"] = new GraphicsLoadMethod(),
-
-
+                ["GGETFONT"] = new GraphicsGetFontMethod(),
+                ["GGETFONTSIZE"] = new GraphicsStateMethod(),
+                ["GGETFONTSTYLE"] = new GraphicsStateMethod(),
+                ["GGETPEN"] = new GraphicsStateMethod(),
+                ["GGETPENWIDTH"] = new GraphicsStateMethod(),
+                ["GGETBRUSH"] = new GraphicsStateMethod(),
+                ["GGETTEXTSIZE"] = new GraphicsGetTextSizeMethod(),
+                ["GDRAWLINE"] = new GraphicsDrawLineMethod(),
+                ["GDRAWTEXT"] = new GraphicsDrawStringMethod(),
+                ["GDRAWSTRING"] = new GraphicsDrawStringMethod(),
+                ["GDASHSTYLE"] = new GraphicsDashStyleMethod(),
+                ["GROTATE"] = new GraphicsRotateMethod(),
+                ["G_POLYGON_POINT_ADD"] = new PolygonPointAddMethod(),
+                ["G_POLYGON_POINT_CLEAR"] = new PolygonPointClearMethod(),
+                ["G_POLYGON_DRAW"] = new PolygonDrawMethod(),
+                ["G_POLYGON_FILL"] = new PolygonFillMethod(),
+                ["GDRAWPOLYGONADDPOINT"] = new PolygonPointAddMethod(),
+                ["GDRAWPOLYGONCLEARPOINT"] = new PolygonPointClearMethod(),
+                ["GDRAWPOLYGON"] = new PolygonDrawMethod(),
+                ["GFILLPOLYGON"] = new PolygonFillMethod(),
+                ["SPRITECREATEFROMFILE"] = new SpriteCreateFromFileMethod(),
+                ["SPRITEDISPOSEALL"] = new SpriteDisposeAllMethod(),
+                ["SETTEXTBOX"] = new SetTextBoxMethod(),
+                ["GETTEXTBOX"] = new GetTextBoxMethod(),
+                ["MOVETEXTBOX"] = new MoveTextBoxMethod(),
+                ["RESUMETEXTBOX"] = new ResumeTextBoxMethod(),
+                ["MOUSEB"] = new MouseButtonMethod(),
+                ["MOUSEBUTTON"] = new MouseButtonMethod(),
                 ["SPRITEANIMECREATE"] = new SpriteAnimeCreateMethod(),
                 ["SPRITEANIMEADDFRAME"] = new SpriteAnimeAddFrameMethod(),
-                ["SETANIMETIMER"] = new SetAnimeTimerMethod()
-            };
+                ["SETANIMETIMER"] = new SetAnimeTimerMethod(),
+                // v24 core methods (previously Snake-only)
+                ["GETANIMETIMER"] = new GetAnimeTimerMethod(),
+                ["HTML_STRINGLEN"] = new HtmlStringLenMethod(),
+                ["HTML_SUBSTRING"] = new HtmlSubstringMethod(),
+                ["HTML_STRINGLINES"] = new HtmlStringLinesMethod(),
+                ["EXISTSOUND"] = new ExistSoundMethod(),
+                ["EXISTSIMAGELAYER"] = new ExistsImageLayerMethod(),
+                ["EXISTFUNCTION"] = new ExistFunctionMethod(),
+                ["EXISTFILE"] = new ExistFileMethod(),
+                ["GETCSVNOBYNAME"] = new GetCsvNoByNameMethod(CharacterStrData.NAME),
+                ["GETCSVNOBYNICKNAME"] = new GetCsvNoByNameMethod(CharacterStrData.NICKNAME),
+                ["GETCSVNOBYCALLNAME"] = new GetCsvNoByNameMethod(CharacterStrData.CALLNAME),
+                ["GETCSVNOBYMASTERNAME"] = new GetCsvNoByNameMethod(CharacterStrData.MASTERNAME),
+                ["GETSOUNDORBGMINFO"] = new GetSoundOrBgmInfoMethod(),
+                ["ISPLAYINGSOUND"] = new IsPlayingSoundMethod(),
+                ["SOUNDCONTROL"] = new SoundControlMethod(),
+                ["ISPLAYINGBGM"] = new IsPlayingBgmMethod(),
+                ["BGMCONTROL"] = new BgmControlMethod(),
+                ["GET_TEXT_DRAWING_MODE"] = new GetTextDrawingModeMethod(),
+                ["GET_SKIA_QUALITY"] = new GetSkiaQualityMethod(),
+                ["SIN"] = new V24TrigMethod("SIN", Math.Sin),
+                ["COS"] = new V24TrigMethod("COS", Math.Cos),
+                ["TAN"] = new V24TrigMethod("TAN", Math.Tan),
+                ["ASIN"] = new V24TrigMethod("ASIN", Math.Asin, true),
+                ["ACOS"] = new V24TrigMethod("ACOS", Math.Acos, true),
+                ["ATAN"] = new V24TrigMethod("ATAN", Math.Atan),
+                ["FLOOR"] = new V24RoundMathMethod("FLOOR", Math.Floor),
+                ["CEIL"] = new V24RoundMathMethod("CEIL", Math.Ceiling),
+                ["ROUND"] = new V24RoundMathMethod("ROUND", value => Math.Round(value, MidpointRounding.AwayFromZero)),
+                ["ARGLEN"] = new ArgLengthMethod(),
+                ["GETARGCOUNT"] = new ArgLengthMethod(),
+                ["TOFLOAT"] = new ToFloatMethod(),
+                ["UNCHECKED_ADD"] = new UncheckedMathMethod("ADD"),
+                ["UNCHECKED_SUB"] = new UncheckedMathMethod("SUB"),
+                ["UNCHECKED_MUL"] = new UncheckedMathMethod("MUL"),
+                ["UNCHECKED_NEG"] = new UncheckedMathMethod("NEG"),
+                ["BITSET"] = new BitMethod("SET"),
+                ["BITGET"] = new BitMethod("GET"),
+                ["BITTOGGLE"] = new BitMethod("TOGGLE"),
+                ["BITINDEXOFFIRST"] = new BitMethod("INDEX"),
+                ["SQL_CONNECTION_OPEN"] = new SqlConnectionOpenMethod(),
+                ["SQL_CONNECT"] = new SqlConnectMethod(),
+                ["SQL_DISCONNECT"] = new SqlDisconnectMethod(),
+                ["SQL_EXECUTE_NONQUERY"] = new SqlExecuteNonQueryMethod(),
+                ["SQL_EXECUTE_READER"] = new SqlExecuteReaderMethod(),
+                ["SQL_READER_READ"] = new SqlReaderReadMethod(),
+                ["SQL_READER_GET_LONG"] = new SqlReaderGetIntMethod(),
+                ["SQL_READER_GET_FLOAT"] = new SqlReaderGetFloatMethod(),
+                ["SQL_READER_ISNULL"] = new SqlReaderIsNullMethod(),
+                ["SQL_READER_CLOSE"] = new SqlReaderCloseMethod(),
+                ["SQL_EXECUTE_SCALAR_LONG"] = new SqlExecuteScalarLongMethod(),
+                ["SQL_EXECUTE_SCALAR_FLOAT"] = new SqlExecuteScalarFloatMethod(),
+                ["SQL_P_EXECUTE_NONQUERY"] = new SqlPExecuteNonQueryMethod(),
+                ["SQL_P_EXECUTE_READER"] = new SqlPExecuteReaderMethod(),
+                ["SQL_P_EXECUTE_SCALAR_LONG"] = new SqlPExecuteScalarLongMethod(),
+                ["SQL_P_EXECUTE_SCALAR_FLOAT"] = new SqlPExecuteScalarFloatMethod(),
+                ["SQL_IMPORT_MAP_XML"] = new SqlImportMapXmlMethod(),
+                ["SQL_IMPORT_DT_XML"] = new SqlImportDtXmlMethod(),
+                ["SQL_IMPORT_XML_CUSTOM"] = new SqlImportXmlCustomMethod(),
+                ["SQL_EXPORT_MAP_XML"] = new SqlExportMapXmlMethod(),
+                ["SQL_EXPORT_DT_XML"] = new SqlExportDtXmlMethod(),
+                ["SQL_ESCAPE"] = new SqlEscapeMethod(),
+                ["SQL_EXECUTE_SCALAR_STRING"] = new SqlExecuteScalarStringMethod(),
+                ["SQL_P_EXECUTE_SCALAR_STRING"] = new SqlPExecuteScalarStringMethod(),
+                ["SQL_READER_GET_STRING"] = new SqlReaderGetStringMethod(),
+                ["ISDEFINED"] = new IsDefinedMethod(),
+                ["CLEARMEMORY"] = new ClearMemoryMethod(),
+                ["GETMEMORYUSAGE"] = new GetMemoryUsageMethod(),
+                ["OUTPUTLOG"] = new OutputLogMethod(),
+                ["MATCHALL"] = new MatchAllMethod(),
+                ["MATCHALLEX"] = new MatchAllExMethod(),
+                ["EXISTVAR"] = new ExistVarMethod(),
+                ["SETVAR"] = new SetVarMethod(),
+                ["VARSETEX"] = new VarSetExMethod(),
+                ["REGEXPMATCH"] = new RegexpMatchMethod(),
+                ["EXISTMETH"] = new ExistMethMethod(),
+                ["ENUMFUNCBEGINSWITH"] = new EnumNameMethod("Function", "BeginsWith"),
+                ["ENUMFUNCENDSWITH"] = new EnumNameMethod("Function", "EndsWith"),
+                ["ENUMFUNCWITH"] = new EnumNameMethod("Function", "With"),
+                ["ENUMMACROBEGINSWITH"] = new EnumNameMethod("Macro", "BeginsWith"),
+                ["ENUMMACROENDSWITH"] = new EnumNameMethod("Macro", "EndsWith"),
+                ["ENUMMACROWITH"] = new EnumNameMethod("Macro", "With"),
+                ["ENUMVARBEGINSWITH"] = new EnumNameMethod("Variable", "BeginsWith"),
+                ["ENUMVARENDSWITH"] = new EnumNameMethod("Variable", "EndsWith"),
+                ["ENUMVARWITH"] = new EnumNameMethod("Variable", "With"),
+                ["GDRAWGWITHROTATE"] = new GraphicsDrawGWithRotateMethod(),
+                ["GETDISPLAYLINE"] = new GetDisplayLineMethod(),
+                ["GETDOINGFUNCTION"] = new GetDoingFunctionMethod(),
+                ["GETMETH"] = new GetMethMethod(),
+                ["GETMETHF"] = new GetMethFMethod(),
+                ["GETMETHS"] = new GetMethSMethod(),
+                ["EVAL"] = new EvalMethod(),
+                ["EVALF"] = new EvalMethod(),
+                ["EVALS"] = new EvalSMethod(),
+                ["ENUMFILES"] = new EnumFilesMethod(),
+                ["GETVAR"] = new GetVarMethod(),
+                ["GETVARS"] = new GetVarSMethod(),
+                ["GETVARF"] = new GetVarFMethod(),
+                ["ERDNAME"] = new ErdNameMethod(),
+                ["TOSTRF"] = new ToStrfMethod(),
+                // MAP functions
+                ["MAP_CREATE"] = new MapCreateMethod(),
+                ["MAP_EXIST"] = new MapExistMethod(),
+                ["MAP_RELEASE"] = new MapReleaseMethod(),
+                ["MAP_SET"] = new MapSetMethod(),
+                ["MAP_HAS"] = new MapHasMethod(),
+                ["MAP_REMOVE"] = new MapRemoveMethod(),
+                ["MAP_CLEAR"] = new MapClearMethod(),
+                ["MAP_SIZE"] = new MapSizeMethod(),
+                ["MAP_GET"] = new MapGetMethod(),
+                ["MAP_GETKEYS"] = new MapGetKeysMethod(),
+                ["MAP_VALUES"] = new MapValuesMethod(),
+                ["MAP_TOSTRING"] = new MapToStringMethod(),
+                ["MAP_FROMSTRING"] = new MapFromStringMethod(),
+                ["MAP_TOXML"] = new MapToXmlMethod(),
+                ["MAP_FROMXML"] = new MapFromXmlMethod(),
+                ["MAP_MERGE"] = new MapMergeMethod(),
+                ["MAP_REMOVEIF"] = new MapRemoveIfMethod(),
+                ["MAP_FINDKEY"] = new MapFindKeyMethod(),
+                // DT functions
+                ["DT_CREATE"] = new DtCreateMethod(),
+                ["DT_EXIST"] = new DtExistMethod(),
+                ["DT_RELEASE"] = new DtReleaseMethod(),
+                ["DT_CLEAR"] = new DtClearMethod(),
+                ["DT_NOCASE"] = new DtNoCaseMethod(),
+                ["DT_COLUMN_ADD"] = new DtColumnAddMethod(),
+                ["DT_COLUMN_EXIST"] = new DtColumnExistMethod(),
+                ["DT_COLUMN_REMOVE"] = new DtColumnRemoveMethod(),
+                ["DT_COLUMN_LENGTH"] = new DtColumnLengthMethod(),
+                ["DT_COLUMN_NAMES"] = new DtColumnNamesMethod(),
+                ["DT_ROW_ADD"] = new DtRowAddMethod(),
+                ["DT_ROW_SET"] = new DtRowSetMethod(),
+                ["DT_ROW_REMOVE"] = new DtRowRemoveMethod(),
+                ["DT_ROW_LENGTH"] = new DtRowLengthMethod(),
+                ["DT_CELL_GET"] = new DtCellGetMethod(),
+                ["DT_CELL_GETF"] = new DtCellGetfMethod(),
+                ["DT_CELL_GETS"] = new DtCellGetsMethod(),
+                ["DT_CELL_ISNULL"] = new DtCellIsNullMethod(),
+                ["DT_CELL_SET"] = new DtCellSetMethod(),
+                ["DT_CELL_SETF"] = new DtCellSetfMethod(),
+                ["DT_SELECT"] = new DtSelectMethod(),
+                ["DT_TOXML"] = new DtToXmlMethod(),
+                ["DT_FROMXML"] = new DtFromXmlMethod(),
+                // XML functions
+                ["XML_DOCUMENT"] = new XmlDocumentMethod(true),
+                ["XML_EXIST"] = new XmlDocumentMethod(false),
+                ["XML_RELEASE"] = new XmlReleaseMethod(),
+                ["XML_TOSTR"] = new XmlToStrMethod(),
+                ["XML_GET"] = new XmlGetMethod(false),
+                ["XML_GET_BYNAME"] = new XmlGetMethod(true),
+                ["XML_SET"] = new XmlSetMethod(false),
+                ["XML_SET_BYNAME"] = new XmlSetMethod(true),
+                ["XML_ADDNODE"] = new XmlAddNodeMethod(false, false),
+                ["XML_ADDNODE_BYNAME"] = new XmlAddNodeMethod(false, true),
+                ["XML_ADDATTRIBUTE"] = new XmlAddNodeMethod(true, false),
+                ["XML_ADDATTRIBUTE_BYNAME"] = new XmlAddNodeMethod(true, true),
+                ["XML_REMOVENODE"] = new XmlRemoveNodeMethod(false, false),
+                ["XML_REMOVENODE_BYNAME"] = new XmlRemoveNodeMethod(false, true),
+                ["XML_REMOVEATTRIBUTE"] = new XmlRemoveNodeMethod(true, false),
+                ["XML_REMOVEATTRIBUTE_BYNAME"] = new XmlRemoveNodeMethod(true, true),
+                ["XML_REPLACE"] = new XmlReplaceMethod(false),
+                ["XML_REPLACE_BYNAME"] = new XmlReplaceMethod(true),
 
-            if (Program.UseLegacySnakeCompatibilityFallbacks)
-                AddSnakeCompatibilityMethods(methodList);
+                ["FLOWINPUT"] = new FlowInputMethod(),
+                ["FLOWINPUTS"] = new FlowInputsMethod(),
+                ["HOTKEY_STATE"] = new HotkeyStateMethod(),
+                ["HOTKEY_STATE_INIT"] = new HotkeyStateInitMethod()
+            };
 
             //1823 自分の関数名を知っていた方が何かと便利なので覚えさせることにした
             foreach (var pair in methodList)
 				pair.Value.SetMethodName(pair.Key);
         }
-
-		private static void AddSnakeCompatibilityMethods(Dictionary<string, FunctionMethod> methods)
-		{
-			methods["GETANIMETIMER"] = new GetAnimeTimerMethod();
-			methods["HTML_STRINGLEN"] = new HtmlStringLenMethod();
-			methods["HTML_SUBSTRING"] = new HtmlSubstringMethod();
-			methods["HTML_STRINGLINES"] = new HtmlStringLinesMethod();
-			methods["EXISTSOUND"] = new ExistSoundMethod();
-			methods["EXISTSIMAGELAYER"] = new ExistsImageLayerMethod();
-			methods["GETSOUNDORBGMINFO"] = new GetSoundOrBgmInfoMethod();
-			methods["ISPLAYINGSOUND"] = new IsPlayingSoundMethod();
-			methods["SOUNDCONTROL"] = new SoundControlMethod();
-			methods["ISPLAYINGBGM"] = new IsPlayingBgmMethod();
-			methods["BGMCONTROL"] = new BgmControlMethod();
-			methods["GET_TEXT_DRAWING_MODE"] = new GetTextDrawingModeMethod();
-			methods["GET_SKIA_QUALITY"] = new GetSkiaQualityMethod();
-			methods["SIN"] = new SnakeTrigMethod("SIN");
-			methods["COS"] = new SnakeTrigMethod("COS");
-			methods["TAN"] = new SnakeTrigMethod("TAN");
-			methods["ASIN"] = new SnakeTrigMethod("ASIN");
-			methods["ACOS"] = new SnakeTrigMethod("ACOS");
-			methods["ATAN"] = new SnakeTrigMethod("ATAN");
-			methods["FLOOR"] = new SnakeUnaryMathMethod("FLOOR");
-			methods["CEIL"] = new SnakeUnaryMathMethod("CEIL");
-			methods["ROUND"] = new SnakeUnaryMathMethod("ROUND");
-			methods["ARGLEN"] = new SnakeArgLenMethod();
-			methods["TOFLOAT"] = new ToIntMethod();
-			methods["TOSTRF"] = new ToStrMethod();
-			methods["GETVAR"] = new SnakeGetVarIntMethod("GETVAR");
-			methods["GETVARF"] = new SnakeGetVarIntMethod("GETVARF");
-			methods["GETVARS"] = new SnakeGetVarStringMethod();
-			methods["UNCHECKED_ADD"] = new SnakeUncheckedMathMethod("ADD");
-			methods["UNCHECKED_SUB"] = new SnakeUncheckedMathMethod("SUB");
-			methods["UNCHECKED_MUL"] = new SnakeUncheckedMathMethod("MUL");
-			methods["UNCHECKED_NEG"] = new SnakeUncheckedMathMethod("NEG");
-			methods["BITSET"] = new SnakeBitMethod("SET");
-			methods["BITGET"] = new SnakeBitMethod("GET");
-			methods["BITTOGGLE"] = new SnakeBitMethod("TOGGLE");
-			methods["BITINDEXOFFIRST"] = new SnakeBitMethod("INDEX");
-			methods["SQL_CONNECTION_OPEN"] = new SnakeSqlIntMethod("CONNECTION_OPEN");
-			methods["SQL_CONNECT"] = new SnakeSqlIntMethod("CONNECT");
-			methods["SQL_DISCONNECT"] = new SnakeSqlIntMethod("DISCONNECT");
-			methods["SQL_EXECUTE_NONQUERY"] = new SnakeSqlIntMethod("EXECUTE_NONQUERY");
-			methods["SQL_EXECUTE_READER"] = new SnakeSqlIntMethod("EXECUTE_READER");
-			methods["SQL_READER_READ"] = new SnakeSqlIntMethod("READER_READ");
-			methods["SQL_READER_GET_LONG"] = new SnakeSqlIntMethod("READER_GET_LONG");
-			methods["SQL_READER_GET_FLOAT"] = new SnakeSqlIntMethod("READER_GET_FLOAT");
-			methods["SQL_READER_ISNULL"] = new SnakeSqlIntMethod("READER_ISNULL");
-			methods["SQL_READER_CLOSE"] = new SnakeSqlIntMethod("READER_CLOSE");
-			methods["SQL_EXECUTE_SCALAR_LONG"] = new SnakeSqlIntMethod("EXECUTE_SCALAR_LONG");
-			methods["SQL_EXECUTE_SCALAR_FLOAT"] = new SnakeSqlIntMethod("EXECUTE_SCALAR_FLOAT");
-			methods["SQL_P_EXECUTE_NONQUERY"] = new SnakeSqlIntMethod("P_EXECUTE_NONQUERY");
-			methods["SQL_P_EXECUTE_READER"] = new SnakeSqlIntMethod("P_EXECUTE_READER");
-			methods["SQL_P_EXECUTE_SCALAR_LONG"] = new SnakeSqlIntMethod("P_EXECUTE_SCALAR_LONG");
-			methods["SQL_P_EXECUTE_SCALAR_FLOAT"] = new SnakeSqlIntMethod("P_EXECUTE_SCALAR_FLOAT");
-			methods["SQL_IMPORT_MAP_XML"] = new SnakeSqlIntMethod("IMPORT_MAP_XML");
-			methods["SQL_IMPORT_DT_XML"] = new SnakeSqlIntMethod("IMPORT_DT_XML");
-			methods["SQL_IMPORT_XML_CUSTOM"] = new SnakeSqlIntMethod("IMPORT_XML_CUSTOM");
-			methods["SQL_EXPORT_MAP_XML"] = new SnakeSqlIntMethod("EXPORT_MAP_XML");
-			methods["SQL_EXPORT_DT_XML"] = new SnakeSqlIntMethod("EXPORT_DT_XML");
-			methods["SQL_ESCAPE"] = new SnakeSqlStringMethod("ESCAPE");
-			methods["SQL_EXECUTE_SCALAR_STRING"] = new SnakeSqlStringMethod("EXECUTE_SCALAR_STRING");
-			methods["SQL_P_EXECUTE_SCALAR_STRING"] = new SnakeSqlStringMethod("P_EXECUTE_SCALAR_STRING");
-			methods["SQL_READER_GET_STRING"] = new SnakeSqlStringMethod("READER_GET_STRING");
-
-			string[] intFallbacks =
-			{
-				"ACOS", "ARGLEN", "ARRAYMSORTEX", "ASIN", "ATAN", "CEIL", "CLEARMEMORY", "COS",
-				"DT_CELL_GET", "DT_CELL_GETF", "DT_CELL_ISNULL", "DT_CELL_SET", "DT_CELL_SETF",
-				"DT_CLEAR", "DT_COLUMN_ADD", "DT_COLUMN_EXIST", "DT_COLUMN_LENGTH", "DT_COLUMN_REMOVE",
-				"DT_CREATE", "DT_EXIST", "DT_FROMXML", "DT_NOCASE", "DT_RELEASE", "DT_ROW_ADD",
-				"DT_ROW_LENGTH", "DT_ROW_REMOVE", "DT_ROW_SET", "DT_SELECT", "DT_TOXML",
-				"ENUMFUNCBEGINSWITH", "ENUMFUNCENDSWITH", "ENUMFUNCWITH", "ENUMMACROBEGINSWITH",
-				"ENUMMACROENDSWITH", "ENUMMACROWITH", "ENUMVARBEGINSWITH", "ENUMVARENDSWITH",
-				"ENUMVARWITH", "EVAL", "EVALF", "EXISTFILE", "EXISTFUNCTION", "EXISTMETH",
-				"EXISTVAR", "FLOOR", "FLOWINPUT", "FLOWINPUTS", "G_POLYGON_DRAW", "G_POLYGON_FILL",
-				"G_POLYGON_POINT_ADD", "G_POLYGON_POINT_CLEAR", "GDASHSTYLE", "GDRAWGWITHROTATE",
-				"GDRAWLINE", "GDRAWTEXT", "GETCSVNOBYCALLNAME", "GETCSVNOBYMASTERNAME",
-				"GETCSVNOBYNAME", "GETCSVNOBYNICKNAME", "GETMEMORYUSAGE", "GETMETH", "GETMETHF",
-				"GGETBRUSH", "GGETFONTSIZE", "GGETFONTSTYLE", "GGETPEN", "GGETPENWIDTH",
-				"GGETTEXTSIZE", "GROTATE", "HOTKEY_STATE", "HOTKEY_STATE_INIT", "ISDEFINED",
-				"MAP_CLEAR", "MAP_CREATE", "MAP_EXIST", "MAP_FINDKEY", "MAP_FROMSTRING",
-				"MAP_FROMXML", "MAP_HAS", "MAP_MERGE", "MAP_RELEASE", "MAP_REMOVE",
-				"MAP_REMOVEIF", "MAP_SET", "MAP_SIZE", "MATCHALL", "MATCHALLEX", "MOUSEB",
-				"MOVETEXTBOX", "OUTPUTLOG", "REGEXPMATCH", "RESUMETEXTBOX", "ROUND", "SETTEXTBOX",
-				"SETVAR", "SIN", "SPRITECREATEFROMFILE", "SPRITEDISPOSEALL", "SQL_CONNECT",
-				"SQL_CONNECTION_OPEN", "SQL_DISCONNECT", "SQL_EXECUTE_NONQUERY", "SQL_EXECUTE_READER",
-				"SQL_EXECUTE_SCALAR_FLOAT", "SQL_EXECUTE_SCALAR_LONG",
-				"SQL_EXPORT_DT_XML", "SQL_EXPORT_MAP_XML", "SQL_IMPORT_DT_XML", "SQL_IMPORT_MAP_XML",
-				"SQL_IMPORT_XML_CUSTOM", "SQL_P_EXECUTE_NONQUERY", "SQL_P_EXECUTE_READER",
-				"SQL_P_EXECUTE_SCALAR_FLOAT", "SQL_P_EXECUTE_SCALAR_LONG",
-				"SQL_READER_CLOSE", "SQL_READER_GET_FLOAT", "SQL_READER_GET_LONG", "SQL_READER_ISNULL",
-				"SQL_READER_READ", "TAN", "UNCHECKED_ADD", "UNCHECKED_MUL", "UNCHECKED_NEG",
-				"UNCHECKED_SUB", "VARSETEX", "XML_ADDATTRIBUTE", "XML_ADDATTRIBUTE_BYNAME",
-				"XML_ADDNODE", "XML_ADDNODE_BYNAME", "XML_DOCUMENT", "XML_EXIST", "XML_GET",
-				"XML_GET_BYNAME", "XML_RELEASE", "XML_REMOVEATTRIBUTE", "XML_REMOVEATTRIBUTE_BYNAME",
-				"XML_REMOVENODE", "XML_REMOVENODE_BYNAME", "XML_REPLACE", "XML_REPLACE_BYNAME",
-				"XML_SET", "XML_SET_BYNAME"
-			};
-			foreach (string name in intFallbacks)
-			{
-				if (!methods.ContainsKey(name))
-					methods[name] = new SnakeIntFallbackMethod();
-			}
-
-			string[] strFallbacks =
-			{
-				"DT_CELL_GETS", "DT_COLUMN_NAMES", "ENUMFILES", "ERDNAME", "EVALS", "GETDISPLAYLINE",
-				"GETDOINGFUNCTION", "GETMETHS", "GETTEXTBOX", "GETVAR", "GETVARF", "GETVARS",
-				"GGETFONT", "MAP_GET", "MAP_GETKEYS", "MAP_TOSTRING", "MAP_TOXML", "MAP_VALUES",
-				"SQL_ESCAPE", "SQL_EXECUTE_SCALAR_STRING", "SQL_P_EXECUTE_SCALAR_STRING",
-				"SQL_READER_GET_STRING", "TOSTRF", "XML_TOSTR"
-			};
-			foreach (string name in strFallbacks)
-			{
-				if (!methods.ContainsKey(name))
-					methods[name] = new SnakeStringFallbackMethod();
-			}
-		}
 
 		private static readonly Dictionary<string, FunctionMethod> methodList;
 		public static Dictionary<string, FunctionMethod> GetMethodList()

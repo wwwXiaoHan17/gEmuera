@@ -64,8 +64,6 @@ namespace MinorShift.Emuera.Content
 	                if (result != null)
 	                    return result;
 	            }
-	            if (name.IndexOf("褐", StringComparison.Ordinal) >= 0 || name.IndexOf("CIP正面", StringComparison.Ordinal) >= 0 && name.IndexOf("色", StringComparison.Ordinal) >= 0)
-	                Godot.GD.Print($"[GetSprite] NOT FOUND: '{name}' (len={name.Length}, bytes={BitConverter.ToString(System.Text.Encoding.UTF8.GetBytes(name), 0, Math.Min(40, System.Text.Encoding.UTF8.GetByteCount(name)))})");
 	            if (name.StartsWith("CUTIN") && int.TryParse(name.Substring(5), out int graphicsId))
 	            {
 	                GraphicsImage g;
@@ -145,9 +143,7 @@ namespace MinorShift.Emuera.Content
 				return true;
 			try
 			{
-				//resourcesフォルダ内の全てのcsvファイルを探索する
 				List<string> csvFiles = uEmuera.Utils.GetFilePaths(Program.ContentDir, "*.csv", SearchOption.AllDirectories);
-                Godot.GD.Print($"[AppContents] Found {csvFiles.Count} CSV files in {Program.ContentDir}");
                 if (UseLazyResourceIndex)
                 {
                     BuildLazyResourceIndex(csvFiles);
@@ -185,18 +181,14 @@ namespace MinorShift.Emuera.Content
                             {
 								imageDictionary.Add(item.Name, item);
                                 loadedCount++;
-                                if (item.Name.IndexOf("褐", StringComparison.Ordinal) >= 0)
-                                    Godot.GD.Print($"[AppContents] LOADED sprite with 褐: '{item.Name}' (len={item.Name.Length}, bytes={BitConverter.ToString(System.Text.Encoding.UTF8.GetBytes(item.Name), 0, Math.Min(40, System.Text.Encoding.UTF8.GetByteCount(item.Name)))})");
                             }
 							else
 							{
-								ParserMediator.Warn("同名のリソースがすでに作成されています:"+item.Name, sp, 0);
+								ParserMediator.Warn("同名のリソースが既に作成されています: " + item.Name, sp, 0);
 								item.Dispose();
 							}
 						}
 					}
-                    if (loadedCount > 0 || filename.Contains("ボディ") || filename.Contains("ボデ"))
-                        Godot.GD.Print($"[AppContents] CSV '{filename}' dir='{directory}' loaded {loadedCount} sprites (lines={linecount})");
 				}
 			}
 			catch(Exception )
@@ -220,7 +212,7 @@ namespace MinorShift.Emuera.Content
 			gList.Clear();
 		}
 
-		//タイトルに戻る時用（コードの変更はないので、動的に作られた分だけ削除）
+		//タイトルに戻る時用。コードの変更はないので、動的に作られた分だけ削除する。
 		static public void UnloadGraphicList()
 		{
 			foreach (var graph in gList.Values)
@@ -229,7 +221,8 @@ namespace MinorShift.Emuera.Content
 		}
 
 		/// <summary>
-		/// resourcesフォルダ中のcsvの1行を読んで新しいリソースを作る(or既存のアニメーションスプライトに1フレーム追加する)
+		/// resourcesフォルダ中のcsvの1行を読んで新しいリソースを作る。
+		/// 既存のアニメーションスプライトに対しては1フレーム追加する。
 		/// </summary>
 		/// <param name="tokens"></param>
 		/// <param name="dir"></param>
@@ -241,15 +234,15 @@ namespace MinorShift.Emuera.Content
 			if(tokens.Length < 2)
 				return null;
 			string name = tokens[0].Trim().ToUpper();//
-			string arg2 = tokens[1].Trim();//画像ファイル名
+			string arg2 = tokens[1].Trim();
 			if (name.Length == 0 || arg2.Length == 0)
 				return null;
-			//アニメーションスプライト宣言
+			// アニメーションスプライト宣言
 			if (arg2.Equals("ANIME", StringComparison.OrdinalIgnoreCase))
 			{
 				if (tokens.Length < 4)
 				{
-					ParserMediator.Warn("アニメーションスプライトのサイズが宣言されていません", sp, 1);
+					ParserMediator.Warn("ANIME sprite size is not defined", sp, 1);
 					return null;
 				}
 				//w,h
@@ -259,28 +252,28 @@ namespace MinorShift.Emuera.Content
 					sccs &= int.TryParse(tokens[i + 2], out sizeValue[i]);
 				if (!sccs || sizeValue[0] <= 0 || sizeValue[1] <= 0 || sizeValue[0] > AbstractImage.MAX_IMAGESIZE || sizeValue[1] > AbstractImage.MAX_IMAGESIZE)
 				{
-					ParserMediator.Warn("アニメーションスプライトのサイズの指定が適切ではありません", sp, 1);
+					ParserMediator.Warn("ANIME sprite size is invalid", sp, 1);
 					return null;
 				}
 				SpriteAnime anime = new SpriteAnime(name, new Size(sizeValue[0],sizeValue[1]));
 				return anime;
 			}
-			//アニメ宣言以外（アニメ用フレーム含む
+			// アニメ宣言以外。アニメ用フレームを含む。
 
 			if(arg2.IndexOf('.') < 0)
 			{
-				ParserMediator.Warn("第二引数に拡張子がありません:" + arg2, sp, 1);
+				ParserMediator.Warn("第2引数に拡張子がありません: " + arg2, sp, 1);
 				return null;
 			}
 			string parentName = dir + arg2;
 
-			//親画像のロードConstImage
+			// 親画像のロード ConstImage
 			if (!resourceDic.ContainsKey(parentName))
 			{
 				string filepath = uEmuera.Utils.ResolveExistingFilePath(parentName);
 				if (!uEmuera.Utils.FileExists(filepath))
 				{
-					ParserMediator.Warn("指定された画像ファイルが見つかりませんでした:" + arg2, sp, 1);
+					ParserMediator.Warn("指定された画像ファイルが見つかりません: " + arg2, sp, 1);
 					return null;
 				}
 				// BitmapTexture only reads image dimensions here. Actual decoding is lazy so
@@ -289,16 +282,16 @@ namespace MinorShift.Emuera.Content
                 bmp.name = name;
 				if (bmp.Width > AbstractImage.MAX_IMAGESIZE || bmp.Height > AbstractImage.MAX_IMAGESIZE)
 				{
-					//1824-2 すでに8192以上の幅を持つ画像を利用したバリアントが存在してしまっていたため、警告しつつ許容するように変更
+					// 1824-2: 8192px以上の画像を使うバリアントがあるため、警告しつつ許容する。
 					//	bmp.Dispose();
-					ParserMediator.Warn("指定された画像ファイルの大きさが大きすぎます(幅及び高さを"+ AbstractImage.MAX_IMAGESIZE.ToString()+ "以下にすることを強く推奨します):" + arg2, sp, 1);
+					ParserMediator.Warn("指定された画像ファイルのサイズが大きすぎます(幅と高さは" + AbstractImage.MAX_IMAGESIZE.ToString() + "以下を推奨): " + arg2, sp, 1);
 					//return null;
 				}
 				ConstImage img = new ConstImage(parentName);
 				img.CreateFrom(bmp, Config.TextDrawingMode == TextDrawingMode.WINAPI);
 				if (!img.IsCreated)
 				{
-					ParserMediator.Warn("画像リソースの作成に失敗しました:" + arg2, sp, 1);
+					ParserMediator.Warn("画像リソースの作成に失敗しました: " + arg2, sp, 1);
 					return null;
 				}
 				resourceDic.Add(parentName, img);
@@ -306,7 +299,7 @@ namespace MinorShift.Emuera.Content
 			ConstImage parentImage = resourceDic[parentName] as ConstImage;
 			if (parentImage == null || !parentImage.IsCreated)
 			{
-				ParserMediator.Warn("作成に失敗したリソースを元にスプライトを作成しようとしました:" + arg2, sp, 1);
+				ParserMediator.Warn("作成に失敗したリソースを元にスプライトを作成しようとしました: " + arg2, sp, 1);
 				return null;
 			}
 			Rectangle rect = new Rectangle(new Point(0, 0), parentImage.Bitmap.Size);
@@ -325,13 +318,13 @@ namespace MinorShift.Emuera.Content
 
                     if (rect.Width <= 0 || rect.Height <= 0)
 					{
-						ParserMediator.Warn("スプライトの高さ又は幅には正の値のみ指定できます:" + name, sp, 1);
+						ParserMediator.Warn("スプライトの高さまたは幅には正の値のみ指定できます: " + name, sp, 1);
 						return null;
 					}
-                    //uEmuera在此时尚未获取图片尺寸
+                    // uEmueraではこの時点で画像寸法を取得していない。
 					//if (!rect.IntersectsWith(new Rectangle(0,0,parentImage.Bitmap.Width, parentImage.Bitmap.Height)))
 					//{
-					//	ParserMediator.Warn("親画像の範囲外を参照しています:" + name, sp, 1);
+					//	ParserMediator.Warn("親画像の範囲外を参照しています: " + name, sp, 1);
 					//	return null;
 					//}
 				}
@@ -347,31 +340,30 @@ namespace MinorShift.Emuera.Content
 						sccs = int.TryParse(tokens[8], out delay);
 						if (sccs && delay <= 0)
 						{
-							ParserMediator.Warn("フレーム表示時間には正の値のみ指定できます:" + name, sp, 1);
+							ParserMediator.Warn("フレーム表示時間には正の値のみ指定できます: " + name, sp, 1);
 							return null;
 						}
 					}
 				}
 			}
-			//既存のスプライトに対するフレーム追加
+			// 既存のスプライトに対するフレーム追加
 			if (currentAnime != null && currentAnime.Name == name)
 			{
 				if(!currentAnime.AddFrame(parentImage, rect, pos, delay))
 				{
-					ParserMediator.Warn("アニメーションスプライトのフレームの追加に失敗しました:" + arg2, sp, 1);
+					ParserMediator.Warn("アニメーションスプライトのフレーム追加に失敗しました: " + arg2, sp, 1);
 					return null;
 				}
 				return null;
 			}
 
-			//新規スプライト定義
 			ASprite image = new SpriteF(name, parentImage, rect, pos);
 			return image;
 		}
 
 		private static bool UseLazyResourceIndex
 		{
-			get { return Program.IsSnakeProfile && Godot.OS.GetName() == "Android"; }
+			get { return Program.IsSnakeProfile; }
 		}
 
 		private static void BuildLazyResourceIndex(List<string> csvFiles)
@@ -434,7 +426,6 @@ namespace MinorShift.Emuera.Content
 					}
 				}
 			}
-			Godot.GD.Print($"[AppContents] Lazy indexed {indexedCount} sprites from {csvFiles.Count} CSV files");
 		}
 
 		private static ASprite RealizeLazySprite(string name, LazySpriteDefinition definition)
@@ -469,7 +460,7 @@ namespace MinorShift.Emuera.Content
 			string str = line.Trim();
 			if (str.Length == 0)
 				return str;
-			if (!Program.IsSnakeProfile || str[0] != ';')
+			if (str[0] != ';')
 				return str;
 
 			string candidate = str.Substring(1).Trim();
@@ -490,7 +481,7 @@ namespace MinorShift.Emuera.Content
 			string str = line.Trim();
 			if (str.Length == 0)
 				return str;
-			if (!Program.IsSnakeProfile || str[0] != ';')
+			if (str[0] != ';')
 				return str;
 
 			// Some Snake resource packs keep optional sprite definitions behind a leading

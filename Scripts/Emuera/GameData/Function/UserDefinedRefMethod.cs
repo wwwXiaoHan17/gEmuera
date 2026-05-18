@@ -17,7 +17,9 @@ namespace MinorShift.Emuera.GameData.Function
 		{
 			UserDefinedRefMethod ret = new UserDefinedRefMethod();
 			ret.Name = funcData.Name;
-			if (funcData.TypeIsStr)
+			if (funcData.TypeIsFloat)
+				ret.RetType = typeof(double);
+			else if (funcData.TypeIsStr)
 				ret.RetType = typeof(string);
 			else
 				ret.RetType = typeof(Int64);
@@ -46,18 +48,29 @@ namespace MinorShift.Emuera.GameData.Function
 				{
 					UserDifinedFunctionDataArgType type = UserDifinedFunctionDataArgType.__Ref;
 					type += vToken.Dimension;
-					if (vToken.IsInteger)
+					if (vToken.IsFloat)
+						type |= UserDifinedFunctionDataArgType.Float;
+					else if (vToken.IsInteger)
 						type |= UserDifinedFunctionDataArgType.Int;
 					else
 						type |= UserDifinedFunctionDataArgType.Str;
+					if (vToken.IsOut)
+						type |= UserDifinedFunctionDataArgType.__Out;
+					if (i == label.VariadicArgIndex)
+						type |= UserDifinedFunctionDataArgType.__Variadic;
 					if (ArgTypeList[i] != type)
 						return false;
 				}
 				else
 				{
-					if (vToken.IsInteger && ArgTypeList[i] !=  UserDifinedFunctionDataArgType.Int)
-						return false;
-					if (vToken.IsString && ArgTypeList[i] != UserDifinedFunctionDataArgType.Str)
+					UserDifinedFunctionDataArgType type = UserDifinedFunctionDataArgType.Int;
+					if (vToken.IsFloat)
+						type = UserDifinedFunctionDataArgType.Float;
+					else if (vToken.IsString)
+						type = UserDifinedFunctionDataArgType.Str;
+					if (i == label.VariadicArgIndex)
+						type |= UserDifinedFunctionDataArgType.__Variadic;
+					if (ArgTypeList[i] != type)
 						return false;
 				}
 			}

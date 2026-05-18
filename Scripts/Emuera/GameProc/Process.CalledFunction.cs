@@ -16,6 +16,7 @@ namespace MinorShift.Emuera.GameProc
 		{
 			Arguments = srcArgs;
 			TransporterInt = new Int64[Arguments.Length];
+			TransporterFloat = new double[Arguments.Length];
 			TransporterStr = new string[Arguments.Length];
 			TransporterRef = new Array[Arguments.Length];
 			isRef = new bool[Arguments.Length];
@@ -26,6 +27,7 @@ namespace MinorShift.Emuera.GameProc
 		}
 		public readonly IOperandTerm[] Arguments;
 		public readonly Int64[] TransporterInt;
+		public readonly double[] TransporterFloat;
 		public readonly string[] TransporterStr;
 		public readonly Array[] TransporterRef;
 		public readonly bool[] isRef;
@@ -49,6 +51,8 @@ namespace MinorShift.Emuera.GameProc
 						TransporterRef[i] = (Array)vTerm.Identifier.GetArray();
 
 				}
+				else if (Arguments[i].GetOperandType() == typeof(double))
+					TransporterFloat[i] = Arguments[i].GetFloatValue(exm);
 				else if (Arguments[i].GetOperandType() == typeof(Int64))
 					TransporterInt[i] = Arguments[i].GetIntValue(exm);
 				else

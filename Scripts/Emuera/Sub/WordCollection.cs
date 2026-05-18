@@ -36,6 +36,13 @@ namespace MinorShift.Emuera.Sub
 				return Collection[Pointer]; 
 			} 
 		}
+		public Word PeekNext(int offset)
+		{
+			int index = Pointer + offset;
+			if (index >= Collection.Count)
+				return nullToken;
+			return Collection[index];
+		}
 		public bool EOL { get { return Pointer >= Collection.Count; } }
 
 		public void Insert(Word w)
@@ -85,7 +92,6 @@ namespace MinorShift.Emuera.Sub
 		
 	}
 }
-
 
 
 

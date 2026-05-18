@@ -1,0 +1,21 @@
+; v18 Core Smoke Test
+; Purpose: verify basic v18 PRINT/INPUT/WAIT still work on V24Pure profile.
+; Expected output (first screen):
+;   === V18 CORE SMOKE ===
+;   PASS: PRINTL works
+;   PASS: PRINT works
+;   PASS: PRINTFORM works 123
+;   PASS: PRINTFORML works 456
+;   [WAIT prompt]
+
+@EVENTFIRST
+PRINTL === V18 CORE SMOKE ===
+PRINTL PASS: PRINTL works
+PRINT PASS: PRINT works
+PRINTL
+LOCAL = 123
+PRINTFORML PASS: PRINTFORM works {LOCAL}
+LOCAL:1 = 456
+PRINTFORML PASS: PRINTFORML works {LOCAL:1}
+WAIT
+RETURN 0

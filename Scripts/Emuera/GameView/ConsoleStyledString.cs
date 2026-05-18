@@ -10,6 +10,14 @@ using uEmuera.Forms;
 
 namespace MinorShift.Emuera.GameView
 {
+	internal enum DisplayMode
+	{
+		Relative,
+		Absolute,
+		AbsoluteLeftBottom,
+		AbsoluteLeftTop,
+	}
+
 	/// <summary>
 	/// 装飾付文字列。stringとStringStyleからなる。
 	/// </summary>

@@ -25,6 +25,10 @@ namespace MinorShift.Emuera.GameData.Function
         {
 			return method.GetStrValue(exm, arguments);
         }
+        public override double GetFloatValue(ExpressionMediator exm)
+        {
+			return method.GetReturnValue(exm, arguments).GetFloatValue(exm);
+        }
 		public override SingleTerm GetValue(ExpressionMediator exm)
 		{
 			return method.GetReturnValue(exm, arguments);

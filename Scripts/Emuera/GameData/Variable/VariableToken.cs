@@ -14,13 +14,16 @@ namespace MinorShift.Emuera.GameData.Variable
 		protected VariableToken(VariableCode varCode, VariableData varData)
 		{
 			Code = varCode;
-			VariableType = ((varCode & VariableCode.__INTEGER__) == VariableCode.__INTEGER__) ? typeof(Int64) : typeof(string);
+			VariableType = ((varCode & VariableCode.__INTEGER__) == VariableCode.__INTEGER__) ? typeof(Int64) :
+				((varCode & VariableCode.__FLOAT__) == VariableCode.__FLOAT__) ? typeof(double) :
+				typeof(string);
 			VarCodeInt = (int)(varCode & VariableCode.__LOWERCASE__);
 			varName = varCode.ToString();
 			this.varData = varData;
 			IsForbid = false;
 			IsPrivate = false;
 			IsReference = false;
+			IsOut = false;
 			Dimension = 0;
 			IsGlobal = (Code == VariableCode.GLOBAL) || (Code == VariableCode.GLOBALS);
 			if ((Code & VariableCode.__ARRAY_1D__) == VariableCode.__ARRAY_1D__)
@@ -95,20 +98,28 @@ namespace MinorShift.Emuera.GameData.Variable
 		//CodeEEにしているけど実際はExeEEかもしれない
 		public virtual Int64 GetIntValue(ExpressionMediator exm, Int64[] arguments)
 		{ throw new CodeEE("整数型でない変数" + varName + "を整数型として呼び出しました"); }
+		public virtual double GetFloatValue(ExpressionMediator exm, Int64[] arguments)
+		{ throw new CodeEE("小数型でない変数" + varName + "を小数型として呼び出しました"); }
 		public virtual string GetStrValue(ExpressionMediator exm, Int64[] arguments)
 		{ throw new CodeEE("文字列型でない変数" + varName + "を文字列型として呼び出しました"); }
 		public virtual void SetValue(Int64 value, Int64[] arguments)
 		{ throw new CodeEE("整数型でない変数" + varName + "を整数型として呼び出しました"); }
+		public virtual void SetValue(double value, Int64[] arguments)
+		{ throw new CodeEE("小数型でない変数" + varName + "を小数型として呼び出しました"); }
 		public virtual void SetValue(string value, Int64[] arguments)
 		{ throw new CodeEE("文字列型でない変数" + varName + "を文字列型として呼び出しました"); }
 		public virtual void SetValue(Int64[] values, Int64[] arguments)
 		{ throw new CodeEE("整数型配列でない変数" + varName + "を整数型配列として呼び出しました"); }
 		public virtual void SetValue(string[] values, Int64[] arguments)
 		{ throw new CodeEE("文字列型配列でない変数" + varName + "を文字列型配列として呼び出しました"); }
+		public virtual void SetValue(double[] values, Int64[] arguments)
+		{ throw new CodeEE("小数型配列でない変数" + varName + "を小数型配列として呼び出しました"); }
 		public virtual void SetValueAll(Int64 value, int start, int end, int charaPos)
 		{ throw new CodeEE("整数型配列でない変数" + varName + "を整数型配列として呼び出しました"); }
 		public virtual void SetValueAll(string value, int start, int end, int charaPos)
 		{ throw new CodeEE("文字列型配列でない変数" + varName + "を文字列型配列として呼び出しました"); }
+		public virtual void SetValueAll(double value, int start, int end, int charaPos)
+		{ throw new CodeEE("小数型配列でない変数" + varName + "を小数型配列として呼び出しました"); }
 		public virtual Int64 PlusValue(Int64 value, Int64[] arguments)
 		{ throw new CodeEE("整数型でない変数" + varName + "を整数型として呼び出しました"); }
 		public virtual Int32 GetLength()
@@ -120,6 +131,16 @@ namespace MinorShift.Emuera.GameData.Variable
 			if (IsCharacterData)
 				throw new CodeEE("キャラクタ変数" + varName + "を非キャラ変数として呼び出しました");
 			throw new CodeEE("配列型でない変数" + varName + "の配列を取得しようとしました");
+		}
+		public object GetSaveValue(ExpressionMediator exm = null)
+		{
+			if (Dimension != 0)
+				return GetArray();
+			if (IsInteger)
+				return GetIntValue(exm, null);
+			if (IsFloat)
+				return GetFloatValue(exm, null);
+			return GetStrValue(exm, null);
 		}
 		public virtual object GetArrayChara(int charano)
 		{
@@ -163,18 +184,25 @@ namespace MinorShift.Emuera.GameData.Variable
 				return ((Code & VariableCode.__CHARACTER_DATA__) == VariableCode.__CHARACTER_DATA__);
 			}
 		}
-		public bool IsInteger
+		public virtual bool IsInteger
 		{
 			get
 			{
 				return ((Code & VariableCode.__INTEGER__) == VariableCode.__INTEGER__);
 			}
 		}
-		public bool IsString
+		public virtual bool IsString
 		{
 			get
 			{
 				return ((Code & VariableCode.__STRING__) == VariableCode.__STRING__);
+			}
+		}
+		public virtual bool IsFloat
+		{
+			get
+			{
+				return ((Code & VariableCode.__FLOAT__) == VariableCode.__FLOAT__);
 			}
 		}
 		public bool IsArray1D
@@ -231,6 +259,7 @@ namespace MinorShift.Emuera.GameData.Variable
         }
 		public bool IsForbid { get; protected set; }
 		public bool IsPrivate { get; protected set; }
+		public bool IsOut { get; internal set; }
 		public bool IsGlobal { get; protected set; }
 		public bool IsSavedata { get; protected set; }
 		public bool IsReference { get; protected set; }
@@ -304,6 +333,9 @@ namespace MinorShift.Emuera.GameData.Variable
 			this.sizes = data.Lengths;
 			this.IsGlobal = data.Global;
 			this.IsSavedata = data.Save;
+			this.typeIsFloat = data.TypeIsFloat;
+			if (typeIsFloat)
+				VariableType = typeof(double);
 			//Dimension = sizes.Length;
 			totalSize = 1;
 			for (int i = 0; i < sizes.Length; i++)
@@ -316,6 +348,7 @@ namespace MinorShift.Emuera.GameData.Variable
 		protected bool isConst = false;
 		protected int[] sizes;
 		protected int totalSize;
+		protected readonly bool typeIsFloat;
 		//public bool IsGlobal { get; protected set; }
 		//public bool IsSavedata { get; protected set; }
 		public override bool IsConst
@@ -323,6 +356,27 @@ namespace MinorShift.Emuera.GameData.Variable
 			get
 			{
 				return isConst;
+			}
+		}
+		public override bool IsInteger
+		{
+			get
+			{
+				return !typeIsFloat && base.IsInteger;
+			}
+		}
+		public override bool IsString
+		{
+			get
+			{
+				return !typeIsFloat && base.IsString;
+			}
+		}
+		public override bool IsFloat
+		{
+			get
+			{
+				return typeIsFloat || base.IsFloat;
 			}
 		}
 
@@ -375,6 +429,9 @@ namespace MinorShift.Emuera.GameData.Variable
 			this.sizes = data.Lengths;
 			this.IsGlobal = data.Global;
 			this.IsSavedata = data.Save;
+			this.typeIsFloat = data.TypeIsFloat;
+			if (typeIsFloat)
+				VariableType = typeof(double);
 			//Dimension = sizes.Length;
 			totalSize = 1;
 			for (int i = 0; i < sizes.Length; i++)
@@ -383,6 +440,10 @@ namespace MinorShift.Emuera.GameData.Variable
 		}
 		readonly public UserDefinedVariableData DimData;
 		readonly public int ArrayIndex;
+		protected readonly bool typeIsFloat;
+		public override bool IsInteger { get { return !typeIsFloat && base.IsInteger; } }
+		public override bool IsString { get { return !typeIsFloat && base.IsString; } }
+		public override bool IsFloat { get { return typeIsFloat || base.IsFloat; } }
 		public override object GetArrayChara(int charano)
 		{
 			return varData.CharacterList[charano].UserDefCVarDataList[ArrayIndex];
@@ -412,11 +473,18 @@ namespace MinorShift.Emuera.GameData.Variable
 			CanRestructure = false;
 			IsStatic = !data.Private;
 			IsReference = true;
+			IsOut = data.Out;
 			arrayList = new List<Array>();
+			scalarRefTokenList = new List<VariableToken>();
+			scalarRefArgsList = new List<Int64[]>();
 			IsForbid = false;
 		}
 		protected List<Array> arrayList = null;
 		protected Array array = null;
+		protected List<VariableToken> scalarRefTokenList = null;
+		protected List<Int64[]> scalarRefArgsList = null;
+		protected VariableToken scalarRefToken = null;
+		protected Int64[] scalarRefArgs = null;
 
 		public override void SetDefault()
 		{//Defaultのセットは参照元がやるべき
@@ -462,9 +530,15 @@ namespace MinorShift.Emuera.GameData.Variable
 		public override void In()
 		{
 			if (counter > 0)
+			{
 				arrayList.Add(array);
+				scalarRefTokenList.Add(scalarRefToken);
+				scalarRefArgsList.Add(scalarRefArgs);
+			}
 			counter++;
 			array = null;
+			scalarRefToken = null;
+			scalarRefArgs = null;
 		}
 
 		public override void Out()
@@ -474,9 +548,17 @@ namespace MinorShift.Emuera.GameData.Variable
 			{
 				array = arrayList[arrayList.Count - 1];
 				arrayList.RemoveAt(arrayList.Count - 1);
+				scalarRefToken = scalarRefTokenList[scalarRefTokenList.Count - 1];
+				scalarRefTokenList.RemoveAt(scalarRefTokenList.Count - 1);
+				scalarRefArgs = scalarRefArgsList[scalarRefArgsList.Count - 1];
+				scalarRefArgsList.RemoveAt(scalarRefArgsList.Count - 1);
 			}
 			else
+			{
 				array = null;
+				scalarRefToken = null;
+				scalarRefArgs = null;
+			}
 			counter--;
 		}
 		public override object GetArray()
@@ -489,6 +571,15 @@ namespace MinorShift.Emuera.GameData.Variable
 		public void SetRef(Array refArray)
 		{
 			array = refArray;
+			scalarRefToken = null;
+			scalarRefArgs = null;
+		}
+
+		public void SetScalarRef(VariableToken token, Int64[] arguments)
+		{
+			array = null;
+			scalarRefToken = token;
+			scalarRefArgs = arguments;
 		}
 
 		/// <summary>
@@ -509,17 +600,21 @@ namespace MinorShift.Emuera.GameData.Variable
 			{ errMes = "定数は参照できません"; return false; }
 			//1812 ローカル参照の条件変更
 			//ローカルかつDYNAMICなREFはローカル参照できる
-			if ((!this.IsPrivate) && (rother.IsPrivate || rother.IsLocal))
+			if ((!this.IsPrivate) && (rother.IsPrivate || rother.IsLocal) && !rother.IsOut)
 			{ errMes = "広域の参照変数はローカル変数を参照できません"; return false; }
 			////1810beta002 ローカル参照禁止
 			//if ((!rother.IsReference) && (rother.IsPrivate || rother.IsLocal))
 			//{ errMes = "ローカル変数は参照できません"; return false; }
 			if (rother.IsCharacterData && !allowChara)
 			{ errMes = "キャラ変数は参照できません"; return false; }
-			if (this.IsInteger != rother.IsInteger)
+			if (this.IsInteger != rother.IsInteger || this.IsString != rother.IsString || this.IsFloat != rother.IsFloat)
 			{ errMes = "型が異なる変数は参照できません"; return false; }
 			if (this.Dimension != rother.Dimension)
-			{ errMes = "次元数が異なる変数は参照できません"; return false; }
+			{
+				if (this.Dimension == 0 && rother.Dimension == 1)
+					return true;
+				errMes = "次元数が異なる変数は参照できません"; return false;
+			}
 			return true;
 		}
 	}
@@ -596,8 +691,31 @@ namespace MinorShift.Emuera.GameData.Variable
 
 			public override Int64 PlusValue(Int64 value, Int64[] arguments)
 			{
-				array[VarCodeInt] += value;
+				array[VarCodeInt] = SafeArithmetic.SafeAdd(array[VarCodeInt], value);
 				return array[VarCodeInt];
+			}
+		}
+
+		private sealed class FloatVariableToken : VariableToken
+		{
+			public FloatVariableToken(VariableCode varCode, VariableData varData)
+				: base(varCode, varData)
+			{
+				CanRestructure = false;
+				array = varData.DataFloat;
+			}
+			double[] array;
+			public override double GetFloatValue(ExpressionMediator exm, Int64[] arguments)
+			{
+				return array[VarCodeInt];
+			}
+			public override void SetValue(double value, Int64[] arguments)
+			{
+				array[VarCodeInt] = value;
+			}
+			public override void SetValueAll(long value, int start, int end, int charaPos)
+			{
+				array[VarCodeInt] = value;
 			}
 		}
 
@@ -637,7 +755,7 @@ namespace MinorShift.Emuera.GameData.Variable
 
 			public override Int64 PlusValue(Int64 value, Int64[] arguments)
 			{
-				array[arguments[0]] += value;
+				array[arguments[0]] = SafeArithmetic.SafeAdd(array[arguments[0]], value);
 				return array[arguments[0]];
 			}
 			public override Int32 GetLength()
@@ -703,7 +821,7 @@ namespace MinorShift.Emuera.GameData.Variable
 			}
 			public override Int64 PlusValue(Int64 value, Int64[] arguments)
 			{
-				array[arguments[0], arguments[1]] += value;
+				array[arguments[0], arguments[1]] = SafeArithmetic.SafeAdd(array[arguments[0], arguments[1]], value);
 				return array[arguments[0], arguments[1]];
 			}
 			public override Int32 GetLength()
@@ -773,7 +891,7 @@ namespace MinorShift.Emuera.GameData.Variable
 
 			public override Int64 PlusValue(Int64 value, Int64[] arguments)
 			{
-				array[arguments[0], arguments[1], arguments[2]] += value;
+				array[arguments[0], arguments[1], arguments[2]] = SafeArithmetic.SafeAdd(array[arguments[0], arguments[1], arguments[2]], value);
 				return array[arguments[0], arguments[1], arguments[2]];
 			}
 			public override Int32 GetLength()
@@ -1046,7 +1164,7 @@ namespace MinorShift.Emuera.GameData.Variable
 			public override Int64 PlusValue(Int64 value, Int64[] arguments)
 			{
 				CharacterData chara = varData.CharacterList[(int)arguments[0]];
-				chara.DataInteger[VarCodeInt] += value;
+				chara.DataInteger[VarCodeInt] = SafeArithmetic.SafeAdd(chara.DataInteger[VarCodeInt], value);
 				return chara.DataInteger[VarCodeInt];
 			}
 		}
@@ -1092,7 +1210,7 @@ namespace MinorShift.Emuera.GameData.Variable
 			public override Int64 PlusValue(Int64 value, Int64[] arguments)
 			{
 				CharacterData chara = varData.CharacterList[(int)arguments[0]];
-				chara.DataIntegerArray[VarCodeInt][arguments[1]] += value;
+				chara.DataIntegerArray[VarCodeInt][arguments[1]] = SafeArithmetic.SafeAdd(chara.DataIntegerArray[VarCodeInt][arguments[1]], value);
 				return chara.DataIntegerArray[VarCodeInt][arguments[1]];
 			}
 
@@ -1226,7 +1344,7 @@ namespace MinorShift.Emuera.GameData.Variable
 			public override Int64 PlusValue(Int64 value, Int64[] arguments)
 			{
 				CharacterData chara = varData.CharacterList[(int)arguments[0]];
-				chara.DataIntegerArray2D[VarCodeInt][arguments[1], arguments[2]] += value;
+				chara.DataIntegerArray2D[VarCodeInt][arguments[1], arguments[2]] = SafeArithmetic.SafeAdd(chara.DataIntegerArray2D[VarCodeInt][arguments[1], arguments[2]], value);
 				return chara.DataIntegerArray2D[VarCodeInt][arguments[1], arguments[2]];
 			}
 
@@ -1759,7 +1877,7 @@ namespace MinorShift.Emuera.GameData.Variable
 			{
 				if (array == null)
 					array = new Int64[size];
-				array[arguments[0]] += value;
+				array[arguments[0]] = SafeArithmetic.SafeAdd(array[arguments[0]], value);
 				return array[arguments[0]];
 			}
 
@@ -1770,6 +1888,50 @@ namespace MinorShift.Emuera.GameData.Variable
 				return array;
 			}
 
+			public override void resize(int newSize)
+			{
+				this.size = newSize;
+				array = null;
+			}
+		}
+
+		private sealed class LocalFloat1DVariableToken : LocalVariableToken
+		{
+			public LocalFloat1DVariableToken(VariableCode varCode, VariableData varData, string subId, int size)
+				: base(varCode, varData, subId, size)
+			{
+			}
+			double[] array = null;
+			public override void SetDefault()
+			{
+				if (array != null)
+					Array.Clear(array, 0, size);
+			}
+			public override double GetFloatValue(ExpressionMediator exm, Int64[] arguments)
+			{
+				if (array == null)
+					array = new double[size];
+				return array[arguments[0]];
+			}
+			public override void SetValue(double value, Int64[] arguments)
+			{
+				if (array == null)
+					array = new double[size];
+				array[arguments[0]] = value;
+			}
+			public override void SetValueAll(long value, int start, int end, int charaPos)
+			{
+				if (array == null)
+					array = new double[size];
+				for (int i = start; i < end; i++)
+					array[i] = value;
+			}
+			public override object GetArray()
+			{
+				if (array == null)
+					array = new double[size];
+				return array;
+			}
 			public override void resize(int newSize)
 			{
 				this.size = newSize;
@@ -1890,7 +2052,7 @@ namespace MinorShift.Emuera.GameData.Variable
 
 			public override Int64 PlusValue(Int64 value, Int64[] arguments)
 			{
-				array[arguments[0]] += value;
+				array[arguments[0]] = SafeArithmetic.SafeAdd(array[arguments[0]], value);
 				return array[arguments[0]];
 			}
 			public override object GetArray() { return array; }
@@ -1940,7 +2102,7 @@ namespace MinorShift.Emuera.GameData.Variable
 			}
 			public override Int64 PlusValue(Int64 value, Int64[] arguments)
 			{
-				array[arguments[0], arguments[1]] += value;
+				array[arguments[0], arguments[1]] = SafeArithmetic.SafeAdd(array[arguments[0], arguments[1]], value);
 				return array[arguments[0], arguments[1]];
 			}
 			public override object GetArray() { return array; }
@@ -1992,7 +2154,7 @@ namespace MinorShift.Emuera.GameData.Variable
 
 			public override Int64 PlusValue(Int64 value, Int64[] arguments)
 			{
-				array[arguments[0], arguments[1], arguments[2]] += value;
+				array[arguments[0], arguments[1], arguments[2]] = SafeArithmetic.SafeAdd(array[arguments[0], arguments[1], arguments[2]], value);
 				return array[arguments[0], arguments[1], arguments[2]];
 			}
 			public override object GetArray() { return array; }
@@ -2181,7 +2343,7 @@ namespace MinorShift.Emuera.GameData.Variable
 
 			public override Int64 PlusValue(Int64 value, Int64[] arguments)
 			{
-				array[arguments[0]] += value;
+				array[arguments[0]] = SafeArithmetic.SafeAdd(array[arguments[0]], value);
 				return array[arguments[0]];
 			}
 			public override object GetArray() { return array; }
@@ -2249,7 +2411,7 @@ namespace MinorShift.Emuera.GameData.Variable
 			}
 			public override Int64 PlusValue(Int64 value, Int64[] arguments)
 			{
-				array[arguments[0], arguments[1]] += value;
+				array[arguments[0], arguments[1]] = SafeArithmetic.SafeAdd(array[arguments[0], arguments[1]], value);
 				return array[arguments[0], arguments[1]];
 			}
 			public override object GetArray() { return array; }
@@ -2318,7 +2480,7 @@ namespace MinorShift.Emuera.GameData.Variable
 
 			public override Int64 PlusValue(Int64 value, Int64[] arguments)
 			{
-				array[arguments[0], arguments[1], arguments[2]] += value;
+				array[arguments[0], arguments[1], arguments[2]] = SafeArithmetic.SafeAdd(array[arguments[0], arguments[1], arguments[2]], value);
 				return array[arguments[0], arguments[1], arguments[2]];
 			}
 			public override object GetArray() { return array; }
@@ -2548,6 +2710,153 @@ namespace MinorShift.Emuera.GameData.Variable
 		/// public staticとprivate dynamicをクラスレベルでは区別しない
 		/// 1808beta009時点ではprivate dynamicのみ
 		/// </summary>
+		private sealed class ReferenceIntScalarToken : ReferenceToken
+		{
+			public ReferenceIntScalarToken(UserDefinedVariableData data)
+				: base(VariableCode.REF, data)
+			{
+				CanRestructure = false;
+				IsStatic = !data.Private;
+				Dimension = 0;
+			}
+
+			public override Int64 GetIntValue(ExpressionMediator exm, Int64[] arguments)
+			{
+				if (scalarRefToken != null)
+					return scalarRefToken.GetIntValue(exm, scalarRefArgs);
+				if (array == null)
+					throw new CodeEE("参照型変数" + varName + "は何も参照していません");
+				return ((Int64[])array)[0];
+			}
+
+			public override void SetValue(Int64 value, Int64[] arguments)
+			{
+				if (scalarRefToken != null)
+				{
+					scalarRefToken.SetValue(value, scalarRefArgs);
+					return;
+				}
+				if (array == null)
+					throw new CodeEE("参照型変数" + varName + "は何も参照していません");
+				((Int64[])array)[0] = value;
+			}
+
+			public override Int64 PlusValue(Int64 value, Int64[] arguments)
+			{
+				if (scalarRefToken != null)
+					return scalarRefToken.PlusValue(value, scalarRefArgs);
+				if (array == null)
+					throw new CodeEE("参照型変数" + varName + "は何も参照していません");
+				((Int64[])array)[0] = SafeArithmetic.SafeAdd(((Int64[])array)[0], value);
+				return ((Int64[])array)[0];
+			}
+
+			public override Int32 GetLength()
+			{
+				throw new CodeEE("非配列型の参照型変数" + varName + "の長さを取得しようとしました");
+			}
+
+			public override Int32 GetLength(int dimension)
+			{
+				throw new CodeEE("非配列型の参照型変数" + varName + "の長さを取得しようとしました");
+			}
+
+			public override void CheckElement(Int64[] arguments, bool[] doCheck) { }
+		}
+
+		private sealed class ReferenceFloatScalarToken : ReferenceToken
+		{
+			public ReferenceFloatScalarToken(UserDefinedVariableData data)
+				: base(VariableCode.REF, data)
+			{
+				CanRestructure = false;
+				IsStatic = !data.Private;
+				Dimension = 0;
+			}
+
+			public override double GetFloatValue(ExpressionMediator exm, Int64[] arguments)
+			{
+				if (scalarRefToken != null)
+					return scalarRefToken.GetFloatValue(exm, scalarRefArgs);
+				if (array == null)
+					throw new CodeEE("参照型変数" + varName + "は何も参照していません");
+				return ((double[])array)[0];
+			}
+
+			public override Int64 GetIntValue(ExpressionMediator exm, Int64[] arguments)
+			{
+				return (Int64)GetFloatValue(exm, arguments);
+			}
+
+			public override void SetValue(double value, Int64[] arguments)
+			{
+				if (scalarRefToken != null)
+				{
+					scalarRefToken.SetValue(value, scalarRefArgs);
+					return;
+				}
+				if (array == null)
+					throw new CodeEE("参照型変数" + varName + "は何も参照していません");
+				((double[])array)[0] = value;
+			}
+
+			public override Int32 GetLength()
+			{
+				throw new CodeEE("非配列型の参照型変数" + varName + "の長さを取得しようとしました");
+			}
+
+			public override Int32 GetLength(int dimension)
+			{
+				throw new CodeEE("非配列型の参照型変数" + varName + "の長さを取得しようとしました");
+			}
+
+			public override void CheckElement(Int64[] arguments, bool[] doCheck) { }
+		}
+
+		private sealed class ReferenceStrScalarToken : ReferenceToken
+		{
+			public ReferenceStrScalarToken(UserDefinedVariableData data)
+				: base(VariableCode.REFS, data)
+			{
+				CanRestructure = false;
+				IsStatic = !data.Private;
+				Dimension = 0;
+			}
+
+			public override string GetStrValue(ExpressionMediator exm, Int64[] arguments)
+			{
+				if (scalarRefToken != null)
+					return scalarRefToken.GetStrValue(exm, scalarRefArgs);
+				if (array == null)
+					throw new CodeEE("参照型変数" + varName + "は何も参照していません");
+				return ((string[])array)[0];
+			}
+
+			public override void SetValue(string value, Int64[] arguments)
+			{
+				if (scalarRefToken != null)
+				{
+					scalarRefToken.SetValue(value, scalarRefArgs);
+					return;
+				}
+				if (array == null)
+					throw new CodeEE("参照型変数" + varName + "は何も参照していません");
+				((string[])array)[0] = value;
+			}
+
+			public override Int32 GetLength()
+			{
+				throw new CodeEE("非配列型の参照型変数" + varName + "の長さを取得しようとしました");
+			}
+
+			public override Int32 GetLength(int dimension)
+			{
+				throw new CodeEE("非配列型の参照型変数" + varName + "の長さを取得しようとしました");
+			}
+
+			public override void CheckElement(Int64[] arguments, bool[] doCheck) { }
+		}
+
 		private sealed class ReferenceInt1DToken : ReferenceToken
 		{
 			public ReferenceInt1DToken(UserDefinedVariableData data)
@@ -2592,7 +2901,7 @@ namespace MinorShift.Emuera.GameData.Variable
 			{
 				if (array == null)
 					throw new CodeEE("参照型変数" + varName + "は何も参照していません");
-				((Int64[])array)[arguments[0]] += value;
+				((Int64[])array)[arguments[0]] = SafeArithmetic.SafeAdd(((Int64[])array)[arguments[0]], value);
 				return ((Int64[])array)[arguments[0]];
 			}
 
@@ -2646,7 +2955,7 @@ namespace MinorShift.Emuera.GameData.Variable
 			{
 				if (array == null)
 					throw new CodeEE("参照型変数" + varName + "は何も参照していません");
-				((Int64[,])array)[arguments[0], arguments[1]] += value;
+				((Int64[,])array)[arguments[0], arguments[1]] = SafeArithmetic.SafeAdd(((Int64[,])array)[arguments[0], arguments[1]], value);
 				return ((Int64[,])array)[arguments[0], arguments[1]];
 			}
 		}
@@ -2701,10 +3010,131 @@ namespace MinorShift.Emuera.GameData.Variable
 			{
 				if (array == null)
 					throw new CodeEE("参照型変数" + varName + "は何も参照していません");
-				((Int64[, ,])array)[arguments[0], arguments[1], arguments[2]] += value;
+				((Int64[, ,])array)[arguments[0], arguments[1], arguments[2]] = SafeArithmetic.SafeAdd(((Int64[, ,])array)[arguments[0], arguments[1], arguments[2]], value);
 				return ((Int64[, ,])array)[arguments[0], arguments[1], arguments[2]];
 			}
 
+		}
+		private sealed class ReferenceFloat1DToken : ReferenceToken
+		{
+			public ReferenceFloat1DToken(UserDefinedVariableData data)
+				: base(VariableCode.REF, data)
+			{
+				CanRestructure = false;
+				IsStatic = !data.Private;
+			}
+			public override double GetFloatValue(ExpressionMediator exm, Int64[] arguments)
+			{
+				if (array == null)
+					throw new CodeEE("参照型変数" + varName + "は何も参照していません");
+				return ((double[])array)[arguments[0]];
+			}
+			public override void SetValue(double value, Int64[] arguments)
+			{
+				if (array == null)
+					throw new CodeEE("参照型変数" + varName + "は何も参照していません");
+				((double[])array)[arguments[0]] = value;
+			}
+			public override void SetValue(double[] values, Int64[] arguments)
+			{
+				if (array == null)
+					throw new CodeEE("参照型変数" + varName + "は何も参照していません");
+				int start = (int)arguments[0];
+				int end = start + values.Length;
+				for (int i = start; i < end; i++)
+					((double[])array)[i] = values[i - start];
+			}
+			public override void SetValueAll(double value, int start, int end, int charaPos)
+			{
+				if (array == null)
+					throw new CodeEE("参照型変数" + varName + "は何も参照していません");
+				for (int i = start; i < end; i++)
+					((double[])array)[i] = value;
+			}
+		}
+
+		private sealed class ReferenceFloat2DToken : ReferenceToken
+		{
+			public ReferenceFloat2DToken(UserDefinedVariableData data)
+				: base(VariableCode.REF2D, data)
+			{
+				CanRestructure = false;
+				IsStatic = !data.Private;
+			}
+			public override double GetFloatValue(ExpressionMediator exm, Int64[] arguments)
+			{
+				if (array == null)
+					throw new CodeEE("参照型変数" + varName + "は何も参照していません");
+				return ((double[,])array)[arguments[0], arguments[1]];
+			}
+			public override void SetValue(double value, Int64[] arguments)
+			{
+				if (array == null)
+					throw new CodeEE("参照型変数" + varName + "は何も参照していません");
+				((double[,])array)[arguments[0], arguments[1]] = value;
+			}
+			public override void SetValue(double[] values, Int64[] arguments)
+			{
+				if (array == null)
+					throw new CodeEE("参照型変数" + varName + "は何も参照していません");
+				int start = (int)arguments[1];
+				int end = start + values.Length;
+				for (int i = start; i < end; i++)
+					((double[,])array)[arguments[0], i] = values[i - start];
+			}
+			public override void SetValueAll(double value, int start, int end, int charaPos)
+			{
+				if (array == null)
+					throw new CodeEE("参照型変数" + varName + "は何も参照していません");
+				int a1 = array.GetLength(0);
+				int a2 = array.GetLength(1);
+				for (int i = 0; i < a1; i++)
+					for (int j = 0; j < a2; j++)
+						((double[,])array)[i, j] = value;
+			}
+		}
+
+		private sealed class ReferenceFloat3DToken : ReferenceToken
+		{
+			public ReferenceFloat3DToken(UserDefinedVariableData data)
+				: base(VariableCode.REF3D, data)
+			{
+				CanRestructure = false;
+				IsStatic = !data.Private;
+			}
+			public override double GetFloatValue(ExpressionMediator exm, Int64[] arguments)
+			{
+				if (array == null)
+					throw new CodeEE("参照型変数" + varName + "は何も参照していません");
+				return ((double[, ,])array)[arguments[0], arguments[1], arguments[2]];
+			}
+			public override void SetValue(double value, Int64[] arguments)
+			{
+				if (array == null)
+					throw new CodeEE("参照型変数" + varName + "は何も参照していません");
+				((double[, ,])array)[arguments[0], arguments[1], arguments[2]] = value;
+			}
+			public override void SetValue(double[] values, Int64[] arguments)
+			{
+				if (array == null)
+					throw new CodeEE("参照型変数" + varName + "は何も参照していません");
+				int start = (int)arguments[2];
+				int end = start + values.Length;
+				for (int i = start; i < end; i++)
+					((double[, ,])array)[arguments[0], arguments[1], i] = values[i - start];
+			}
+			public override void SetValueAll(double value, int start, int end, int charaPos)
+			{
+				if (array == null)
+					throw new CodeEE("参照型変数" + varName + "は何も参照していません");
+				int a1 = array.GetLength(0);
+				int a2 = array.GetLength(1);
+				int a3 = array.GetLength(2);
+				for (int i = 0; i < a1; i++)
+					for (int j = 0; j < a2; j++)
+						for (int k = 0; k < a3; k++)
+							((double[, ,])array)[i, j, k] = value;
+			}
 		}
 		private sealed class ReferenceStr1DToken : ReferenceToken
 		{
@@ -2877,7 +3307,7 @@ namespace MinorShift.Emuera.GameData.Variable
 			public override Int64 PlusValue(Int64 value, Int64[] arguments)
 			{
 				Int64[] array = (Int64[])GetArrayChara((int)arguments[0]);
-				array[arguments[1]] += value;
+				array[arguments[1]] = SafeArithmetic.SafeAdd(array[arguments[1]], value);
 				return array[arguments[1]];
 			}
 		}
@@ -2959,7 +3389,7 @@ namespace MinorShift.Emuera.GameData.Variable
 			public override Int64 PlusValue(Int64 value, Int64[] arguments)
 			{
 				Int64[,] array = (Int64[,])GetArrayChara((int)arguments[0]);
-				array[arguments[1], arguments[2]] += value;
+				array[arguments[1], arguments[2]] = SafeArithmetic.SafeAdd(array[arguments[1], arguments[2]], value);
 				return array[arguments[1], arguments[2]];
 			}
 		}
@@ -3004,6 +3434,372 @@ namespace MinorShift.Emuera.GameData.Variable
 			}
 
 		}
+			#region float
+
+			private sealed class StaticFloat1DVariableToken : UserDefinedVariableToken
+			{
+				public StaticFloat1DVariableToken(UserDefinedVariableData data)
+					: base(VariableCode.VAR, data)
+				{
+					int[] sizes = data.Lengths;
+					IsStatic = true;
+					array = new double[sizes[0]];
+					defArray = data.DefaultFloat;
+					if (defArray != null)
+						Array.Copy(defArray, array, defArray.Length);
+				}
+				double[] array = null;
+				double[] defArray = null;
+				public override void SetDefault()
+				{
+					Array.Clear(array, 0, totalSize);
+					if (defArray != null)
+						Array.Copy(defArray, array, defArray.Length);
+				}
+				public override double GetFloatValue(ExpressionMediator exm, Int64[] arguments)
+				{
+					return array[arguments[0]];
+				}
+				public override void SetValue(double value, Int64[] arguments)
+				{
+					array[arguments[0]] = value;
+				}
+				public override void SetValue(double[] values, Int64[] arguments)
+				{
+					int start = (int)arguments[0];
+					int end = start + values.Length;
+					for (int i = start; i < end; i++)
+						array[i] = values[i - start];
+				}
+				public override void SetValueAll(double value, int start, int end, int charaPos)
+				{
+					for (int i = start; i < end; i++)
+						array[i] = value;
+				}
+				public override object GetArray() { return array; }
+				public override void In() { }
+				public override void Out() { }
+			}
+
+			private sealed class StaticFloat2DVariableToken : UserDefinedVariableToken
+			{
+				public StaticFloat2DVariableToken(UserDefinedVariableData data)
+					: base(VariableCode.VAR2D, data)
+				{
+					int[] sizes = data.Lengths;
+					IsStatic = true;
+					array = new double[sizes[0], sizes[1]];
+				}
+				double[,] array = null;
+				public override void SetDefault()
+				{
+					Array.Clear(array, 0, totalSize);
+				}
+				public override double GetFloatValue(ExpressionMediator exm, Int64[] arguments)
+				{
+					return array[arguments[0], arguments[1]];
+				}
+				public override void SetValue(double value, Int64[] arguments)
+				{
+					array[arguments[0], arguments[1]] = value;
+				}
+				public override void SetValue(double[] values, Int64[] arguments)
+				{
+					int start = (int)arguments[1];
+					int end = start + values.Length;
+					for (int i = start; i < end; i++)
+						array[arguments[0], i] = values[i - start];
+				}
+				public override void SetValueAll(double value, int start, int end, int charaPos)
+				{
+					int a1 = array.GetLength(0);
+					int a2 = array.GetLength(1);
+					for (int i = 0; i < a1; i++)
+						for (int j = 0; j < a2; j++)
+							array[i, j] = value;
+				}
+				public override object GetArray() { return array; }
+				public override void In() { }
+				public override void Out() { }
+			}
+
+			private sealed class StaticFloat3DVariableToken : UserDefinedVariableToken
+			{
+				public StaticFloat3DVariableToken(UserDefinedVariableData data)
+					: base(VariableCode.VAR3D, data)
+				{
+					int[] sizes = data.Lengths;
+					IsStatic = true;
+					array = new double[sizes[0], sizes[1], sizes[2]];
+				}
+				double[, ,] array = null;
+				public override void SetDefault()
+				{
+					Array.Clear(array, 0, totalSize);
+				}
+				public override double GetFloatValue(ExpressionMediator exm, Int64[] arguments)
+				{
+					return array[arguments[0], arguments[1], arguments[2]];
+				}
+				public override void SetValue(double value, Int64[] arguments)
+				{
+					array[arguments[0], arguments[1], arguments[2]] = value;
+				}
+				public override void SetValue(double[] values, Int64[] arguments)
+				{
+					int start = (int)arguments[2];
+					int end = start + values.Length;
+					for (int i = start; i < end; i++)
+						array[arguments[0], arguments[1], i] = values[i - start];
+				}
+				public override void SetValueAll(double value, int start, int end, int charaPos)
+				{
+					int a1 = array.GetLength(0);
+					int a2 = array.GetLength(1);
+					int a3 = array.GetLength(2);
+					for (int i = 0; i < a1; i++)
+						for (int j = 0; j < a2; j++)
+							for (int k = 0; k < a3; k++)
+								array[i, j, k] = value;
+				}
+				public override object GetArray() { return array; }
+				public override void In() { }
+				public override void Out() { }
+			}
+
+			private sealed class PrivateFloat1DVariableToken : UserDefinedVariableToken
+			{
+				public PrivateFloat1DVariableToken(UserDefinedVariableData data)
+					: base(VariableCode.VAR, data)
+				{
+					int[] sizes = data.Lengths;
+					IsStatic = false;
+					arrayList = new List<double[]>();
+					defArray = data.DefaultFloat;
+				}
+				readonly List<double[]> arrayList = null;
+				double[] array = null;
+				double[] defArray = null;
+				public override void SetDefault() { }
+				public override double GetFloatValue(ExpressionMediator exm, Int64[] arguments)
+				{
+					return array[arguments[0]];
+				}
+				public override void SetValue(double value, Int64[] arguments)
+				{
+					array[arguments[0]] = value;
+				}
+				public override void SetValue(double[] values, Int64[] arguments)
+				{
+					int start = (int)arguments[0];
+					int end = start + values.Length;
+					for (int i = start; i < end; i++)
+						array[i] = values[i - start];
+				}
+				public override void SetValueAll(double value, int start, int end, int charaPos)
+				{
+					for (int i = start; i < end; i++)
+						array[i] = value;
+				}
+				public override object GetArray() { return array; }
+				public override void In()
+				{
+					if (array != null)
+						arrayList.Add(array);
+					array = new double[sizes[0]];
+					if (defArray != null)
+						Array.Copy(defArray, array, defArray.Length);
+				}
+				public override void Out()
+				{
+					if (arrayList.Count > 0)
+					{
+						array = arrayList[arrayList.Count - 1];
+						arrayList.RemoveAt(arrayList.Count - 1);
+					}
+					else
+						array = null;
+				}
+			}
+
+			private sealed class PrivateFloat2DVariableToken : UserDefinedVariableToken
+			{
+				public PrivateFloat2DVariableToken(UserDefinedVariableData data)
+					: base(VariableCode.VAR2D, data)
+				{
+					int[] sizes = data.Lengths;
+					IsStatic = false;
+					arrayList = new List<double[,]>();
+				}
+				readonly List<double[,]> arrayList = null;
+				double[,] array = null;
+				public override void SetDefault() { }
+				public override double GetFloatValue(ExpressionMediator exm, Int64[] arguments)
+				{
+					return array[arguments[0], arguments[1]];
+				}
+				public override void SetValue(double value, Int64[] arguments)
+				{
+					array[arguments[0], arguments[1]] = value;
+				}
+				public override void SetValue(double[] values, Int64[] arguments)
+				{
+					int start = (int)arguments[1];
+					int end = start + values.Length;
+					for (int i = start; i < end; i++)
+						array[arguments[0], i] = values[i - start];
+				}
+				public override void SetValueAll(double value, int start, int end, int charaPos)
+				{
+					int a1 = array.GetLength(0);
+					int a2 = array.GetLength(1);
+					for (int i = 0; i < a1; i++)
+						for (int j = 0; j < a2; j++)
+							array[i, j] = value;
+				}
+				public override object GetArray() { return array; }
+				public override void In()
+				{
+					if (array != null)
+						arrayList.Add(array);
+					array = new double[sizes[0], sizes[1]];
+				}
+				public override void Out()
+				{
+					if (arrayList.Count > 0)
+					{
+						array = arrayList[arrayList.Count - 1];
+						arrayList.RemoveAt(arrayList.Count - 1);
+					}
+					else
+						array = null;
+				}
+			}
+
+			private sealed class PrivateFloat3DVariableToken : UserDefinedVariableToken
+			{
+				public PrivateFloat3DVariableToken(UserDefinedVariableData data)
+					: base(VariableCode.VAR3D, data)
+				{
+					int[] sizes = data.Lengths;
+					IsStatic = false;
+					arrayList = new List<double[, ,]>();
+				}
+				readonly List<double[, ,]> arrayList = null;
+				double[, ,] array = null;
+				public override void SetDefault() { }
+				public override double GetFloatValue(ExpressionMediator exm, Int64[] arguments)
+				{
+					return array[arguments[0], arguments[1], arguments[2]];
+				}
+				public override void SetValue(double value, Int64[] arguments)
+				{
+					array[arguments[0], arguments[1], arguments[2]] = value;
+				}
+				public override void SetValue(double[] values, Int64[] arguments)
+				{
+					int start = (int)arguments[2];
+					int end = start + values.Length;
+					for (int i = start; i < end; i++)
+						array[arguments[0], arguments[1], i] = values[i - start];
+				}
+				public override void SetValueAll(double value, int start, int end, int charaPos)
+				{
+					int a1 = array.GetLength(0);
+					int a2 = array.GetLength(1);
+					int a3 = array.GetLength(2);
+					for (int i = 0; i < a1; i++)
+						for (int j = 0; j < a2; j++)
+							for (int k = 0; k < a3; k++)
+								array[i, j, k] = value;
+				}
+				public override object GetArray() { return array; }
+				public override void In()
+				{
+					if (array != null)
+						arrayList.Add(array);
+					array = new double[sizes[0], sizes[1], sizes[2]];
+				}
+				public override void Out()
+				{
+					if (arrayList.Count > 0)
+					{
+						array = arrayList[arrayList.Count - 1];
+						arrayList.RemoveAt(arrayList.Count - 1);
+					}
+					else
+						array = null;
+				}
+			}
+
+			private sealed class UserDefinedCharaFloat1DVariableToken : UserDefinedCharaVariableToken
+			{
+				public UserDefinedCharaFloat1DVariableToken(UserDefinedVariableData data, VariableData varData, int arrayIndex)
+					: base(VariableCode.CVAR, data, varData, arrayIndex)
+				{
+				}
+				public override double GetFloatValue(ExpressionMediator exm, Int64[] arguments)
+				{
+					double[] array = (double[])GetArrayChara((int)arguments[0]);
+					return array[arguments[1]];
+				}
+				public override void SetValue(double value, Int64[] arguments)
+				{
+					double[] array = (double[])GetArrayChara((int)arguments[0]);
+					array[arguments[1]] = value;
+				}
+				public override void SetValue(double[] values, Int64[] arguments)
+				{
+					double[] array = (double[])GetArrayChara((int)arguments[0]);
+					int start = (int)arguments[1];
+					int end = start + values.Length;
+					for (int i = start; i < end; i++)
+						array[i] = values[i - start];
+				}
+				public override void SetValueAll(double value, int start, int end, int charaPos)
+				{
+					double[] array = (double[])GetArrayChara(charaPos);
+					for (int i = start; i < end; i++)
+						array[i] = value;
+				}
+			}
+
+			private sealed class UserDefinedCharaFloat2DVariableToken : UserDefinedCharaVariableToken
+			{
+				public UserDefinedCharaFloat2DVariableToken(UserDefinedVariableData data, VariableData varData, int arrayIndex)
+					: base(VariableCode.CVAR2D, data, varData, arrayIndex)
+				{
+				}
+				public override double GetFloatValue(ExpressionMediator exm, Int64[] arguments)
+				{
+					double[,] array = (double[,])GetArrayChara((int)arguments[0]);
+					return array[arguments[1], arguments[2]];
+				}
+				public override void SetValue(double value, Int64[] arguments)
+				{
+					double[,] array = (double[,])GetArrayChara((int)arguments[0]);
+					array[arguments[1], arguments[2]] = value;
+				}
+				public override void SetValue(double[] values, Int64[] arguments)
+				{
+					double[,] array = (double[,])GetArrayChara((int)arguments[0]);
+					int start = (int)arguments[2];
+					int end = start + values.Length;
+					int index1 = (int)arguments[1];
+					for (int i = start; i < end; i++)
+						array[index1, i] = values[i - start];
+				}
+				public override void SetValueAll(double value, int start, int end, int charaPos)
+				{
+					double[,] array = (double[,])GetArrayChara(charaPos);
+					int a1 = sizes[0];
+					int a2 = sizes[1];
+					for (int i = 0; i < a1; i++)
+						for (int j = 0; j < a2; j++)
+							array[i, j] = value;
+				}
+			}
+			#endregion
 		#endregion
 		#endregion
 	}

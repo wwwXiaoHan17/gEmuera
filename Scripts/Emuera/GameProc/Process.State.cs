@@ -105,6 +105,14 @@ namespace MinorShift.Emuera.GameProc
         public int currentMin = 0;
         //private bool sequential;
 
+		private string pendingThrowMessage;
+		private bool inBeforeError;
+		private bool skipBeforeError;
+		private InstructionLine pendingThrowLine;
+		private Exception pendingErrorException;
+		private LogicalLine pendingErrorCurrentLine;
+		private bool pendingErrorSystemProc;
+
 		public bool ScriptEnd
 		{
 			get
@@ -159,6 +167,31 @@ namespace MinorShift.Emuera.GameProc
 				return functionList[functionList.Count - 1].VariadicArgCount;
 			}
 		}
+
+		public string PendingThrowMessage { get { return pendingThrowMessage; } set { pendingThrowMessage = value; } }
+		public bool HasPendingThrow { get { return pendingThrowMessage != null; } }
+		public void ClearPendingThrow() { pendingThrowMessage = null; }
+		public InstructionLine PendingThrowLine { get { return pendingThrowLine; } set { pendingThrowLine = value; } }
+
+		public bool InBeforeError { get { return inBeforeError; } set { inBeforeError = value; } }
+		public bool SkipBeforeError { get { return skipBeforeError; } set { skipBeforeError = value; } }
+		public bool IsInBeforeThrow
+		{
+			get
+			{
+				foreach (CalledFunction called in functionList)
+				{
+					if (called.IsEvent && called.FunctionName == "BEFORE_THROW")
+						return true;
+				}
+				return false;
+			}
+		}
+
+		public Exception PendingErrorException { get { return pendingErrorException; } set { pendingErrorException = value; } }
+		public LogicalLine PendingErrorCurrentLine { get { return pendingErrorCurrentLine; } set { pendingErrorCurrentLine = value; } }
+		public bool PendingErrorSystemProc { get { return pendingErrorSystemProc; } set { pendingErrorSystemProc = value; } }
+
 		public SystemStateCode SystemState
 		{
 			get { return sysStateCode; }
@@ -425,6 +458,27 @@ namespace MinorShift.Emuera.GameProc
             }
 			if (Program.DebugMode)
 				console.DebugRemoveTraceLog();
+			if (currentLine == null && called.IsEvent && called.FunctionName == "BEFORE_THROW" && pendingThrowMessage != null)
+			{
+				string msg = pendingThrowMessage;
+				functionList.RemoveAt(functionList.Count - 1);
+				pendingThrowMessage = null;
+				skipBeforeError = true;
+				throw new CodeEE(msg, pendingThrowLine != null ? pendingThrowLine.Position : null);
+			}
+			if (currentLine == null && called.IsEvent && called.FunctionName == "BEFORE_ERROR" && pendingErrorException != null)
+			{
+				Exception ec = pendingErrorException;
+				ScriptPosition pos = null;
+				if (ec is EmueraException ee && ee.Position != null)
+					pos = ee.Position;
+				else if (pendingErrorCurrentLine != null)
+					pos = pendingErrorCurrentLine.Position;
+				functionList.RemoveAt(functionList.Count - 1);
+				pendingErrorException = null;
+				inBeforeError = true;
+				throw new CodeEE(ec.Message, pos);
+			}
 			//関数終了
             if (currentLine == null)
             {
@@ -459,10 +513,14 @@ namespace MinorShift.Emuera.GameProc
 
 			if (call.IsEvent)
 			{
-				foreach (CalledFunction called in functionList)
+				bool isBeforeEvent = call.FunctionName == "BEFORE_THROW" || call.FunctionName == "BEFORE_ERROR";
+				if (!isBeforeEvent)
 				{
-					if (called.IsEvent)
-						throw new CodeEE("EVENT関数の解決前にCALLEVENT命令が行われました");
+					foreach (CalledFunction called in functionList)
+					{
+						if (called.IsEvent)
+							throw new CodeEE("EVENT関数の解決前にCALLEVENT命令が行われました");
+					}
 				}
 			}
 			if (Program.DebugMode)
@@ -507,7 +565,9 @@ namespace MinorShift.Emuera.GameProc
 								if (value == null)
 									continue;
 								long[] index = new long[] { baseIndex + j };
-								if (call.TopLabel.Arg[i].Identifier.VariableType == typeof(Int64))
+								if (call.TopLabel.Arg[i].Identifier.VariableType == typeof(double))
+									call.TopLabel.Arg[i].Identifier.SetValue(value.GetFloatValue(exm), index);
+								else if (call.TopLabel.Arg[i].Identifier.VariableType == typeof(Int64))
 									call.TopLabel.Arg[i].Identifier.SetValue(value.GetIntValue(exm), index);
 								else
 									call.TopLabel.Arg[i].Identifier.SetValue(value.GetStrValue(exm), index);

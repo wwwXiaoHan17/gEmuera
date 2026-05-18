@@ -66,6 +66,10 @@ namespace MinorShift.Emuera.GameProc
 						output.PrintSystemLine("LazyLoading: index not found; building a new table");
 					}
 				}
+				else
+				{
+					parentProcess.ResetLazyLoadingState();
+				}
 				for (int i = 0; i < erbFiles.Count; i++)
 				{
 					string filename = erbFiles[i].Key;
@@ -335,7 +339,7 @@ namespace MinorShift.Emuera.GameProc
 			//一部ファイルの再読み込み時の処理用
 			labelDic.AddFilename(filename);
 			EraStreamReader eReader = new EraStreamReader(Config.UseRenameFile && ParserMediator.RenameDic != null);
-			if (!eReader.Open(filepath, filename))
+			if (!eReader.OpenOnCache(filepath, filename))
 			{
 				output.PrintError(eReader.Filename + "のオープンに失敗しました");
 				return;
@@ -525,10 +529,10 @@ namespace MinorShift.Emuera.GameProc
 			SingleTerm[] defs = new SingleTerm[0];
 			int maxArg = -1;
 			int maxArgs = -1;
+			int maxArgF = -1;
 			bool hasVariadic = false;
 			int variadicArgIndex = -1;
-			if (Program.IsSnakeProfile)
-				RemoveSnakeVariadicMarker(wc, out hasVariadic, out variadicArgIndex);
+			RemoveSnakeVariadicMarker(wc, out hasVariadic, out variadicArgIndex);
 			//1807 非イベント関数のシステム関数については警告レベル低下＆エラー解除＆引数を設定するように。
 			if (label.IsEvent)
 			{
@@ -594,6 +598,8 @@ namespace MinorShift.Emuera.GameProc
                         { errMes = "関数定義の引数には代入可能な変数を指定してください"; goto err; }
                         else if (!vTerm.Identifier.IsReference)//参照型なら添え字不要
                         {
+							// TODO: Snake compatibility fallback — relax subscript requirement for PRIVATE arguments.
+							// Remove once snake scripts are updated to declare subscripts explicitly.
 							bool allowSnakePrivateArgument = Program.IsSnakeProfile && vTerm.Identifier.IsPrivate;
                             if (vTerm is VariableNoArgTerm && !allowSnakePrivateArgument)
                             { errMes = "関数定義の参照型でない引数\"" + vTerm.Identifier.Name + "\"に添え字が指定されていません"; goto err; }
@@ -615,32 +621,34 @@ namespace MinorShift.Emuera.GameProc
 							if (maxArgs < vTerm.getEl1forArg + 1)
 								maxArgs = vTerm.getEl1forArg + 1;
 						}
-						else if (Program.IsSnakeProfile && vTerm.Identifier.Code == VariableCode.ARGF)
+						else if (vTerm.Identifier.Code == VariableCode.ARGF)
 						{
-							if (maxArg < vTerm.getEl1forArg + 1)
-								maxArg = vTerm.getEl1forArg + 1;
+							if (maxArgF < vTerm.getEl1forArg + 1)
+								maxArgF = vTerm.getEl1forArg + 1;
 						}
 						bool canDef = (vTerm.Identifier.Code == VariableCode.ARG || vTerm.Identifier.Code == VariableCode.ARGS
-							|| (Program.IsSnakeProfile && vTerm.Identifier.Code == VariableCode.ARGF)
+							|| (vTerm.Identifier.Code == VariableCode.ARGF)
 							|| vTerm.Identifier.IsPrivate);
 						term = argsRow[i * 2 + 1];
-						if (term is NullTerm)
-						{
-							if (canDef)// && label.ArgOptional)
+							if (term is NullTerm)
 							{
-								if (vTerm.GetOperandType() == typeof(Int64))
-									def = new SingleTerm(0);
-								else
-									def = new SingleTerm("");
+								if (canDef)// && label.ArgOptional)
+								{
+									if (vTerm.GetOperandType() == typeof(double))
+										def = new SingleTerm(0.0);
+									else if (vTerm.GetOperandType() == typeof(Int64))
+										def = new SingleTerm(0);
+									else
+										def = new SingleTerm("");
+								}
 							}
-						}
 						else
 						{
 							def = term.Restructure(exm) as SingleTerm;
 							if (def == null)
 							{ errMes = "引数の初期値には定数のみを指定できます"; goto err; }
 							if (!canDef)
-							{ errMes = "引数の初期値を定義できるのは\"ARG\"、\"ARGS\"またはプライベート変数のみです"; goto err; }
+							{ errMes = "引数の初期値を定義できるのは\"ARG\"、\"ARGS\"、\"ARGF\"またはプライベート変数のみです"; goto err; }
 							else if (vTerm.Identifier.IsReference)
 							{ errMes = "参照渡しの引数に初期値は定義できません"; goto err; }
 							if (vTerm.GetOperandType() != def.GetOperandType())
@@ -668,9 +676,9 @@ namespace MinorShift.Emuera.GameProc
 					return;
 				}
 				VariableCode code = args[args.Length - 1].Identifier.Code;
-				if (code != VariableCode.ARG && code != VariableCode.ARGS && (!Program.IsSnakeProfile || code != VariableCode.ARGF))
+				if (code != VariableCode.ARG && code != VariableCode.ARGS && code != VariableCode.ARGF)
 				{
-					ParserMediator.Warn(Program.IsSnakeProfile ? "VARIADICはARG、ARGSまたはARGFだけを修飾できます" : "VARIADICはARGまたはARGSだけを修飾できます", label, 2, true, false);
+					ParserMediator.Warn("VARIADICはARG、ARGSまたはARGFだけを修飾できます", label, 2, true, false);
 					return;
 				}
 				for (int i = 0; i < args.Length - 1; i++)
@@ -689,6 +697,7 @@ namespace MinorShift.Emuera.GameProc
 			label.Def = defs;
 			label.ArgLength = maxArg;
 			label.ArgsLength = maxArgs;
+			label.ArgFloatLength = maxArgF;
 			return;
 		err:
 			ParserMediator.Warn("関数@" + label.LabelName + " の引数のエラー:" + errMes, label, 2, true, false);
@@ -712,6 +721,16 @@ namespace MinorShift.Emuera.GameProc
 					hasVariadic = true;
 					variadicArgIndex = commaCount;
 					wc.Remove();
+					// Remove adjacent comma to prevent double commas in argument lists
+					if (!wc.EOL && wc.Current is SymbolWord symNext && symNext.Type == ',')
+					{
+						wc.Remove();
+					}
+					else if (wc.Pointer > 0 && wc.Collection[wc.Pointer - 1] is SymbolWord symPrev && symPrev.Type == ',')
+					{
+						wc.Pointer--;
+						wc.Remove();
+					}
 					continue;
 				}
 				if (wc.Current is SymbolWord sym && sym.Type == ',')

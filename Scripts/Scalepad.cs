@@ -135,7 +135,7 @@ public partial class Scalepad : Control
         Visible = false;
     }
 
-    public void ApplyFont(FontFile font, int fontSize)
+    public void ApplyFont(Font font, int fontSize)
     {
         if (hbox == null)
             return;

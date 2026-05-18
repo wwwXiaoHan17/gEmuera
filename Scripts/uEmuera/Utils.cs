@@ -626,6 +626,8 @@ namespace uEmuera
             string csvpath, System.Text.Encoding encoding)
         {
             string[] lines = null;
+            if (MinorShift.Emuera.Sub.Preload.TryGetFileLines(csvpath, out lines))
+                return lines;
             if(resource_csv_lines_ != null &&
                 resource_csv_lines_.TryGetValue(csvpath, out lines))
                 return lines;

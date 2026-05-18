@@ -1,6 +1,6 @@
 # gemuera-c# (Godot Emuera Port)
 
-A Godot 4.6 + .NET 8.0 port of the Emuera text game engine. Emuera is a Japanese derivative of eramaker that executes `.ERB` script files and reads `.CSV` data files. This project replaces the original Windows Forms / GDI rendering stack with Godot nodes and a `System.Drawing` compatibility shim (`uEmuera` namespace).
+A Godot 4.6 + .NET 8.0 port of the Emuera text game engine. The unified core targets `Emuera1824+v24+EMv18+EEv55` compatibility. Emuera is a Japanese derivative of eramaker that executes `.ERB` script files and reads `.CSV` data files. This project replaces the original Windows Forms / GDI rendering stack with Godot nodes and a `System.Drawing` compatibility shim (`uEmuera` namespace).
 
 ## Tech Stack
 

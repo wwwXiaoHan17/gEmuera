@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using MinorShift.Emuera.GameData.Expression;
@@ -373,6 +374,8 @@ namespace MinorShift.Emuera.GameData.Function
                 int dim = 0;
                 if (arguments.Length == 2 && arguments[1] != null)
                     dim = (int)arguments[1].GetIntValue(exm);
+				if (Config.VarsizeDimConfig && dim > 0)
+					dim--;
                 return (var.GetLength(dim));
             }
 			public override bool UniqueRestructure(ExpressionMediator exm, IOperandTerm[] arguments)
@@ -1635,8 +1638,8 @@ namespace MinorShift.Emuera.GameData.Function
             }
             public override string CheckArgumentType(string name, IOperandTerm[] arguments)
             {
-                if (arguments.Length != 2)
-                    return name + "関数には2つの引数が必要です";
+                if (arguments.Length < 2 || arguments.Length > 3)
+                    return name + "関数には2つまたは3つの引数が必要です";
                 if (arguments[0] == null)
                     return name + "関数の1番目の引数は省略できません";
                 if (!(arguments[0] is VariableTerm))
@@ -1645,14 +1648,19 @@ namespace MinorShift.Emuera.GameData.Function
                     return name + "関数の2番目の引数は省略できません";
                 if (arguments[1].GetOperandType() != typeof(string))
                     return name + "関数の2番目の引数の型が正しくありません";
+				if (arguments.Length == 3 && arguments[2] != null && arguments[2].GetOperandType() != typeof(Int64))
+					return name + "関数の3番目の引数の型が正しくありません";
                 return null;
             }
             public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
             {
                 VariableTerm vToken = (VariableTerm)arguments[0];
                 VariableCode varCode = vToken.Identifier.Code;
+				string varname = arguments.Length > 2 && arguments[2] != null
+					? vToken.Identifier.Name + "@" + arguments[2].GetIntValue(exm)
+					: vToken.Identifier.Name;
                 string key = arguments[1].GetStrValue(exm);
-                if (exm.VEvaluator.Constant.TryKeywordToInteger(out int ret, varCode, key, -1, vToken.Identifier.Name))
+                if (exm.VEvaluator.Constant.TryKeywordToInteger(out int ret, varCode, key, -1, varname))
                     return ret;
                 else
                     return -1;
@@ -1674,17 +1682,14 @@ namespace MinorShift.Emuera.GameData.Function
 			}
 			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
 			{
-				string errStr = base.CheckArgumentType(name, arguments);
-				if (errStr != null)
-					return errStr;
+				if (arguments.Length != 2)
+					return string.Format(Properties.Resources.SyntaxErrMesMethodDefaultArgumentNum0, name);
 				if (arguments[0] == null)
 					return name + "関数の1番目の引数は省略できません";
-				if (arguments[0] is SingleTerm)
-				{
-					string varName = ((SingleTerm)arguments[0]).Str;
-					if (GlobalStatic.IdentifierDictionary.GetVariableToken(varName, null, true) == null)
-						return name + "関数の1番目の引数が変数名ではありません";
-				}
+				if (arguments[1] == null)
+					return name + "関数の2番目の引数は省略できません";
+				if (arguments[1].GetOperandType() != typeof(string))
+					return name + "関数の2番目の引数の型が正しくありません";
 				return null;
 			}
 			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
@@ -2084,6 +2089,178 @@ namespace MinorShift.Emuera.GameData.Function
 				return false;
 			}
 		}
+
+		private sealed class ArrayMultiSortExMethod : FunctionMethod
+		{
+			public ArrayMultiSortExMethod()
+			{
+				ReturnType = typeof(Int64);
+				argumentTypeArray = null;
+				CanRestructure = false;
+				HasUniqueRestructure = true;
+			}
+
+			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+			{
+				if (arguments.Length < 2)
+					return string.Format("{0}関数:少なくとも{1}の引数が必要です", name, 2);
+				if (arguments.Length > 4)
+					return name + "関数の引数が多すぎます";
+				if (arguments[0] == null)
+					return name + "関数の1番目の引数は省略できません";
+				if (!(arguments[0] is VariableTerm) && arguments[0].GetOperandType() != typeof(string))
+					return name + "関数の1番目の引数は配列変数または変数名文字列でなければなりません";
+				if (!(arguments[1] is VariableTerm namesTerm) || !namesTerm.Identifier.IsString || !namesTerm.Identifier.IsArray1D)
+					return name + "関数の2番目の引数は文字列型1次元配列変数でなければなりません";
+				if (namesTerm.Identifier.IsCalc || namesTerm.Identifier.IsConst || namesTerm.Identifier.IsCharacterData)
+					return name + "関数の2番目の引数は通常の文字列型1次元配列変数でなければなりません";
+				if (arguments.Length >= 3 && arguments[2] != null && arguments[2].GetOperandType() != typeof(Int64))
+					return name + "関数の3番目の引数の型が正しくありません";
+				if (arguments.Length >= 4 && arguments[3] != null && arguments[3].GetOperandType() != typeof(Int64))
+					return name + "関数の4番目の引数の型が正しくありません";
+				return null;
+			}
+
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				VariableTerm baseTerm = GetSortableArrayTerm(arguments[0], exm, "ARRAYMSORTEX");
+				bool ascending = arguments.Length < 3 || arguments[2] == null || arguments[2].GetIntValue(exm) != 0;
+				long fixedLengthInput = arguments.Length < 4 || arguments[3] == null ? -1 : arguments[3].GetIntValue(exm);
+				if (fixedLengthInput == 0)
+					return 0;
+				if (fixedLengthInput < -1 || fixedLengthInput > int.MaxValue)
+					throw new CodeEE("ARRAYMSORTEX関数の4番目の引数が範囲外です");
+
+				int[] sortedIndices = BuildSortedIndices(baseTerm, ascending, (int)fixedLengthInput);
+				if (sortedIndices == null)
+					return 0;
+
+				string[] targetNames = (string[])((VariableTerm)arguments[1]).Identifier.GetArray();
+				for (int i = 0; i < targetNames.Length; i++)
+				{
+					string variableName = targetNames[i];
+					if (string.IsNullOrWhiteSpace(variableName))
+						break;
+					if (!TryParseSnakeVariable(variableName, out VariableTerm targetTerm))
+						throw new CodeEE("ARRAYMSORTEX関数:変数\"" + variableName + "\"を解釈できません");
+					targetTerm = GetSortableArrayTerm(targetTerm, exm, "ARRAYMSORTEX");
+					if (!ApplySortedIndices(targetTerm, sortedIndices))
+						return 0;
+				}
+				return 1;
+			}
+
+			public override bool UniqueRestructure(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				for (int i = 0; i < arguments.Length; i++)
+				{
+					if (arguments[i] != null)
+						arguments[i] = arguments[i].Restructure(exm);
+				}
+				return false;
+			}
+		}
+
+		private static VariableTerm GetSortableArrayTerm(IOperandTerm argument, ExpressionMediator exm, string functionName)
+		{
+			VariableTerm term = argument as VariableTerm;
+			if (term == null)
+			{
+				if (argument == null || argument.GetOperandType() != typeof(string) || !TryParseSnakeVariable(argument.GetStrValue(exm), out term))
+					throw new CodeEE(functionName + "関数の引数が配列変数ではありません");
+			}
+			if (term.Identifier.IsCalc || term.Identifier.IsConst || term.Identifier.IsCharacterData)
+				throw new CodeEE(functionName + "関数の引数が通常の配列変数ではありません");
+			if (!term.Identifier.IsArray1D)
+				throw new CodeEE(functionName + "関数は一次元配列だけに対応しています");
+			if (!term.Identifier.IsInteger && !term.Identifier.IsString && !term.Identifier.IsFloat)
+				throw new CodeEE(functionName + "関数の引数の型が正しくありません");
+			return term;
+		}
+
+		private static int[] BuildSortedIndices(VariableTerm term, bool ascending, int fixedLength)
+		{
+			if (term.Identifier.IsInteger)
+			{
+				Int64[] array = (Int64[])term.Identifier.GetArray();
+				int length = GetSortLength(array.Length, fixedLength, i => array[i] == 0);
+				if (length < 0)
+					return null;
+				var sortList = new List<KeyValuePair<Int64, int>>(length);
+				for (int i = 0; i < length; i++)
+					sortList.Add(new KeyValuePair<Int64, int>(array[i], i));
+				sortList.Sort((a, b) => ascending ? a.Key.CompareTo(b.Key) : b.Key.CompareTo(a.Key));
+				return sortList.Select(pair => pair.Value).ToArray();
+			}
+			if (term.Identifier.IsFloat)
+			{
+				double[] array = (double[])term.Identifier.GetArray();
+				int length = GetSortLength(array.Length, fixedLength, i => array[i] == 0.0d);
+				if (length < 0)
+					return null;
+				var sortList = new List<KeyValuePair<double, int>>(length);
+				for (int i = 0; i < length; i++)
+					sortList.Add(new KeyValuePair<double, int>(array[i], i));
+				sortList.Sort((a, b) => ascending ? a.Key.CompareTo(b.Key) : b.Key.CompareTo(a.Key));
+				return sortList.Select(pair => pair.Value).ToArray();
+			}
+			else
+			{
+				string[] array = (string[])term.Identifier.GetArray();
+				int length = GetSortLength(array.Length, fixedLength, i => string.IsNullOrEmpty(array[i]));
+				if (length < 0)
+					return null;
+				var sortList = new List<KeyValuePair<string, int>>(length);
+				for (int i = 0; i < length; i++)
+					sortList.Add(new KeyValuePair<string, int>(array[i], i));
+				sortList.Sort((a, b) => ascending ? string.CompareOrdinal(a.Key, b.Key) : string.CompareOrdinal(b.Key, a.Key));
+				return sortList.Select(pair => pair.Value).ToArray();
+			}
+		}
+
+		private static int GetSortLength(int arrayLength, int fixedLength, Func<int, bool> isDefault)
+		{
+			if (fixedLength >= 0)
+				return fixedLength <= arrayLength ? fixedLength : -1;
+			int length = 0;
+			while (length < arrayLength && !isDefault(length))
+				length++;
+			return length;
+		}
+
+		private static bool ApplySortedIndices(VariableTerm term, int[] sortedIndices)
+		{
+			if (term.Identifier.IsInteger)
+			{
+				Int64[] array = (Int64[])term.Identifier.GetArray();
+				if (array.Length < sortedIndices.Length)
+					return false;
+				Int64[] clone = (Int64[])array.Clone();
+				for (int i = 0; i < sortedIndices.Length; i++)
+					array[i] = clone[sortedIndices[i]];
+				return true;
+			}
+			if (term.Identifier.IsFloat)
+			{
+				double[] array = (double[])term.Identifier.GetArray();
+				if (array.Length < sortedIndices.Length)
+					return false;
+				double[] clone = (double[])array.Clone();
+				for (int i = 0; i < sortedIndices.Length; i++)
+					array[i] = clone[sortedIndices[i]];
+				return true;
+			}
+			else
+			{
+				string[] array = (string[])term.Identifier.GetArray();
+				if (array.Length < sortedIndices.Length)
+					return false;
+				string[] clone = (string[])array.Clone();
+				for (int i = 0; i < sortedIndices.Length; i++)
+					array[i] = clone[sortedIndices[i]];
+				return true;
+			}
+		}
         #endregion
 
         #region 文字列操作系
@@ -2379,6 +2556,28 @@ namespace MinorShift.Emuera.GameData.Function
                         return (0);
                 }
                 return ret;
+            }
+        }
+
+        private sealed class ToFloatMethod : FunctionMethod
+        {
+            public ToFloatMethod()
+            {
+                ReturnType = typeof(double);
+                argumentTypeArray = new Type[] { typeof(string) };
+                CanRestructure = true;
+            }
+
+            public override SingleTerm GetReturnValue(ExpressionMediator exm, IOperandTerm[] arguments)
+            {
+                string str = arguments[0].GetStrValue(exm);
+                if (string.IsNullOrEmpty(str))
+                    return new SingleTerm(0.0);
+                if (str.Length < LangManager.GetStrlenLang(str))
+                    return new SingleTerm(0.0);
+                if (double.TryParse(str, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double result))
+                    return new SingleTerm(result);
+                return new SingleTerm(0.0);
             }
         }
 
@@ -2951,33 +3150,17 @@ namespace MinorShift.Emuera.GameData.Function
 			public HtmlSubstringMethod()
 			{
 				ReturnType = typeof(string);
-				argumentTypeArray = null;
+				argumentTypeArray = new Type[] { typeof(string), typeof(Int64) };
 				CanRestructure = false;
-			}
-			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
-			{
-				if (arguments.Length < 2 || arguments.Length > 3)
-					return name + "関数の引数の数が正しくありません";
-				if (arguments[0] == null || arguments[0].GetOperandType() != typeof(string))
-					return name + "関数の1番目の引数の型が正しくありません";
-				if (arguments[1] == null || arguments[1].GetOperandType() != typeof(Int64))
-					return name + "関数の2番目の引数の型が正しくありません";
-				if (arguments.Length == 3 && arguments[2] != null && arguments[2].GetOperandType() != typeof(Int64))
-					return name + "関数の3番目の引数の型が正しくありません";
-				return null;
 			}
 			public override string GetStrValue(ExpressionMediator exm, IOperandTerm[] arguments)
 			{
-				string plain = HtmlManager.Html2PlainText(arguments[0].GetStrValue(exm)) ?? "";
-				int start = (int)Math.Max(0, arguments[1].GetIntValue(exm));
-				if (start >= plain.Length)
-					return "";
-				int length = arguments.Length >= 3 && arguments[2] != null ? (int)arguments[2].GetIntValue(exm) : plain.Length - start;
-				if (length <= 0)
-					return "";
-				if (start + length > plain.Length)
-					length = plain.Length - start;
-				return plain.Substring(start, length);
+				string[] values = HtmlManager.HtmlSubString(arguments[0].GetStrValue(exm), (int)arguments[1].GetIntValue(exm));
+				string[] results = exm.VEvaluator.RESULTS_ARRAY;
+				int count = Math.Min(values.Length, results.Length);
+				for (int i = 0; i < count; i++)
+					results[i] = values[i];
+				return values[0];
 			}
 		}
 
@@ -2986,19 +3169,23 @@ namespace MinorShift.Emuera.GameData.Function
 			public HtmlStringLinesMethod()
 			{
 				ReturnType = typeof(Int64);
-				argumentTypeArray = new Type[] { typeof(string) };
+				argumentTypeArray = new Type[] { typeof(string), typeof(Int64) };
 				CanRestructure = false;
 			}
 			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
 			{
-				string plain = HtmlManager.Html2PlainText(arguments[0].GetStrValue(exm)) ?? "";
-				if (plain.Length == 0)
+				string str = arguments[0].GetStrValue(exm);
+				int lineLength = (int)arguments[1].GetIntValue(exm);
+				if (string.IsNullOrEmpty(str) || lineLength <= 0)
 					return 0;
 				int lines = 1;
-				for (int i = 0; i < plain.Length; i++)
+				while (true)
 				{
-					if (plain[i] == '\n')
-						lines++;
+					string[] values = HtmlManager.HtmlSubString(str, lineLength);
+					str = values[1];
+					if (string.IsNullOrEmpty(str))
+						break;
+					lines++;
 				}
 				return lines;
 			}
@@ -3153,6 +3340,16 @@ namespace MinorShift.Emuera.GameData.Function
 						return g.Width;
 					case "GHEIGHT":
 						return g.Height;
+					case "GGETFONTSIZE":
+						return g.Fontsize;
+					case "GGETFONTSTYLE":
+						return g.Fontstyle;
+					case "GGETPEN":
+						return ((Int64)g.PenColor.ToArgb()) & 0xFFFFFFFFL;
+					case "GGETPENWIDTH":
+						return g.PenWidth;
+					case "GGETBRUSH":
+						return ((Int64)g.BrushColor.ToArgb()) & 0xFFFFFFFFL;
 				}
 				throw new ExeEE("GraphicsState:" + Name + ":異常な分岐");
 			}
@@ -3264,7 +3461,7 @@ namespace MinorShift.Emuera.GameData.Function
 			public GraphicsSetPenMethod()
 			{
 				ReturnType = typeof(Int64);
-				argumentTypeArray = new Type[] { typeof(Int64), typeof(Int64) };
+				argumentTypeArray = new Type[] { typeof(Int64), typeof(Int64), typeof(Int64) };
 				CanRestructure = false;
 			}
 			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
@@ -4287,6 +4484,76 @@ namespace MinorShift.Emuera.GameData.Function
 			}
 		}
 
+		private sealed class ExistFunctionMethod : FunctionMethod
+		{
+			public ExistFunctionMethod()
+			{
+				ReturnType = typeof(Int64);
+				argumentTypeArray = new Type[] { typeof(string) };
+				CanRestructure = false;
+			}
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				string name = arguments[0].GetStrValue(exm);
+				if (Config.ICFunction)
+					name = name.ToUpper();
+
+				if (FunctionMethodCreator.GetMethodList().TryGetValue(name, out var method))
+				{
+					if (method.ReturnType == typeof(Int64))
+						return 2;
+					if (method.ReturnType == typeof(string))
+						return 3;
+					if (method.ReturnType == typeof(double) || method.ReturnType == typeof(float))
+						return 4;
+					return 1;
+				}
+
+				var labelDic = exm.Process.LabelDictionary;
+				if (labelDic.GetNonEventLabel(name) != null)
+					return 1;
+				if (labelDic.GetEventLabels(name) != null)
+					return 1;
+
+				if (exm.Process.IsFunctionInLazyLoadingTable(name))
+					return 1;
+
+				return 0;
+			}
+		}
+
+		private sealed class ExistFileMethod : FunctionMethod
+		{
+			public ExistFileMethod()
+			{
+				ReturnType = typeof(Int64);
+				argumentTypeArray = new Type[] { typeof(string) };
+				CanRestructure = false;
+			}
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				string path = arguments[0].GetStrValue(exm);
+				return !string.IsNullOrWhiteSpace(path) && System.IO.File.Exists(path) ? 1 : 0;
+			}
+		}
+
+		private sealed class GetCsvNoByNameMethod : FunctionMethod
+		{
+			readonly CharacterStrData searchType;
+			public GetCsvNoByNameMethod(CharacterStrData type)
+			{
+				ReturnType = typeof(Int64);
+				argumentTypeArray = new Type[] { typeof(string) };
+				CanRestructure = true;
+				searchType = type;
+			}
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				string name = arguments[0].GetStrValue(exm);
+				return exm.VEvaluator.Constant.GetCsvNoByCharacterStr(searchType, name);
+			}
+		}
+
 		private sealed class GetSoundOrBgmInfoMethod : FunctionMethod
 		{
 			public GetSoundOrBgmInfoMethod()
@@ -4465,180 +4732,6 @@ namespace MinorShift.Emuera.GameData.Function
 			}
 		}
 
-		private sealed class SnakeSqlIntMethod : FunctionMethod
-		{
-			public SnakeSqlIntMethod(string operation)
-			{
-				this.operation = operation;
-				ReturnType = typeof(Int64);
-				argumentTypeArray = null;
-				CanRestructure = false;
-			}
-
-			readonly string operation;
-
-			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
-			{
-				switch (operation)
-				{
-					case "CONNECTION_OPEN":
-						return CheckSqlArgs(name, arguments, 1, 1, typeof(string), typeof(string));
-					case "CONNECT":
-						return CheckSqlArgs(name, arguments, 1, 2, typeof(string), typeof(string));
-					case "DISCONNECT":
-						return CheckSqlArgs(name, arguments, 1, 1, typeof(string), typeof(string));
-					case "EXECUTE_NONQUERY":
-					case "EXECUTE_READER":
-					case "EXECUTE_SCALAR_LONG":
-					case "EXECUTE_SCALAR_FLOAT":
-						return CheckSqlArgs(name, arguments, 2, 2, typeof(string), typeof(string));
-					case "P_EXECUTE_NONQUERY":
-					case "P_EXECUTE_READER":
-					case "P_EXECUTE_SCALAR_LONG":
-					case "P_EXECUTE_SCALAR_FLOAT":
-						return CheckSqlArgs(name, arguments, 2, int.MaxValue, typeof(string), typeof(string));
-					case "IMPORT_MAP_XML":
-					case "EXPORT_MAP_XML":
-						return CheckSqlArgs(name, arguments, 3, 3, typeof(string), typeof(string));
-					case "IMPORT_DT_XML":
-					case "EXPORT_DT_XML":
-						return CheckSqlArgs(name, arguments, 4, 4, typeof(string), typeof(string));
-					case "IMPORT_XML_CUSTOM":
-						return CheckSqlArgs(name, arguments, 5, 5, typeof(string), typeof(string));
-					case "READER_READ":
-					case "READER_CLOSE":
-						return CheckSqlArgs(name, arguments, 1, 1, typeof(Int64), typeof(Int64));
-					case "READER_GET_LONG":
-					case "READER_GET_FLOAT":
-					case "READER_ISNULL":
-						return CheckSqlArgs(name, arguments, 2, 2, typeof(Int64), typeof(Int64));
-					default:
-						return null;
-				}
-			}
-
-			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
-			{
-				try
-				{
-					switch (operation)
-					{
-						case "CONNECTION_OPEN":
-							return SnakeSqlManager.ConnectionOpen(arguments[0].GetStrValue(exm));
-						case "CONNECT":
-							return SnakeSqlManager.Connect(
-								arguments[0].GetStrValue(exm),
-								arguments.Length > 1 && arguments[1] != null ? arguments[1].GetStrValue(exm) : "Data Source=:memory:",
-								false);
-						case "DISCONNECT":
-							return SnakeSqlManager.Disconnect(arguments[0].GetStrValue(exm));
-						case "EXECUTE_NONQUERY":
-							return SnakeSqlManager.ExecuteNonQuery(arguments[0].GetStrValue(exm), arguments[1].GetStrValue(exm));
-						case "EXECUTE_READER":
-							return SnakeSqlManager.ExecuteReader(arguments[0].GetStrValue(exm), arguments[1].GetStrValue(exm));
-						case "READER_READ":
-							return SnakeSqlManager.ReaderRead(arguments[0].GetIntValue(exm));
-						case "READER_GET_LONG":
-							return SnakeSqlManager.ReaderGetLong(arguments[0].GetIntValue(exm), (int)arguments[1].GetIntValue(exm));
-						case "READER_GET_FLOAT":
-							return SnakeSqlManager.ReaderGetFloatAsLong(arguments[0].GetIntValue(exm), (int)arguments[1].GetIntValue(exm));
-						case "READER_ISNULL":
-							return SnakeSqlManager.ReaderIsNull(arguments[0].GetIntValue(exm), (int)arguments[1].GetIntValue(exm));
-						case "READER_CLOSE":
-							return SnakeSqlManager.ReaderClose(arguments[0].GetIntValue(exm));
-						case "EXECUTE_SCALAR_LONG":
-							return SnakeSqlManager.ExecuteScalarLong(arguments[0].GetStrValue(exm), arguments[1].GetStrValue(exm));
-						case "EXECUTE_SCALAR_FLOAT":
-							return SnakeSqlManager.ExecuteScalarFloatAsLong(arguments[0].GetStrValue(exm), arguments[1].GetStrValue(exm));
-						case "P_EXECUTE_NONQUERY":
-							return SnakeSqlManager.ExecuteNonQuery(arguments[0].GetStrValue(exm), arguments[1].GetStrValue(exm), ReadSqlParameters(exm, arguments, 2));
-						case "P_EXECUTE_READER":
-							return SnakeSqlManager.ExecuteReader(arguments[0].GetStrValue(exm), arguments[1].GetStrValue(exm), ReadSqlParameters(exm, arguments, 2));
-						case "P_EXECUTE_SCALAR_LONG":
-							return SnakeSqlManager.ExecuteScalarLong(arguments[0].GetStrValue(exm), arguments[1].GetStrValue(exm), ReadSqlParameters(exm, arguments, 2));
-						case "P_EXECUTE_SCALAR_FLOAT":
-							return SnakeSqlManager.ExecuteScalarFloatAsLong(arguments[0].GetStrValue(exm), arguments[1].GetStrValue(exm), ReadSqlParameters(exm, arguments, 2));
-						case "IMPORT_MAP_XML":
-							return SnakeSqlManager.ImportMapXml(arguments[0].GetStrValue(exm), arguments[1].GetStrValue(exm), arguments[2].GetStrValue(exm));
-						case "IMPORT_DT_XML":
-							return SnakeSqlManager.ImportDtXml(arguments[0].GetStrValue(exm), arguments[1].GetStrValue(exm), arguments[2].GetStrValue(exm), arguments[3].GetStrValue(exm));
-						case "IMPORT_XML_CUSTOM":
-							return SnakeSqlManager.ImportXmlCustom(arguments[0].GetStrValue(exm), arguments[1].GetStrValue(exm), arguments[2].GetStrValue(exm), arguments[3].GetStrValue(exm), arguments[4].GetStrValue(exm));
-						case "EXPORT_MAP_XML":
-							return SnakeSqlManager.ExportMapXml(arguments[0].GetStrValue(exm), arguments[1].GetStrValue(exm), arguments[2].GetStrValue(exm));
-						case "EXPORT_DT_XML":
-							return SnakeSqlManager.ExportDtXml(arguments[0].GetStrValue(exm), arguments[1].GetStrValue(exm), arguments[2].GetStrValue(exm), arguments[3].GetStrValue(exm));
-					}
-				}
-				catch (CodeEE)
-				{
-					throw;
-				}
-				catch (Exception ex)
-				{
-					throw new CodeEE(Name + ": " + ex.Message);
-				}
-				return 0;
-			}
-		}
-
-		private sealed class SnakeSqlStringMethod : FunctionMethod
-		{
-			public SnakeSqlStringMethod(string operation)
-			{
-				this.operation = operation;
-				ReturnType = typeof(string);
-				argumentTypeArray = null;
-				CanRestructure = operation == "ESCAPE";
-			}
-
-			readonly string operation;
-
-			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
-			{
-				switch (operation)
-				{
-					case "ESCAPE":
-						return CheckSqlArgs(name, arguments, 1, 1, typeof(string), typeof(string));
-					case "EXECUTE_SCALAR_STRING":
-						return CheckSqlArgs(name, arguments, 2, 2, typeof(string), typeof(string));
-					case "P_EXECUTE_SCALAR_STRING":
-						return CheckSqlArgs(name, arguments, 2, int.MaxValue, typeof(string), typeof(string));
-					case "READER_GET_STRING":
-						return CheckSqlArgs(name, arguments, 2, 2, typeof(Int64), typeof(Int64));
-					default:
-						return null;
-				}
-			}
-
-			public override string GetStrValue(ExpressionMediator exm, IOperandTerm[] arguments)
-			{
-				try
-				{
-					switch (operation)
-					{
-						case "ESCAPE":
-							return SnakeSqlManager.Escape(arguments[0].GetStrValue(exm));
-						case "EXECUTE_SCALAR_STRING":
-							return SnakeSqlManager.ExecuteScalarString(arguments[0].GetStrValue(exm), arguments[1].GetStrValue(exm));
-						case "P_EXECUTE_SCALAR_STRING":
-							return SnakeSqlManager.ExecuteScalarString(arguments[0].GetStrValue(exm), arguments[1].GetStrValue(exm), ReadSqlParameters(exm, arguments, 2));
-						case "READER_GET_STRING":
-							return SnakeSqlManager.ReaderGetString(arguments[0].GetIntValue(exm), (int)arguments[1].GetIntValue(exm));
-					}
-				}
-				catch (CodeEE)
-				{
-					throw;
-				}
-				catch (Exception ex)
-				{
-					throw new CodeEE(Name + ": " + ex.Message);
-				}
-				return "";
-			}
-		}
-
 		private static string CheckSqlArgs(string name, IOperandTerm[] arguments, int min, int max, Type firstType, Type secondType)
 		{
 			if (arguments.Length < min)
@@ -4680,79 +4773,6 @@ namespace MinorShift.Emuera.GameData.Function
 			return parameters;
 		}
 
-		private sealed class SnakeGetVarIntMethod : FunctionMethod
-		{
-			public SnakeGetVarIntMethod(string operation)
-			{
-				this.operation = operation;
-				ReturnType = typeof(Int64);
-				argumentTypeArray = null;
-				CanRestructure = false;
-			}
-
-			readonly string operation;
-
-			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
-			{
-				if (arguments.Length < 1 || arguments.Length > 2)
-					return name + "関数の引数の数が正しくありません";
-				if (arguments[0] == null || arguments[0].GetOperandType() != typeof(string))
-					return name + "関数の1番目の引数の型が正しくありません";
-				if (arguments.Length == 2 && arguments[1] != null && arguments[1].GetOperandType() != typeof(Int64))
-					return name + "関数の2番目の引数の型が正しくありません";
-				return null;
-			}
-
-			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
-			{
-				long defaultValue = arguments.Length > 1 && arguments[1] != null ? arguments[1].GetIntValue(exm) : 0;
-				if (!TryParseSnakeVariable(arguments[0].GetStrValue(exm), out VariableTerm term))
-					return defaultValue;
-				if (term.GetOperandType() != typeof(Int64))
-				{
-					if (arguments.Length > 1)
-						return defaultValue;
-					throw new CodeEE(operation + " target " + term.Identifier.Name + " is not integer.");
-				}
-				return term.GetIntValue(exm);
-			}
-		}
-
-		private sealed class SnakeGetVarStringMethod : FunctionMethod
-		{
-			public SnakeGetVarStringMethod()
-			{
-				ReturnType = typeof(string);
-				argumentTypeArray = null;
-				CanRestructure = false;
-			}
-
-			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
-			{
-				if (arguments.Length < 1 || arguments.Length > 2)
-					return name + "関数の引数の数が正しくありません";
-				if (arguments[0] == null || arguments[0].GetOperandType() != typeof(string))
-					return name + "関数の1番目の引数の型が正しくありません";
-				if (arguments.Length == 2 && arguments[1] != null && arguments[1].GetOperandType() != typeof(string))
-					return name + "関数の2番目の引数の型が正しくありません";
-				return null;
-			}
-
-			public override string GetStrValue(ExpressionMediator exm, IOperandTerm[] arguments)
-			{
-				string defaultValue = arguments.Length > 1 && arguments[1] != null ? arguments[1].GetStrValue(exm) : "";
-				if (!TryParseSnakeVariable(arguments[0].GetStrValue(exm), out VariableTerm term))
-					return defaultValue;
-				if (term.GetOperandType() != typeof(string))
-				{
-					if (arguments.Length > 1)
-						return defaultValue;
-					throw new CodeEE("GETVARS target " + term.Identifier.Name + " is not string.");
-				}
-				return term.GetStrValue(exm);
-			}
-		}
-
 		private static bool TryParseSnakeVariable(string source, out VariableTerm term)
 		{
 			term = null;
@@ -4777,103 +4797,97 @@ namespace MinorShift.Emuera.GameData.Function
 			}
 		}
 
-		private sealed class SnakeIntFallbackMethod : FunctionMethod
+		private sealed class V24TrigMethod : FunctionMethod
 		{
-			public SnakeIntFallbackMethod()
+			public V24TrigMethod(string kind, Func<double, double> func, bool checkUnitRange = false)
 			{
+				this.kind = kind;
+				this.func = func;
+				this.checkUnitRange = checkUnitRange;
 				ReturnType = typeof(Int64);
 				argumentTypeArray = null;
-				CanRestructure = false;
+				CanRestructure = true;
 			}
+			readonly string kind;
+			readonly Func<double, double> func;
+			readonly bool checkUnitRange;
 			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
 			{
+				if (arguments.Length != 1)
+					return name + "関数の引数の数が正しくありません";
+				if (arguments[0] == null || (arguments[0].GetOperandType() != typeof(Int64) && arguments[0].GetOperandType() != typeof(double)))
+					return name + "関数の引数の型が正しくありません";
 				return null;
 			}
 			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
 			{
-				return 0;
+				return CheckedDoubleToLong(kind, Calculate(arguments[0].GetIntValue(exm)));
+			}
+			public override SingleTerm GetReturnValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				if (arguments[0].GetOperandType() == typeof(double))
+					return new SingleTerm(Calculate(arguments[0].GetFloatValue(exm)));
+				return new SingleTerm(GetIntValue(exm, arguments));
+			}
+			double Calculate(double value)
+			{
+				if (checkUnitRange && (value < -1.0d || value > 1.0d))
+					throw new CodeEE(kind + "関数の引数が範囲外です");
+				double result = func(value);
+				if (double.IsNaN(result))
+					throw new CodeEE(kind + "関数の結果が非数値です");
+				if (double.IsInfinity(result))
+					throw new CodeEE(kind + "関数の結果が無限大です");
+				return result;
 			}
 		}
 
-		private sealed class SnakeStringFallbackMethod : FunctionMethod
+		private sealed class V24RoundMathMethod : FunctionMethod
 		{
-			public SnakeStringFallbackMethod()
+			public V24RoundMathMethod(string kind, Func<double, double> func)
 			{
-				ReturnType = typeof(string);
+				this.kind = kind;
+				this.func = func;
+				ReturnType = typeof(Int64);
 				argumentTypeArray = null;
-				CanRestructure = false;
+				CanRestructure = true;
 			}
+			readonly string kind;
+			readonly Func<double, double> func;
 			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
 			{
+				if (arguments.Length != 1)
+					return name + "関数の引数の数が正しくありません";
+				if (arguments[0] == null || (arguments[0].GetOperandType() != typeof(Int64) && arguments[0].GetOperandType() != typeof(double)))
+					return name + "関数の引数の型が正しくありません";
 				return null;
 			}
-			public override string GetStrValue(ExpressionMediator exm, IOperandTerm[] arguments)
-			{
-				return "";
-			}
-		}
-
-		private sealed class SnakeTrigMethod : FunctionMethod
-		{
-			public SnakeTrigMethod(string kind)
-			{
-				this.kind = kind;
-				ReturnType = typeof(Int64);
-				argumentTypeArray = new Type[] { typeof(Int64) };
-				CanRestructure = true;
-			}
-			readonly string kind;
 			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
 			{
-				double value = arguments[0].GetIntValue(exm) * Math.PI / 180.0d;
-				switch (kind)
-				{
-					case "SIN":
-						return (long)Math.Round(Math.Sin(value) * 1000.0d);
-					case "COS":
-						return (long)Math.Round(Math.Cos(value) * 1000.0d);
-					case "TAN":
-						return (long)Math.Round(Math.Tan(value) * 1000.0d);
-					case "ASIN":
-						return (long)Math.Round(Math.Asin(arguments[0].GetIntValue(exm) / 1000.0d) * 180.0d / Math.PI);
-					case "ACOS":
-						return (long)Math.Round(Math.Acos(arguments[0].GetIntValue(exm) / 1000.0d) * 180.0d / Math.PI);
-					case "ATAN":
-						return (long)Math.Round(Math.Atan(arguments[0].GetIntValue(exm) / 1000.0d) * 180.0d / Math.PI);
-					default:
-						return 0;
-				}
+				return CheckedDoubleToLong(kind, func(arguments[0].GetIntValue(exm)));
+			}
+			public override SingleTerm GetReturnValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				if (arguments[0].GetOperandType() == typeof(double))
+					return new SingleTerm(func(arguments[0].GetFloatValue(exm)));
+				return new SingleTerm(GetIntValue(exm, arguments));
 			}
 		}
 
-		private sealed class SnakeUnaryMathMethod : FunctionMethod
+		static long CheckedDoubleToLong(string name, double value)
 		{
-			public SnakeUnaryMathMethod(string kind)
-			{
-				this.kind = kind;
-				ReturnType = typeof(Int64);
-				argumentTypeArray = new Type[] { typeof(Int64) };
-				CanRestructure = true;
-			}
-			readonly string kind;
-			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
-			{
-				long value = arguments[0].GetIntValue(exm);
-				switch (kind)
-				{
-					case "FLOOR":
-					case "CEIL":
-					case "ROUND":
-						return value;
-					default:
-						return 0;
-				}
-			}
+			if (double.IsNaN(value))
+				throw new CodeEE(name + "関数の結果が非数値です");
+			if (double.IsInfinity(value))
+				throw new CodeEE(name + "関数の結果が無限大です");
+			if (value >= long.MaxValue || value <= long.MinValue)
+				throw new CodeEE(name + "関数の結果が64ビット符号付き整数の範囲外です");
+			return (long)value;
 		}
 
-		private sealed class SnakeArgLenMethod : FunctionMethod
+		private sealed class ArgLengthMethod : FunctionMethod
 		{
-			public SnakeArgLenMethod()
+			public ArgLengthMethod()
 			{
 				ReturnType = typeof(Int64);
 				argumentTypeArray = new Type[0];
@@ -4885,9 +4899,9 @@ namespace MinorShift.Emuera.GameData.Function
 			}
 		}
 
-		private sealed class SnakeUncheckedMathMethod : FunctionMethod
+		private sealed class UncheckedMathMethod : FunctionMethod
 		{
-			public SnakeUncheckedMathMethod(string kind)
+			public UncheckedMathMethod(string kind)
 			{
 				this.kind = kind;
 				ReturnType = typeof(Int64);
@@ -4929,9 +4943,9 @@ namespace MinorShift.Emuera.GameData.Function
 			}
 		}
 
-		private sealed class SnakeBitMethod : FunctionMethod
+		private sealed class BitMethod : FunctionMethod
 		{
-			public SnakeBitMethod(string kind)
+			public BitMethod(string kind)
 			{
 				this.kind = kind;
 				ReturnType = typeof(Int64);
@@ -5258,6 +5272,1822 @@ namespace MinorShift.Emuera.GameData.Function
 			}
 		}
 
-		#endregion
+
+	public sealed class GraphicsGetFontMethod : FunctionMethod
+	{
+		public GraphicsGetFontMethod()
+		{
+			ReturnType = typeof(string);
+			argumentTypeArray = new Type[] { typeof(Int64) };
+			CanRestructure = false;
+		}
+		public override string GetStrValue(ExpressionMediator exm, IOperandTerm[] arguments)
+		{
+			if (Config.TextDrawingMode == TextDrawingMode.WINAPI)
+				throw new CodeEE(string.Format(Properties.Resources.RuntimeErrMesMethodGDIPLUSOnly, Name));
+			GraphicsImage g = ReadGraphics(Name, exm, arguments, 0);
+			if (!g.IsCreated)
+				return "";
+			return g.Fontname ?? "";
+		}
 	}
+
+	public sealed class GraphicsGetTextSizeMethod : FunctionMethod
+	{
+		public GraphicsGetTextSizeMethod()
+		{
+			ReturnType = typeof(Int64);
+			argumentTypeArray = new Type[] { typeof(Int64), typeof(string) };
+			CanRestructure = false;
+		}
+		public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+		{
+			if (Config.TextDrawingMode == TextDrawingMode.WINAPI)
+				throw new CodeEE(string.Format(Properties.Resources.RuntimeErrMesMethodGDIPLUSOnly, Name));
+			GraphicsImage g = ReadGraphics(Name, exm, arguments, 0);
+			if (!g.IsCreated)
+				return 0;
+			string text = arguments[1].GetStrValue(exm) ?? "";
+			int width = uEmuera.Utils.GetDisplayLength(text, g.Fontsize);
+			int height = Math.Max(1, g.Fontsize + 6);
+			exm.VEvaluator.RESULT_ARRAY[1] = height;
+			return width;
+		}
+	}
+
+	public sealed class GraphicsDrawLineMethod : FunctionMethod
+	{
+		public GraphicsDrawLineMethod()
+		{
+			ReturnType = typeof(Int64);
+			argumentTypeArray = new Type[] { typeof(Int64), typeof(Int64), typeof(Int64), typeof(Int64), typeof(Int64) };
+			CanRestructure = false;
+		}
+		public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+		{
+			if (Config.TextDrawingMode == TextDrawingMode.WINAPI)
+				throw new CodeEE(string.Format(Properties.Resources.RuntimeErrMesMethodGDIPLUSOnly, Name));
+			GraphicsImage g = ReadGraphics(Name, exm, arguments, 0);
+			if (!g.IsCreated)
+				return 0;
+			int x1 = (int)arguments[1].GetIntValue(exm);
+			int y1 = (int)arguments[2].GetIntValue(exm);
+			int x2 = (int)arguments[3].GetIntValue(exm);
+			int y2 = (int)arguments[4].GetIntValue(exm);
+			g.GDrawLine(x1, y1, x2, y2);
+			return 1;
+		}
+	}
+
+	public sealed class GraphicsDrawStringMethod : FunctionMethod
+	{
+		public GraphicsDrawStringMethod()
+		{
+			ReturnType = typeof(Int64);
+			argumentTypeArray = new Type[] { typeof(Int64), typeof(string), typeof(Int64), typeof(Int64) };
+			CanRestructure = false;
+		}
+		public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+		{
+			if (Config.TextDrawingMode == TextDrawingMode.WINAPI)
+				throw new CodeEE(string.Format(Properties.Resources.RuntimeErrMesMethodGDIPLUSOnly, Name));
+			GraphicsImage g = ReadGraphics(Name, exm, arguments, 0);
+			if (!g.IsCreated)
+				return 0;
+			string text = arguments[1].GetStrValue(exm) ?? "";
+			int x = (int)arguments[2].GetIntValue(exm);
+			int y = (int)arguments[3].GetIntValue(exm);
+			return g.GDrawString(text, x, y) ? 1 : 0;
+		}
+	}
+
+	public sealed class GraphicsDashStyleMethod : FunctionMethod
+	{
+		public GraphicsDashStyleMethod()
+		{
+			ReturnType = typeof(Int64);
+			argumentTypeArray = new Type[] { typeof(Int64), typeof(Int64), typeof(Int64) };
+			CanRestructure = false;
+		}
+		public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+		{
+			if (Config.TextDrawingMode == TextDrawingMode.WINAPI)
+				throw new CodeEE(string.Format(Properties.Resources.RuntimeErrMesMethodGDIPLUSOnly, Name));
+			GraphicsImage g = ReadGraphics(Name, exm, arguments, 0);
+			if (!g.IsCreated)
+				return 0;
+			int style = (int)arguments[1].GetIntValue(exm);
+			int cap = (int)arguments[2].GetIntValue(exm);
+			g.GDashStyle(style, cap);
+			return 1;
+		}
+	}
+
+	public sealed class GraphicsRotateMethod : FunctionMethod
+	{
+		public GraphicsRotateMethod()
+		{
+			ReturnType = typeof(Int64);
+			argumentTypeArray = new Type[] { typeof(Int64), typeof(Int64), typeof(Int64), typeof(Int64) };
+			CanRestructure = false;
+		}
+		public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+		{
+			if (Config.TextDrawingMode == TextDrawingMode.WINAPI)
+				throw new CodeEE(string.Format(Properties.Resources.RuntimeErrMesMethodGDIPLUSOnly, Name));
+			GraphicsImage g = ReadGraphics(Name, exm, arguments, 0);
+			if (!g.IsCreated)
+				return 0;
+			long angle = arguments[1].GetIntValue(exm);
+			int pivotX = (int)arguments[2].GetIntValue(exm);
+			int pivotY = (int)arguments[3].GetIntValue(exm);
+			g.GRotate(angle, pivotX, pivotY);
+			return 1;
+		}
+	}
+
+	public sealed class PolygonPointAddMethod : FunctionMethod
+	{
+		public PolygonPointAddMethod()
+		{
+			ReturnType = typeof(Int64);
+			argumentTypeArray = new Type[] { typeof(Int64), typeof(Int64), typeof(Int64) };
+			CanRestructure = false;
+		}
+		public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+		{
+			if (Config.TextDrawingMode == TextDrawingMode.WINAPI)
+				throw new CodeEE(string.Format(Properties.Resources.RuntimeErrMesMethodGDIPLUSOnly, Name));
+			GraphicsImage g = ReadGraphics(Name, exm, arguments, 0);
+			if (!g.IsCreated)
+				return 0;
+			int x = (int)arguments[1].GetIntValue(exm);
+			int y = (int)arguments[2].GetIntValue(exm);
+			g.GDrawPolygonAddPoint(new Point(x, y));
+			return 1;
+		}
+	}
+
+	public sealed class PolygonPointClearMethod : FunctionMethod
+	{
+		public PolygonPointClearMethod()
+		{
+			ReturnType = typeof(Int64);
+			argumentTypeArray = new Type[] { typeof(Int64) };
+			CanRestructure = false;
+		}
+		public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+		{
+			if (Config.TextDrawingMode == TextDrawingMode.WINAPI)
+				throw new CodeEE(string.Format(Properties.Resources.RuntimeErrMesMethodGDIPLUSOnly, Name));
+			GraphicsImage g = ReadGraphics(Name, exm, arguments, 0);
+			if (!g.IsCreated)
+				return 0;
+			g.GDrawPolygonClearPoint();
+			return 1;
+		}
+	}
+
+	public sealed class PolygonDrawMethod : FunctionMethod
+	{
+		public PolygonDrawMethod()
+		{
+			ReturnType = typeof(Int64);
+			argumentTypeArray = new Type[] { typeof(Int64) };
+			CanRestructure = false;
+		}
+		public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+		{
+			if (Config.TextDrawingMode == TextDrawingMode.WINAPI)
+				throw new CodeEE(string.Format(Properties.Resources.RuntimeErrMesMethodGDIPLUSOnly, Name));
+			GraphicsImage g = ReadGraphics(Name, exm, arguments, 0);
+			if (!g.IsCreated)
+				return 0;
+			g.GDrawPolygon();
+			return 1;
+		}
+	}
+
+	public sealed class PolygonFillMethod : FunctionMethod
+	{
+		public PolygonFillMethod()
+		{
+			ReturnType = typeof(Int64);
+			argumentTypeArray = new Type[] { typeof(Int64) };
+			CanRestructure = false;
+		}
+		public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+		{
+			if (Config.TextDrawingMode == TextDrawingMode.WINAPI)
+				throw new CodeEE(string.Format(Properties.Resources.RuntimeErrMesMethodGDIPLUSOnly, Name));
+			GraphicsImage g = ReadGraphics(Name, exm, arguments, 0);
+			if (!g.IsCreated)
+				return 0;
+			g.GFillPolygon();
+			return 1;
+		}
+	}
+
+	public sealed class SpriteCreateFromFileMethod : FunctionMethod
+	{
+		public SpriteCreateFromFileMethod()
+		{
+			ReturnType = typeof(Int64);
+			argumentTypeArray = new Type[] { typeof(string), typeof(string) };
+			CanRestructure = false;
+		}
+		public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+		{
+			string imgName = arguments[0].GetStrValue(exm) ?? "";
+			string filepath = arguments[1].GetStrValue(exm) ?? "";
+			return AppContents.CreateSpriteFromFileDynamic(imgName, filepath) ? 1 : 0;
+		}
+	}
+
+	public sealed class SpriteDisposeAllMethod : FunctionMethod
+	{
+		public SpriteDisposeAllMethod()
+		{
+			ReturnType = typeof(Int64);
+			argumentTypeArray = new Type[] { typeof(Int64) };
+			CanRestructure = false;
+		}
+		public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+		{
+			bool delCsv = arguments[0].GetIntValue(exm) != 0;
+			return AppContents.SpriteDisposeAll(delCsv);
+		}
+	}
+
+	public sealed class SetTextBoxMethod : FunctionMethod
+	{
+		public SetTextBoxMethod()
+		{
+			ReturnType = typeof(Int64);
+			argumentTypeArray = new Type[] { typeof(string) };
+			CanRestructure = false;
+		}
+		public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+		{
+			string text = arguments[0].GetStrValue(exm) ?? "";
+			exm.Console.SetTextBoxText(text);
+			return 1;
+		}
+	}
+
+	public sealed class GetTextBoxMethod : FunctionMethod
+	{
+		public GetTextBoxMethod()
+		{
+			ReturnType = typeof(string);
+			argumentTypeArray = new Type[] { };
+			CanRestructure = false;
+		}
+		public override string GetStrValue(ExpressionMediator exm, IOperandTerm[] arguments)
+		{
+			return exm.Console.GetTextBoxText() ?? "";
+		}
+	}
+
+	public sealed class MoveTextBoxMethod : FunctionMethod
+	{
+		public MoveTextBoxMethod()
+		{
+			ReturnType = typeof(Int64);
+			argumentTypeArray = new Type[] { typeof(Int64), typeof(Int64), typeof(Int64) };
+			CanRestructure = false;
+		}
+		public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+		{
+			var window = GlobalStatic.MainWindow;
+			if (window == null)
+				return 0;
+			int x = (int)arguments[0].GetIntValue(exm);
+			int y = (int)arguments[1].GetIntValue(exm);
+			int width = (int)arguments[2].GetIntValue(exm);
+			window.SetTextBoxPos(x, y, width);
+			return 1;
+		}
+	}
+
+	public sealed class ResumeTextBoxMethod : FunctionMethod
+	{
+		public ResumeTextBoxMethod()
+		{
+			ReturnType = typeof(Int64);
+			argumentTypeArray = new Type[] { };
+			CanRestructure = false;
+		}
+		public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+		{
+			var window = GlobalStatic.MainWindow;
+			if (window == null)
+				return 0;
+			window.ResetTextBoxPos();
+			return 1;
+		}
+	}
+
+	public sealed class MouseButtonMethod : FunctionMethod
+	{
+		public MouseButtonMethod()
+		{
+			ReturnType = typeof(string);
+			argumentTypeArray = new Type[] { };
+			CanRestructure = false;
+		}
+		public override string GetStrValue(ExpressionMediator exm, IOperandTerm[] arguments)
+		{
+			return GenericUtils.GetPointingButtonInput() ?? "";
+		}
+	}
+
+	public sealed class VarSetExMethod : FunctionMethod
+	{
+		public VarSetExMethod()
+		{
+			ReturnType = typeof(Int64);
+			argumentTypeArray = null;
+			CanRestructure = false;
+		}
+		public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+		{
+			if (arguments.Length < 2)
+				return name + "関数には少なくとも2つの引数が必要です";
+			if (arguments.Length > 5)
+				return name + "関数の引数が多すぎます";
+			if (arguments[0] == null || arguments[0].GetOperandType() != typeof(string))
+				return name + "関数の1番目の引数の型が正しくありません";
+			if (arguments[1] == null)
+				return name + "関数の2番目の引数が必要です";
+			if (arguments.Length >= 3 && arguments[2] != null && arguments[2].GetOperandType() != typeof(Int64))
+				return name + "関数の3番目の引数の型が正しくありません";
+			if (arguments.Length >= 4 && arguments[3] != null && arguments[3].GetOperandType() != typeof(Int64))
+				return name + "関数の4番目の引数の型が正しくありません";
+			if (arguments.Length >= 5 && arguments[4] != null && arguments[4].GetOperandType() != typeof(Int64))
+				return name + "関数の5番目の引数の型が正しくありません";
+			return null;
+		}
+		public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+		{
+			string varName = arguments[0].GetStrValue(exm) ?? "";
+			VariableTerm varTerm = ParseVarSetExTerm(varName);
+			if (varTerm == null || varTerm.Identifier == null)
+				throw new CodeEE(varName + "は未定義の変数です");
+			VariableToken token = varTerm.Identifier;
+			if (token.IsConst)
+				throw new CodeEE(varName + "は変更できません");
+
+			bool setAllDims = arguments.Length < 3 || arguments[2] == null || arguments[2].GetIntValue(exm) != 0;
+			int start = arguments.Length >= 4 && arguments[3] != null ? (int)arguments[3].GetIntValue(exm) : 0;
+			int end = arguments.Length >= 5 && arguments[4] != null ? (int)arguments[4].GetIntValue(exm) : GetVarSetExDefaultEnd(token);
+
+			if (token.IsArray1D)
+			{
+				ClampVarSetExRange(token.GetLength(), ref start, ref end);
+				for (int i = start; i < end; i++)
+					SetVarSetExValue(token, arguments[1], exm, new long[] { i });
+			}
+			else if (token.IsArray2D)
+			{
+				int len1 = token.GetLength();
+				int len2 = token.GetLength(1);
+				int selected1 = (int)GetVarSetExIndex(varTerm, 0, exm);
+				int selected2 = (int)GetVarSetExIndex(varTerm, 1, exm);
+				start = Math.Max(start, selected2);
+				ClampVarSetExRange(len2, ref start, ref end);
+				int firstBegin = setAllDims ? 0 : selected1;
+				int firstEnd = setAllDims ? len1 : selected1 + 1;
+				for (int i = firstBegin; i < firstEnd; i++)
+					for (int j = start; j < end; j++)
+						SetVarSetExValue(token, arguments[1], exm, new long[] { i, j });
+			}
+			else if (token.IsArray3D)
+			{
+				int len1 = token.GetLength();
+				int len2 = token.GetLength(1);
+				int len3 = token.GetLength(2);
+				int selected1 = (int)GetVarSetExIndex(varTerm, 0, exm);
+				int selected2 = (int)GetVarSetExIndex(varTerm, 1, exm);
+				int selected3 = (int)GetVarSetExIndex(varTerm, 2, exm);
+				start = Math.Max(start, selected3);
+				ClampVarSetExRange(len3, ref start, ref end);
+				int firstBegin = setAllDims ? 0 : selected1;
+				int firstEnd = setAllDims ? len1 : selected1 + 1;
+				int secondBegin = setAllDims ? 0 : selected2;
+				int secondEnd = setAllDims ? len2 : selected2 + 1;
+				for (int i = firstBegin; i < firstEnd; i++)
+					for (int j = secondBegin; j < secondEnd; j++)
+						for (int k = start; k < end; k++)
+							SetVarSetExValue(token, arguments[1], exm, new long[] { i, j, k });
+			}
+			else
+			{
+				SetVarSetExValue(token, arguments[1], exm, new long[0]);
+			}
+			return 1;
+		}
+
+		private static VariableTerm ParseVarSetExTerm(string name)
+		{
+			WordCollection wc = LexicalAnalyzer.Analyse(new StringStream(name), LexEndWith.EoL, LexAnalyzeFlag.None);
+			return ExpressionParser.ReduceExpressionTerm(wc, TermEndWith.EoL) as VariableTerm;
+		}
+
+		private static int GetVarSetExDefaultEnd(VariableToken token)
+		{
+			if (token.IsArray1D)
+				return token.GetLength();
+			if (token.IsArray2D)
+				return token.GetLength(1);
+			if (token.IsArray3D)
+				return token.GetLength(2);
+			return 0;
+		}
+
+		private static long GetVarSetExIndex(VariableTerm term, int dimension, ExpressionMediator exm)
+		{
+			try
+			{
+				return term.GetElementInt(dimension, exm);
+			}
+			catch
+			{
+				return 0;
+			}
+		}
+
+		private static void ClampVarSetExRange(int length, ref int start, ref int end)
+		{
+			if (start < 0)
+				start = 0;
+			if (end < start)
+				end = start;
+			if (end > length)
+				end = length;
+		}
+
+		private static void SetVarSetExValue(VariableToken token, IOperandTerm value, ExpressionMediator exm, long[] indexes)
+		{
+			if (token.VariableType == typeof(string))
+				token.SetValue(value.GetStrValue(exm) ?? "", indexes);
+			else if (token.VariableType == typeof(double))
+				token.SetValue(value.GetFloatValue(exm), indexes);
+			else
+				token.SetValue(value.GetIntValue(exm), indexes);
+		}
+	}
+
+	public sealed class RegexpMatchMethod : FunctionMethod
+	{
+		public RegexpMatchMethod()
+		{
+			ReturnType = typeof(Int64);
+			argumentTypeArray = null;
+			CanRestructure = false;
+		}
+		public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+		{
+			if (arguments.Length < 2)
+				return name + "関数には少なくとも2つの引数が必要です";
+			if (arguments.Length > 4)
+				return name + "関数の引数が多すぎます";
+			if (arguments[0] == null || arguments[0].GetOperandType() != typeof(string))
+				return name + "関数の1番目の引数の型が正しくありません";
+			if (arguments[1] == null || arguments[1].GetOperandType() != typeof(string))
+				return name + "関数の2番目の引数の型が正しくありません";
+			if (arguments.Length == 3 && arguments[2] != null && arguments[2].GetOperandType() != typeof(Int64))
+				return name + "関数の3番目の引数の型が正しくありません";
+			if (arguments.Length == 4)
+			{
+				if (!(arguments[2] is VariableTerm) || arguments[2].GetOperandType() != typeof(Int64))
+					return name + "関数の3番目の引数は整数変数である必要があります";
+				if (!(arguments[3] is VariableTerm) || arguments[3].GetOperandType() != typeof(string))
+					return name + "関数の4番目の引数は文字列配列変数である必要があります";
+				VariableTerm matchArray = (VariableTerm)arguments[3];
+				if (!matchArray.Identifier.IsArray1D)
+					return name + "関数の4番目の引数は文字列配列変数である必要があります";
+			}
+			return null;
+		}
+		static void OutputMatches(MatchCollection matches, Regex reg, string[] results)
+		{
+			int index = 0;
+			foreach (Match match in matches)
+			{
+				foreach (string name in reg.GetGroupNames())
+				{
+					if (index >= results.Length)
+						return;
+					results[index++] = match.Groups[name].Value;
+				}
+			}
+		}
+		static void OutputMatches(MatchCollection matches, Regex reg, VariableTerm resultArray, ExpressionMediator exm)
+		{
+			long length = resultArray.Identifier.GetLength();
+			long index = 0;
+			foreach (Match match in matches)
+			{
+				foreach (string name in reg.GetGroupNames())
+				{
+					if (index >= length)
+						return;
+					resultArray.Identifier.SetValue(match.Groups[name].Value, new long[] { index++ });
+				}
+			}
+		}
+		public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+		{
+			string baseString = arguments[0].GetStrValue(exm) ?? "";
+			string pattern = arguments[1].GetStrValue(exm) ?? "";
+			System.Text.RegularExpressions.Regex reg;
+			try
+			{
+				reg = new System.Text.RegularExpressions.Regex(pattern);
+			}
+			catch (ArgumentException e)
+			{
+				throw new CodeEE("無効な正規表現パターン: " + e.Message);
+			}
+			var matches = reg.Matches(baseString);
+			int ret = matches.Count;
+			if (arguments.Length == 3 && arguments[2].GetIntValue(exm) != 0)
+			{
+				exm.VEvaluator.RESULT_ARRAY[1] = reg.GetGroupNumbers().Length;
+				if (ret > 0 && matches[0].Groups.Count > 0)
+					OutputMatches(matches, reg, exm.VEvaluator.RESULTS_ARRAY);
+			}
+			if (arguments.Length == 4)
+			{
+				((VariableTerm)arguments[2]).SetValue(reg.GetGroupNumbers().Length, exm);
+				if (ret > 0)
+					OutputMatches(matches, reg, (VariableTerm)arguments[3], exm);
+			}
+			return ret;
+		}
+	}
+
+	public sealed class ExistMethMethod : FunctionMethod
+	{
+		public ExistMethMethod()
+		{
+			ReturnType = typeof(Int64);
+			argumentTypeArray = new Type[] { typeof(string) };
+			CanRestructure = false;
+		}
+		public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+		{
+			string name = arguments[0].GetStrValue(exm) ?? "";
+			try
+			{
+				var term = GlobalStatic.IdentifierDictionary.GetFunctionMethod(GlobalStatic.LabelDictionary, name, new IOperandTerm[0], true);
+				if (term == null)
+					return 0;
+				// Check return type
+				// gEmuera's GetFunctionMethod returns IOperandTerm which doesn't have GetEraType
+				// We approximate by checking if it's a UserDefinedRefMethodTerm or UserDefinedRefMethodNoArgTerm
+				if (term is UserDefinedRefMethodTerm || term is UserDefinedRefMethodNoArgTerm)
+					return 1; // User ref methods are typically int
+				return 1;
+			}
+			catch (CodeEE)
+			{
+				return 0;
+			}
+		}
+	}
+
+	public sealed class EnumNameMethod : FunctionMethod
+	{
+		readonly EType type;
+		readonly EAction action;
+		public EnumNameMethod(string typeStr, string actionStr)
+		{
+			this.type = (EType)System.Enum.Parse(typeof(EType), typeStr);
+			this.action = (EAction)System.Enum.Parse(typeof(EAction), actionStr);
+			ReturnType = typeof(Int64);
+			argumentTypeArray = new Type[] { typeof(string) };
+			CanRestructure = false;
+		}
+		public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+		{
+			string arg = arguments[0].GetStrValue(exm)?.ToUpperInvariant() ?? "";
+			List<string> source = new List<string>();
+			switch (type)
+			{
+				case EType.Function:
+					source.AddRange(GlobalStatic.LabelDictionary.NoneventKeys);
+					break;
+				case EType.Variable:
+					source.AddRange(GlobalStatic.IdentifierDictionary.VarKeys);
+					break;
+				case EType.Macro:
+					source.AddRange(GlobalStatic.IdentifierDictionary.MacroNames);
+					break;
+			}
+			List<string> strs = new List<string>();
+			if (arg.Length > 0)
+			{
+				foreach (string item in source)
+				{
+					string upper = item.ToUpperInvariant();
+					if (upper.Length < arg.Length)
+						continue;
+					switch (action)
+					{
+						case EAction.BeginsWith:
+							if (upper.StartsWith(arg, StringComparison.Ordinal))
+								strs.Add(item);
+							break;
+						case EAction.EndsWith:
+							if (upper.EndsWith(arg, StringComparison.Ordinal))
+								strs.Add(item);
+							break;
+						case EAction.With:
+							if (upper.Contains(arg))
+								strs.Add(item);
+							break;
+					}
+				}
+			}
+			string[] results = exm.VEvaluator.RESULTS_ARRAY;
+			int count = Math.Min(strs.Count, results.Length);
+			for (int i = 0; i < count; i++)
+				results[i] = strs[i];
+			return strs.Count;
+		}
+		enum EType { Function, Variable, Macro }
+		enum EAction { BeginsWith, EndsWith, With }
+	}
+
+	public sealed class GraphicsDrawGWithRotateMethod : FunctionMethod
+	{
+		public GraphicsDrawGWithRotateMethod()
+		{
+			ReturnType = typeof(Int64);
+			argumentTypeArray = new Type[] { typeof(Int64), typeof(Int64), typeof(Int64), typeof(Int64), typeof(Int64) };
+			CanRestructure = false;
+		}
+		public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+		{
+			if (Config.TextDrawingMode == TextDrawingMode.WINAPI)
+				throw new CodeEE(string.Format(Properties.Resources.RuntimeErrMesMethodGDIPLUSOnly, Name));
+			GraphicsImage dest = ReadGraphics(Name, exm, arguments, 0);
+			if (!dest.IsCreated)
+				return 0;
+			GraphicsImage src = ReadGraphics(Name, exm, arguments, 1);
+			if (!src.IsCreated)
+				return 0;
+			long angle = arguments[2].GetIntValue(exm);
+			int pivotX = (int)arguments[3].GetIntValue(exm);
+			int pivotY = (int)arguments[4].GetIntValue(exm);
+			dest.GDrawGWithRotate(src, angle, pivotX, pivotY);
+			return 1;
+		}
+	}
+
+	public sealed class GetDisplayLineMethod : FunctionMethod
+	{
+		public GetDisplayLineMethod()
+		{
+			ReturnType = typeof(string);
+			argumentTypeArray = new Type[] { typeof(Int64) };
+			CanRestructure = false;
+		}
+		public override string GetStrValue(ExpressionMediator exm, IOperandTerm[] arguments)
+		{
+			int index = (int)arguments[0].GetIntValue(exm);
+			return exm.Console.GetDisplayLine(index);
+		}
+	}
+
+	public sealed class GetDoingFunctionMethod : FunctionMethod
+	{
+		public GetDoingFunctionMethod()
+		{
+			ReturnType = typeof(string);
+			argumentTypeArray = new Type[] { };
+			CanRestructure = false;
+		}
+		public override string GetStrValue(ExpressionMediator exm, IOperandTerm[] arguments)
+		{
+			LogicalLine line = exm.Process.GetScaningLine();
+			if (line == null || line.ParentLabelLine == null)
+				return "";
+			return line.ParentLabelLine.LabelName ?? "";
+		}
+	}
+
+	public sealed class GetMethMethod : FunctionMethod
+	{
+		public GetMethMethod()
+		{
+			ReturnType = typeof(Int64);
+			argumentTypeArray = null;
+			CanRestructure = false;
+		}
+		public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+		{
+			if (arguments.Length < 1)
+				return name + "関数には少なくとも1つの引数が必要です";
+			if (arguments[0] == null || arguments[0].GetOperandType() != typeof(string))
+				return name + "関数の1番目の引数の型が正しくありません";
+			if (arguments.Length >= 2 && arguments[1] == null)
+				return name + "関数の2番目の引数が必要です";
+			return null;
+		}
+		public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+		{
+			string name = arguments[0].GetStrValue(exm) ?? "";
+			bool hasDefault = arguments.Length >= 2 && arguments[1] != null;
+			long defaultValue = hasDefault ? arguments[1].GetIntValue(exm) : 0L;
+			int argStart = hasDefault ? 2 : 1;
+			IOperandTerm[] methArgs = new IOperandTerm[arguments.Length - argStart];
+			for (int i = argStart; i < arguments.Length; i++)
+			{
+				if (arguments[i] == null)
+					methArgs[i - argStart] = new SingleTerm(0L);
+				else if (arguments[i].GetOperandType() == typeof(string))
+					methArgs[i - argStart] = new SingleTerm(arguments[i].GetStrValue(exm) ?? "");
+				else
+					methArgs[i - argStart] = new SingleTerm(arguments[i].GetIntValue(exm));
+			}
+			try
+			{
+				var term = GlobalStatic.IdentifierDictionary.GetFunctionMethod(GlobalStatic.LabelDictionary, name, methArgs, true);
+				if (term == null)
+				{
+					if (hasDefault)
+						return defaultValue;
+					throw new CodeEE("指定された関数名\"@" + name + "\"は存在しません");
+				}
+				return term.GetIntValue(exm);
+			}
+			catch (CodeEE)
+			{
+				if (!hasDefault)
+					throw;
+				return defaultValue;
+			}
+		}
+	}
+
+	public sealed class GetMethFMethod : FunctionMethod
+	{
+		public GetMethFMethod()
+		{
+			ReturnType = typeof(double);
+			argumentTypeArray = null;
+			CanRestructure = false;
+		}
+		public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+		{
+			if (arguments.Length < 1)
+				return name + "関数には少なくとも1つの引数が必要です";
+			if (arguments[0] == null || arguments[0].GetOperandType() != typeof(string))
+				return name + "関数の1番目の引数の型が正しくありません";
+			if (arguments.Length >= 2 && arguments[1] == null)
+				return name + "関数の2番目の引数が必要です";
+			return null;
+		}
+		public override SingleTerm GetReturnValue(ExpressionMediator exm, IOperandTerm[] arguments)
+		{
+			string name = arguments[0].GetStrValue(exm) ?? "";
+			bool hasDefault = arguments.Length >= 2 && arguments[1] != null;
+			double defaultValue = hasDefault ? arguments[1].GetFloatValue(exm) : 0.0d;
+			int argStart = hasDefault ? 2 : 1;
+			IOperandTerm[] methArgs = new IOperandTerm[arguments.Length - argStart];
+			for (int i = argStart; i < arguments.Length; i++)
+			{
+				if (arguments[i] == null)
+					methArgs[i - argStart] = new SingleTerm(0L);
+				else if (arguments[i].GetOperandType() == typeof(string))
+					methArgs[i - argStart] = new SingleTerm(arguments[i].GetStrValue(exm) ?? "");
+				else if (arguments[i].GetOperandType() == typeof(double))
+					methArgs[i - argStart] = new SingleTerm(arguments[i].GetFloatValue(exm));
+				else
+					methArgs[i - argStart] = new SingleTerm(arguments[i].GetIntValue(exm));
+			}
+			try
+			{
+				var term = GlobalStatic.IdentifierDictionary.GetFunctionMethod(GlobalStatic.LabelDictionary, name, methArgs, true);
+				if (term == null)
+				{
+					if (hasDefault)
+						return new SingleTerm(defaultValue);
+					throw new CodeEE("指定された関数名\"@" + name + "\"は存在しません");
+				}
+				return new SingleTerm(term.GetFloatValue(exm));
+			}
+			catch (CodeEE)
+			{
+				if (!hasDefault)
+					throw;
+				return new SingleTerm(defaultValue);
+			}
+		}
+	}
+
+	public sealed class GetMethSMethod : FunctionMethod
+	{
+		public GetMethSMethod()
+		{
+			ReturnType = typeof(string);
+			argumentTypeArray = null;
+			CanRestructure = false;
+		}
+		public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+		{
+			if (arguments.Length < 1)
+				return name + "関数には少なくとも1つの引数が必要です";
+			if (arguments[0] == null || arguments[0].GetOperandType() != typeof(string))
+				return name + "関数の1番目の引数の型が正しくありません";
+			if (arguments.Length >= 2 && arguments[1] == null)
+				return name + "関数の2番目の引数が必要です";
+			return null;
+		}
+		public override string GetStrValue(ExpressionMediator exm, IOperandTerm[] arguments)
+		{
+			string name = arguments[0].GetStrValue(exm) ?? "";
+			bool hasDefault = arguments.Length >= 2 && arguments[1] != null;
+			string defaultValue = hasDefault ? arguments[1].GetStrValue(exm) ?? "" : "";
+			int argStart = hasDefault ? 2 : 1;
+			IOperandTerm[] methArgs = new IOperandTerm[arguments.Length - argStart];
+			for (int i = argStart; i < arguments.Length; i++)
+			{
+				if (arguments[i] == null)
+					methArgs[i - argStart] = new SingleTerm(0L);
+				else if (arguments[i].GetOperandType() == typeof(string))
+					methArgs[i - argStart] = new SingleTerm(arguments[i].GetStrValue(exm) ?? "");
+				else
+					methArgs[i - argStart] = new SingleTerm(arguments[i].GetIntValue(exm));
+			}
+			try
+			{
+				var term = GlobalStatic.IdentifierDictionary.GetFunctionMethod(GlobalStatic.LabelDictionary, name, methArgs, true);
+				if (term == null)
+				{
+					if (hasDefault)
+						return defaultValue;
+					throw new CodeEE("指定された関数名\"@" + name + "\"は存在しません");
+				}
+				return term.GetStrValue(exm) ?? defaultValue;
+			}
+			catch (CodeEE)
+			{
+				if (!hasDefault)
+					throw;
+				return defaultValue;
+			}
+		}
+	}
+		private sealed class EvalMethod : FunctionMethod
+		{
+			public EvalMethod()
+			{
+				ReturnType = typeof(Int64);
+				argumentTypeArray = null;
+				CanRestructure = false;
+			}
+			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+			{
+				if (arguments.Length < 1)
+					return name + "関数には少なくとも1つの引数が必要です";
+				if (arguments.Length > 2)
+					return name + "関数の引数が多すぎます";
+				if (arguments[0] == null || arguments[0].GetOperandType() != typeof(string))
+					return name + "関数の1番目の引数の型が正しくありません";
+				if (arguments.Length >= 2 && arguments[1] != null && arguments[1].GetOperandType() != typeof(Int64))
+					return name + "関数の2番目の引数の型が正しくありません";
+				return null;
+			}
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				string expressionStr = arguments[0].GetStrValue(exm);
+				long defaultValue = arguments.Length > 1 && arguments[1] != null ? arguments[1].GetIntValue(exm) : 0;
+				if (string.IsNullOrWhiteSpace(expressionStr))
+					return defaultValue;
+				try
+				{
+					WordCollection wc = LexicalAnalyzer.Analyse(new StringStream(expressionStr), LexEndWith.EoL, LexAnalyzeFlag.None);
+					IOperandTerm term = ExpressionParser.ReduceExpressionTerm(wc, TermEndWith.EoL);
+					if (term == null)
+						return defaultValue;
+					term = term.Restructure(exm);
+					if (term.GetOperandType() == typeof(Int64))
+						return term.GetIntValue(exm);
+					else if (term.GetOperandType() == typeof(double))
+						return (long)term.GetFloatValue(exm);
+					else
+						return defaultValue;
+				}
+				catch
+				{
+					return defaultValue;
+				}
+			}
+		}
+
+		private sealed class EvalSMethod : FunctionMethod
+		{
+			public EvalSMethod()
+			{
+				ReturnType = typeof(string);
+				argumentTypeArray = null;
+				CanRestructure = false;
+			}
+			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+			{
+				if (arguments.Length < 1)
+					return name + "関数には少なくとも1つの引数が必要です";
+				if (arguments.Length > 2)
+					return name + "関数の引数が多すぎます";
+				if (arguments[0] == null || arguments[0].GetOperandType() != typeof(string))
+					return name + "関数の1番目の引数の型が正しくありません";
+				if (arguments.Length >= 2 && arguments[1] != null && arguments[1].GetOperandType() != typeof(string))
+					return name + "関数の2番目の引数の型が正しくありません";
+				return null;
+			}
+			public override string GetStrValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				string expressionStr = arguments[0].GetStrValue(exm);
+				string defaultValue = arguments.Length > 1 && arguments[1] != null ? arguments[1].GetStrValue(exm) : "";
+				if (string.IsNullOrWhiteSpace(expressionStr))
+					return defaultValue;
+				try
+				{
+					WordCollection wc = LexicalAnalyzer.Analyse(new StringStream(expressionStr), LexEndWith.EoL, LexAnalyzeFlag.None);
+					IOperandTerm term = ExpressionParser.ReduceExpressionTerm(wc, TermEndWith.EoL);
+					if (term == null)
+						return defaultValue;
+					term = term.Restructure(exm);
+					if (term.GetOperandType() == typeof(string))
+						return term.GetStrValue(exm);
+					else if (term.GetOperandType() == typeof(double))
+						return term.GetFloatValue(exm).ToString();
+					else
+						return defaultValue;
+				}
+				catch
+				{
+					return defaultValue;
+				}
+			}
+		}
+
+		private sealed class MatchAllMethod : FunctionMethod
+		{
+			public MatchAllMethod()
+			{
+				ReturnType = typeof(Int64);
+				argumentTypeArray = null;
+				CanRestructure = false;
+			}
+			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+			{
+				if (arguments.Length < 2)
+					return name + "関数には少なくとも2つの引数が必要です";
+				if (arguments.Length > 5)
+					return name + "関数の引数が多すぎます";
+				if (arguments[0] == null)
+					return name + "関数の1番目の引数は省略できません";
+				if (!(arguments[0] is VariableTerm))
+					return name + "関数の1番目の引数が変数ではありません";
+				if (arguments[1] == null)
+					return name + "関数の2番目の引数は省略できません";
+				if (arguments.Length >= 3 && arguments[2] != null && arguments[2].GetOperandType() != typeof(Int64))
+					return name + "関数の3番目の引数の型が正しくありません";
+				if (arguments.Length >= 4 && arguments[3] != null && arguments[3].GetOperandType() != typeof(Int64))
+					return name + "関数の4番目の引数の型が正しくありません";
+				if (arguments.Length >= 5 && arguments[4] != null && !(arguments[4] is VariableTerm))
+					return name + "関数の5番目の引数は変数である必要があります";
+				return null;
+			}
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				VariableTerm varTerm = (VariableTerm)arguments[0];
+				VariableToken token = varTerm.Identifier;
+				Type targetType = arguments[1].GetOperandType();
+				long beg = (arguments.Length > 2 && arguments[2] != null) ? arguments[2].GetIntValue(exm) : 0;
+				long end;
+				if (token.IsCharacterData)
+					end = exm.VEvaluator.CHARANUM;
+				else if (token.IsArray1D)
+					end = token.GetLength();
+				else
+					end = 1;
+				if (arguments.Length > 3 && arguments[3] != null)
+					end = arguments[3].GetIntValue(exm);
+				if (beg < 0 || end < 0)
+					throw new CodeEE("検索範囲に負の値が渡されました");
+				if (beg > end)
+					throw new CodeEE("検索範囲の指定が不正です");
+				long maxLen = token.IsCharacterData ? exm.VEvaluator.CHARANUM : token.IsArray1D ? token.GetLength() : 1;
+				if (end > maxLen)
+					end = maxLen;
+				VariableTerm outArr = null;
+				if (arguments.Length > 4 && arguments[4] != null)
+					outArr = (VariableTerm)arguments[4];
+				long count = 0;
+				long[] idxs = new long[2];
+				if (targetType == typeof(Int64))
+				{
+					long targetValue = arguments[1].GetIntValue(exm);
+					for (long i = beg; i < end; i++)
+					{
+						idxs[0] = i;
+						if (token.GetIntValue(exm, idxs) == targetValue)
+						{
+							if (outArr != null)
+							{
+								try
+								{
+									long outLen = outArr.Identifier.GetLength();
+									if (count < outLen)
+										outArr.Identifier.SetValue(i, new long[] { count });
+								}
+								catch { }
+							}
+							count++;
+						}
+					}
+				}
+				else if (targetType == typeof(string))
+				{
+					string targetStr = arguments[1].GetStrValue(exm);
+					for (long i = beg; i < end; i++)
+					{
+						idxs[0] = i;
+						if (token.GetStrValue(exm, idxs) == targetStr)
+						{
+							if (outArr != null)
+							{
+								try
+								{
+									long outLen = outArr.Identifier.GetLength();
+									if (count < outLen)
+										outArr.Identifier.SetValue(i, new long[] { count });
+								}
+								catch { }
+							}
+							count++;
+						}
+					}
+				}
+				else
+				{
+					throw new CodeEE("MATCHALL: サポートされていない型です");
+				}
+				return count;
+			}
+		}
+
+		private sealed class MatchAllExMethod : FunctionMethod
+		{
+			public MatchAllExMethod()
+			{
+				ReturnType = typeof(Int64);
+				argumentTypeArray = null;
+				CanRestructure = false;
+			}
+			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+			{
+				if (arguments.Length < 2)
+					return name + "関数には少なくとも2つの引数が必要です";
+				if (arguments.Length > 5)
+					return name + "関数の引数が多すぎます";
+				if (arguments[0] == null)
+					return name + "関数の1番目の引数は省略できません";
+				if (arguments[0].GetOperandType() != typeof(string))
+					return name + "関数の1番目の引数が文字列ではありません";
+				if (arguments[1] == null)
+					return name + "関数の2番目の引数は省略できません";
+				if (arguments.Length >= 3 && arguments[2] != null && arguments[2].GetOperandType() != typeof(Int64))
+					return name + "関数の3番目の引数の型が正しくありません";
+				if (arguments.Length >= 4 && arguments[3] != null && arguments[3].GetOperandType() != typeof(Int64))
+					return name + "関数の4番目の引数の型が正しくありません";
+				if (arguments.Length >= 5 && arguments[4] != null && !(arguments[4] is VariableTerm))
+					return name + "関数の5番目の引数は変数である必要があります";
+				return null;
+			}
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				string varName = arguments[0].GetStrValue(exm);
+				VariableToken token = null;
+				try
+				{
+					WordCollection wc = LexicalAnalyzer.Analyse(new StringStream(varName), LexEndWith.EoL, LexAnalyzeFlag.None);
+					IdentifierWord id = wc.Current as IdentifierWord;
+					if (id != null)
+					{
+						wc.ShiftNext();
+						token = ExpressionParser.ReduceVariableIdentifier(wc, id.Code);
+					}
+				}
+				catch { }
+				if (token == null)
+					throw new CodeEE("変数 " + varName + " が見つかりません");
+				Type targetType = arguments[1].GetOperandType();
+				long beg = (arguments.Length > 2 && arguments[2] != null) ? arguments[2].GetIntValue(exm) : 0;
+				long end;
+				if (token.IsCharacterData)
+					end = exm.VEvaluator.CHARANUM;
+				else if (token.IsArray1D)
+					end = token.GetLength();
+				else
+					end = 1;
+				if (arguments.Length > 3 && arguments[3] != null)
+					end = arguments[3].GetIntValue(exm);
+				if (beg < 0 || end < 0)
+					throw new CodeEE("検索範囲に負の値が渡されました");
+				if (beg > end)
+					throw new CodeEE("検索範囲の指定が不正です");
+				long maxLen = token.IsCharacterData ? exm.VEvaluator.CHARANUM : token.IsArray1D ? token.GetLength() : 1;
+				if (end > maxLen)
+					end = maxLen;
+				VariableTerm outArr = null;
+				if (arguments.Length > 4 && arguments[4] != null)
+					outArr = (VariableTerm)arguments[4];
+				long count = 0;
+				long[] idxs = new long[2];
+				if (targetType == typeof(Int64))
+				{
+					long targetValue = arguments[1].GetIntValue(exm);
+					for (long i = beg; i < end; i++)
+					{
+						idxs[0] = i;
+						if (token.GetIntValue(exm, idxs) == targetValue)
+						{
+							if (outArr != null)
+							{
+								try
+								{
+									long outLen = outArr.Identifier.GetLength();
+									if (count < outLen)
+										outArr.Identifier.SetValue(i, new long[] { count });
+								}
+								catch { }
+							}
+							count++;
+						}
+					}
+				}
+				else if (targetType == typeof(string))
+				{
+					string targetStr = arguments[1].GetStrValue(exm);
+					for (long i = beg; i < end; i++)
+					{
+						idxs[0] = i;
+						if (token.GetStrValue(exm, idxs) == targetStr)
+						{
+							if (outArr != null)
+							{
+								try
+								{
+									long outLen = outArr.Identifier.GetLength();
+									if (count < outLen)
+										outArr.Identifier.SetValue(i, new long[] { count });
+								}
+								catch { }
+							}
+							count++;
+						}
+					}
+				}
+				else
+				{
+					throw new CodeEE("MATCHALLEX: サポートされていない型です");
+				}
+				return count;
+			}
+		}
+
+		private sealed class ExistVarMethod : FunctionMethod
+		{
+			public ExistVarMethod()
+			{
+				ReturnType = typeof(Int64);
+				argumentTypeArray = null;
+				CanRestructure = true;
+			}
+			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+			{
+				if (arguments.Length < 1)
+					return name + "関数には少なくとも1つの引数が必要です";
+				if (arguments.Length > 2)
+					return name + "関数の引数が多すぎます";
+				if (arguments[0] == null || arguments[0].GetOperandType() != typeof(string))
+					return name + "関数の1番目の引数の型が正しくありません";
+				if (arguments.Length >= 2 && arguments[1] != null && arguments[1].GetOperandType() != typeof(Int64))
+					return name + "関数の2番目の引数の型が正しくありません";
+				return null;
+			}
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				string name = arguments[0].GetStrValue(exm);
+				long mode = (arguments.Length > 1 && arguments[1] != null) ? arguments[1].GetIntValue(exm) : 0;
+				if (mode == 0)
+				{
+					try
+					{
+						VariableToken token = GlobalStatic.IdentifierDictionary.GetVariableToken(name, null, true);
+						if (token != null)
+						{
+							long res = 0;
+							if (token.IsInteger)
+								res |= 1;
+							else if (token.IsString)
+								res |= 2;
+							else if (token.IsFloat)
+								res |= 32;
+							if (token.IsConst)
+								res |= 4;
+							if (token.IsArray2D)
+								res |= 8;
+							if (token.IsArray3D)
+								res |= 16;
+							return res;
+						}
+					}
+					catch
+					{
+						return 0;
+					}
+				}
+				else
+				{
+					try
+					{
+						WordCollection wc = LexicalAnalyzer.Analyse(new StringStream(name), LexEndWith.EoL, LexAnalyzeFlag.None);
+						IOperandTerm term = ExpressionParser.ReduceExpressionTerm(wc, TermEndWith.EoL);
+						return term != null ? 1 : 0;
+					}
+					catch
+					{
+						return 0;
+					}
+				}
+				return 0;
+			}
+		}
+
+		private sealed class SetVarMethod : FunctionMethod
+		{
+			public SetVarMethod()
+			{
+				ReturnType = typeof(Int64);
+				argumentTypeArray = null;
+				CanRestructure = false;
+			}
+			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+			{
+				if (arguments.Length < 2)
+					return name + "関数には少なくとも2つの引数が必要です";
+				if (arguments.Length > 3)
+					return name + "関数の引数が多すぎます";
+				if (arguments[0] == null || arguments[0].GetOperandType() != typeof(string))
+					return name + "関数の1番目の引数の型が正しくありません";
+				if (arguments[1] == null)
+					return name + "関数の2番目の引数は省略できません";
+				if (arguments.Length >= 3 && arguments[2] != null && arguments[2].GetOperandType() != typeof(Int64))
+					return name + "関数の3番目の引数の型が正しくありません";
+				return null;
+			}
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				long defaultValue = arguments.Length > 2 && arguments[2] != null ? arguments[2].GetIntValue(exm) : 0;
+				bool hasDefault = arguments.Length > 2 && arguments[2] != null;
+				string name = arguments[0].GetStrValue(exm);
+				VariableTerm varTerm = null;
+				try
+				{
+					WordCollection wc = LexicalAnalyzer.Analyse(new StringStream(name), LexEndWith.EoL, LexAnalyzeFlag.None);
+					IOperandTerm term = ExpressionParser.ReduceExpressionTerm(wc, TermEndWith.EoL);
+					varTerm = term as VariableTerm;
+				}
+				catch { }
+				if (varTerm == null || varTerm.Identifier == null || varTerm.Identifier.IsConst)
+					return hasDefault ? defaultValue : throw new CodeEE(name + "は変数ではありません");
+				Type varType = varTerm.Identifier.VariableType;
+				Type valType = arguments[1].GetOperandType();
+				if (varType == typeof(string))
+				{
+					if (valType != typeof(string))
+						return hasDefault ? defaultValue : throw new CodeEE(name + "は文字列型ではありません");
+					varTerm.SetValue(arguments[1].GetStrValue(exm), exm);
+				}
+				else if (varType == typeof(double))
+				{
+					if (valType != typeof(double) && valType != typeof(Int64))
+						return hasDefault ? defaultValue : throw new CodeEE(name + "は小数型ではありません");
+					varTerm.SetValue(arguments[1].GetFloatValue(exm), exm);
+				}
+				else
+				{
+					if (valType != typeof(Int64))
+						return hasDefault ? defaultValue : throw new CodeEE(name + "は整数型ではありません");
+					varTerm.SetValue(arguments[1].GetIntValue(exm), exm);
+				}
+				return 1;
+			}
+		}
+
+		private sealed class IsDefinedMethod : FunctionMethod
+		{
+			public IsDefinedMethod()
+			{
+				ReturnType = typeof(Int64);
+				argumentTypeArray = new Type[] { typeof(string) };
+				CanRestructure = true;
+			}
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				string name = arguments[0].GetStrValue(exm);
+				if (string.IsNullOrWhiteSpace(name))
+					return 0;
+				var macro = GlobalStatic.IdentifierDictionary.GetMacro(name);
+				return macro != null ? 1 : 0;
+			}
+		}
+
+		private sealed class ClearMemoryMethod : FunctionMethod
+		{
+			public ClearMemoryMethod()
+			{
+				ReturnType = typeof(Int64);
+				argumentTypeArray = new Type[0];
+				CanRestructure = false;
+			}
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				long before = GC.GetTotalMemory(false);
+				GC.Collect();
+				long after = GC.GetTotalMemory(false);
+				return before - after;
+			}
+		}
+
+		private sealed class GetMemoryUsageMethod : FunctionMethod
+		{
+			public GetMemoryUsageMethod()
+			{
+				ReturnType = typeof(Int64);
+				argumentTypeArray = new Type[0];
+				CanRestructure = false;
+			}
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				using (System.Diagnostics.Process proc = System.Diagnostics.Process.GetCurrentProcess())
+				{
+					return proc.WorkingSet64;
+				}
+			}
+		}
+
+		private sealed class OutputLogMethod : FunctionMethod
+		{
+			public OutputLogMethod()
+			{
+				ReturnType = typeof(Int64);
+				argumentTypeArray = null;
+				CanRestructure = false;
+			}
+			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+			{
+				if (arguments.Length > 2)
+					return name + "関数の引数が多すぎます";
+				if (arguments.Length >= 1 && arguments[0] != null && arguments[0].GetOperandType() != typeof(string))
+					return name + "関数の1番目の引数の型が正しくありません";
+				if (arguments.Length >= 2 && arguments[1] != null && arguments[1].GetOperandType() != typeof(Int64))
+					return name + "関数の2番目の引数の型が正しくありません";
+				return null;
+			}
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				string filename = arguments.Length > 0 && arguments[0] != null ? arguments[0].GetStrValue(exm) : null;
+				bool hideInfo = arguments.Length > 1 && arguments[1] != null && arguments[1].GetIntValue(exm) != 0;
+				return exm.Console.OutputLog(filename, hideInfo) ? 1 : 0;
+			}
+		}
+		public sealed class ErdNameMethod : FunctionMethod
+		{
+			public ErdNameMethod()
+			{
+				ReturnType = typeof(string);
+				argumentTypeArray = null;
+				CanRestructure = false;
+			}
+			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+			{
+				if (arguments.Length < 2)
+						return name + "関数には少なくとも2つの引数が必要です";
+					if (arguments.Length > 3)
+						return name + "関数の引数が多すぎます";
+					if (arguments[0] == null || !(arguments[0] is VariableTerm))
+						return name + "関数の1番目の引数の型が正しくありません";
+					if (arguments[1] == null || arguments[1].GetOperandType() != typeof(Int64))
+						return name + "関数の2番目の引数の型が正しくありません";
+					if (arguments.Length == 3 && arguments[2] != null && arguments[2].GetOperandType() != typeof(Int64))
+						return name + "関数の3番目の引数の型が正しくありません";
+					return null;
+			}
+			public override string GetStrValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				VariableTerm varTerm = (VariableTerm)arguments[0];
+				string varName = varTerm.Identifier.Name;
+				long value = arguments[1].GetIntValue(exm);
+				int index = arguments.Length > 2 && arguments[2] != null ? (int)arguments[2].GetIntValue(exm) : -1;
+				if (index >= 0)
+					varName = varName + "@" + index;
+				return TryIntegerToKeyword(varName, value, index);
+			}
+			static string TryIntegerToKeyword(string variableName, long value, int index)
+			{
+				if (string.IsNullOrWhiteSpace(variableName))
+						return "";
+				var constantData = MinorShift.Emuera.GlobalStatic.ConstantData;
+				if (constantData != null && constantData.TryIntegerToKeyword(out string erdValue, value, variableName))
+					return erdValue;
+				string name = variableName.Trim();
+				int atIndex = name.IndexOf('@');
+				if (atIndex >= 0)
+						name = name.Substring(0, atIndex);
+				int colonIndex = name.IndexOf(':');
+				if (colonIndex >= 0)
+						name = name.Substring(0, colonIndex);
+				if (!System.Enum.TryParse<MinorShift.Emuera.GameData.Variable.VariableCode>(name, true, out var legacyCode))
+						return "";
+				if (constantData == null)
+						return "";
+				Dictionary<string, int> dictionary;
+				try
+				{
+					dictionary = constantData.GetKeywordDictionary(out _, legacyCode, index);
+				}
+				catch
+				{
+					return "";
+				}
+				if (dictionary == null)
+						return "";
+				foreach (var pair in dictionary)
+				{
+					if (pair.Value == value)
+							return pair.Key;
+				}
+				return "";
+			}
+		}
+
+		public sealed class ToStrfMethod : FunctionMethod
+		{
+			public ToStrfMethod()
+			{
+				ReturnType = typeof(string);
+				argumentTypeArray = null;
+				CanRestructure = false;
+			}
+			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+			{
+				if (arguments.Length < 1)
+						return name + "関数には少なくとも1つの引数が必要です";
+					if (arguments.Length > 2)
+						return name + "関数の引数が多すぎます";
+					return null;
+			}
+			public override string GetStrValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				double value = arguments[0].GetFloatValue(exm);
+				if (arguments.Length < 2)
+						return value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+				string format = arguments[1].GetStrValue(exm) ?? "";
+				try
+				{
+					return value.ToString(format, System.Globalization.CultureInfo.InvariantCulture);
+				}
+				catch (System.FormatException)
+				{
+					throw new CodeEE("TOSTRF: 無効な書式指定文字列です");
+				}
+			}
+		}
+
+
+
+		public sealed class EnumFilesMethod : FunctionMethod
+			{
+			public EnumFilesMethod()
+				{
+				ReturnType = typeof(Int64);
+				argumentTypeArray = null;
+				CanRestructure = false;
+				}
+				public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+				{
+				if (arguments.Length < 1)
+					return name + "関数には少なくとも1つの引数が必要です";
+				if (arguments.Length > 4)
+					return name + "関数の引数が多すぎます";
+				if (arguments[0] == null || arguments[0].GetOperandType() != typeof(string))
+					return name + "関数の1番目の引数の型が正しくありません";
+				return null;
+				}
+				public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+				{
+				string dir = arguments[0].GetStrValue(exm) ?? "";
+				if (string.IsNullOrWhiteSpace(dir) || !System.IO.Directory.Exists(dir))
+					return -1;
+				string pattern = arguments.Length > 1 && arguments[1] != null ? arguments[1].GetStrValue(exm) : "*";
+				bool recursive = arguments.Length > 2 && arguments[2] != null && arguments[2].GetIntValue(exm) != 0;
+				int resultsIndex = arguments.Length > 3 && arguments[3] != null ? (int)arguments[3].GetIntValue(exm) : 0;
+				if (resultsIndex < 0) resultsIndex = 0;
+				System.IO.SearchOption option = recursive ? System.IO.SearchOption.AllDirectories : System.IO.SearchOption.TopDirectoryOnly;
+				string[] files;
+				try
+				{
+					files = System.IO.Directory.EnumerateFiles(dir, string.IsNullOrEmpty(pattern) ? "*" : pattern, option).ToArray();
+				}
+				catch
+				{
+					return -1;
+				}
+				string[] results = exm.VEvaluator.RESULTS_ARRAY;
+				int offset = Math.Min(resultsIndex, results.Length);
+				int count = Math.Min(files.Length, results.Length - offset);
+				for (int i = 0; i < count; i++)
+					results[offset + i] = files[i];
+				return files.Length;
+				}
+			}
+
+		public sealed class GetVarMethod : FunctionMethod
+			{
+			public GetVarMethod()
+				{
+				ReturnType = typeof(Int64);
+				argumentTypeArray = null;
+				CanRestructure = false;
+				}
+				public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+				{
+				if (arguments.Length < 1)
+					return name + "関数には少なくとも1つの引数が必要です";
+				if (arguments.Length > 2)
+					return name + "関数の引数が多すぎます";
+				if (arguments[0] == null || arguments[0].GetOperandType() != typeof(string))
+					return name + "関数の1番目の引数の型が正しくありません";
+				return null;
+				}
+				public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+				{
+				bool hasDefault = arguments.Length > 1 && arguments[1] != null;
+				long defaultValue = hasDefault ? arguments[1].GetIntValue(exm) : 0;
+				string name = arguments[0].GetStrValue(exm) ?? "";
+				VariableTerm varTerm = null;
+				try
+				{
+					WordCollection wc = LexicalAnalyzer.Analyse(new StringStream(name), LexEndWith.EoL, LexAnalyzeFlag.None);
+					IOperandTerm term = ExpressionParser.ReduceExpressionTerm(wc, TermEndWith.EoL);
+					varTerm = term as VariableTerm;
+				}
+				catch
+				{
+					if (hasDefault)
+						return defaultValue;
+					throw new CodeEE(name + "は変数ではありません");
+				}
+				if (varTerm == null || varTerm.Identifier == null)
+					return hasDefault ? defaultValue : throw new CodeEE(name + "は変数ではありません");
+				try
+				{
+					if (varTerm.Identifier.VariableType == typeof(Int64))
+						return varTerm.GetIntValue(exm);
+				}
+				catch
+				{
+					if (hasDefault)
+						return defaultValue;
+					throw;
+				}
+				return hasDefault ? defaultValue : throw new CodeEE(name + "は整数型ではありません");
+				}
+			}
+
+		public sealed class GetVarSMethod : FunctionMethod
+			{
+			public GetVarSMethod()
+				{
+				ReturnType = typeof(string);
+				argumentTypeArray = null;
+				CanRestructure = false;
+				}
+				public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+				{
+				if (arguments.Length < 1)
+					return name + "関数には少なくとも1つの引数が必要です";
+				if (arguments.Length > 2)
+					return name + "関数の引数が多すぎます";
+				if (arguments[0] == null || arguments[0].GetOperandType() != typeof(string))
+					return name + "関数の1番目の引数の型が正しくありません";
+				return null;
+				}
+				public override string GetStrValue(ExpressionMediator exm, IOperandTerm[] arguments)
+				{
+				bool hasDefault = arguments.Length > 1 && arguments[1] != null;
+				string defaultValue = hasDefault ? arguments[1].GetStrValue(exm) ?? "" : "";
+				string name = arguments[0].GetStrValue(exm) ?? "";
+				VariableTerm varTerm = null;
+				try
+				{
+					WordCollection wc = LexicalAnalyzer.Analyse(new StringStream(name), LexEndWith.EoL, LexAnalyzeFlag.None);
+					IOperandTerm term = ExpressionParser.ReduceExpressionTerm(wc, TermEndWith.EoL);
+					varTerm = term as VariableTerm;
+				}
+				catch
+				{
+					if (hasDefault)
+						return defaultValue;
+					throw new CodeEE(name + "は変数ではありません");
+				}
+				if (varTerm == null || varTerm.Identifier == null)
+					return hasDefault ? defaultValue : throw new CodeEE(name + "は変数ではありません");
+				try
+				{
+					if (varTerm.Identifier.VariableType == typeof(string))
+						return varTerm.GetStrValue(exm) ?? defaultValue;
+				}
+				catch
+				{
+					if (hasDefault)
+						return defaultValue;
+					throw;
+				}
+				return hasDefault ? defaultValue : throw new CodeEE(name + "は文字列型ではありません");
+				}
+			}
+
+			public sealed class GetVarFMethod : FunctionMethod
+				{
+				public GetVarFMethod()
+					{
+					ReturnType = typeof(double);
+					argumentTypeArray = null;
+					CanRestructure = false;
+					}
+					public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+					{
+					if (arguments.Length < 1)
+						return name + "関数には少なくとも1つの引数が必要です";
+					if (arguments.Length > 2)
+						return name + "関数の引数が多すぎます";
+					if (arguments[0] == null || arguments[0].GetOperandType() != typeof(string))
+						return name + "関数の1番目の引数の型が正しくありません";
+					return null;
+					}
+					public override SingleTerm GetReturnValue(ExpressionMediator exm, IOperandTerm[] arguments)
+					{
+					bool hasDefault = arguments.Length > 1 && arguments[1] != null;
+					double defaultValue = hasDefault ? arguments[1].GetFloatValue(exm) : 0.0;
+					string name = arguments[0].GetStrValue(exm) ?? "";
+					VariableTerm varTerm = null;
+					try
+					{
+						WordCollection wc = LexicalAnalyzer.Analyse(new StringStream(name), LexEndWith.EoL, LexAnalyzeFlag.None);
+						IOperandTerm term = ExpressionParser.ReduceExpressionTerm(wc, TermEndWith.EoL);
+						varTerm = term as VariableTerm;
+					}
+					catch
+					{
+						if (hasDefault)
+							return new SingleTerm(defaultValue);
+						throw new CodeEE(name + "は変数ではありません");
+					}
+					if (varTerm == null || varTerm.Identifier == null)
+						return hasDefault ? new SingleTerm(defaultValue) : throw new CodeEE(name + "は変数ではありません");
+					try
+					{
+						if (varTerm.Identifier.IsFloat)
+							return new SingleTerm(varTerm.GetFloatValue(exm));
+					}
+					catch
+					{
+						if (hasDefault)
+							return new SingleTerm(defaultValue);
+						throw;
+					}
+					return hasDefault ? new SingleTerm(defaultValue) : throw new CodeEE(name + "は小数型ではありません");
+					}
+				}
+
+			#region FlowInput / HotkeyState
+
+			private static long[] hotkeyStateArray;
+
+			public sealed class FlowInputMethod : FunctionMethod
+			{
+				public FlowInputMethod()
+				{
+					ReturnType = typeof(Int64);
+					argumentTypeArray = null;
+					CanRestructure = false;
+				}
+				public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+				{
+					if (arguments.Length < 1)
+						return name + "関数には少なくとも1つの引数が必要です";
+					if (arguments.Length > 4)
+						return name + "関数の引数が多すぎます";
+					for (int i = 0; i < arguments.Length; i++)
+					{
+						if (arguments[i] == null || arguments[i].GetOperandType() != typeof(Int64))
+							return name + "関数の引数の型が正しくありません";
+					}
+					return null;
+				}
+				public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+				{
+					exm.Process.flowinputDef = arguments[0].GetIntValue(exm);
+					if (arguments.Length > 1)
+						exm.Process.flowinput = arguments[1].GetIntValue(exm) != 0;
+					if (arguments.Length > 2)
+						exm.Process.flowinputCanSkip = arguments[2].GetIntValue(exm) != 0;
+					if (arguments.Length > 3)
+						exm.Process.flowinputForceSkip = arguments[3].GetIntValue(exm) != 0;
+					return 0;
+				}
+			}
+
+			public sealed class FlowInputsMethod : FunctionMethod
+			{
+				public FlowInputsMethod()
+				{
+					ReturnType = typeof(Int64);
+					argumentTypeArray = null;
+					CanRestructure = false;
+				}
+				public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+				{
+					if (arguments.Length < 1)
+						return name + "関数には少なくとも1つの引数が必要です";
+					if (arguments.Length > 2)
+						return name + "関数の引数が多すぎます";
+					if (arguments[0] == null || arguments[0].GetOperandType() != typeof(Int64))
+						return name + "関数の1番目の引数の型が正しくありません";
+					if (arguments.Length > 1 && (arguments[1] == null || arguments[1].GetOperandType() != typeof(string)))
+						return name + "関数の2番目の引数の型が正しくありません";
+					return null;
+				}
+				public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+				{
+					exm.Process.flowinputString = arguments[0].GetIntValue(exm) != 0;
+					if (arguments.Length > 1)
+						exm.Process.flowinputDefString = arguments[1].GetStrValue(exm) ?? "";
+					return 0;
+				}
+			}
+
+			public sealed class HotkeyStateInitMethod : FunctionMethod
+			{
+				public HotkeyStateInitMethod()
+				{
+					ReturnType = typeof(Int64);
+					argumentTypeArray = new Type[] { typeof(Int64) };
+					CanRestructure = false;
+				}
+				public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+				{
+					long size = arguments[0].GetIntValue(exm);
+					if (size < 0 || size > int.MaxValue)
+						throw new CodeEE("HOTKEY_STATE_INITのサイズが範囲外です");
+					hotkeyStateArray = new long[(int)size];
+					return 0;
+				}
+			}
+
+			public sealed class HotkeyStateMethod : FunctionMethod
+			{
+				public HotkeyStateMethod()
+				{
+					ReturnType = typeof(Int64);
+					argumentTypeArray = new Type[] { typeof(Int64), typeof(Int64) };
+					CanRestructure = false;
+				}
+				public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+				{
+					if (hotkeyStateArray == null)
+						throw new CodeEE("HOTKEY_STATE_INITを先に呼び出す必要があります");
+					long index = arguments[0].GetIntValue(exm);
+					long value = arguments[1].GetIntValue(exm);
+					if (index < 0 || index >= hotkeyStateArray.Length)
+						throw new CodeEE("HOTKEY_STATEのインデックスが範囲外です");
+					hotkeyStateArray[index] = value;
+					return 0;
+				}
+			}
+
+			#endregion
+
+			#endregion
+		}
 }

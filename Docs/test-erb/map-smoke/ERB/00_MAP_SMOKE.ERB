@@ -1,0 +1,61 @@
+; MAP Smoke Test
+; Purpose: verify MAP_CREATE, MAP_SET, MAP_GET, MAP_HAS, MAP_REMOVE, MAP_CLEAR, MAP_SIZE, MAP_GETKEYS, MAP_VALUES.
+; Expected output (first screen):
+;   === MAP SMOKE ===
+;   PASS: create
+;   1
+;   PASS: set and get
+;   value1
+;   PASS: has key
+;   1
+;   PASS: remove key
+;   1
+;   PASS: size after remove
+;   1
+;   PASS: clear
+;   1
+;   PASS: size after clear
+;   0
+;   PASS: keys
+;   keyA
+;   PASS: values
+;   valA
+;   PASS: merge
+;   1
+;   PASS: merged value
+;   valB
+;   PASS: MAP smoke finished
+;   [WAIT prompt]
+
+@EVENTFIRST
+PRINTL === MAP SMOKE ===
+PRINTL PASS: create
+PRINTVL MAP_CREATE("m")
+PRINTL PASS: set and get
+PRINTVL MAP_SET("m", "k1", "value1")
+PRINTSL MAP_GET("m", "k1")
+PRINTL PASS: has key
+PRINTVL MAP_HAS("m", "k1")
+PRINTL PASS: remove key
+PRINTVL MAP_REMOVE("m", "k1")
+PRINTL PASS: size after remove
+PRINTVL MAP_SIZE("m")
+MAP_SET("m", "k2", "value2")
+PRINTL PASS: clear
+PRINTVL MAP_CLEAR("m")
+PRINTL PASS: size after clear
+PRINTVL MAP_SIZE("m")
+MAP_SET("m", "keyA", "valA")
+PRINTL PASS: keys
+PRINTSL MAP_GETKEYS("m")
+PRINTL PASS: values
+PRINTSL MAP_VALUES("m")
+PRINTL PASS: merge
+PRINTVL MAP_CREATE("m2")
+PRINTVL MAP_SET("m2", "keyA", "valB")
+PRINTVL MAP_MERGE("m", "m2")
+PRINTL PASS: merged value
+PRINTSL MAP_GET("m", "keyA")
+PRINTL PASS: MAP smoke finished
+WAIT
+RETURN 0

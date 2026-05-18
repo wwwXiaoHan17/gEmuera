@@ -1,0 +1,35 @@
+; CALLSTR / TRYCALLSTR Smoke Test
+; Purpose: verify dynamic string-based function calls.
+; Expected output (first screen):
+;   === CALLSTR SMOKE ===
+;   PASS: CALLSTR direct
+;   PASS: CALLSTR via variable
+;   PASS: TRYCALLSTR missing is silent
+;   PASS: TRYCALLSTR existing works
+;   PASS: CALLSTR smoke finished
+;   [WAIT prompt]
+
+@EVENTFIRST
+PRINTL === CALLSTR SMOKE ===
+CALLSTR "TARGET_A"
+#DIMS FUNC_NAME
+FUNC_NAME = "TARGET_B"
+CALLSTR FUNC_NAME
+TRYCALLSTR "NO_SUCH_FUNC"
+PRINTL PASS: TRYCALLSTR missing is silent
+TRYCALLSTR "TARGET_C"
+PRINTL PASS: CALLSTR smoke finished
+WAIT
+RETURN 0
+
+@TARGET_A
+PRINTL PASS: CALLSTR direct
+RETURN 0
+
+@TARGET_B
+PRINTL PASS: CALLSTR via variable
+RETURN 0
+
+@TARGET_C
+PRINTL PASS: TRYCALLSTR existing works
+RETURN 0

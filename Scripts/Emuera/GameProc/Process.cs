@@ -59,12 +59,17 @@ namespace MinorShift.Emuera.GameProc
             Stopwatch loadStopwatch = Stopwatch.StartNew();
             void MarkLoad(string stage)
             {
-                if (Program.IsSnakeProfile)
+                if (Config.DisplayReport)
                     GenericUtils.Info($"[LOADTIME] {stage}: {loadStopwatch.ElapsedMilliseconds}ms");
             }
             try
             {
 				ParserMediator.Initialize(console);
+				Preload.Clear();
+				Preload.Load(Program.CsvDir);
+				Preload.Load(Program.ErbDir);
+				Preload.Load(Program.ContentDir);
+				MarkLoad("preload");
 				//コンフィグファイルに関するエラーの処理（コンフィグファイルはこの関数に入る前に読込済み）
 				if (ParserMediator.HasWarning)
 				{
@@ -201,7 +206,7 @@ namespace MinorShift.Emuera.GameProc
                 if (Program.AnalysisMode)
                     noError = loader.loadErbs(Program.AnalysisFiles, labelDic);
                 else
-                    noError = loader.LoadErbFiles(Program.ErbDir, Config.DisplayReport, labelDic, Config.UseLazyLoading);
+                    noError = loader.LoadErbFiles(Program.ErbDir, Config.DisplayReport, labelDic, Config.UseLazyLoading && Program.SupportsLazyLoading);
 				GenericUtils.Info($"[LOAD] ERB loaded, noError={noError}");
 				MarkLoad("erb");
                 initSystemProcess();
@@ -230,7 +235,7 @@ namespace MinorShift.Emuera.GameProc
 			saveCurrentState(false);
 			state.SystemState = SystemStateCode.System_Reloaderb;
 			ErbLoader loader = new ErbLoader(console, exm, this);
-            loader.LoadErbFiles(Program.ErbDir, false, labelDic, Config.UseLazyLoading);
+            loader.LoadErbFiles(Program.ErbDir, false, labelDic, Config.UseLazyLoading && Program.SupportsLazyLoading);
 			console.ReadAnyKey();
 		}
 
@@ -296,9 +301,9 @@ namespace MinorShift.Emuera.GameProc
 			startTime = _Library.WinmmTimer.TickCount;
 			state.lineCount = 0;
 			bool systemProcRunning = true;
-			try
+			while (true)
 			{
-				while (true)
+				try
 				{
 					methodStack = 0;
 					systemProcRunning = true;
@@ -309,16 +314,51 @@ namespace MinorShift.Emuera.GameProc
 					systemProcRunning = false;
 					runScriptProc();
 				}
-			}
-			catch (Exception ec)
-			{
-				LogicalLine currentLine = state.ErrorLine;
-				if (currentLine != null && currentLine is NullLine)
-					currentLine = null;
-				if (systemProcRunning)
-					handleExceptionInSystemProc(ec, currentLine, true);
-				else
-					handleException(ec, currentLine, true);
+				catch (Exception ec)
+				{
+					LogicalLine currentLine = state.ErrorLine;
+					if (currentLine != null && currentLine is NullLine)
+						currentLine = null;
+					if (state.InBeforeError)
+					{
+						LogicalLine errorLine = state.PendingErrorCurrentLine;
+						if (errorLine != null && errorLine is NullLine)
+							errorLine = null;
+						if (errorLine == null)
+							errorLine = currentLine;
+						if (state.PendingErrorSystemProc)
+							handleExceptionInSystemProc(ec, errorLine, true);
+						else
+							handleException(ec, errorLine, true);
+						return;
+					}
+					if (state.SkipBeforeError)
+					{
+						state.SkipBeforeError = false;
+						LogicalLine throwLine = state.PendingThrowLine ?? currentLine;
+						state.PendingThrowLine = null;
+						if (systemProcRunning)
+							handleExceptionInSystemProc(ec, throwLine, true);
+						else
+							handleException(ec, throwLine, true);
+						return;
+					}
+					state.InBeforeError = true;
+					var beforeError = CalledFunction.CallEventFunction(this, "BEFORE_ERROR", null);
+					if (beforeError != null)
+					{
+						state.IntoFunction(beforeError, null, null);
+						state.PendingErrorException = ec;
+						state.PendingErrorCurrentLine = currentLine;
+						state.PendingErrorSystemProc = systemProcRunning;
+						continue;
+					}
+					state.InBeforeError = false;
+					if (systemProcRunning)
+						handleExceptionInSystemProc(ec, currentLine, true);
+					else
+						handleException(ec, currentLine, true);
+				}
 			}
 		}
 		

@@ -39,8 +39,17 @@ namespace MinorShift.Emuera.GameData.Expression
         {
             get { return type == typeof(string); }
         }
+        public bool IsFloat
+        {
+            get { return type == typeof(double); }
+        }
         readonly Type type;
-        
+
+        public virtual double GetFloatValue(ExpressionMediator exm)
+        {
+            return GetIntValue(exm);
+        }
+
 		/// <summary>
 		/// 定数を解体して可能ならSingleTerm化する
 		/// defineの都合上、2回以上呼ばれる可能性がある

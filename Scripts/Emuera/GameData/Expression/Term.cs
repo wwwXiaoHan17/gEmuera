@@ -44,8 +44,14 @@ namespace MinorShift.Emuera.GameData.Expression
 		{
 			sValue = s;
 		}
+        public SingleTerm(double d)
+            : base(typeof(double))
+		{
+			fValue = d;
+		}
 		readonly Int64 iValue;
 		string sValue;
+		readonly double fValue;
 
         public override long GetIntValue(ExpressionMediator exm)
         {
@@ -54,6 +60,10 @@ namespace MinorShift.Emuera.GameData.Expression
         public override string GetStrValue(ExpressionMediator exm)
         {
             return sValue;
+        }
+        public override double GetFloatValue(ExpressionMediator exm)
+        {
+            return fValue;
         }
         public override SingleTerm GetValue(ExpressionMediator exm)
         {
@@ -80,12 +90,23 @@ namespace MinorShift.Emuera.GameData.Expression
 				return iValue;
 			}
 		}
+
+		public double Float
+		{
+			get
+			{
+				return fValue;
+			}
+		}
+
 		public override string ToString()
 		{
 			if (GetOperandType() == typeof(Int64))
 				return iValue.ToString();
             if (GetOperandType() == typeof(string))
 				return sValue.ToString();
+            if (GetOperandType() == typeof(double))
+				return fValue.ToString();
 			return base.ToString();
 		}
 		

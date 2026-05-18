@@ -47,6 +47,7 @@ namespace MinorShift.Emuera
 		{
 			MinorShift.Emuera.GameData.Function.SnakeSqlManager.CloseAll();
 			MinorShift.Emuera.Modern.Script.Functions.ModernSqlManager.CloseAll();
+			MinorShift.Emuera.GameData.Function.RuntimeDataStore.Clear();
 			Process = null;
 			ConstantData = null;
 			GameBaseData = null;

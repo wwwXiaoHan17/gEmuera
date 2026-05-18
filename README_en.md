@@ -8,7 +8,16 @@ Emuera is the execution engine for Japanese eramaker-series text games, parsing 
 
 ## Features
 
-- Full Emuera 1824+v18 engine compatibility
+- Unified `Emuera1824+v24+EMv18+EEv55` core
+- v18 game compatibility; native v24 / EE / EM extension support
+- `DIMF` / `FUNCTIONF` / `LOCALF` / `ARGF` / `RESULTF` floating-point support
+- `VARIADIC` variadic functions, `#REF` / `#REFS` / `#REFF` reference parameters
+- `SETIMAGELAYER` / `CLEARIMAGELAYER` image layer control, `SETANIMETIMER` animation timer
+- `EXISTFUNCTION` with lazyload on-demand loading trigger
+- Optional Lazyload acceleration (`lazyloading.cfg` + on-demand loading)
+- Snake compatibility profile (compatibility config on the same core, not a separate core)
+- Save compatibility: v18 saves are readable; v24 new saves are not guaranteed backward to old v18 engines
+- Honest unimplemented list: SafeArithmetic, sprite flip, animation pause/resume, zip-compressed saves, etc. are not yet implemented
 - ERB script execution, CSV data loading, SHIFT-JIS/UTF-8 encoding support
 - GPU-accelerated ColorMatrix color transforms (desktop, character portrait tinting)
 - Godot native `Image.BlendRect` sprite compositing (high-performance pixel blending)

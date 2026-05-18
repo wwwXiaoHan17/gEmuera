@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 //using System.Runtime.InteropServices;
@@ -15,7 +15,7 @@ namespace MinorShift._Library
 	///     source rectangle is to be combined with the color data for the destination
 	///     rectangle to achieve the final color.
 	/// </summary>
-	/// 
+	///
 	[global::System.Reflection.Obfuscation(Exclude=false)]
 	internal enum TernaryRasterOperations : uint
 	{
@@ -201,11 +201,11 @@ namespace MinorShift._Library
 		}
 		public static uint SetTextColor(Color color)
 		{
-            //if (color == lastTextColor)
-            //	return 0;
-            //lastTextColor = color;
-            //return SetTextColor(hDC, ColorTranslator.ToWin32(color));
-            return 1;
+			//if (color == lastTextColor)
+			//	return 0;
+			//lastTextColor = color;
+			//return SetTextColor(hDC, ColorTranslator.ToWin32(color));
+			return 1;
 		}
 
 		public static void SetBrushColor(Color color)
@@ -268,7 +268,7 @@ namespace MinorShift._Library
 			////TextOut(hDC, p.X, p.Y, str, str.Length);
 			//TabbedTextOutW(hDC, x, y, str, str.Length, 0, ref devnull, 0);
 		}
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+
 		public static void FillRect(Rectangle rect)
 		{
 			//Rectangle(hDC, rect.X, rect.Y, rect.Right, rect.Bottom);
@@ -301,52 +301,52 @@ namespace MinorShift._Library
 			//	StretchBlt(hDC, destX, destY, width, height, srchDC, srcRect.X, srcRect.Y, srcRect.Width, srcRect.Height, TernaryRasterOperations.SRCCOPY);
 		}
 
-        public static void DrawImage(int destX, int destY, int width, int hegith,
-                    Bitmap texture, Rectangle srcrect)
-        { }
+		public static void DrawImage(int destX, int destY, int width, int hegith,
+					Bitmap texture, Rectangle srcrect)
+		{ }
 
-        #region MesureText用
+		#region MesureText用
 
-        static IntPtr hDCMesureText;
+		static IntPtr hDCMesureText;
 		static Font mtLastFont = null;
 		static IntPtr mtDefaulthFont;
 
 		static Size MeasureText98(string str, Font font)
 		{
-            //if (mtLastFont != font)
-            //{
-            //	IntPtr hFont = font.ToHfont();
-            //	IntPtr hOldFont = SelectObject(hDCMesureText, hFont);
-            //	if (mtLastFont == null)
-            //		mtDefaulthFont = hOldFont;
-            //	else
-            //		DeleteObject(hOldFont);
-            //	mtLastFont = font;
-            //	GetTextExtentPoint32(hDCMesureText, "あ", "あ".Length, out fontMetrics);
-            //}
-            //int ret = GetTabbedTextExtentW(hDCMesureText, str, LangManager.GetStrlenLang(str), 0, ref devnull);
-            //Size size = new Size(ret & 0xffff, (ret >> 16) & 0xffff);
-            //return size;
-            return new Size(16, 16);
+			//if (mtLastFont != font)
+			//{
+			//	IntPtr hFont = font.ToHfont();
+			//	IntPtr hOldFont = SelectObject(hDCMesureText, hFont);
+			//	if (mtLastFont == null)
+			//		mtDefaulthFont = hOldFont;
+			//	else
+			//		DeleteObject(hOldFont);
+			//	mtLastFont = font;
+			//	GetTextExtentPoint32(hDCMesureText, "あ", "あ".Length, out fontMetrics);
+			//}
+			//int ret = GetTabbedTextExtentW(hDCMesureText, str, LangManager.GetStrlenLang(str), 0, ref devnull);
+			//Size size = new Size(ret & 0xffff, (ret >> 16) & 0xffff);
+			//return size;
+			return new Size(16, 16);
 		}
 		static Size MeasureTextNT(string str, Font font)
 		{
-            //if (mtLastFont != font)
-            //{
-            //	IntPtr hFont = font.ToHfont();
-            //	IntPtr hOldFont = SelectObject(hDCMesureText, hFont);
-            //	if (mtLastFont == null)
-            //		mtDefaulthFont = hOldFont;
-            //	else
-            //		DeleteObject(hOldFont);
-            //	mtLastFont = font;
-            //	GetTextExtentPoint32(hDCMesureText, "あ", "あ".Length, out fontMetrics);
-            //}
-            //int ret = GetTabbedTextExtentW(hDCMesureText, str, str.Length, 0, ref devnull);
-            //Size size = new Size(ret & 0xffff, (ret >> 16) & 0xffff);
-            //return size;
-            return new Size(16, 16);
-        }
+			//if (mtLastFont != font)
+			//{
+			//	IntPtr hFont = font.ToHfont();
+			//	IntPtr hOldFont = SelectObject(hDCMesureText, hFont);
+			//	if (mtLastFont == null)
+			//		mtDefaulthFont = hOldFont;
+			//	else
+			//		DeleteObject(hOldFont);
+			//	mtLastFont = font;
+			//	GetTextExtentPoint32(hDCMesureText, "あ", "あ".Length, out fontMetrics);
+			//}
+			//int ret = GetTabbedTextExtentW(hDCMesureText, str, str.Length, 0, ref devnull);
+			//Size size = new Size(ret & 0xffff, (ret >> 16) & 0xffff);
+			//return size;
+			return new Size(16, 16);
+		}
 
 		public static void GdiMesureTextStart(Graphics g)
 		{

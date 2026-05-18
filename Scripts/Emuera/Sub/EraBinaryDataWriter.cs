@@ -120,6 +120,30 @@ namespace MinorShift.Emuera.Sub
 				writer.Write(key);
 				writeData((string[, ,])v);
 			}
+			else if (v is double)
+			{
+				writer.Write((byte)EraSaveDataType.Float);
+				writer.Write(key);
+				writeData((double)v);
+			}
+			else if (v is double[])
+			{
+				writer.Write((byte)EraSaveDataType.FloatArray);
+				writer.Write(key);
+				writeData((double[])v);
+			}
+			else if (v is double[,])
+			{
+				writer.Write((byte)EraSaveDataType.FloatArray2D);
+				writer.Write(key);
+				writeData((double[,])v);
+			}
+			else if (v is double[, ,])
+			{
+				writer.Write((byte)EraSaveDataType.FloatArray3D);
+				writer.Write(key);
+				writeData((double[, ,])v);
+			}
 		}
 
 		#region private
@@ -385,6 +409,130 @@ namespace MinorShift.Emuera.Sub
 								countZero = 0;
 							}
 							writer.Write(Ebdb.String);
+							writer.Write(array[x,y,z]);
+						}
+					}
+					if (countZero == length2)
+						countAllZero++;
+					else
+						writer.Write(Ebdb.EoA1);
+					countZero = 0;
+				}
+				if (countAllZero == length1)
+					countAllZero2D++;
+				else
+					writer.Write(Ebdb.EoA2);
+				countAllZero = 0;
+			}
+			writer.Write(Ebdb.EoD);
+		}
+
+		private void writeData(double v)
+		{
+			writer.Write(v);
+		}
+
+		private void writeData(double[] array)
+		{
+			writer.Write((Int32)array.Length);
+			int countZero = 0;
+			for(int x = 0; x < array.Length; x++)
+			{
+				if (array[x] == 0)
+					countZero++;
+				else
+				{
+					if (countZero > 0)
+					{
+						writer.Write(Ebdb.Zero);
+						this.m_WriteInt(countZero);
+						countZero = 0;
+					}
+					writer.Write(array[x]);
+				}
+			}
+			writer.Write(Ebdb.EoD);
+		}
+
+		private void writeData(double[,] array)
+		{
+			int countZero = 0;
+			int countAllZero = 0;
+			int length0 = array.GetLength(0);
+			int length1 = array.GetLength(1);
+			writer.Write(length0);
+			writer.Write(length1);
+			for(int x = 0; x < length0; x++)
+			{
+				for(int y = 0; y < length1; y++)
+				{
+					if (array[x,y] == 0)
+						countZero++;
+					else
+					{
+						if (countAllZero > 0)
+						{
+							writer.Write(Ebdb.ZeroA1);
+							this.m_WriteInt(countAllZero);
+							countAllZero = 0;
+						}
+						if (countZero > 0)
+						{
+							writer.Write(Ebdb.Zero);
+							this.m_WriteInt(countZero);
+							countZero = 0;
+						}
+						writer.Write(array[x,y]);
+					}
+				}
+				if (countZero == length1)
+					countAllZero++;
+				else
+					writer.Write(Ebdb.EoA1);
+				countZero = 0;
+			}
+			writer.Write(Ebdb.EoD);
+		}
+
+		private void writeData(double[, ,] array)
+		{
+			int countZero = 0;
+			int countAllZero = 0;
+			int countAllZero2D = 0;
+			int length0 = array.GetLength(0);
+			int length1 = array.GetLength(1);
+			int length2 = array.GetLength(2);
+			writer.Write(length0);
+			writer.Write(length1);
+			writer.Write(length2);
+			for(int x = 0; x < length0; x++)
+			{
+				for(int y = 0; y < length1; y++)
+				{
+					for(int z = 0; z < length2; z++)
+					{
+						if (array[x,y,z] == 0)
+							countZero++;
+						else
+						{
+							if (countAllZero2D > 0)
+							{
+								writer.Write(Ebdb.ZeroA2);
+								this.m_WriteInt(countAllZero2D);
+								countAllZero2D = 0;
+							}
+							if (countAllZero > 0)
+							{
+								writer.Write(Ebdb.ZeroA1);
+								this.m_WriteInt(countAllZero);
+								countAllZero = 0;
+							}
+							if (countZero > 0)
+							{
+								writer.Write(Ebdb.Zero);
+								this.m_WriteInt(countZero);
+								countZero = 0;
+							}
 							writer.Write(array[x,y,z]);
 						}
 					}

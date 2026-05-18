@@ -131,6 +131,9 @@ namespace MinorShift.Emuera
 		SystemNoTarget,
 		SystemIgnoreStringSet,
 		UseLazyLoading,
+		UseERD,
+		VarsizeDimConfig,
+		CheckDuplicateIdentifier,
 
 		MoneyLabel = 100,
 		MoneyFirst = 101,

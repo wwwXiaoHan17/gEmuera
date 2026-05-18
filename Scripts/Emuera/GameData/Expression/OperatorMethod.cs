@@ -215,7 +215,7 @@ namespace MinorShift.Emuera.GameData.Expression
 
 			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
 			{
-				return arguments[0].GetIntValue(exm) + arguments[1].GetIntValue(exm);
+				return SafeArithmetic.SafeAdd(arguments[0].GetIntValue(exm), arguments[1].GetIntValue(exm));
 			}
 		}
 
@@ -244,7 +244,7 @@ namespace MinorShift.Emuera.GameData.Expression
 
 			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
 			{
-				return arguments[0].GetIntValue(exm) - arguments[1].GetIntValue(exm);
+				return SafeArithmetic.SafeSubtract(arguments[0].GetIntValue(exm), arguments[1].GetIntValue(exm));
 			}
 		}
 
@@ -258,7 +258,7 @@ namespace MinorShift.Emuera.GameData.Expression
 
 			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
 			{
-				return arguments[0].GetIntValue(exm) * arguments[1].GetIntValue(exm);
+				return SafeArithmetic.SafeMultiply(arguments[0].GetIntValue(exm), arguments[1].GetIntValue(exm));
 			}
 		}
 
@@ -312,9 +312,7 @@ namespace MinorShift.Emuera.GameData.Expression
 			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
 	        {
 				Int64 right = arguments[1].GetIntValue(exm);
-				if (right == 0)
-					throw new CodeEE("0による除算が行なわれました");
-				return arguments[0].GetIntValue(exm) / right;
+				return SafeArithmetic.SafeDivide(arguments[0].GetIntValue(exm), right);
 			}
 		}
 
@@ -329,9 +327,7 @@ namespace MinorShift.Emuera.GameData.Expression
 			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
 	        {
 				Int64 right = arguments[1].GetIntValue(exm);
-				if (right == 0)
-					throw new CodeEE("0による除算が行なわれました");
-				return arguments[0].GetIntValue(exm) % right;
+				return SafeArithmetic.SafeModulo(arguments[0].GetIntValue(exm), right);
 			}
 		}
 
@@ -706,7 +702,7 @@ namespace MinorShift.Emuera.GameData.Expression
 
 			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
 			{
-				return -arguments[0].GetIntValue(exm);
+				return SafeArithmetic.SafeNegate(arguments[0].GetIntValue(exm));
 			}
 		}
 
@@ -778,7 +774,7 @@ namespace MinorShift.Emuera.GameData.Expression
 			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
 			{
 				VariableTerm var = (VariableTerm)arguments[0];
-				return var.PlusValue(1L, exm) - 1;
+				return SafeArithmetic.SafeSubtract(var.PlusValue(1L, exm), 1);
 			}
 		}
 
@@ -793,7 +789,7 @@ namespace MinorShift.Emuera.GameData.Expression
 			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
 			{
 				VariableTerm var = (VariableTerm)arguments[0];
-				return var.PlusValue(-1L, exm) + 1;
+				return SafeArithmetic.SafeAdd(var.PlusValue(-1L, exm), 1);
 			}
 		}
 

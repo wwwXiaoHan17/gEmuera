@@ -343,6 +343,7 @@ internal static class ModernSqlManager
 		foreach (var connection in connections.Values)
 			connection.Dispose();
 		connections.Clear();
+		nextReaderId = 1;
 	}
 
 	static object ExecuteScalar(string dbName, string sql, object[] parameters)
@@ -393,7 +394,22 @@ internal static class ModernSqlManager
 	{
 		if (string.IsNullOrWhiteSpace(path))
 			throw new ArgumentException("SQL file path is empty.");
-		string resolved = Path.IsPathRooted(path) ? path : Path.Combine(StorageDirectory, path);
+		string resolved;
+		if (Path.IsPathRooted(path))
+		{
+			resolved = path;
+		}
+		else if (createParent)
+		{
+			string baseDir = !string.IsNullOrEmpty(MinorShift.Emuera.Program.ExeDir)
+				? MinorShift.Emuera.Program.ExeDir
+				: Directory.GetCurrentDirectory();
+			resolved = Path.Combine(baseDir, path);
+		}
+		else
+		{
+			resolved = ResolveExistingDataPath(path);
+		}
 		if (createParent)
 		{
 			string directory = Path.GetDirectoryName(resolved);
@@ -401,6 +417,28 @@ internal static class ModernSqlManager
 				Directory.CreateDirectory(directory);
 		}
 		return resolved;
+	}
+
+	static string ResolveExistingDataPath(string path)
+	{
+		foreach (string candidate in BuildDataPathCandidates(path))
+		{
+			if (File.Exists(candidate))
+				return candidate;
+		}
+		throw new FileNotFoundException("SQL XML file not found.", path);
+	}
+
+	static IEnumerable<string> BuildDataPathCandidates(string path)
+	{
+		if (!string.IsNullOrEmpty(MinorShift.Emuera.Program.WorkingDir))
+			yield return Path.Combine(MinorShift.Emuera.Program.WorkingDir, path);
+		if (!string.IsNullOrEmpty(MinorShift.Emuera.Program.ExeDir))
+			yield return Path.Combine(MinorShift.Emuera.Program.ExeDir, path);
+		if (!string.IsNullOrEmpty(MinorShift.Emuera.Program.ContentDir))
+			yield return Path.Combine(MinorShift.Emuera.Program.ContentDir, path);
+		yield return Path.Combine(StorageDirectory, path);
+		yield return path;
 	}
 
 	static string QuoteIdentifier(string identifier)

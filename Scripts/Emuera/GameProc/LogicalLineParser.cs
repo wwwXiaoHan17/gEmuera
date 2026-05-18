@@ -14,6 +14,15 @@ namespace MinorShift.Emuera.GameProc
 {
 	internal static class LogicalLineParser
 	{
+		static Type GetFunctionReturnType(string token)
+		{
+			if (token == "FUNCTIONS")
+				return typeof(string);
+			if (token == "FUNCTIONF")
+				return typeof(double);
+			return typeof(Int64);
+		}
+
 		public static bool ParseSharpLine(FunctionLabelLine label, StringStream st, ScriptPosition position, List<string> OnlyLabel)
 		{
 			st.ShiftNext();//'#'を飛ばす
@@ -152,15 +161,24 @@ namespace MinorShift.Emuera.GameProc
 						}
 						if (label.IsMethod)
 						{
-							if ((label.MethodType == typeof(Int64) && (token == "FUNCTION" || token == "FUNCTIONF")) || (label.MethodType == typeof(string) && token == "FUNCTIONS"))
+							Type requestedType = GetFunctionReturnType(token);
+							if (label.MethodType == requestedType)
 							{
 								ParserMediator.Warn("関数" + label.LabelName + "にはすでに#" + token + "が宣言されています(この行は無視されます)", position, 1);
 								return false;
 							}
 							if (label.MethodType == typeof(Int64) && token == "FUNCTIONS")
 								ParserMediator.Warn("関数" + label.LabelName + "にはすでに#FUNCTIONが宣言されています", position, 2);
+							else if (label.MethodType == typeof(Int64) && token == "FUNCTIONF")
+								ParserMediator.Warn("関数" + label.LabelName + "にはすでに#FUNCTIONが宣言されています", position, 2);
 							else if (label.MethodType == typeof(string) && token == "FUNCTION")
 								ParserMediator.Warn("関数" + label.LabelName + "にはすでに#FUNCTIONSが宣言されています", position, 2);
+							else if (label.MethodType == typeof(string) && token == "FUNCTIONF")
+								ParserMediator.Warn("関数" + label.LabelName + "にはすでに#FUNCTIONSが宣言されています", position, 2);
+							else if (label.MethodType == typeof(double) && token == "FUNCTION")
+								ParserMediator.Warn("関数" + label.LabelName + "にはすでに#FUNCTIONFが宣言されています", position, 2);
+							else if (label.MethodType == typeof(double) && token == "FUNCTIONS")
+								ParserMediator.Warn("関数" + label.LabelName + "にはすでに#FUNCTIONFが宣言されています", position, 2);
 							return false;
 						}
 						if (label.Depth == 0)
@@ -170,10 +188,7 @@ namespace MinorShift.Emuera.GameProc
 						}
 						label.IsMethod = true;
 						label.Depth = 0;
-						if (token == "FUNCTIONS")
-							label.MethodType = typeof(string);
-						else
-							label.MethodType = typeof(Int64);
+						label.MethodType = GetFunctionReturnType(token);
 						if (label.IsPri)
 						{
 							ParserMediator.Warn("式中関数では#PRIは機能しません", position, 1);
@@ -254,7 +269,21 @@ namespace MinorShift.Emuera.GameProc
 					case "DIMS":
 					case "DIMF":
 						{
-							UserDefinedVariableData data = UserDefinedVariableData.Create(wc, token == "DIMS", true, position);
+							UserDefinedVariableData data = UserDefinedVariableData.Create(wc, token == "DIMS", token == "DIMF", true, position);
+							if (!label.AddPrivateVariable(data))
+							{
+								ParserMediator.Warn("変数名" + data.Name + "は既に使用されています", position, 2);
+								return false;
+							}
+							break;
+						}
+					case "REF":
+					case "REFS":
+					case "REFF":
+						{
+							bool isStr = token == "REFS";
+							bool isFloat = token == "REFF";
+							UserDefinedVariableData data = UserDefinedVariableData.CreateRefScalar(wc, isStr, isFloat, true, position);
 							if (!label.AddPrivateVariable(data))
 							{
 								ParserMediator.Warn("変数名" + data.Name + "は既に使用されています", position, 2);
@@ -281,7 +310,7 @@ namespace MinorShift.Emuera.GameProc
 
 		private static WordCollection AnalyzeSharpArguments(StringStream st, string token)
 		{
-			if (Program.IsSnakeProfile && string.Equals(token, "DIMF", StringComparison.OrdinalIgnoreCase))
+			if (string.Equals(token, "DIMF", StringComparison.OrdinalIgnoreCase))
 				return LexicalAnalyzer.Analyse(new StringStream(NormalizeSnakeFloatLiterals(st.Substring())), LexEndWith.EoL, LexAnalyzeFlag.AllowAssignment);
 			return LexicalAnalyzer.Analyse(st, LexEndWith.EoL, LexAnalyzeFlag.AllowAssignment);
 		}
@@ -291,11 +320,12 @@ namespace MinorShift.Emuera.GameProc
 			if (token == null)
 				return false;
 			if (token == "SINGLE" || token == "LATER" || token == "PRI" || token == "ONLY"
-				|| token == "FUNCTION" || token == "FUNCTIONS"
+				|| token == "FUNCTION" || token == "FUNCTIONS" || token == "FUNCTIONF"
 				|| token == "LOCALSIZE" || token == "LOCALSSIZE"
-				|| token == "DIM" || token == "DIMS")
+				|| token == "DIM" || token == "DIMS" || token == "DIMF"
+				|| token == "REF" || token == "REFS" || token == "REFF")
 				return true;
-			return Program.IsSnakeProfile && (token == "FUNCTIONF" || token == "DIMF");
+			return false;
 		}
 
 		private static string NormalizeSnakeFloatLiterals(string source)

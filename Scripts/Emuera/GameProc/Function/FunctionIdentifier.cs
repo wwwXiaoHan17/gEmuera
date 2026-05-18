@@ -84,48 +84,12 @@ namespace MinorShift.Emuera.GameProc.Function
 			addPrintFunction(FunctionCode.PRINTFORMN);
 			addPrintFunction(FunctionCode.PRINTFORMSN);
 
-			addFunction(FunctionCode.INPUTANY, new WAITANYKEY_Instruction());
-			addFunction(FunctionCode.BINPUT, new INPUT_Instruction());
-			addFunction(FunctionCode.BINPUTS, new INPUTS_Instruction());
-			addFunction(FunctionCode.ONEBINPUT, new ONEINPUT_Instruction());
-			addFunction(FunctionCode.ONEBINPUTS, new ONEINPUTS_Instruction());
-
-			addFunction(FunctionCode.JUMPSTR, new CALL_Instruction(false, true, false, false));
-			addFunction(FunctionCode.CALLSTR, new CALL_Instruction(false, false, false, false));
-			addFunction(FunctionCode.TRYJUMPSTR, new CALL_Instruction(false, true, true, false), EXTENDED);
-			addFunction(FunctionCode.TRYCALLSTR, new CALL_Instruction(false, false, true, false), EXTENDED);
-			addFunction(FunctionCode.TRYCJUMPSTR, new CALL_Instruction(false, true, true, true), EXTENDED);
-			addFunction(FunctionCode.TRYCCALLSTR, new CALL_Instruction(false, false, true, true), EXTENDED);
-
 			addFunction(FunctionCode.SKIPLOG, new SNAKE_SKIPLOG_Instruction());
-			addFunction(FunctionCode.UPDATECHECK, new SNAKE_UPDATECHECK_Instruction());
-			addFunction(FunctionCode.CALLSHARP, new SNAKE_CALLSHARP_Instruction());
-			addFunction(FunctionCode.TRYCALLF, new CALLF_Instruction(false, true));
-			addFunction(FunctionCode.TRYCALLFORMF, new CALLF_Instruction(true, true));
-			addFunction(FunctionCode.FORCE_BEGIN, new FORCE_BEGIN_Instruction());
-
 			addFunction(FunctionCode.SETBGIMAGE, new SNAKE_SETBGIMAGE_Instruction());
 			addFunction(FunctionCode.CLEARBGIMAGE, new SNAKE_CLEARBGIMAGE_Instruction());
 			addFunction(FunctionCode.REMOVEBGIMAGE, new SNAKE_REMOVEBGIMAGE_Instruction());
-			addFunction(FunctionCode.SETIMAGELAYER, new SNAKE_SETIMAGELAYER_Instruction());
-			addFunction(FunctionCode.CLEARIMAGELAYER, new SNAKE_CLEARIMAGELAYER_Instruction());
-			addFunction(FunctionCode.CLEARIMAGELAYER_ALL, new SNAKE_CLEARIMAGELAYER_ALL_Instruction());
 			addFunction(FunctionCode.TEXT_BGC_OFF, new SNAKE_TEXT_BGC_OFF_Instruction());
 			addFunction(FunctionCode.TEXT_BGC_ON, new SNAKE_TEXT_BGC_ON_Instruction());
-			addFunction(FunctionCode.PLAYSOUND, new SNAKE_PLAYSOUND_Instruction());
-			addFunction(FunctionCode.STOPSOUND, new SNAKE_STOPSOUND_Instruction());
-			addFunction(FunctionCode.PLAYBGM, new SNAKE_PLAYBGM_Instruction());
-			addFunction(FunctionCode.STOPBGM, new SNAKE_STOPBGM_Instruction());
-			addFunction(FunctionCode.SETSOUNDVOLUME, new SNAKE_SETVOLUME_Instruction(false));
-			addFunction(FunctionCode.SETBGMVOLUME, new SNAKE_SETVOLUME_Instruction(true));
-			addFunction(FunctionCode.QUIT_AND_RESTART, ArgumentParser.GetArgumentBuilder(FunctionArgType.VOID));
-			addFunction(FunctionCode.FORCE_QUIT, ArgumentParser.GetArgumentBuilder(FunctionArgType.VOID));
-			addFunction(FunctionCode.FORCE_QUIT_AND_RESTART, ArgumentParser.GetArgumentBuilder(FunctionArgType.VOID));
-			addFunction(FunctionCode.TOOLTIP_SETFONT, new SNAKE_TOOLTIP_SETFONT_Instruction());
-			addFunction(FunctionCode.TOOLTIP_SETFONTSIZE, new SNAKE_TOOLTIP_INT_Instruction(FunctionCode.TOOLTIP_SETFONTSIZE));
-			addFunction(FunctionCode.TOOLTIP_CUSTOM, new SNAKE_TOOLTIP_INT_Instruction(FunctionCode.TOOLTIP_CUSTOM));
-			addFunction(FunctionCode.TOOLTIP_FORMAT, new SNAKE_TOOLTIP_INT_Instruction(FunctionCode.TOOLTIP_FORMAT));
-			addFunction(FunctionCode.TOOLTIP_IMG, new SNAKE_TOOLTIP_INT_Instruction(FunctionCode.TOOLTIP_IMG));
 			addFunction(FunctionCode.DT_COLUMN_OPTIONS, new SNAKE_DT_COLUMN_OPTIONS_Instruction());
 			addFunction(FunctionCode.VARI, new SNAKE_VARI_Instruction(false));
 			addFunction(FunctionCode.VARS, new SNAKE_VARI_Instruction(true));
@@ -133,11 +97,35 @@ namespace MinorShift.Emuera.GameProc.Function
 			addFunction(FunctionCode.HTML_PRINT_ISLAND_CLEAR, new SNAKE_HTML_PRINT_ISLAND_CLEAR_Instruction());
 			addFunction(FunctionCode.HTML_PRINTC, new SNAKE_HTML_PRINTC_Instruction(true));
 			addFunction(FunctionCode.HTML_PRINTLC, new SNAKE_HTML_PRINTC_Instruction(false));
-			addFunction(FunctionCode.SETANIMETIMER, new SNAKE_SETANIMETIMER_Instruction());
 			addFunction(FunctionCode.STRICT_FONT_FALLBACK, new SNAKE_UI_SETTING_Instruction(FunctionCode.STRICT_FONT_FALLBACK));
 			addFunction(FunctionCode.SET_SKIA_QUALITY, new SNAKE_UI_SETTING_Instruction(FunctionCode.SET_SKIA_QUALITY));
 			addFunction(FunctionCode.SET_TEXT_DRAWING_MODE, new SNAKE_UI_SETTING_Instruction(FunctionCode.SET_TEXT_DRAWING_MODE));
 			addFunction(FunctionCode.BITMAP_CACHE_ENABLE, new SNAKE_UI_SETTING_Instruction(FunctionCode.BITMAP_CACHE_ENABLE));
+		}
+
+		private static void addV24CompatibilityFunctions()
+		{
+			addFunction(FunctionCode.INPUTANY, new INPUTANY_Instruction());
+			addFunction(FunctionCode.JUMPSTR, new CALLS_Instruction(true, false, false));
+			addFunction(FunctionCode.CALLSTR, new CALLS_Instruction(false, false, false));
+			addFunction(FunctionCode.TRYJUMPSTR, new CALLS_Instruction(true, true, false), EXTENDED);
+			addFunction(FunctionCode.TRYCALLSTR, new CALLS_Instruction(false, true, false), EXTENDED);
+			addFunction(FunctionCode.TRYCJUMPSTR, new CALLS_Instruction(true, true, true), EXTENDED);
+			addFunction(FunctionCode.TRYCCALLSTR, new CALLS_Instruction(false, true, true), EXTENDED);
+			addFunction(FunctionCode.TRYCALLF, new CALLF_Instruction(false, true));
+			addFunction(FunctionCode.TRYCALLFORMF, new CALLF_Instruction(true, true));
+			addFunction(FunctionCode.CALLSHARP, new SNAKE_CALLSHARP_Instruction());
+			addFunction(FunctionCode.PLAYSOUND, new SNAKE_PLAYSOUND_Instruction());
+			addFunction(FunctionCode.STOPSOUND, new SNAKE_STOPSOUND_Instruction());
+			addFunction(FunctionCode.PLAYBGM, new SNAKE_PLAYBGM_Instruction());
+			addFunction(FunctionCode.STOPBGM, new SNAKE_STOPBGM_Instruction());
+			addFunction(FunctionCode.SETSOUNDVOLUME, new SNAKE_SETVOLUME_Instruction(false));
+			addFunction(FunctionCode.SETBGMVOLUME, new SNAKE_SETVOLUME_Instruction(true));
+			addFunction(FunctionCode.UPDATECHECK, new SNAKE_UPDATECHECK_Instruction());
+			addFunction(FunctionCode.QUIT_AND_RESTART, ArgumentParser.GetArgumentBuilder(FunctionArgType.VOID));
+			addFunction(FunctionCode.FORCE_QUIT, ArgumentParser.GetArgumentBuilder(FunctionArgType.VOID));
+			addFunction(FunctionCode.FORCE_QUIT_AND_RESTART, ArgumentParser.GetArgumentBuilder(FunctionArgType.VOID));
+			addFunction(FunctionCode.FORCE_BEGIN, new FORCE_BEGIN_Instruction());
 		}
 
 		static FunctionIdentifier()
@@ -401,6 +389,7 @@ namespace MinorShift.Emuera.GameProc.Function
 			addFunction(FunctionCode.CALLEVENT, new CALLEVENT_Instruction());
 			addFunction(FunctionCode.CALLF, new CALLF_Instruction(false));
 			addFunction(FunctionCode.CALLFORMF, new CALLF_Instruction(true));
+			addV24CompatibilityFunctions();
 			addFunction(FunctionCode.RESTART, new RESTART_Instruction());//関数の再開。関数の最初に戻る。
 			addFunction(FunctionCode.GOTO, new GOTO_Instruction(false, false, false));//$ラベルへジャンプ
 			addFunction(FunctionCode.TRYGOTO, new GOTO_Instruction(false, true, false), EXTENDED);
@@ -441,9 +430,25 @@ namespace MinorShift.Emuera.GameProc.Function
 			addFunction(FunctionCode.TOOLTIP_SETCOLOR, new TOOLTIP_SETCOLOR_Instruction());
 			addFunction(FunctionCode.TOOLTIP_SETDELAY, new TOOLTIP_SETDELAY_Instruction());
             addFunction(FunctionCode.TOOLTIP_SETDURATION, new TOOLTIP_SETDURATION_Instruction());
+			addFunction(FunctionCode.TOOLTIP_SETFONT, new SNAKE_TOOLTIP_SETFONT_Instruction());
+			addFunction(FunctionCode.TOOLTIP_SETFONTSIZE, new SNAKE_TOOLTIP_INT_Instruction(FunctionCode.TOOLTIP_SETFONTSIZE));
+			addFunction(FunctionCode.TOOLTIP_CUSTOM, new SNAKE_TOOLTIP_INT_Instruction(FunctionCode.TOOLTIP_CUSTOM));
+			addFunction(FunctionCode.TOOLTIP_FORMAT, new SNAKE_TOOLTIP_INT_Instruction(FunctionCode.TOOLTIP_FORMAT));
+			addFunction(FunctionCode.TOOLTIP_IMG, new SNAKE_TOOLTIP_INT_Instruction(FunctionCode.TOOLTIP_IMG));
+
+			addFunction(FunctionCode.BINPUT, new BINPUT_Instruction());
+			addFunction(FunctionCode.BINPUTS, new BINPUTS_Instruction());
+			addFunction(FunctionCode.ONEBINPUT, new ONEBINPUT_Instruction());
+			addFunction(FunctionCode.ONEBINPUTS, new ONEBINPUTS_Instruction());
 
 			addFunction(FunctionCode.INPUTMOUSEKEY, new INPUTMOUSEKEY_Instruction());
 			addFunction(FunctionCode.AWAIT, new AWAIT_Instruction());
+
+			addFunction(FunctionCode.SETIMAGELAYER, new SETIMAGELAYER_Instruction());
+			addFunction(FunctionCode.CLEARIMAGELAYER, new CLEARIMAGELAYER_Instruction());
+			addFunction(FunctionCode.CLEARIMAGELAYER_ALL, new CLEARIMAGELAYER_ALL_Instruction());
+			addFunction(FunctionCode.SETANIMETIMER, new SETANIMETIMER_Instruction());
+
 			if (Program.IsSnakeProfile)
 				addSnakeCompatibilityFunctions();
 			#region 式中関数の引数違い

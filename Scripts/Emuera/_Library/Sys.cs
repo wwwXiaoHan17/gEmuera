@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 
 namespace MinorShift._Library
 {
@@ -6,18 +6,18 @@ namespace MinorShift._Library
 	{
 		static Sys()
 		{}
-        public static void SetWorkFolder(string folder)
-        {
-            _WorkFolder = folder;
-        }
-        public static string WorkFolder { get { return _WorkFolder; } }
-        private static string _WorkFolder;
+		public static void SetWorkFolder(string folder)
+		{
+			_WorkFolder = folder;
+		}
+		public static string WorkFolder { get { return _WorkFolder; } }
+		private static string _WorkFolder;
 
-        public static void SetSourceFolder(string folder)
-        {
-            ExeDir = uEmuera.Utils.NormalizePath(_WorkFolder + "/" + folder + "/");
-        }
-        
+		public static void SetSourceFolder(string folder)
+		{
+			ExeDir = uEmuera.Utils.NormalizePath(_WorkFolder + "/" + folder + "/");
+		}
+
 		/// <summary>
 		/// 実行ファイルのパス
 		/// </summary>
@@ -39,13 +39,12 @@ namespace MinorShift._Library
 		/// <returns></returns>
 		public static bool PrevInstance()
 		{
-            //string thisProcessName = System.Diagnostics.Process.GetCurrentProcess().ProcessName;
-            //if (System.Diagnostics.Process.GetProcessesByName(thisProcessName).Length > 1)
-            //{
-            //	return true;
-            //}
-            return false;
+			//string thisProcessName = System.Diagnostics.Process.GetCurrentProcess().ProcessName;
+			//if (System.Diagnostics.Process.GetProcessesByName(thisProcessName).Length > 1)
+			//{
+			//	return true;
+			//}
+			return false;
 		}
 	}
 }
-

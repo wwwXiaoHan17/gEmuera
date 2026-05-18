@@ -11,14 +11,18 @@ namespace MinorShift.Emuera.GameData.Variable
 	{
 		readonly Int64[] dataInteger;
 		readonly string[] dataString;
+		readonly double[] dataFloat;
 		readonly Int64[][] dataIntegerArray;
 		readonly string[][] dataStringArray;
+		readonly double[][] dataFloatArray;
 		readonly Int64[][,] dataIntegerArray2D;
 		readonly string[][,] dataStringArray2D;
 		public Int64[] DataInteger { get { return dataInteger; } }
 		public string[] DataString { get { return dataString; } }
+		public double[] DataFloat { get { return dataFloat; } }
 		public Int64[][] DataIntegerArray { get { return dataIntegerArray; } }
 		public string[][] DataStringArray { get { return dataStringArray; } }
+		public double[][] DataFloatArray { get { return dataFloatArray; } }
 		public Int64[][,] DataIntegerArray2D { get { return dataIntegerArray2D; } }
 		public string[][,] DataStringArray2D { get { return dataStringArray2D; } }
 
@@ -28,8 +32,10 @@ namespace MinorShift.Emuera.GameData.Variable
 		{
 			dataInteger = new Int64[(int)VariableCode.__COUNT_CHARACTER_INTEGER__];
 			dataString = new string[(int)VariableCode.__COUNT_CHARACTER_STRING__];
+			dataFloat = new double[0];
 			dataIntegerArray = new Int64[(int)VariableCode.__COUNT_CHARACTER_INTEGER_ARRAY__][];
 			dataStringArray = new string[(int)VariableCode.__COUNT_CHARACTER_STRING_ARRAY__][];
+			dataFloatArray = new double[(int)VariableCode.__COUNT_FLOAT_ARRAY__][];
 			dataIntegerArray2D = new Int64[(int)VariableCode.__COUNT_CHARACTER_INTEGER_ARRAY_2D__][,];
 			dataStringArray2D = new string[(int)VariableCode.__COUNT_CHARACTER_STRING_ARRAY_2D__][,];
 			for (int i = 0; i < dataIntegerArray.Length; i++)
@@ -67,6 +73,21 @@ namespace MinorShift.Emuera.GameData.Variable
 							break;
 						case 3:
 							array = new string[d.Lengths[0], d.Lengths[1], d.Lengths[2]];
+							break;
+					}
+				}
+				else if (d.TypeIsFloat)
+				{
+					switch (d.Dimension)
+					{
+						case 1:
+							array = new double[d.Lengths[0]];
+							break;
+						case 2:
+							array = new double[d.Lengths[0], d.Lengths[1]];
+							break;
+						case 3:
+							array = new double[d.Lengths[0], d.Lengths[1], d.Lengths[2]];
 							break;
 					}
 				}
@@ -260,6 +281,23 @@ namespace MinorShift.Emuera.GameData.Variable
                                     ((string[,])(other.UserDefCVarDataList[var.ArrayIndex]))[i, j] = ((string[,])(UserDefCVarDataList[var.ArrayIndex]))[i, j];
                         }
                     }
+                    else if (var.IsFloat)
+                    {
+                        if (var.IsArray1D)
+                        {
+                            int length = ((double[])(UserDefCVarDataList[var.ArrayIndex])).GetLength(0);
+                            for (int i = 0; i < length; i++)
+                                ((double[])(other.UserDefCVarDataList[var.ArrayIndex]))[i] = ((double[])(UserDefCVarDataList[var.ArrayIndex]))[i];
+                        }
+                        else if (var.IsArray2D)
+                        {
+                            int length1 = ((double[,])UserDefCVarDataList[var.ArrayIndex]).GetLength(0);
+                            int length2 = ((double[,])UserDefCVarDataList[var.ArrayIndex]).GetLength(1);
+                            for (int i = 0; i < length1; i++)
+                                for (int j = 0; j < length2; j++)
+                                    ((double[,])(other.UserDefCVarDataList[var.ArrayIndex]))[i, j] = ((double[,])(UserDefCVarDataList[var.ArrayIndex]))[i, j];
+                        }
+                    }
                     else
                     {
                         if (var.IsArray1D)
@@ -448,11 +486,17 @@ namespace MinorShift.Emuera.GameData.Variable
 					case VariableCode.__STRING__:
 						writer.WriteWithKey(code.ToString(), dataString[CodeInt]);
 						break;
+					case VariableCode.__FLOAT__:
+						writer.WriteWithKey(code.ToString(), dataFloat[CodeInt]);
+						break;
 					case VariableCode.__INTEGER__ | VariableCode.__ARRAY_1D__:
 						writer.WriteWithKey(code.ToString(), dataIntegerArray[CodeInt]);
 						break;
 					case VariableCode.__STRING__ | VariableCode.__ARRAY_1D__:
 						writer.WriteWithKey(code.ToString(), dataStringArray[CodeInt]);
+						break;
+					case VariableCode.__FLOAT__ | VariableCode.__ARRAY_1D__:
+						writer.WriteWithKey(code.ToString(), dataFloatArray[CodeInt]);
 						break;
 					case VariableCode.__INTEGER__ | VariableCode.__ARRAY_2D__:
 						writer.WriteWithKey(code.ToString(), dataIntegerArray2D[CodeInt]);
@@ -532,6 +576,28 @@ namespace MinorShift.Emuera.GameData.Variable
 							reader.ReadString();
 						else
 							dataString[codeInt] = reader.ReadString();
+						break;
+					case EraSaveDataType.Float:
+						if (vToken == null || !vToken.IsFloat || vToken.Dimension != 0)
+							reader.ReadFloat();
+						else
+							dataFloat[codeInt] = reader.ReadFloat();
+						break;
+					case EraSaveDataType.FloatArray:
+						if (userDefineData && array != null)
+							reader.ReadFloatArray(array as double[], true);
+						else if (vToken == null || !vToken.IsFloat || vToken.Dimension != 1)
+							reader.ReadFloatArray(null, true);
+						else
+							reader.ReadFloatArray(dataFloatArray[codeInt], true);
+						break;
+					case EraSaveDataType.FloatArray2D:
+						if (userDefineData && array != null)
+							reader.ReadFloatArray2D(array as double[,], true);
+						else if (vToken == null || !vToken.IsFloat || vToken.Dimension != 2)
+							reader.ReadFloatArray2D(null, true);
+						else
+							throw new FileEE("組み込みの2次元小数配列型キャラ変数は存在しません");
 						break;
 					case EraSaveDataType.IntArray:
 						if (userDefineData && array != null)

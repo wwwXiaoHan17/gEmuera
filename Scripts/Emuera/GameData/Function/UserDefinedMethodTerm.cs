@@ -29,6 +29,13 @@ namespace MinorShift.Emuera.GameData.Function
 				return "";
 			return term.Str;
 		}
+		public override double GetFloatValue(ExpressionMediator exm)
+		{
+			SingleTerm term = exm.Process.GetValue(this);
+			if (term == null)
+				return 0.0;
+			return term.GetFloatValue(exm);
+		}
 		public override SingleTerm GetValue(ExpressionMediator exm)
 		{
 			SingleTerm term = exm.Process.GetValue(this);
@@ -36,6 +43,8 @@ namespace MinorShift.Emuera.GameData.Function
 			{
 				if (GetOperandType() == typeof(Int64))
 					return new SingleTerm(0);
+				else if (GetOperandType() == typeof(double))
+					return new SingleTerm(0.0);
 				else
 					return new SingleTerm("");
 			}
@@ -117,7 +126,8 @@ namespace MinorShift.Emuera.GameData.Function
 			{
 				if (srcArgs[i] == null)
 					continue;
-				if ((reffunc.ArgTypeList[i] & UserDifinedFunctionDataArgType.__Ref) == UserDifinedFunctionDataArgType.__Ref)
+				UserDifinedFunctionDataArgType argType = reffunc.ArgTypeList[Math.Min(i, reffunc.ArgTypeList.Length - 1)];
+				if ((argType & UserDifinedFunctionDataArgType.__Ref) == UserDifinedFunctionDataArgType.__Ref)
 					srcArgs[i].Restructure(exm);
 				else
 					srcArgs[i] = srcArgs[i].Restructure(exm);

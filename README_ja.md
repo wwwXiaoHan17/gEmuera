@@ -8,7 +8,16 @@ Emuera は日本の eramaker 系テキストゲームの実行エンジンで、
 
 ## 特徴
 
-- Emuera 1824+v18 エンジン完全互換
+- 統一された `Emuera1824+v24+EMv18+EEv55` コア
+- v18 ゲーム互換；v24 / EE / EM 拡張ゲームをネイティブサポート
+- `DIMF` / `FUNCTIONF` / `LOCALF` / `ARGF` / `RESULTF` 浮動小数点サポート
+- `VARIADIC` 可変長引数関数、`#REF` / `#REFS` / `#REFF` 参照型引数
+- `SETIMAGELAYER` / `CLEARIMAGELAYER` 画像レイヤー制御、`SETANIMETIMER` アニメーションタイマー
+- `EXISTFUNCTION` lazyload オンデマンド読み込みトリガー対応
+- オプションの Lazyload 高速化戦略（`lazyloading.cfg` + オンデマンド読み込み）
+- Snake 互換プロファイル（同一コア上の互換設定、独立したコアではない）
+- セーブ互換性：v18 セーブは読み込み可能；v24 新規セーブは旧 v18 エンジンへの互換を保証しない
+- 未実装機能の明示：SafeArithmetic、スプライト反転、アニメーション一時停止/再開、Zip 圧縮セーブ等は未実装
 - ERB スクリプト実行、CSV データ読み込み、SHIFT-JIS/UTF-8 エンコーディング対応
 - GPU アクセラレーション ColorMatrix カラー変換（デスクトップ、キャラクター立ち絵着色）
 - Godot ネイティブ `Image.BlendRect` によるスプライト合成（高速ピクセル混合）

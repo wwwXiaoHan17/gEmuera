@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using MinorShift.Emuera;
 using MinorShift.Emuera.GameView;
 using MinorShift.Emuera.Content;
+using EmuFont = uEmuera.Drawing.Font;
+using EmuColor = uEmuera.Drawing.Color;
 
 public partial class EmueraContent : Control
 {
@@ -22,12 +24,14 @@ public partial class EmueraContent : Control
     OptionWindow optionWindow;
     AudioStreamPlayer bgmPlayer;
     List<AudioStreamPlayer> soundPlayers = new List<AudioStreamPlayer>();
+    List<int> soundRepeatRemaining = new List<int>();
     float soundVolume = 1.0f;
     float bgmVolume = 1.0f;
 
     Dictionary<int, ConsoleDisplayLine> lineObjects = new Dictionary<int, ConsoleDisplayLine>();
     HashSet<string> failedTextureSearches = new HashSet<string>();
     List<EmueraImage> cbgNodes = new List<EmueraImage>();
+    List<MinorShift.Emuera.GameView.EmueraConsole.ClientBackGroundImage> renderedCbgLayers = new List<MinorShift.Emuera.GameView.EmueraConsole.ClientBackGroundImage>();
     bool batchingDisplayLines = false;
 
     public const int DefaultMaxVisibleLines = 360;
@@ -36,7 +40,7 @@ public partial class EmueraContent : Control
     static int MaxVisibleLines => ConfiguredMaxVisibleLines;
     static int LineTrimBatch => System.Math.Max(40, System.Math.Min(200, MaxVisibleLines / 6));
 
-    FontFile mainFont;
+    Font mainFont;
     int lastButtonGeneration = -1;
     int displayRevision = 0;
     int quickRenderedGeneration = int.MinValue;
@@ -47,6 +51,7 @@ public partial class EmueraContent : Control
     long quickInputGateGeneration = -1;
     int quickInputGateRevision = -1;
     ulong quickInputGateTick = 0;
+    int lastCbgScrollVertical = int.MinValue;
     uint lastClickTick = 0;
     bool contentDragActive = false;
     bool contentDragMoved = false;
@@ -177,7 +182,7 @@ public partial class EmueraContent : Control
             Config.UpdateWindowWidth(ContentWidth);
         GetViewport().SizeChanged += OnViewportSizeChanged;
 
-        mainFont = ResourceLoader.Load<FontFile>("res://Fonts/MS Gothic.ttf");
+        mainFont = LoadConfiguredFont();
 
         bgRect = new ColorRect();
         bgRect.AnchorLeft = 0;
@@ -302,13 +307,13 @@ public partial class EmueraContent : Control
         lineContainer.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         lineContainer.SizeFlagsVertical = SizeFlags.ExpandFill;
         lineContainer.ClipContents = false;
-        lineContainer.AddThemeConstantOverride("separation", 4);
+        lineContainer.AddThemeConstantOverride("separation", 0);
         scaledContentRoot.AddChild(lineContainer);
 
         htmlIslandContainer = new VBoxContainer();
         htmlIslandContainer.MouseFilter = MouseFilterEnum.Ignore;
         htmlIslandContainer.ClipContents = false;
-        htmlIslandContainer.AddThemeConstantOverride("separation", 4);
+        htmlIslandContainer.AddThemeConstantOverride("separation", 0);
         scaledContentRoot.AddChild(htmlIslandContainer);
 
         // Message box popup
@@ -420,6 +425,114 @@ public partial class EmueraContent : Control
         control.AddThemeFontSizeOverride("font_size", FontSize);
     }
 
+    static void SetFixedControlSize(Control control, Vector2 size)
+    {
+        control.CustomMinimumSize = size;
+        control.Size = size;
+    }
+
+    Label CreateTextPart(string text, EmuColor color, EmuFont font, float width)
+    {
+        var label = new Label();
+        label.MouseFilter = MouseFilterEnum.Ignore;
+        label.Text = text ?? "";
+        ApplyFont(label);
+        label.AddThemeColorOverride("font_color", new Godot.Color(color.r, color.g, color.b, color.a));
+        if (font?.Bold == true)
+        {
+            label.AddThemeConstantOverride("outline_size", 1);
+            label.AddThemeColorOverride("font_outline_color", new Godot.Color(color.r, color.g, color.b, color.a));
+        }
+        label.VerticalAlignment = VerticalAlignment.Center;
+        label.ClipText = true;
+        label.AutowrapMode = TextServer.AutowrapMode.Off;
+        SetFixedControlSize(label, new Vector2(width, EffectiveLineHeight));
+        return label;
+    }
+
+    Font LoadConfiguredFont()
+    {
+        string requested = Config.FontName;
+        if (!string.IsNullOrWhiteSpace(requested))
+        {
+            return new SystemFont
+            {
+                FontNames = new[]
+                {
+                    requested,
+                    "SimHei",
+                    "Microsoft YaHei",
+                    "MS Gothic",
+                    "Noto Sans CJK SC",
+                    "Noto Sans CJK JP",
+                    "Droid Sans Fallback",
+                    "sans-serif"
+                }
+            };
+        }
+        return ResourceLoader.Load<Font>("res://Fonts/MS Gothic.ttf");
+    }
+
+    int GetPartTop(AConsoleDisplayPart part)
+    {
+        if (part == null)
+            return 0;
+        if (part is ConsoleImagePart image)
+        {
+            if (image.Display == DisplayMode.Relative)
+                return 0;
+            return System.Math.Min(0, image.PositionY);
+        }
+        if (part is ConsoleDivPart div && div.IsRelative)
+            return System.Math.Min(0, div.Y);
+        return System.Math.Min(0, part.Top);
+    }
+
+    int GetPartBottom(AConsoleDisplayPart part)
+    {
+        if (part == null)
+            return EffectiveLineHeight;
+        if (part is ConsoleImagePart image)
+        {
+            if (image.Display == DisplayMode.Relative)
+                return EffectiveLineHeight;
+            return EffectiveLineHeight;
+        }
+        if (part is ConsoleDivPart div && div.IsRelative)
+            return System.Math.Max(EffectiveLineHeight, div.Y + div.DivHeight);
+        return System.Math.Max(EffectiveLineHeight, part.Bottom);
+    }
+
+    int GetButtonTop(ConsoleButtonString button)
+    {
+        int top = 0;
+        if (button?.StrArray == null)
+            return top;
+        foreach (var part in button.StrArray)
+            top = System.Math.Min(top, GetPartTop(part));
+        return top;
+    }
+
+    int GetButtonBottom(ConsoleButtonString button)
+    {
+        int bottom = EffectiveLineHeight;
+        if (button?.StrArray == null)
+            return bottom;
+        foreach (var part in button.StrArray)
+            bottom = System.Math.Max(bottom, GetPartBottom(part));
+        return bottom;
+    }
+
+    int GetLineBottom(ConsoleDisplayLine line)
+    {
+        int bottom = EffectiveLineHeight;
+        if (line?.Buttons == null)
+            return bottom;
+        foreach (var button in line.Buttons)
+            bottom = System.Math.Max(bottom, GetButtonBottom(button));
+        return bottom;
+    }
+
     static StyleBoxFlat _btnNormalStyle;
     static StyleBoxFlat _btnHoverStyle;
 
@@ -518,16 +631,23 @@ public partial class EmueraContent : Control
 
     internal void AddLine(ConsoleDisplayLine line, bool isUpdate)
     {
+        if (line == null)
+            return;
+        int lineHeight = GetLineBottom(line);
         var lineControl = new Control();
         lineControl.MouseFilter = MouseFilterEnum.Pass;
         lineControl.ClipContents = false;
-        AddLineBackground(line, lineControl);
+        AddLineBackground(line, lineControl, lineHeight);
         int maxLineRight = 0;
 
         foreach(var button in line.Buttons)
         {
             if(button.IsButton)
             {
+                int buttonTop = GetButtonTop(button);
+                int buttonHeight = GetButtonBottom(button) - buttonTop;
+                if (buttonHeight <= 0)
+                    buttonHeight = EffectiveLineHeight;
                 var btn = new Panel();
                 btn.FocusMode = FocusModeEnum.None;
                 btn.MouseForcePassScrollEvents = false;
@@ -545,6 +665,7 @@ public partial class EmueraContent : Control
                 var contentBox = new Control();
                 contentBox.MouseFilter = MouseFilterEnum.Ignore;
                 contentBox.ClipContents = false;
+                contentBox.Position = new Vector2(0, -buttonTop);
                 btn.AddChild(contentBox);
 
                 foreach(var part in button.StrArray)
@@ -559,10 +680,10 @@ public partial class EmueraContent : Control
                         c.MouseFilter = MouseFilterEnum.Ignore;
                 }
 
-                contentBox.CustomMinimumSize = new Vector2(button.Width, EffectiveLineHeight);
-                btn.CustomMinimumSize = new Vector2(button.Width, EffectiveLineHeight);
-                btn.Position = new Vector2(button.PointX, 0);
-                btn.Size = new Vector2(button.Width, EffectiveLineHeight);
+                SetFixedControlSize(contentBox, new Vector2(button.Width, buttonHeight));
+                btn.CustomMinimumSize = new Vector2(button.Width, buttonHeight);
+                btn.Position = new Vector2(button.PointX, buttonTop);
+                btn.Size = new Vector2(button.Width, buttonHeight);
                 lineControl.AddChild(btn);
 
                 int btnRight = button.PointX + button.Width;
@@ -579,13 +700,8 @@ public partial class EmueraContent : Control
             }
         }
 
-        // Fixed line height matching original Emuera behavior:
-        // every line is exactly EffectiveLineHeight tall, images overflow via negative Y offset
-        int lineHeight = EffectiveLineHeight;
-        if (lineControl.GetChildCount() == 0)
-            lineHeight = 0;
-
-        lineControl.CustomMinimumSize = new Vector2(0, lineHeight);
+        int fixedLineHeight = lineControl.GetChildCount() == 0 ? 0 : lineHeight;
+        SetFixedControlSize(lineControl, new Vector2(maxLineRight, fixedLineHeight));
 
         // Handle line updates: replace existing Control if LineNo already exists
         int insertIndex = -1;
@@ -619,7 +735,10 @@ public partial class EmueraContent : Control
         if (!batchingDisplayLines)
         {
             RefreshQuickInputGate();
-            QueueDisplayFollowUp();
+            if (isUpdate)
+                QueueScaleBoundsUpdate();
+            else
+                QueueDisplayFollowUp();
         }
     }
 
@@ -661,7 +780,7 @@ public partial class EmueraContent : Control
         }
     }
 
-    void AddLineBackground(ConsoleDisplayLine line, Control lineControl)
+    void AddLineBackground(ConsoleDisplayLine line, Control lineControl, int lineHeight)
     {
         if (line.TextBackgroundColor == null)
             return;
@@ -670,8 +789,8 @@ public partial class EmueraContent : Control
         bg.MouseFilter = MouseFilterEnum.Ignore;
         bg.Color = new Godot.Color(c.r, c.g, c.b, c.a);
         bg.Position = Vector2.Zero;
-        bg.Size = new Vector2(Config.DrawableWidth, EffectiveLineHeight);
-        bg.CustomMinimumSize = new Vector2(Config.DrawableWidth, EffectiveLineHeight);
+        bg.Size = new Vector2(Config.DrawableWidth, lineHeight);
+        bg.CustomMinimumSize = new Vector2(Config.DrawableWidth, lineHeight);
         bg.ZIndex = -1;
         lineControl.AddChild(bg);
     }
@@ -683,16 +802,19 @@ public partial class EmueraContent : Control
             return;
         foreach (var line in lines)
         {
+            if (line == null)
+                continue;
+            int lineHeight = GetLineBottom(line);
             var lineControl = new Control();
             lineControl.MouseFilter = MouseFilterEnum.Ignore;
             lineControl.ClipContents = false;
-            AddLineBackground(line, lineControl);
+            AddLineBackground(line, lineControl, lineHeight);
             foreach (var button in line.Buttons)
             {
                 foreach (var part in button.StrArray)
                     AddPartToContainer(part, lineControl, 0);
             }
-            lineControl.CustomMinimumSize = new Vector2(0, EffectiveLineHeight);
+            SetFixedControlSize(lineControl, new Vector2(0, lineHeight));
             htmlIslandContainer.AddChild(lineControl);
         }
         displayRevision++;
@@ -714,14 +836,14 @@ public partial class EmueraContent : Control
     {
         if (scrollContainer != null)
         {
-            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-            UpdateScaleBounds();
-            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-            UpdateScaleBounds();
-            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-            if (!contentDragActive && !contentInertiaActive && interactionSerial == contentScrollInteractionSerial)
+            for (int i = 0; i < 5; i++)
             {
-                scrollContainer.ScrollVertical = GetMaxContentVerticalScroll();
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                UpdateScaleBounds();
+                if (!contentDragActive && !contentInertiaActive && interactionSerial == contentScrollInteractionSerial)
+                    scrollContainer.ScrollVertical = GetMaxContentVerticalScroll();
+                else
+                    break;
             }
         }
         pendingScroll = false;
@@ -790,18 +912,7 @@ public partial class EmueraContent : Control
         {
             if (string.IsNullOrEmpty(css.Str))
                 return EffectiveLineHeight;
-            var label = new Label();
-            label.MouseFilter = MouseFilterEnum.Ignore;
-            label.Text = css.Str;
-            ApplyFont(label);
-            label.AddThemeColorOverride("font_color",
-                new Godot.Color(css.pColor.r, css.pColor.g, css.pColor.b, css.pColor.a));
-            label.VerticalAlignment = VerticalAlignment.Center;
-            label.ClipText = true;
-            label.AutowrapMode = TextServer.AutowrapMode.Off;
-            container.AddChild(label);
             float posX = css.PointX - relX;
-            label.Position = new Vector2(posX, 0);
             float w;
             if (relX == 0)
             {
@@ -813,9 +924,15 @@ public partial class EmueraContent : Control
             {
                 w = css.Width > 0 ? css.Width : 9999;
             }
-            label.Size = new Vector2(w, EffectiveLineHeight);
+            var text = CreateTextPart(css.Str, css.pColor, css.Font, w);
+            text.Position = new Vector2(posX, 0);
+            container.AddChild(text);
 
             return EffectiveLineHeight;
+        }
+        else if(part is ConsoleDivPart div)
+        {
+            return AddDivPartToContainer(div, container, relX);
         }
         else if(part is ConsoleImagePart cip)
         {
@@ -937,22 +1054,25 @@ public partial class EmueraContent : Control
                     emuImg.SourceTexture = texture;
                 }
                 emuImg.DrawOffset = new Vector2(0, 0);
-                emuImg.Position = new Vector2(cip.PointX - relX + cip.dest_rect.X, cip.dest_rect.Y);
+                emuImg.Position = GetHtmlImagePosition(cip, relX);
                 emuImg.Size = new Vector2(w, imgH);
+                emuImg.FlipX = cip.FlipX;
+                emuImg.FlipY = cip.FlipY;
+                emuImg.SetColorMatrix(cip.ColorMatrix);
                 // Inline images are absolutely positioned inside a fixed-height Emuera line.
                 // Giving them a minimum size lets Godot containers add blank vertical space.
                 emuImg.CustomMinimumSize = Vector2.Zero;
                 container.AddChild(emuImg);
-                return System.Math.Max(EffectiveLineHeight, (cip.dest_rect.Y > 0 ? cip.dest_rect.Y : 0) + imgH);
+                return EffectiveLineHeight;
             }
             else
             {
-                var label = new Label();
-                label.MouseFilter = MouseFilterEnum.Ignore;
-                label.Text = cip.AltText ?? cip.ResourceName ?? "";
-                ApplyFont(label);
-                label.Position = new Vector2(cip.PointX - relX, 0);
-                container.AddChild(label);
+                var spacer = new Control();
+                spacer.MouseFilter = MouseFilterEnum.Ignore;
+                float placeholderWidth = System.Math.Max(cip.Width, EffectiveLineHeight);
+                SetFixedControlSize(spacer, new Vector2(placeholderWidth, EffectiveLineHeight));
+                spacer.Position = new Vector2(cip.PointX - relX, 0);
+                container.AddChild(spacer);
                 return EffectiveLineHeight;
             }
         }
@@ -980,17 +1100,239 @@ public partial class EmueraContent : Control
             }
             else if (csp is ConsoleErrorShapePart errShape)
             {
-                var label = new Label();
-                label.MouseFilter = MouseFilterEnum.Ignore;
-                label.Text = errShape.AltText ?? errShape.Str ?? "";
-                ApplyFont(label);
-                label.Position = new Vector2(csp.PointX - relX, 0);
-                container.AddChild(label);
+                float labelWidth = System.Math.Max(csp.Width, EffectiveLineHeight);
+                var text = CreateTextPart(errShape.AltText ?? errShape.Str ?? "", Config.ForeColor, Config.Font, labelWidth);
+                text.Position = new Vector2(csp.PointX - relX, 0);
+                container.AddChild(text);
                 return EffectiveLineHeight;
             }
             return EffectiveLineHeight;
         }
         return EffectiveLineHeight;
+    }
+
+    int AddDivPartToContainer(ConsoleDivPart div, Control container, int relX)
+    {
+        var wrapper = BuildDivControl(div, relX);
+        container.AddChild(wrapper);
+        if (!div.IsRelative)
+            return EffectiveLineHeight;
+        return System.Math.Max(EffectiveLineHeight, div.Y + div.DivHeight);
+    }
+
+    Control BuildDivControl(ConsoleDivPart div, int relX)
+    {
+        var wrapper = new Control();
+        wrapper.MouseFilter = MouseFilterEnum.Pass;
+        wrapper.ClipContents = true;
+        wrapper.Position = GetHtmlDivPosition(div, relX);
+        wrapper.Size = new Vector2(div.DivWidth, div.DivHeight);
+        wrapper.CustomMinimumSize = new Vector2(div.DivWidth, div.DivHeight);
+        wrapper.ZIndex = div.Depth;
+
+        int[] margin = div.StyledBox?.Margin;
+        int[] padding = div.StyledBox?.Padding;
+        int[] border = div.StyledBox?.Border;
+        int[] borderColor = div.StyledBox?.BorderColor;
+
+        int marginLeft = BoxValue(margin, BoxDirection.Left);
+        int marginTop = BoxValue(margin, BoxDirection.Top);
+        int marginRight = BoxValue(margin, BoxDirection.Right);
+        int marginBottom = BoxValue(margin, BoxDirection.Bottom);
+        int borderLeft = BoxValue(border, BoxDirection.Left);
+        int borderTop = BoxValue(border, BoxDirection.Top);
+        int borderRight = BoxValue(border, BoxDirection.Right);
+        int borderBottom = BoxValue(border, BoxDirection.Bottom);
+        int paddingLeft = BoxValue(padding, BoxDirection.Left);
+        int paddingTop = BoxValue(padding, BoxDirection.Top);
+        int paddingRight = BoxValue(padding, BoxDirection.Right);
+        int paddingBottom = BoxValue(padding, BoxDirection.Bottom);
+
+        float boxX = marginLeft;
+        float boxY = marginTop;
+        float boxW = Mathf.Max(0, div.DivWidth - marginLeft - marginRight);
+        float boxH = Mathf.Max(0, div.DivHeight - marginTop - marginBottom);
+
+        if (div.BackgroundColor.HasValue && boxW > 0 && boxH > 0)
+        {
+            var bg = new ColorRect();
+            bg.MouseFilter = MouseFilterEnum.Ignore;
+            var c = div.BackgroundColor.Value;
+            bg.Color = new Godot.Color(c.r, c.g, c.b, c.a);
+            bg.Position = new Vector2(boxX, boxY);
+            bg.Size = new Vector2(boxW, boxH);
+            wrapper.AddChild(bg);
+        }
+
+        AddDivBorder(wrapper, border, borderColor, boxX, boxY, boxW, boxH);
+
+        var content = new Control();
+        content.MouseFilter = MouseFilterEnum.Pass;
+        content.ClipContents = true;
+        content.Position = new Vector2(boxX + borderLeft + paddingLeft, boxY + borderTop + paddingTop);
+        content.Size = new Vector2(
+            Mathf.Max(0, boxW - borderLeft - borderRight - paddingLeft - paddingRight),
+            Mathf.Max(0, boxH - borderTop - borderBottom - paddingTop - paddingBottom));
+        content.CustomMinimumSize = content.Size;
+        wrapper.AddChild(content);
+
+        int y = 0;
+        foreach (var childLine in div.Children)
+        {
+            AddDisplayLineToContainer(childLine, content, y);
+            y += EffectiveLineHeight;
+        }
+
+        return wrapper;
+    }
+
+    int AddDisplayLineToContainer(ConsoleDisplayLine line, Control container, int yOffset)
+    {
+        if (line == null)
+            return 0;
+        var row = new Control();
+        row.MouseFilter = MouseFilterEnum.Pass;
+        row.ClipContents = false;
+        row.Position = new Vector2(0, yOffset);
+
+        foreach (var button in line.Buttons)
+        {
+            if (button.IsButton)
+            {
+                int buttonTop = GetButtonTop(button);
+                int buttonHeight = GetButtonBottom(button) - buttonTop;
+                if (buttonHeight <= 0)
+                    buttonHeight = EffectiveLineHeight;
+                var btn = new Panel();
+                btn.FocusMode = FocusModeEnum.None;
+                btn.MouseForcePassScrollEvents = false;
+                btn.MouseFilter = MouseFilterEnum.Stop;
+                btn.ClipContents = false;
+                EnsureButtonStyles();
+                btn.AddThemeStyleboxOverride("panel", _btnNormalStyle);
+                string inputs = button.Inputs;
+                long generation = button.Generation;
+                btn.GuiInput += inputEvent => OnContentButtonGuiInput(inputEvent, btn, inputs, generation);
+                btn.MouseEntered += () => GenericUtils.SetPointingButton(inputs, generation);
+                btn.MouseExited += () => GenericUtils.ClearPointingButton(generation);
+                btn.SetMeta("generation", generation);
+
+                var contentBox = new Control();
+                contentBox.MouseFilter = MouseFilterEnum.Ignore;
+                contentBox.ClipContents = false;
+                contentBox.Position = new Vector2(0, -buttonTop);
+                btn.AddChild(contentBox);
+
+                foreach (var part in button.StrArray)
+                    AddPartToContainer(part, contentBox, button.PointX);
+
+                foreach (var child in contentBox.GetChildren())
+                {
+                    if (child is Control c)
+                        c.MouseFilter = MouseFilterEnum.Ignore;
+                }
+
+                SetFixedControlSize(contentBox, new Vector2(button.Width, buttonHeight));
+                btn.CustomMinimumSize = new Vector2(button.Width, buttonHeight);
+                btn.Position = new Vector2(button.PointX, buttonTop);
+                btn.Size = new Vector2(button.Width, buttonHeight);
+                row.AddChild(btn);
+            }
+            else
+            {
+                foreach (var part in button.StrArray)
+                    AddPartToContainer(part, row, 0);
+            }
+        }
+
+        int maxHeight = GetLineBottom(line);
+        SetFixedControlSize(row, new Vector2(GetLineRight(line), maxHeight));
+        container.AddChild(row);
+        return maxHeight;
+    }
+
+    static int GetLineRight(ConsoleDisplayLine line)
+    {
+        int right = 0;
+        if (line?.Buttons == null)
+            return right;
+        foreach (var button in line.Buttons)
+        {
+            if (button == null)
+                continue;
+            right = System.Math.Max(right, button.PointX + button.Width);
+        }
+        return right;
+    }
+
+    void AddDivBorder(Control wrapper, int[] border, int[] borderColor, float boxX, float boxY, float boxW, float boxH)
+    {
+        if (border == null || borderColor == null || boxW <= 0 || boxH <= 0)
+            return;
+        AddBorderRect(wrapper, boxX, boxY, boxW, BoxValue(border, BoxDirection.Top), ColorValue(borderColor, BoxDirection.Top));
+        AddBorderRect(wrapper, boxX + boxW - BoxValue(border, BoxDirection.Right), boxY, BoxValue(border, BoxDirection.Right), boxH, ColorValue(borderColor, BoxDirection.Right));
+        AddBorderRect(wrapper, boxX, boxY + boxH - BoxValue(border, BoxDirection.Bottom), boxW, BoxValue(border, BoxDirection.Bottom), ColorValue(borderColor, BoxDirection.Bottom));
+        AddBorderRect(wrapper, boxX, boxY, BoxValue(border, BoxDirection.Left), boxH, ColorValue(borderColor, BoxDirection.Left));
+    }
+
+    void AddBorderRect(Control wrapper, float x, float y, float w, float h, int color)
+    {
+        if (w <= 0 || h <= 0 || color < 0)
+            return;
+        var rect = new ColorRect();
+        rect.MouseFilter = MouseFilterEnum.Ignore;
+        rect.Color = new Godot.Color(((color >> 16) & 0xFF) / 255f, ((color >> 8) & 0xFF) / 255f, (color & 0xFF) / 255f, 1f);
+        rect.Position = new Vector2(x, y);
+        rect.Size = new Vector2(w, h);
+        wrapper.AddChild(rect);
+    }
+
+    static int BoxValue(int[] values, int index)
+    {
+        if (values == null || index < 0 || index >= values.Length)
+            return 0;
+        return values[index];
+    }
+
+    static int ColorValue(int[] values, int index)
+    {
+        if (values == null || index < 0 || index >= values.Length)
+            return -1;
+        return values[index];
+    }
+
+    Vector2 GetHtmlDivPosition(ConsoleDivPart div, int relX)
+    {
+        switch (div.Display)
+        {
+            case DisplayMode.Absolute:
+            case DisplayMode.AbsoluteLeftBottom:
+                return new Vector2(div.X, Config.WindowY - div.Y - div.DivHeight);
+            case DisplayMode.AbsoluteLeftTop:
+                return new Vector2(div.X, div.Y);
+            default:
+                return new Vector2(div.PointX - relX + div.X, div.Y);
+        }
+    }
+
+    Vector2 GetHtmlImagePosition(ConsoleImagePart imagePart, int relX)
+    {
+        switch (imagePart.Display)
+        {
+            case DisplayMode.Absolute:
+            case DisplayMode.AbsoluteLeftBottom:
+                return new Vector2(
+                    imagePart.PositionX + imagePart.dest_rect.X,
+                    Config.WindowY + imagePart.PositionY);
+            case DisplayMode.AbsoluteLeftTop:
+                return new Vector2(
+                    imagePart.PositionX + imagePart.dest_rect.X,
+                    imagePart.PositionY);
+            default:
+                return new Vector2(
+                    imagePart.PointX - relX + imagePart.dest_rect.X,
+                    imagePart.dest_rect.Y);
+        }
     }
 
     static bool IsDynamicCutinName(string name)
@@ -1210,6 +1552,8 @@ public partial class EmueraContent : Control
         }
 
         int nodeIndex = 0;
+        renderedCbgLayers.Clear();
+        int currentScrollY = GetCurrentContentScrollY();
         foreach (var cbg in list)
         {
             if (cbg.zdepth == 0)
@@ -1233,15 +1577,56 @@ public partial class EmueraContent : Control
                 emuImg.SourceRegion = default;
             }
             emuImg.DrawOffset = new Vector2(0, 0);
-            emuImg.Position = new Vector2(cbg.x, cbg.y);
-            int w = cbg.width > 0 ? cbg.width : (cbg.Img.DestBaseSize.Width > 0 ? cbg.Img.DestBaseSize.Width : texture.GetWidth());
-            int h = cbg.height > 0 ? cbg.height : (cbg.Img.DestBaseSize.Height > 0 ? cbg.Img.DestBaseSize.Height : texture.GetHeight());
+            emuImg.Position = GetCbgLayerPosition(cbg, currentScrollY);
+            bool flipX = cbg.width < 0;
+            bool flipY = cbg.height < 0;
+            int w = cbg.width != 0 ? System.Math.Abs(cbg.width) : (cbg.Img.DestBaseSize.Width > 0 ? cbg.Img.DestBaseSize.Width : texture.GetWidth());
+            int h = cbg.height != 0 ? System.Math.Abs(cbg.height) : (cbg.Img.DestBaseSize.Height > 0 ? cbg.Img.DestBaseSize.Height : texture.GetHeight());
             emuImg.Size = new Vector2(w, h);
+            emuImg.FlipX = flipX;
+            emuImg.FlipY = flipY;
             emuImg.Modulate = new Godot.Color(1, 1, 1, cbg.opacity);
+            emuImg.SetColorMatrix(cbg.colorMatrix);
             emuImg.Visible = true;
+            renderedCbgLayers.Add(cbg);
             nodeIndex++;
         }
+        lastCbgScrollVertical = currentScrollY;
         TrimCbgNodes(nodeIndex);
+    }
+
+    Vector2 GetCbgLayerPosition(MinorShift.Emuera.GameView.EmueraConsole.ClientBackGroundImage cbg, int currentScrollY)
+    {
+        int y = cbg.y;
+        if (cbg.followScroll)
+        {
+            if (cbg.initialScrollY == int.MinValue)
+                cbg.initialScrollY = currentScrollY;
+            y -= currentScrollY - cbg.initialScrollY;
+        }
+        return new Vector2(cbg.x, y);
+    }
+
+    int GetCurrentContentScrollY()
+    {
+        return scrollContainer != null ? scrollContainer.ScrollVertical : 0;
+    }
+
+    void RefreshCbgFollowScrollPositions()
+    {
+        if (renderedCbgLayers.Count == 0 || cbgNodes.Count == 0)
+            return;
+        int currentScrollY = GetCurrentContentScrollY();
+        if (currentScrollY == lastCbgScrollVertical)
+            return;
+        int count = System.Math.Min(renderedCbgLayers.Count, cbgNodes.Count);
+        for (int i = 0; i < count; i++)
+        {
+            var cbg = renderedCbgLayers[i];
+            if (cbg != null && cbg.followScroll && cbgNodes[i] != null)
+                cbgNodes[i].Position = GetCbgLayerPosition(cbg, currentScrollY);
+        }
+        lastCbgScrollVertical = currentScrollY;
     }
 
     EmueraImage GetOrCreateCbgNode(int index)
@@ -1258,6 +1643,12 @@ public partial class EmueraContent : Control
 
     public void PlaySoundFile(string path, bool loop, int channel)
     {
+        PlaySoundFile(path, loop ? -1 : 1, channel);
+    }
+
+    public void PlaySoundFile(string path, int repeat, int channel)
+    {
+        bool loop = repeat < 0;
         var stream = LoadAudioStream(path, loop);
         if (stream == null)
         {
@@ -1266,28 +1657,50 @@ public partial class EmueraContent : Control
         }
         while (soundPlayers.Count <= channel)
         {
+            int newChannel = soundPlayers.Count;
             var newPlayer = new AudioStreamPlayer();
+            newPlayer.Finished += () => OnSoundPlayerFinished(newChannel);
             soundPlayers.Add(newPlayer);
+            soundRepeatRemaining.Add(0);
             AddChild(newPlayer);
         }
         AudioStreamPlayer player = soundPlayers[channel];
         player.Stop();
         player.Stream = stream;
         player.VolumeDb = LinearToDb(soundVolume);
+        soundRepeatRemaining[channel] = loop ? -1 : Math.Max(repeat, 1);
         player.Play();
         GenericUtils.NotifySoundPlaybackStarted(channel, path, GetAudioStreamLengthMs(stream));
     }
 
+    void OnSoundPlayerFinished(int channel)
+    {
+        if (channel < 0 || channel >= soundPlayers.Count || channel >= soundRepeatRemaining.Count)
+            return;
+        int remaining = soundRepeatRemaining[channel];
+        if (remaining < 0)
+            return;
+        remaining--;
+        soundRepeatRemaining[channel] = remaining;
+        if (remaining > 0)
+            soundPlayers[channel].Play();
+    }
+
     public void StopSounds()
     {
-        foreach (var player in soundPlayers)
-            player.Stop();
+        for (int i = 0; i < soundPlayers.Count; i++)
+        {
+            soundRepeatRemaining[i] = 0;
+            soundPlayers[i].Stop();
+        }
     }
 
     public void StopSoundChannel(int channel)
     {
         if (channel < 0 || channel >= soundPlayers.Count)
             return;
+        if (channel < soundRepeatRemaining.Count)
+            soundRepeatRemaining[channel] = 0;
         soundPlayers[channel].Stop();
     }
 
@@ -1360,8 +1773,14 @@ public partial class EmueraContent : Control
 
     AudioStream LoadAudioStream(string path, bool loop)
     {
-        if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path))
+        if (string.IsNullOrEmpty(path))
             return null;
+        path = uEmuera.Utils.ResolveExistingFilePath(path);
+        if (!uEmuera.Utils.FileExists(path))
+        {
+            GenericUtils.Info($"[AUDIO] File not found: {path}");
+            return null;
+        }
         string ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
         switch (ext)
         {
@@ -1379,8 +1798,11 @@ public partial class EmueraContent : Control
                 var mp3 = AudioStreamMP3.LoadFromFile(path);
                 if (mp3 != null)
                     mp3.Loop = loop;
+                else
+                    GenericUtils.Info($"[AUDIO] Failed to load MP3: {path}");
                 return mp3;
             default:
+                GenericUtils.Info($"[AUDIO] Unsupported audio extension \"{ext}\": {path}");
                 return null;
         }
     }
@@ -1455,18 +1877,7 @@ public partial class EmueraContent : Control
             {
                 var line = kvp.Value;
                 var lineButtons = new List<(string text, Godot.Color color, string code)>();
-                foreach (var btn in line.Buttons)
-                {
-                    if (!btn.IsButton)
-                        continue;
-                    if (btn.Generation != lastButtonGeneration)
-                        continue;
-                    string text = btn.ToString().Trim();
-                    if (string.IsNullOrEmpty(text))
-                        text = btn.Title ?? "";
-                    Godot.Color color = GetQuickButtonColor(btn);
-                    lineButtons.Add((text, color, btn.Inputs));
-                }
+                CollectQuickButtons(line, lineButtons);
                 if (lineButtons.Count > 0)
                     lineGroups.Add((kvp.Key, lineButtons));
             }
@@ -1493,6 +1904,30 @@ public partial class EmueraContent : Control
                 }
                 if (i < lineGroups.Count - 1)
                     quickButtons.ShiftLine();
+            }
+        }
+    }
+
+    void CollectQuickButtons(ConsoleDisplayLine line, List<(string text, Godot.Color color, string code)> output)
+    {
+        if (line?.Buttons == null || output == null)
+            return;
+        foreach (var btn in line.Buttons)
+        {
+            if (btn.IsButton && btn.Generation == lastButtonGeneration)
+            {
+                string text = btn.ToString().Trim();
+                if (string.IsNullOrEmpty(text))
+                    text = btn.Title ?? "";
+                output.Add((text, GetQuickButtonColor(btn), btn.Inputs));
+            }
+            foreach (var part in btn.StrArray)
+            {
+                if (part is ConsoleDivPart div && div.Children != null)
+                {
+                    foreach (var childLine in div.Children)
+                        CollectQuickButtons(childLine, output);
+                }
             }
         }
     }
@@ -1896,6 +2331,8 @@ public partial class EmueraContent : Control
     {
         ProcessContentInertia((float)delta);
         PublishAudioPlaybackPositions();
+        RefreshCbgFollowScrollPositions();
+        RefreshCbgAnimationPauseState();
         RefreshQuickInputGate();
         if (quickInputGateActive && Time.GetTicksMsec() - quickInputGateTick >= QuickInputGateFallbackMs && !EmueraThread.instance.Running())
         {
@@ -1912,6 +2349,30 @@ public partial class EmueraContent : Control
             return;
         lastAutoClickSkipTick = now;
         EmueraThread.instance.Input("", false, true);
+    }
+
+    void RefreshCbgAnimationPauseState()
+    {
+        if (renderedCbgLayers.Count == 0 || cbgNodes.Count == 0 || cbgContainer == null)
+            return;
+        var viewRect = cbgContainer.GetGlobalRect();
+        int count = System.Math.Min(renderedCbgLayers.Count, cbgNodes.Count);
+        for (int i = 0; i < count; i++)
+        {
+            var sprite = renderedCbgLayers[i].Img;
+            if (sprite is MinorShift.Emuera.Content.SpriteAnime anime)
+            {
+                var node = cbgNodes[i];
+                if (node == null)
+                    continue;
+                var nodeRect = node.GetGlobalRect();
+                bool visible = nodeRect.Intersects(viewRect);
+                if (visible)
+                    anime.ResumeAnimation();
+                else
+                    anime.PauseAnimation();
+            }
+        }
     }
 
     void PublishAudioPlaybackPositions()
@@ -2026,6 +2487,10 @@ public partial class EmueraContent : Control
             return false;
 
         bool handled = false;
+        bool restoreQuickInputGate = false;
+        string pressedButtonInput = null;
+        long pressedButtonGeneration = 0;
+        bool advanceTap = false;
         if (contentDragMoved)
         {
             StartContentInertia();
@@ -2033,18 +2498,26 @@ public partial class EmueraContent : Control
         }
         else if (contentDragStartedOnButton)
         {
-            OnButtonPressed(contentDragButtonInput, contentDragButtonGeneration);
-            RestoreQuickInputGate();
+            pressedButtonInput = contentDragButtonInput;
+            pressedButtonGeneration = contentDragButtonGeneration;
+            restoreQuickInputGate = true;
             handled = true;
         }
         else if (!contentDragStartedOnButton)
         {
-            handled = TryAdvanceTap(acceptEvent);
-            if (handled)
-                RestoreQuickInputGate();
+            var console = GlobalStatic.Console;
+            advanceTap = console != null && (console.IsWaitingEnterKey || console.IsWaitAnyKey);
+            handled = advanceTap;
+            restoreQuickInputGate = advanceTap;
         }
 
         ResetContentDragState();
+        if (pressedButtonInput != null)
+            OnButtonPressed(pressedButtonInput, pressedButtonGeneration);
+        else if (advanceTap)
+            TryAdvanceTap(acceptEvent);
+        if (restoreQuickInputGate)
+            RestoreQuickInputGate();
         if (handled)
         {
             if (acceptEvent)

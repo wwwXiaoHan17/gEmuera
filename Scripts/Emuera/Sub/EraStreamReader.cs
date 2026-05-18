@@ -19,6 +19,7 @@ namespace MinorShift.Emuera.Sub
 		int nextNo = 0;
 		StreamReader reader;
 		Stream stream;
+		string[] cachedLines;
 
 		public bool Open(string path)
 		{
@@ -50,10 +51,38 @@ namespace MinorShift.Emuera.Sub
 			return true;
 		}
 
+		public bool OpenOnCache(string path)
+		{
+			return OpenOnCache(path, Path.GetFileName(path));
+		}
+
+		public bool OpenOnCache(string path, string name)
+		{
+			if (!Preload.TryGetFileLines(path, out cachedLines))
+				return Open(path, name);
+			filepath = path;
+			filename = name;
+			nextNo = 0;
+			curNo = 0;
+			return true;
+		}
+
 		public string ReadLine()
 		{
-			nextNo++;
+			string line = ReadRawLine();
 			curNo = nextNo;
+			return line;
+		}
+
+		string ReadRawLine()
+		{
+			if (cachedLines != null)
+			{
+				if (nextNo >= cachedLines.Length)
+					return null;
+				return cachedLines[nextNo++];
+			}
+			nextNo++;
 			return reader.ReadLine();
 		}
 
@@ -67,9 +96,8 @@ namespace MinorShift.Emuera.Sub
 			curNo = nextNo;
 			while (true)
 			{
-				line = reader.ReadLine();
+				line = ReadRawLine();
 				curNo++;
-				nextNo++;
 				if (line == null)
 					return null;
 				if (line.Length == 0)
@@ -102,8 +130,7 @@ namespace MinorShift.Emuera.Sub
 			StringBuilder b = new StringBuilder();
 			while (true)
 			{
-				line = reader.ReadLine();
-				nextNo++;
+				line = ReadRawLine();
 				if (line == null)
 				{
 					throw new CodeEE("行連結始端記号'{'が使われましたが終端記号'}'が見つかりません", new ScriptPosition(filename, curNo));
@@ -174,6 +201,7 @@ namespace MinorShift.Emuera.Sub
 			filename = null;
 			reader = null;
 			stream = null;
+			cachedLines = null;
 			disposed = true;
 		}
 

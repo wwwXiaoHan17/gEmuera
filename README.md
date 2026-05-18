@@ -8,8 +8,17 @@ Emuera 是日本 eramaker 系列文字游戏的执行引擎，通过解析 `.ERB
 
 ## 特性
 
-- 完整的 Emuera 1824+v18 引擎兼容
-- 支持 ERB 脚本执行、CSV 数据加载、SHIFT-JIS/UTF-8 编码
+- 统一的 `Emuera1824+v24+EMv18+EEv55` 公共核心
+- v18 游戏兼容；v24 / EE / EM 扩展游戏原生支持
+- `DIMF` / `FUNCTIONF` / `LOCALF` / `ARGF` / `RESULTF` 浮点数支持
+- `VARIADIC` 可变参数函数、`#REF` / `#REFS` / `#REFF` 引用型参数
+- `SETIMAGELAYER` / `CLEARIMAGELAYER` 图像层控制、`SETANIMETIMER` 动画定时器
+- `EXISTFUNCTION` 支持 lazyload 补载触发
+- 可选 Lazyload 加速策略（`lazyloading.cfg` + 按需补载）
+- Snake 兼容 profile（同一核心上的兼容配置，非独立核心）
+- 存档兼容说明：v18 存档可读；v24 新存档不保证可回旧 v18 引擎
+- 未实现功能诚实声明：SafeArithmetic、Sprite 翻转、动画暂停/恢复、Zip 压缩存档等尚未实现
+- ERB 脚本执行、CSV 数据加载、SHIFT-JIS/UTF-8 编码
 - GPU 加速的 ColorMatrix 颜色变换（桌面端，角色立绘着色）
 - Godot 原生 `Image.BlendRect` 精灵合成（高性能替代逐像素混合）
 - 固定行高渲染模型，图片通过 Y 偏移覆盖绘制（与原版一致）

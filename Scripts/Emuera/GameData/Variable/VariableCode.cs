@@ -12,6 +12,7 @@ namespace MinorShift.Emuera.GameData.Variable
         __CAN_FORBID__ = 0x00010000,
 		__INTEGER__ = 0x00020000,
 		__STRING__ = 0x00040000,
+		__FLOAT__ = 0x00200000,
 		__ARRAY_1D__ = 0x00080000,
 		__CHARACTER_DATA__ = 0x00100000,//第一引数を省略可能。TARGETで補う
 		__UNCHANGEABLE__ = 0x00400000,//変更不可属性
@@ -98,8 +99,11 @@ namespace MinorShift.Emuera.GameData.Variable
 		ARG = 0x3E | __INTEGER__ | __ARRAY_1D__ | __LOCAL__ | __EXTENDED__ | __CAN_FORBID__,//関数の引数用
 		GLOBAL = 0x3F | __INTEGER__ | __ARRAY_1D__ | __GLOBAL__ | __EXTENDED__ | __CAN_FORBID__,//グローバル数値型変数
 		RANDDATA = 0x40 | __INTEGER__ | __ARRAY_1D__ | __SAVE_EXTENDED__ | __EXTENDED__,//グローバル数値型変数
-		ARGF = 0x41 | __INTEGER__ | __ARRAY_1D__ | __LOCAL__ | __EXTENDED__ | __CAN_FORBID__,//Snake互換: 浮動小数引数を整数互換で扱う
+		LOCALF = 0x3D | __FLOAT__ | __ARRAY_1D__ | __LOCAL__ | __EXTENDED__ | __CAN_FORBID__,
+		ARGF = 0x41 | __FLOAT__ | __ARRAY_1D__ | __LOCAL__ | __EXTENDED__ | __CAN_FORBID__,
+		RESULTF = 0x00 | __FLOAT__ | __EXTENDED__,
 		__COUNT_INTEGER_ARRAY__ = 0x42,
+		__COUNT_FLOAT_ARRAY__ = 0x01,
 
 
 		SAVESTR = 0x00 | __STRING__ | __ARRAY_1D__ | __CAN_FORBID__,//文字列データ。保存される
@@ -228,8 +232,11 @@ namespace MinorShift.Emuera.GameData.Variable
 		SAVESTRNAME = 0x17 | __STRING__ | __ARRAY_1D__ | __UNCHANGEABLE__ | __EXTENDED__ | __CONSTANT__ | __CAN_FORBID__,
 		GLOBALNAME = 0x18 | __STRING__ | __ARRAY_1D__ | __UNCHANGEABLE__ | __EXTENDED__ | __CONSTANT__ | __CAN_FORBID__,
 		GLOBALSNAME = 0x19 | __STRING__ | __ARRAY_1D__ | __UNCHANGEABLE__ | __EXTENDED__ | __CONSTANT__ | __CAN_FORBID__,
+		DAYNAME = 0x1A | __STRING__ | __ARRAY_1D__ | __UNCHANGEABLE__ | __EXTENDED__ | __CONSTANT__ | __CAN_FORBID__,
+		TIMENAME = 0x1B | __STRING__ | __ARRAY_1D__ | __UNCHANGEABLE__ | __EXTENDED__ | __CONSTANT__ | __CAN_FORBID__,
+		MONEYNAME = 0x1C | __STRING__ | __ARRAY_1D__ | __UNCHANGEABLE__ | __EXTENDED__ | __CONSTANT__ | __CAN_FORBID__,
 
-        __COUNT_CSV_STRING_ARRAY_1D__ = 0x1A,
+        __COUNT_CSV_STRING_ARRAY_1D__ = 0x1D,
 
 
 		GAMEBASE_AUTHER = 0x04 | __STRING__ | __CALC__ | __UNCHANGEABLE__ | __EXTENDED__,//文字列型。作者。綴りを間違えていたが互換性のため残す。

@@ -1140,7 +1140,7 @@ namespace MinorShift.Emuera.GameProc.Function
         {
             public SP_TINPUT_ArgumentBuilder()
             {
-                argumentTypeArray = new Type[] { typeof(Int64), typeof(Int64), typeof(Int64), typeof(string) };
+                argumentTypeArray = new Type[] { typeof(Int64), typeof(Int64), typeof(Int64), typeof(string), typeof(Int64), typeof(Int64) };
                 minArg = 2;
             }
             public override Argument CreateArgument(InstructionLine line, ExpressionMediator exm)
@@ -1162,7 +1162,7 @@ namespace MinorShift.Emuera.GameProc.Function
 		{
 			public SP_TINPUTS_ArgumentBuilder()
 			{
-				argumentTypeArray = new Type[] { typeof(Int64), typeof(string), typeof(Int64), typeof(string) };
+				argumentTypeArray = new Type[] { typeof(Int64), typeof(string), typeof(Int64), typeof(string), typeof(Int64), typeof(Int64) };
 				minArg = 2;
 			}
 			public override Argument CreateArgument(InstructionLine line, ExpressionMediator exm)
@@ -1805,7 +1805,7 @@ namespace MinorShift.Emuera.GameProc.Function
         {
             public SP_INPUT_ArgumentBuilder()
             {
-                argumentTypeArray = new Type[] { typeof(Int64) };
+                argumentTypeArray = new Type[] { typeof(Int64), typeof(Int64), typeof(Int64), typeof(Int64) };
                 //if (nullable)妥協
                 minArg = 0;
             }

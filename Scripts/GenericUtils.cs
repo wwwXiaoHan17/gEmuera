@@ -354,6 +354,11 @@ internal static class GenericUtils
 
     public static void PlaySoundFile(string path, bool loop)
     {
+        PlaySoundFile(path, loop ? -1 : 1);
+    }
+
+    public static void PlaySoundFile(string path, int repeat)
+    {
         int channel = 0;
         lock (snakeAudioLock)
         {
@@ -374,7 +379,7 @@ internal static class GenericUtils
             state.TotalMs = 0;
             state.LastKnownCurrentMs = 0;
         }
-        EnqueueUI(() => EmueraContent.instance?.PlaySoundFile(path, loop, channel));
+        EnqueueUI(() => EmueraContent.instance?.PlaySoundFile(path, repeat, channel));
     }
 
     public static void StopSounds()
@@ -439,7 +444,7 @@ internal static class GenericUtils
     public static bool SoundFileExists(string name)
     {
         string path = ResolveSoundPath(name);
-        return !string.IsNullOrEmpty(path) && System.IO.File.Exists(path);
+        return !string.IsNullOrEmpty(path) && uEmuera.Utils.FileExists(path);
     }
 
     public static int FindPlayingSound(int channel)
@@ -684,10 +689,87 @@ internal static class GenericUtils
         foreach (string candidate in candidates)
         {
             string resolved = uEmuera.Utils.ResolveExistingFilePath(candidate);
-            if (!string.IsNullOrEmpty(resolved) && System.IO.File.Exists(resolved))
+            if (!string.IsNullOrEmpty(resolved) && uEmuera.Utils.FileExists(resolved))
                 return resolved;
         }
+        string soundDir = System.IO.Path.Combine(exeDir, "sound");
+        if (uEmuera.Utils.DirectoryExists(soundDir))
+        {
+            string found = uEmuera.Utils.FindFileRecursive(soundDir, name);
+            if (!string.IsNullOrEmpty(found) && uEmuera.Utils.FileExists(found))
+                return found;
+            found = FindSimilarSoundFile(soundDir, name);
+            if (!string.IsNullOrEmpty(found) && uEmuera.Utils.FileExists(found))
+            {
+                Info($"[AUDIO] Resolved similar sound \"{name}\" -> \"{found}\"");
+                return found;
+            }
+        }
         return System.IO.Path.GetFullPath(candidates[0]);
+    }
+
+    static string FindSimilarSoundFile(string soundDir, string requestedName)
+    {
+        if (string.IsNullOrEmpty(soundDir) || string.IsNullOrEmpty(requestedName))
+            return null;
+        string requestedBase = System.IO.Path.GetFileNameWithoutExtension(requestedName);
+        string requestedExt = System.IO.Path.GetExtension(requestedName);
+        if (string.IsNullOrEmpty(requestedBase))
+            return null;
+
+        string best = null;
+        int bestScore = 0;
+        try
+        {
+            foreach (string file in System.IO.Directory.EnumerateFiles(soundDir, "*", System.IO.SearchOption.AllDirectories))
+            {
+                string ext = System.IO.Path.GetExtension(file);
+                if (!IsPlayableAudioExtension(ext))
+                    continue;
+                if (!string.IsNullOrEmpty(requestedExt) && !string.Equals(requestedExt, ext, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                string candidateBase = System.IO.Path.GetFileNameWithoutExtension(file);
+                int score = SharedCjkCharScore(requestedBase, candidateBase);
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    best = file;
+                }
+            }
+        }
+        catch
+        {
+            return null;
+        }
+        return bestScore >= 3 ? best : null;
+    }
+
+    static bool IsPlayableAudioExtension(string ext)
+    {
+        return string.Equals(ext, ".wav", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(ext, ".ogg", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(ext, ".mp3", StringComparison.OrdinalIgnoreCase);
+    }
+
+    static int SharedCjkCharScore(string left, string right)
+    {
+        if (string.IsNullOrEmpty(left) || string.IsNullOrEmpty(right))
+            return 0;
+        var seen = new HashSet<char>();
+        int score = 0;
+        foreach (char c in left)
+        {
+            if (!IsCjk(c) || !seen.Add(c))
+                continue;
+            if (right.IndexOf(c) >= 0)
+                score++;
+        }
+        return score;
+    }
+
+    static bool IsCjk(char c)
+    {
+        return (c >= 0x3400 && c <= 0x9FFF) || (c >= 0xF900 && c <= 0xFAFF);
     }
 
     static int ClampEraVolume(int volume)

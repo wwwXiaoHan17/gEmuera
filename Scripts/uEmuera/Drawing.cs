@@ -428,7 +428,7 @@ namespace uEmuera.Drawing
         public bool Bold { get { return (fontStyle & FontStyle.Bold) > 0; } }
         public bool Italic { get { return (fontStyle & FontStyle.Italic) > 0; } }
         public bool Underline { get { return (fontStyle & FontStyle.Underline) > 0; } }
-        public bool Strikeout { get { return (fontStyle & FontStyle.Underline) > 0; } }
+        public bool Strikeout { get { return (fontStyle & FontStyle.Strikeout) > 0; } }
 
         public GraphicsUnit Unit { get { return graphicsUnit; } }
         GraphicsUnit graphicsUnit;

@@ -19,7 +19,7 @@ namespace MinorShift.Emuera.GameProc
 			uint snakeStart = 0;
 			uint snakeLastLog = 0;
 			int snakeStartLineCount = state.lineCount;
-			if (Program.IsSnakeProfile)
+			if (Config.DisplayReport)
 			{
 				snakeStart = _Library.WinmmTimer.TickCount;
 				snakeLastLog = snakeStart;
@@ -32,7 +32,7 @@ namespace MinorShift.Emuera.GameProc
 				if (Config.InfiniteLoopAlertTime > 0 && (state.lineCount % 10000 == 0))
 					checkInfiniteLoop();
 				LogicalLine line = state.CurrentLine;
-				if (Program.IsSnakeProfile && state.lineCount % 5000 == 0)
+				if (Config.DisplayReport && state.lineCount % 5000 == 0)
 				{
 					uint now = _Library.WinmmTimer.TickCount;
 					if (now - snakeLastLog >= 2000)
@@ -506,9 +506,9 @@ namespace MinorShift.Emuera.GameProc
 						if ((iValue & 2) != 0)
 							fs |= FontStyle.Italic;
 						if ((iValue & 4) != 0)
-							fs |= FontStyle.Strikeout;
-						if ((iValue & 8) != 0)
 							fs |= FontStyle.Underline;
+						if ((iValue & 8) != 0)
+							fs |= FontStyle.Strikeout;
 						exm.Console.SetStringStyle(fs);
 					}
 					break;
@@ -752,7 +752,25 @@ namespace MinorShift.Emuera.GameProc
 						throw new CodeEE("ASSERT文の引数が0です");
 					break;
 				case FunctionCode.THROW:
-					throw new CodeEE(((ExpressionArgument)func.Argument).Term.GetStrValue(exm));
+					{
+						string throwMessage = ((ExpressionArgument)func.Argument).Term.GetStrValue(exm);
+						bool inBeforeThrow = state.IsInBeforeThrow;
+						if (inBeforeThrow)
+						{
+							console.PrintSingleLine(throwMessage);
+							break;
+						}
+						state.PendingThrowMessage = throwMessage;
+						state.PendingThrowLine = func;
+						var beforeThrow = CalledFunction.CallEventFunction(this, "BEFORE_THROW", func);
+						if (beforeThrow == null)
+						{
+							state.ClearPendingThrow();
+							throw new CodeEE(throwMessage);
+						}
+						state.IntoFunction(beforeThrow, null, null);
+						break;
+					}
 				case FunctionCode.CLEARTEXTBOX:
 					GlobalStatic.MainWindow.clear_richText();
 					break;
