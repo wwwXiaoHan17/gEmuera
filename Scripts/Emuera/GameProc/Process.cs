@@ -124,13 +124,15 @@ namespace MinorShift.Emuera.GameProc
                 console.setStBar(Config.DrawLineString);
 
 				//_rename.csv読み込み
-				if (Config.UseRenameFile)
+				string renamePath = Program.CsvDir + "_Rename.csv";
+				bool renameFileExists = uEmuera.Utils.FileExists(renamePath);
+				if (Config.UseRenameFile || renameFileExists)
                 {
-					if (uEmuera.Utils.FileExists(Program.CsvDir + "_Rename.csv"))
+					if (renameFileExists)
                     {
                         if (Config.DisplayReport || Program.AnalysisMode)
 							console.PrintSystemLine("_Rename.csv読み込み中・・・");
-						ParserMediator.LoadEraExRenameFile(Program.CsvDir + "_Rename.csv");
+						ParserMediator.LoadEraExRenameFile(renamePath);
                     }
                     else
                         console.PrintError("csv\\_Rename.csvが見つかりません");

@@ -40,7 +40,7 @@ namespace MinorShift.Emuera.Sub
 			try
 			{
 				stream = new FileStream(filepath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-				reader = new StreamReader(stream, Config.Encode);
+				reader = new StreamReader(stream, DetectTextEncoding(stream), true);
 			}
 			catch (Exception ex)
 			{
@@ -49,6 +49,68 @@ namespace MinorShift.Emuera.Sub
 				return false;
 			}
 			return true;
+		}
+
+		static Encoding DetectTextEncoding(Stream source)
+		{
+			if (source == null || !source.CanSeek)
+				return Config.Encode;
+			long origin = source.Position;
+			try
+			{
+				byte[] sample = new byte[Math.Min(4096, (int)Math.Min(source.Length, int.MaxValue))];
+				int read = source.Read(sample, 0, sample.Length);
+				source.Position = origin;
+				if (read >= 3 && sample[0] == 0xEF && sample[1] == 0xBB && sample[2] == 0xBF)
+					return new UTF8Encoding(true, true);
+				if (IsValidUtf8(sample, read))
+					return new UTF8Encoding(false, true);
+				Encoding cp932 = GetCp932Encoding();
+				return cp932 ?? Config.Encode;
+			}
+			catch
+			{
+				try { source.Position = origin; } catch { }
+				return Config.Encode;
+			}
+		}
+
+		static bool IsValidUtf8(byte[] bytes, int count)
+		{
+			try
+			{
+				new UTF8Encoding(false, true).GetString(bytes, 0, count);
+				return true;
+			}
+			catch (DecoderFallbackException)
+			{
+				return false;
+			}
+		}
+
+		static Encoding GetCp932Encoding()
+		{
+			try
+			{
+				Type providerType = Type.GetType("System.Text.CodePagesEncodingProvider, System.Text.Encoding.CodePages");
+				if (providerType != null)
+				{
+					object provider = providerType.GetProperty("Instance")?.GetValue(null, null);
+					if (provider is EncodingProvider encodingProvider)
+						Encoding.RegisterProvider(encodingProvider);
+				}
+			}
+			catch
+			{
+			}
+			try
+			{
+				return Encoding.GetEncoding(932);
+			}
+			catch
+			{
+				return null;
+			}
 		}
 
 		public bool OpenOnCache(string path)

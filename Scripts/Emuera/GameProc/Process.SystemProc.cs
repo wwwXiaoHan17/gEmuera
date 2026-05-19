@@ -168,12 +168,9 @@ namespace MinorShift.Emuera.GameProc
 				console.ThrowTitleError(false);
 				return;
 			}
-			// TODO: Snake compatibility fallback — allow startup to continue despite ERB parse warnings.
-			// Standard v24 behavior is to exit on unrecoverable parse errors (see else-if below).
-			// Remove once snake scripts are cleaned up; use CompatiErrorLine config in the meantime.
-			if ((!noError) && (!Config.CompatiErrorLine) && Program.IsSnakeProfile)
+			if ((!noError) && (!Config.CompatiErrorLine) && (Program.IsSnakeProfile || Program.IsMegatenProfile))
 			{
-				console.PrintSystemLine("Snake互換モード: ERB解析警告がありますが起動を継続します");
+				console.PrintSystemLine((Program.IsSnakeProfile ? "Snake" : "MGT") + "互換モード: ERB解析警告がありますが起動を継続します");
 				console.PrintSystemLine("emuera.logにログを出力します");
 				console.OutputLog(Program.ExeDir + "emuera.log");
 			}

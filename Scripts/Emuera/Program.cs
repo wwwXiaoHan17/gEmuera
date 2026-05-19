@@ -244,6 +244,10 @@ namespace MinorShift.Emuera
 		{
 			get { return CoreProfile == EmueraCoreProfile.Snake || CoreProfile == EmueraCoreProfile.SnakeModernMobile; }
 		}
+		public static bool IsMegatenProfile
+		{
+			get { return IsMegatenGameDirectory(ExeDir); }
+		}
 		public static bool SupportsLazyLoading { get { return true; } }
 		public static bool IsSnakeModernMobileProfile { get { return CoreProfile == EmueraCoreProfile.SnakeModernMobile; } }
 
@@ -363,6 +367,17 @@ namespace MinorShift.Emuera
 			{
 			}
 			return false;
+		}
+
+		private static bool IsMegatenGameDirectory(string exeDir)
+		{
+			if (string.IsNullOrEmpty(exeDir))
+				return false;
+			string normalized = uEmuera.Utils.NormalizePath(exeDir);
+			string name = Path.GetFileName(normalized.TrimEnd('/', '\\'));
+			return !string.IsNullOrEmpty(name)
+				&& (name.IndexOf("MGT", StringComparison.OrdinalIgnoreCase) >= 0
+					|| name.IndexOf("Megaten", StringComparison.OrdinalIgnoreCase) >= 0);
 		}
 
 	}

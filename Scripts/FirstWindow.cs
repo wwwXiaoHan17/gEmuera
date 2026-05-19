@@ -28,11 +28,20 @@ public partial class FirstWindow : Control
 	Label statusLabel;
 	OptionButton categoryButton;
 	Label categoryHintLabel;
+	Label selectedGameLabel;
 	Control announcementOverlay;
 	Label announcementStatusLabel;
 	LauncherGameCategory currentCategory = LauncherGameCategory.V24Pure;
 	bool androidPermissionCheckPending = false;
 	bool androidPermissionResultReceived = false;
+	bool gameListDragActive = false;
+	bool gameListDragMoved = false;
+	Vector2 gameListDragStartPosition = Vector2.Zero;
+	Vector2 gameListDragLastPosition = Vector2.Zero;
+	ulong gameListDragLastTick = 0;
+	float gameListScrollVelocity = 0.0f;
+	const float GameListDragThreshold = 8.0f;
+	const float GameListInertiaDeceleration = 2600.0f;
 
 	public override void _Ready()
 	{
@@ -78,7 +87,15 @@ public partial class FirstWindow : Control
 		margin.AddChild(root);
 
 		root.AddChild(CreateHeader());
-		root.AddChild(CreateGamePanel());
+
+		var body = new HBoxContainer();
+		body.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		body.SizeFlagsVertical = SizeFlags.ExpandFill;
+		body.AddThemeConstantOverride("separation", 14);
+		root.AddChild(body);
+
+		body.AddChild(CreateOptionsPanel());
+		body.AddChild(CreateGamePanel());
 
 		statusLabel = new Label();
 		statusLabel.HorizontalAlignment = HorizontalAlignment.Center;
@@ -99,7 +116,7 @@ public partial class FirstWindow : Control
 		header.AddChild(titleBlock);
 
 		var title = new Label();
-		title.Text = MultiLanguage.Get("FirstWindow.Title", "gEmuera(Emuera for Godot)");
+		title.Text = MultiLanguage.Get("FirstWindow.Title", "gEmuera");
 		title.AutowrapMode = TextServer.AutowrapMode.WordSmart;
 		title.AddThemeFontSizeOverride("font_size", 28);
 		title.AddThemeColorOverride("font_color", new Color(0.96f, 0.98f, 1.0f));
@@ -275,15 +292,16 @@ public partial class FirstWindow : Control
 		return label;
 	}
 
-	Control CreateGamePanel()
+	Control CreateOptionsPanel()
 	{
-		var panel = CreatePanel(new Color(0.105f, 0.125f, 0.15f), new Color(0.2f, 0.25f, 0.31f));
+		var panel = CreatePanel(new Color(0.095f, 0.115f, 0.14f), new Color(0.2f, 0.25f, 0.31f));
 		panel.SizeFlagsVertical = SizeFlags.ExpandFill;
+		panel.CustomMinimumSize = new Vector2(280, 0);
 
 		var content = CreatePanelContent(panel, 16);
 		content.AddThemeConstantOverride("separation", 12);
 
-		content.AddChild(CreateSectionTitle(MultiLanguage.Get("FirstWindow.SelectGame", "选择游戏")));
+		content.AddChild(CreateSectionTitle(MultiLanguage.Get("FirstWindow.Options", "选项")));
 		content.AddChild(CreateCategorySelector());
 
 		categoryHintLabel = new Label();
@@ -293,7 +311,78 @@ public partial class FirstWindow : Control
 		content.AddChild(categoryHintLabel);
 		UpdateCategoryHint();
 
+		var refreshButton = new Button();
+		refreshButton.Text = MultiLanguage.Get("FirstWindow.Refresh", "刷新列表");
+		refreshButton.CustomMinimumSize = new Vector2(0, 42);
+		refreshButton.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		refreshButton.Pressed += ScanGames;
+		content.AddChild(refreshButton);
+
+		content.AddChild(new HSeparator());
+		content.AddChild(CreateSectionTitle(MultiLanguage.Get("FirstWindow.NoticeTitle", "公告")));
+		content.AddChild(CreateInlineAnnouncement());
+
+		return panel;
+	}
+
+	Control CreateInlineAnnouncement()
+	{
+		var box = new VBoxContainer();
+		box.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		box.SizeFlagsVertical = SizeFlags.ExpandFill;
+		box.AddThemeConstantOverride("separation", 10);
+
+		var notice = new RichTextLabel();
+		notice.BbcodeEnabled = true;
+		notice.FitContent = false;
+		notice.ScrollActive = true;
+		notice.CustomMinimumSize = new Vector2(0, 130);
+		notice.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		notice.SizeFlagsVertical = SizeFlags.ExpandFill;
+		notice.AddThemeFontSizeOverride("normal_font_size", 14);
+		notice.Text = MultiLanguage.Get("FirstWindow.NoticeBody",
+			"[b]启动提示[/b]\n"
+			+ "选择 v24 可运行普通 Emuera 游戏；snake 用于 TW、蛇系核心游戏；All 会显示全部识别到的游戏。\n\n"
+			+ "如果游戏使用 [[名称]] 语法，请保留 csv/_Rename.csv。");
+		box.AddChild(notice);
+
+		var feedback = new Label();
+		feedback.Text = MultiLanguage.Get("FirstWindow.FeedbackBody", $"反馈 QQ 群：{FeedbackQqGroup}");
+		feedback.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+		feedback.AddThemeFontSizeOverride("font_size", 13);
+		feedback.AddThemeColorOverride("font_color", new Color(0.74f, 0.82f, 0.9f));
+		box.AddChild(feedback);
+
+		var copyButton = new Button();
+		copyButton.Text = MultiLanguage.Get("FirstWindow.CopyQQ", "复制群号");
+		copyButton.CustomMinimumSize = new Vector2(0, 40);
+		copyButton.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		copyButton.Pressed += CopyFeedbackGroup;
+		box.AddChild(copyButton);
+
+		var githubButton = new LinkButton();
+		githubButton.Text = MultiLanguage.Get("FirstWindow.GitHubShort", "GitHub 项目页");
+		githubButton.TooltipText = ProjectGitHubUrl;
+		githubButton.AddThemeFontSizeOverride("font_size", 14);
+		githubButton.Pressed += () => OS.ShellOpen(ProjectGitHubUrl);
+		box.AddChild(githubButton);
+
+		return box;
+	}
+
+	Control CreateGamePanel()
+	{
+		var panel = CreatePanel(new Color(0.105f, 0.125f, 0.15f), new Color(0.2f, 0.25f, 0.31f));
+		panel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		panel.SizeFlagsVertical = SizeFlags.ExpandFill;
+		panel.CustomMinimumSize = new Vector2(360, 0);
+
+		var content = CreatePanelContent(panel, 16);
+		content.AddThemeConstantOverride("separation", 12);
+
+		content.AddChild(CreateSectionTitle(MultiLanguage.Get("FirstWindow.SelectGame", "选择游戏")));
 		gameList = new ItemList();
+		gameList.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 		gameList.SizeFlagsVertical = SizeFlags.ExpandFill;
 		gameList.CustomMinimumSize = new Vector2(0, 260);
 		gameList.AddThemeFontSizeOverride("font_size", 20);
@@ -301,7 +390,15 @@ public partial class FirstWindow : Control
 		gameList.AddThemeConstantOverride("line_separation", 8);
 		gameList.ItemSelected += OnGameSelected;
 		gameList.ItemActivated += OnGameActivated;
+		gameList.GuiInput += OnGameListGuiInput;
 		content.AddChild(gameList);
+
+		selectedGameLabel = new Label();
+		selectedGameLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+		selectedGameLabel.AddThemeFontSizeOverride("font_size", 13);
+		selectedGameLabel.AddThemeColorOverride("font_color", new Color(0.7f, 0.78f, 0.86f));
+		selectedGameLabel.Text = MultiLanguage.Get("FirstWindow.SelectHint", "选择一个游戏后启动。");
+		content.AddChild(selectedGameLabel);
 
 		startButton = new Button();
 		startButton.Text = MultiLanguage.Get("FirstWindow.Start", "Start");
@@ -407,12 +504,26 @@ public partial class FirstWindow : Control
 		if (categoryHintLabel == null)
 			return;
 
-		categoryHintLabel.Text = currentCategory switch
+		categoryHintLabel.Text = BuildCategoryHint();
+	}
+
+	string BuildCategoryHint()
+	{
+		return currentCategory switch
 		{
-			LauncherGameCategory.Snake => MultiLanguage.Get("FirstWindow.SnakeHint", $"snake：蛇版 TW 请放入 {GetSnakeRootHint()}，启动时会使用 snake 核心。"),
-			LauncherGameCategory.All => MultiLanguage.Get("FirstWindow.AllHint", $"All：显示 {GetNormalRootHint()} 下所有可识别游戏，包括 snake 目录。"),
-			_ => MultiLanguage.Get("FirstWindow.V24PureHint", $"v24：扫描 {GetNormalRootHint()} 下的普通游戏（兼容 v18），不显示 snake 目录。")
+			LauncherGameCategory.Snake => $"snake：扫描 {GetSnakeRootHint()}，使用 snake 核心。",
+			LauncherGameCategory.All => $"All：显示 {GetNormalRootHint()} 下所有可识别游戏，包括 snake。",
+			_ => $"v24：扫描 {GetNormalRootHint()} 下的普通游戏，兼容 v18/v24。"
 		};
+	}
+
+	public override void _Process(double delta)
+	{
+		if (gameListDragActive || Mathf.Abs(gameListScrollVelocity) < 1.0f)
+			return;
+
+		ScrollGameListBy(gameListScrollVelocity * (float)delta);
+		gameListScrollVelocity = Mathf.MoveToward(gameListScrollVelocity, 0.0f, GameListInertiaDeceleration * (float)delta);
 	}
 
 	public override void _ExitTree()
@@ -483,6 +594,8 @@ public partial class FirstWindow : Control
 
 		gameList.Clear();
 		startButton.Disabled = true;
+		if (selectedGameLabel != null)
+			selectedGameLabel.Text = MultiLanguage.Get("FirstWindow.SelectHint", "Select a game to start.");
 
 		var roots = GetScanRoots(currentCategory);
 		bool includeSnake = currentCategory != LauncherGameCategory.V24Pure;
@@ -637,10 +750,12 @@ public partial class FirstWindow : Control
 		string label = GetGameDisplayName(root, fullPath);
 		gameList.AddItem(label);
 		gameList.SetItemMetadata(gameList.ItemCount - 1, fullPath);
+		gameList.SetItemTooltip(gameList.ItemCount - 1, fullPath);
 		if (PathsEqual(fullPath, selectedPath))
 		{
 			gameList.Select(gameList.ItemCount - 1);
 			startButton.Disabled = false;
+			UpdateSelectedGameLabel(gameList.ItemCount - 1);
 		}
 	}
 
@@ -655,6 +770,92 @@ public partial class FirstWindow : Control
 	void OnGameSelected(long index)
 	{
 		startButton.Disabled = false;
+		UpdateSelectedGameLabel((int)index);
+	}
+
+	void UpdateSelectedGameLabel(int index)
+	{
+		if (selectedGameLabel == null || gameList == null || index < 0 || index >= gameList.ItemCount || gameList.IsItemDisabled(index))
+			return;
+
+		string path = gameList.GetItemMetadata(index).As<string>();
+		selectedGameLabel.Text = $"{gameList.GetItemText(index)}\n{path}";
+	}
+
+	void OnGameListGuiInput(InputEvent inputEvent)
+	{
+		if (gameList == null)
+			return;
+
+		if (inputEvent is InputEventScreenDrag screenDrag)
+		{
+			if (!gameListDragActive)
+				BeginGameListDrag(screenDrag.Position);
+			HandleGameListDrag(screenDrag.Position, screenDrag.Relative);
+			AcceptEvent();
+			return;
+		}
+
+		if (inputEvent is InputEventMouseButton mouseButton && mouseButton.ButtonIndex == MouseButton.Left)
+		{
+			if (mouseButton.Pressed)
+				BeginGameListDrag(mouseButton.Position);
+			else
+				EndGameListDrag();
+			return;
+		}
+
+		if (inputEvent is InputEventMouseMotion mouseMotion && gameListDragActive && (mouseMotion.ButtonMask & MouseButtonMask.Left) != 0)
+		{
+			HandleGameListDrag(mouseMotion.Position, mouseMotion.Relative);
+			if (gameListDragMoved)
+				AcceptEvent();
+		}
+	}
+
+	void BeginGameListDrag(Vector2 position)
+	{
+		gameListDragActive = true;
+		gameListDragMoved = false;
+		gameListDragStartPosition = position;
+		gameListDragLastPosition = position;
+		gameListDragLastTick = Time.GetTicksMsec();
+		gameListScrollVelocity = 0.0f;
+	}
+
+	void HandleGameListDrag(Vector2 position, Vector2 relative)
+	{
+		if (!gameListDragActive)
+			BeginGameListDrag(position);
+
+		if (!gameListDragMoved && (position - gameListDragStartPosition).Length() >= GameListDragThreshold)
+			gameListDragMoved = true;
+
+		if (gameListDragMoved)
+			ScrollGameListBy(relative.Y);
+
+		ulong now = Time.GetTicksMsec();
+		float elapsed = Mathf.Max((now - gameListDragLastTick) / 1000.0f, 0.001f);
+		gameListScrollVelocity = relative.Y / elapsed;
+		gameListDragLastPosition = position;
+		gameListDragLastTick = now;
+	}
+
+	void EndGameListDrag()
+	{
+		gameListDragActive = false;
+		if (!gameListDragMoved)
+			gameListScrollVelocity = 0.0f;
+	}
+
+	void ScrollGameListBy(float verticalDelta)
+	{
+		var bar = gameList?.GetVScrollBar();
+		if (bar == null)
+			return;
+
+		float nextValue = Mathf.Clamp((float)bar.Value - verticalDelta, (float)bar.MinValue, (float)bar.MaxValue);
+		bar.Value = nextValue;
 	}
 
 	void OnGameActivated(long index)
