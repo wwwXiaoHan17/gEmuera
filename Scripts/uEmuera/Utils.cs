@@ -149,6 +149,13 @@ namespace uEmuera
                 return null;
             rootDir = NormalizePath(rootDir);
             targetFileName = NormalizePath(targetFileName);
+
+            string direct = FindFileDirect(rootDir, targetFileName);
+            if (!string.IsNullOrEmpty(direct))
+                return direct;
+            if (!DirectoryExists(rootDir))
+                return null;
+
             string baseName = Path.GetFileName(targetFileName);
             string noExtName = Path.GetFileNameWithoutExtension(baseName);
             var index = GetOrBuildRecursiveFileIndex(rootDir);
@@ -158,6 +165,28 @@ namespace uEmuera
                 return found;
             if (!string.IsNullOrEmpty(noExtName) && index.TryGetValue(noExtName, out found))
                 return found;
+            return null;
+        }
+
+        static string FindFileDirect(string rootDir, string targetFileName)
+        {
+            if (Path.IsPathRooted(targetFileName) || targetFileName.Contains("://"))
+            {
+                if (FileExists(targetFileName))
+                    return ResolveExistingFilePath(targetFileName);
+            }
+
+            string rootedTarget = Path.Combine(rootDir, targetFileName);
+            if (FileExists(rootedTarget))
+                return ResolveExistingFilePath(rootedTarget);
+
+            string baseName = Path.GetFileName(targetFileName);
+            if (!string.IsNullOrEmpty(baseName) && !string.Equals(baseName, targetFileName, StringComparison.OrdinalIgnoreCase))
+            {
+                string topLevelTarget = Path.Combine(rootDir, baseName);
+                if (FileExists(topLevelTarget))
+                    return ResolveExistingFilePath(topLevelTarget);
+            }
             return null;
         }
 
@@ -502,6 +531,46 @@ namespace uEmuera
         {
             return c < 0x127 || halfsize.Contains(c);
         }
+
+        public static bool CheckZeroWidth(char c)
+        {
+            return c == '\u200B'
+                || c == '\u200C'
+                || c == '\u200D'
+                || c == '\u2060'
+                || c == '\uFEFF'
+                || c == '\u180E'
+                || c == '\u00AD'
+                || (c >= '\uFE00' && c <= '\uFE0F');
+        }
+
+        public static string StripZeroWidth(string s)
+        {
+            if (string.IsNullOrEmpty(s))
+                return s;
+
+            int first = -1;
+            for (int i = 0; i < s.Length; i++)
+            {
+                if (CheckZeroWidth(s[i]))
+                {
+                    first = i;
+                    break;
+                }
+            }
+            if (first < 0)
+                return s;
+
+            var builder = new System.Text.StringBuilder(s.Length);
+            if (first > 0)
+                builder.Append(s, 0, first);
+            for (int i = first + 1; i < s.Length; i++)
+            {
+                if (!CheckZeroWidth(s[i]))
+                    builder.Append(s[i]);
+            }
+            return builder.ToString();
+        }
         /// <summary>
         /// 获取文本长
         /// </summary>
@@ -515,6 +584,8 @@ namespace uEmuera
             for(int i = 0; i < s.Length; ++i)
             {
                 c = s[i];
+                if(CheckZeroWidth(c))
+                    continue;
                 if(CheckHalfSize(c))
                     xsize += fontsize / 2;
                 else
@@ -550,6 +621,8 @@ namespace uEmuera
             var length = str.Length;
             for(int i = 0; i < length; ++i)
             {
+                if(CheckZeroWidth(str[i]))
+                    continue;
                 if(CheckHalfSize(str[i]))
                     count += 1;
                 else

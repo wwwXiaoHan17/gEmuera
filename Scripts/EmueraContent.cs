@@ -435,7 +435,7 @@ public partial class EmueraContent : Control
     {
         var label = new Label();
         label.MouseFilter = MouseFilterEnum.Ignore;
-        label.Text = text ?? "";
+        label.Text = uEmuera.Utils.StripZeroWidth(text) ?? "";
         ApplyFont(label);
         label.AddThemeColorOverride("font_color", new Godot.Color(color.r, color.g, color.b, color.a));
         if (font?.Bold == true)
@@ -1937,20 +1937,25 @@ public partial class EmueraContent : Control
         if (quickInputGateActive && quickInputGateGeneration == generation && quickInputGateRevision == displayRevision)
             return;
 
-        if (generation >= lastButtonGeneration)
-        {
-            quickInputGateActive = true;
-            quickInputGateGeneration = generation;
-            quickInputGateRevision = displayRevision;
-            quickInputGateTick = Time.GetTicksMsec();
-            quickAutoHiddenUntilNextButtons = true;
-            quickAutoHiddenGeneration = (int)generation;
-            quickButtons?.SetInputEnabled(true);
-            quickButtons?.HidePad();
-            UpdateSystemButtonVisuals();
-        }
+        HideQuickUntilNextButtons(generation);
 
         OnButtonPressed(input, generation);
+    }
+
+    void HideQuickUntilNextButtons(long generation)
+    {
+        if (generation < lastButtonGeneration)
+            return;
+
+        quickInputGateActive = true;
+        quickInputGateGeneration = generation;
+        quickInputGateRevision = displayRevision;
+        quickInputGateTick = Time.GetTicksMsec();
+        quickAutoHiddenUntilNextButtons = true;
+        quickAutoHiddenGeneration = (int)generation;
+        quickButtons?.SetInputEnabled(true);
+        quickButtons?.HidePad();
+        UpdateSystemButtonVisuals();
     }
 
     public void RefreshQuickButtonSettings()
@@ -2500,7 +2505,6 @@ public partial class EmueraContent : Control
         {
             pressedButtonInput = contentDragButtonInput;
             pressedButtonGeneration = contentDragButtonGeneration;
-            restoreQuickInputGate = true;
             handled = true;
         }
         else if (!contentDragStartedOnButton)
@@ -2513,7 +2517,10 @@ public partial class EmueraContent : Control
 
         ResetContentDragState();
         if (pressedButtonInput != null)
+        {
+            HideQuickUntilNextButtons(pressedButtonGeneration);
             OnButtonPressed(pressedButtonInput, pressedButtonGeneration);
+        }
         else if (advanceTap)
             TryAdvanceTap(acceptEvent);
         if (restoreQuickInputGate)

@@ -60,6 +60,72 @@ namespace MinorShift.Emuera.GameProc
 			get { return noneventLabelDic.Keys; }
 		}
 
+		public void SortLabel(FunctionLabelLine label)
+		{
+			string key = label.LabelName;
+			noneventLabelDic.Remove(key);
+			eventLabelDic.Remove(key);
+
+			if (!labelAtDic.TryGetValue(key, out List<FunctionLabelLine> list) || list.Count == 0)
+				return;
+			if (list.Count > 1)
+				list.Sort();
+
+			if (!list[0].IsEvent)
+			{
+				noneventLabelDic[key] = list[0];
+				GlobalStatic.IdentifierDictionary.resizeLocalVars("ARG", list[0].LabelName, list[0].ArgLength);
+				GlobalStatic.IdentifierDictionary.resizeLocalVars("ARGS", list[0].LabelName, list[0].ArgsLength);
+				GlobalStatic.IdentifierDictionary.resizeLocalVars("ARGF", list[0].LabelName, list[0].ArgFloatLength);
+				return;
+			}
+
+			if (Config.CompatiCallEvent)
+				noneventLabelDic[key] = list[0];
+
+			List<FunctionLabelLine>[] eventLabels = new List<FunctionLabelLine>[4];
+			for (int i = 0; i < eventLabels.Length; i++)
+				eventLabels[i] = new List<FunctionLabelLine>();
+
+			foreach (FunctionLabelLine line in list)
+			{
+				if (line.IsOnly)
+					eventLabels[0].Add(line);
+				if (line.IsPri)
+					eventLabels[1].Add(line);
+				if (line.IsLater)
+					eventLabels[3].Add(line);
+				if (!line.IsPri && !line.IsLater)
+					eventLabels[2].Add(line);
+			}
+
+			int localMax = 0;
+			int localsMax = 0;
+			for (int i = 0; i < eventLabels.Length; i++)
+			{
+				for (int j = 0; j < eventLabels[i].Count; j++)
+				{
+					if (eventLabels[i][j].LocalLength > localMax)
+						localMax = eventLabels[i][j].LocalLength;
+					if (eventLabels[i][j].LocalsLength > localsMax)
+						localsMax = eventLabels[i][j].LocalsLength;
+				}
+			}
+			if (localMax < GlobalStatic.IdentifierDictionary.getLocalDefaultSize("LOCAL"))
+				localMax = GlobalStatic.IdentifierDictionary.getLocalDefaultSize("LOCAL");
+			if (localsMax < GlobalStatic.IdentifierDictionary.getLocalDefaultSize("LOCALS"))
+				localsMax = GlobalStatic.IdentifierDictionary.getLocalDefaultSize("LOCALS");
+			for (int i = 0; i < eventLabels.Length; i++)
+			{
+				for (int j = 0; j < eventLabels[i].Count; j++)
+				{
+					eventLabels[i][j].LocalLength = localMax;
+					eventLabels[i][j].LocalsLength = localsMax;
+				}
+			}
+			eventLabelDic.Add(key, eventLabels);
+		}
+
 		public void SortLabels()
 		{
 			foreach (KeyValuePair<string, List<FunctionLabelLine>[]> pair in eventLabelDic)
@@ -78,6 +144,7 @@ namespace MinorShift.Emuera.GameProc
 					noneventLabelDic.Add(key, list[0]);
                     GlobalStatic.IdentifierDictionary.resizeLocalVars("ARG", list[0].LabelName, list[0].ArgLength);
                     GlobalStatic.IdentifierDictionary.resizeLocalVars("ARGS", list[0].LabelName, list[0].ArgsLength);
+                    GlobalStatic.IdentifierDictionary.resizeLocalVars("ARGF", list[0].LabelName, list[0].ArgFloatLength);
 					continue;
 				}
 				//1810alpha010 オプションによりイベント関数をイベント関数でないかのように呼び出すことを許可
@@ -148,6 +215,7 @@ namespace MinorShift.Emuera.GameProc
 
 		public void RemoveLabelWithPath(string fname)
 		{
+			bool removed = false;
 			List<FunctionLabelLine> labelLines;
 			List<FunctionLabelLine> removeLine = new List<FunctionLabelLine>();
 			List<string> removeKey = new List<string>();
@@ -163,6 +231,8 @@ namespace MinorShift.Emuera.GameProc
 				foreach (FunctionLabelLine remove in removeLine)
 				{
 					labelLines.Remove(remove);
+					count--;
+					removed = true;
 					if (labelLines.Count == 0)
 						removeKey.Add(key);
 				}
@@ -177,9 +247,27 @@ namespace MinorShift.Emuera.GameProc
 				if (string.Equals(invalidList[i].Position.Filename, fname, Config.SCIgnoreCase))
 				{
 					invalidList.RemoveAt(i);
+					removed = true;
 					i--;
 				}
 			}
+
+			for (int i = 0; i < labelDollarList.Count; i++)
+			{
+				GotoLabelLine label = labelDollarList[i];
+				if (string.Equals(label.Position.Filename, fname, Config.SCIgnoreCase)
+					|| (label.ParentLabelLine != null && string.Equals(label.ParentLabelLine.Position.Filename, fname, Config.SCIgnoreCase)))
+				{
+					labelDollarList.RemoveAt(i);
+					removed = true;
+					i--;
+				}
+			}
+
+			if (removed && count < 0)
+				count = 0;
+			if (removed)
+				SortLabels();
 		}
 
 

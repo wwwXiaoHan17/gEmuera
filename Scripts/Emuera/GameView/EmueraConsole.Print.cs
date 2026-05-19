@@ -457,11 +457,8 @@ namespace MinorShift.Emuera.GameView
 			Font font = Config.Font;
 			printCWidth = stringMeasure.GetDisplayLength(str, font);
 
-			str += " ";
-			printCWidthL = stringMeasure.GetDisplayLength(str, font);
-
-			str += " ";
-			printCWidthL2 = stringMeasure.GetDisplayLength(str, font);
+			printCWidthL = printCWidth;
+			printCWidthL2 = printCWidth;
 		}
 
 		private string CreateTypeCString(string str, bool alignmentRight)

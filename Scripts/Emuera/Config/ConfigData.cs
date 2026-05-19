@@ -31,7 +31,7 @@ static ConfigData() { }
 		private ConfigData() { setDefault(); }
 
 		//適当に大き目の配列を作っておく。
-		private AConfigItem[] configArray = new AConfigItem[74];
+		private AConfigItem[] configArray = new AConfigItem[75];
 		private AConfigItem[] replaceArray = new AConfigItem[50];
 		private AConfigItem[] debugArray = new AConfigItem[20];
 		private System.Text.StringBuilder configDebugLog = new System.Text.StringBuilder();
@@ -103,6 +103,7 @@ static ConfigData() { }
 			{ "ALLOW CALL ON EVENT FUNCTIONS", ConfigCode.CompatiCallEvent },
 			{ "ALLOW SP CHARACTERS", ConfigCode.CompatiSPChara },
 			{ "USE THE BINARY FORMAT FOR SAVING DATA", ConfigCode.SystemSaveInBinary },
+			{ "COMPRESS SAVE DATA", ConfigCode.ZipSaveData },
 			{ "ALLOW ARGUMENTS OMISSION FOR USER FUNCTIONS", ConfigCode.CompatiFuncArgOptional },
 			{ "AUTO TOSTR CONVERSION FOR USER FUNCTION ARGUMENTS", ConfigCode.CompatiFuncArgAutoConvert },
 			{ "DO NOT PROCESS TRIPLE SYMBOLS INSIDE FORM", ConfigCode.SystemIgnoreTripleSymbol },
@@ -220,6 +221,7 @@ static ConfigData() { }
 			configArray[i++] = new ConfigItem<bool>(ConfigCode.CompatiSPChara, "SPキャラを使用する", false);
 			
 			configArray[i++] = new ConfigItem<bool>(ConfigCode.SystemSaveInBinary, "セーブデータをバイナリ形式で保存する", true);
+			configArray[i++] = new ConfigItem<bool>(ConfigCode.ZipSaveData, "セーブデータを圧縮して保存する", false);
 			configArray[i++] = new ConfigItem<bool>(ConfigCode.CompatiFuncArgOptional, "ユーザー関数の全ての引数の省略を許可する", false);
 			configArray[i++] = new ConfigItem<bool>(ConfigCode.CompatiFuncArgAutoConvert, "ユーザー関数の引数に自動的にTOSTRを補完する", false);
 			configArray[i++] = new ConfigItem<bool>(ConfigCode.SystemIgnoreTripleSymbol, "FORM中の三連記号を展開しない", false);

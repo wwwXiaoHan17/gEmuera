@@ -119,6 +119,7 @@ namespace MinorShift.Emuera
 		CompatiLinefeedAs1739,
         useLanguage,
 		SystemSaveInBinary,
+		ZipSaveData,
 		CompatiFuncArgAutoConvert,
 		CompatiFuncArgOptional,
 		AllowLongInputByMouse,

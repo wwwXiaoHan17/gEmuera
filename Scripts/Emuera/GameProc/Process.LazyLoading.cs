@@ -21,6 +21,12 @@ namespace MinorShift.Emuera.GameProc
 		public readonly HashSet<string> ChangedFiles =
 			new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+		int lazyLoadingRuntimeBatchCount = 0;
+		int lazyLoadingRuntimeFileCount = 0;
+		int lazyLoadingRuntimeElapsedMs = 0;
+		int lazyLoadingRuntimeMaxMs = 0;
+		string lazyLoadingRuntimeMaxFunction = "";
+
 		static string cachedLazyLoadingSourceDir;
 		static string cachedLazyLoadingWorkingDir;
 
@@ -57,15 +63,106 @@ namespace MinorShift.Emuera.GameProc
 		{
 			if (LazyCurrentLazyStatus == LazyStatus.Disabled)
 				return false;
-			if (!lazyLoadingTable.TryGetValue(functionName, out List<string> files))
+			if (!lazyLoadingTable.TryGetValue(functionName, out List<string> files) || files.Count == 0)
 				return false;
 
+			List<string> filesToLoad = files.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 			var loader = new ErbLoader(console, exm, this);
-			if (loader.loadErbs(files, labelDic))
-				return labelDic.GetNonEventLabel(functionName) != null;
+			int start = Environment.TickCount;
+			if (loader.loadErbs(filesToLoad, labelDic, true))
+			{
+				RecordLazyLoadingRuntime(functionName, filesToLoad.Count, Environment.TickCount - start);
+				RemoveLazyLoadingEntriesForFiles(filesToLoad);
+				return true;
+			}
 
 			console.PrintSystemLine("LazyLoading: failed to load ERB for @" + functionName);
 			return false;
+		}
+
+		public void ResetLazyLoadingRuntimeStats()
+		{
+			lazyLoadingRuntimeBatchCount = 0;
+			lazyLoadingRuntimeFileCount = 0;
+			lazyLoadingRuntimeElapsedMs = 0;
+			lazyLoadingRuntimeMaxMs = 0;
+			lazyLoadingRuntimeMaxFunction = "";
+		}
+
+		public void LogLazyLoadingRuntimeStats(string phase)
+		{
+			if (lazyLoadingRuntimeBatchCount == 0)
+				return;
+			GenericUtils.Info(
+				$"[LOADSAVE] {phase} lazyload: batches={lazyLoadingRuntimeBatchCount}, files={lazyLoadingRuntimeFileCount}, total={lazyLoadingRuntimeElapsedMs}ms, max={lazyLoadingRuntimeMaxMs}ms @{lazyLoadingRuntimeMaxFunction}");
+		}
+
+		private void RecordLazyLoadingRuntime(string functionName, int fileCount, int elapsedMs)
+		{
+			lazyLoadingRuntimeBatchCount++;
+			lazyLoadingRuntimeFileCount += fileCount;
+			lazyLoadingRuntimeElapsedMs += elapsedMs;
+			if (elapsedMs > lazyLoadingRuntimeMaxMs)
+			{
+				lazyLoadingRuntimeMaxMs = elapsedMs;
+				lazyLoadingRuntimeMaxFunction = functionName;
+			}
+		}
+
+		public bool PreloadEventLoadLazyErbs()
+		{
+			if (LazyCurrentLazyStatus == LazyStatus.Disabled || LazyCurrentLazyStatus == LazyStatus.NoLazy)
+				return false;
+			if (lazyLoadingTable.Count == 0)
+				return false;
+
+			List<string> filesToLoad = lazyLoadingTable
+				.Where(pair => IsEventLoadHotLazyLabel(pair.Key))
+				.SelectMany(pair => pair.Value)
+				.Distinct(StringComparer.OrdinalIgnoreCase)
+				.ToList();
+			if (filesToLoad.Count == 0)
+				return false;
+
+			int start = Environment.TickCount;
+			var loader = new ErbLoader(console, exm, this);
+			if (loader.loadErbs(filesToLoad, labelDic, true))
+			{
+				int elapsed = Environment.TickCount - start;
+				RecordLazyLoadingRuntime("EVENTLOAD_PRELOAD", filesToLoad.Count, elapsed);
+				RemoveLazyLoadingEntriesForFiles(filesToLoad);
+				GenericUtils.Info($"[LOADSAVE] EVENTLOAD lazy preload: {filesToLoad.Count} files, {elapsed}ms");
+				return true;
+			}
+
+			console.PrintSystemLine("LazyLoading: failed to preload EVENTLOAD ERB files");
+			return false;
+		}
+
+		private static bool IsEventLoadHotLazyLabel(string functionName)
+		{
+			if (string.IsNullOrEmpty(functionName))
+				return false;
+			if (!functionName.StartsWith("M_KOJO", StringComparison.OrdinalIgnoreCase))
+				return false;
+			return functionName.IndexOf("FLAGSETTING", StringComparison.OrdinalIgnoreCase) >= 0
+				|| functionName.IndexOf("KOJO_VERSION", StringComparison.OrdinalIgnoreCase) >= 0
+				|| functionName.IndexOf("CUSTOM_TALENT", StringComparison.OrdinalIgnoreCase) >= 0;
+		}
+
+		private void RemoveLazyLoadingEntriesForFiles(IReadOnlyCollection<string> loadedFiles)
+		{
+			var loadedFileSet = new HashSet<string>(loadedFiles, StringComparer.OrdinalIgnoreCase);
+			foreach (string functionName in lazyLoadingTable.Keys.ToList())
+			{
+				List<string> paths = lazyLoadingTable[functionName];
+				paths.RemoveAll(loadedFileSet.Contains);
+				if (paths.Count == 0)
+					lazyLoadingTable.Remove(functionName);
+			}
+
+			foreach (string file in loadedFiles)
+				LazyLoadingFiles.Remove(NormalizeFullPath(file));
 		}
 
 		public bool IsFunctionInLazyLoadingTable(string functionName)
@@ -431,14 +528,17 @@ namespace MinorShift.Emuera.GameProc
 
 			try
 			{
+				var unchangedLabels = lazyLoadingTable
+					.SelectMany(item => item.Value.Select(path => new KeyValuePair<string, string>(item.Key, RelativeErbPath(path))))
+					.ToList();
+
 				EnsureLazyLoadingWorkingDir();
 				using (var dataStream = new FileStream(LazyLoadingDataFilePath, FileMode.Create, FileAccess.Write, FileShare.None, 65536))
 				using (var dataWriter = new BinaryWriter(dataStream, Encoding.UTF8))
 				{
-					int unchangedCount = lazyLoadingTable.Sum(item => item.Value.Count);
 					dataWriter.Write(LazyMagicNumber);
 					dataWriter.Write(LazyVersion);
-					dataWriter.Write(validLabelsToAppend.Count + unchangedCount);
+					dataWriter.Write(validLabelsToAppend.Count + unchangedLabels.Count);
 
 					foreach (FunctionLabelLine label in validLabelsToAppend)
 					{
@@ -446,13 +546,10 @@ namespace MinorShift.Emuera.GameProc
 						dataWriter.Write(NormalizeRelativePath(label.Position.Filename));
 					}
 
-					foreach (var item in lazyLoadingTable)
+					foreach (var item in unchangedLabels)
 					{
-						foreach (string path in item.Value)
-						{
-							dataWriter.Write(item.Key);
-							dataWriter.Write(RelativeErbPath(path));
-						}
+						dataWriter.Write(item.Key);
+						dataWriter.Write(item.Value);
 					}
 				}
 

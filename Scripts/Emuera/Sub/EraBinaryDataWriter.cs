@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 using System.IO;
+using System.IO.Compression;
 
 namespace MinorShift.Emuera.Sub
 {
@@ -17,18 +18,30 @@ namespace MinorShift.Emuera.Sub
 	{
 		public EraBinaryDataWriter(FileStream fs)
 		{
-			writer = new BinaryWriter(fs, Encoding.Unicode);
+			if (Config.SystemSaveInBinary && Config.ZipSaveData)
+			{
+				memoryStream = new MemoryStream();
+				writer = new BinaryWriter(memoryStream, Encoding.Unicode, true);
+				fileWriter = new BinaryWriter(fs, Encoding.Unicode, true);
+			}
+			else
+			{
+				writer = new BinaryWriter(fs, Encoding.Unicode);
+				fileWriter = writer;
+			}
 		}
 		BinaryWriter writer = null;
+		BinaryWriter fileWriter = null;
+		MemoryStream memoryStream = null;
 		
 		public void WriteHeader()
 		{
-			writer.Write(EraBDConst.Header);
-			writer.Write(EraBDConst.Version1808);
-			writer.Write(EraBDConst.DataCount);
+			fileWriter.Write((Config.SystemSaveInBinary && Config.ZipSaveData) ? EraBDConst.ZipHeader : EraBDConst.Header);
+			fileWriter.Write(EraBDConst.Version1808);
+			fileWriter.Write(EraBDConst.DataCount);
 			for (int i = 0; i < EraBDConst.DataCount; i++)
 			{
-				writer.Write((UInt32)0);
+				fileWriter.Write((UInt32)0);
 			}
 		}
 
@@ -555,9 +568,22 @@ namespace MinorShift.Emuera.Sub
 
 		public void Dispose()
 		{
-			if (writer != null)
+			if (Config.SystemSaveInBinary && Config.ZipSaveData && writer != null)
+			{
+				writer.Flush();
+				memoryStream.Position = 0;
+				using (GZipStream gzip = new GZipStream(fileWriter.BaseStream, CompressionMode.Compress, true))
+					memoryStream.CopyTo(gzip);
 				writer.Close();
+				memoryStream = null;
+				fileWriter.Close();
+			}
+			else if (writer != null)
+			{
+				writer.Close();
+			}
 			writer = null;
+			fileWriter = null;
 		}
 
 		#endregion

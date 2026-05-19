@@ -10,10 +10,8 @@ public partial class FirstWindow : Control
 	const string LauncherSettingsSection = "launcher";
 	const string LauncherLastGamePathKey = "last_game_path";
 	const string LauncherLastCoreProfileKey = "last_core_profile";
-	const string LauncherPreloadThreadsKey = "preload_threads";
 	public const string CoreProfileV24Pure = "v24pure";
 	public const string CoreProfileSnake = "snake";
-	public const int PreloadThreadsUnlimited = 0;
 
 	enum LauncherGameCategory
 	{
@@ -24,13 +22,11 @@ public partial class FirstWindow : Control
 
 	public static string SelectedGamePath { get; private set; }
 	public static string SelectedCoreProfileName { get; private set; } = CoreProfileV24Pure;
-	public static int SelectedPreloadThreads { get; private set; } = 4;
 
 	ItemList gameList;
 	Button startButton;
 	Label statusLabel;
 	OptionButton categoryButton;
-	OptionButton preloadThreadButton;
 	Label categoryHintLabel;
 	Control announcementOverlay;
 	Label announcementStatusLabel;
@@ -42,7 +38,6 @@ public partial class FirstWindow : Control
 	{
 		FrameRateHelper.Apply();
 		ResolutionHelper.Apply();
-		SelectedPreloadThreads = LoadPreloadThreadCount();
 
 		BuildLauncherUi();
 
@@ -290,7 +285,6 @@ public partial class FirstWindow : Control
 
 		content.AddChild(CreateSectionTitle(MultiLanguage.Get("FirstWindow.SelectGame", "选择游戏")));
 		content.AddChild(CreateCategorySelector());
-		content.AddChild(CreatePreloadThreadSelector());
 
 		categoryHintLabel = new Label();
 		categoryHintLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
@@ -344,50 +338,6 @@ public partial class FirstWindow : Control
 		box.AddChild(categoryButton);
 
 		return box;
-	}
-
-	Control CreatePreloadThreadSelector()
-	{
-		var box = new VBoxContainer();
-		box.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-		box.AddThemeConstantOverride("separation", 6);
-
-		var label = new Label();
-		label.Text = MultiLanguage.Get("FirstWindow.PreloadThreads", "CSV/ERB 预读线程");
-		label.AddThemeFontSizeOverride("font_size", 14);
-		label.AddThemeColorOverride("font_color", new Color(0.84f, 0.89f, 0.94f));
-		box.AddChild(label);
-
-		preloadThreadButton = new OptionButton();
-		preloadThreadButton.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-		preloadThreadButton.CustomMinimumSize = new Vector2(0, 44);
-		preloadThreadButton.AddThemeFontSizeOverride("font_size", 17);
-		preloadThreadButton.AddItem("4", 4);
-		preloadThreadButton.AddItem("8", 8);
-		preloadThreadButton.AddItem("16", 16);
-		preloadThreadButton.AddItem(MultiLanguage.Get("FirstWindow.PreloadUnlimited", "不限制"), PreloadThreadsUnlimited);
-		SelectPreloadThreadItem();
-		preloadThreadButton.ItemSelected += OnPreloadThreadSelected;
-		box.AddChild(preloadThreadButton);
-
-		return box;
-	}
-
-	void SelectPreloadThreadItem()
-	{
-		if (preloadThreadButton == null)
-			return;
-		int selected = NormalizePreloadThreadCount(SelectedPreloadThreads);
-		for (int i = 0; i < preloadThreadButton.ItemCount; i++)
-		{
-			if (preloadThreadButton.GetItemId(i) == selected)
-			{
-				preloadThreadButton.Select(i);
-				return;
-			}
-		}
-		preloadThreadButton.Select(0);
-		SelectedPreloadThreads = 4;
 	}
 
 	PanelContainer CreatePanel(Color backgroundColor, Color borderColor)
@@ -450,14 +400,6 @@ public partial class FirstWindow : Control
 		currentCategory = (LauncherGameCategory)categoryButton.GetItemId((int)index);
 		UpdateCategoryHint();
 		ScanGames();
-	}
-
-	void OnPreloadThreadSelected(long index)
-	{
-		if (preloadThreadButton == null)
-			return;
-		SelectedPreloadThreads = NormalizePreloadThreadCount(preloadThreadButton.GetItemId((int)index));
-		SavePreloadThreadCount(SelectedPreloadThreads);
 	}
 
 	void UpdateCategoryHint()
@@ -744,7 +686,6 @@ public partial class FirstWindow : Control
 		{
 			SelectedGamePath = saved;
 			SelectedCoreProfileName = LoadLastCoreProfileName();
-			SelectedPreloadThreads = LoadPreloadThreadCount();
 			return saved;
 		}
 
@@ -792,13 +733,6 @@ public partial class FirstWindow : Control
 		return CoreProfileV24Pure;
 	}
 
-	static int NormalizePreloadThreadCount(int value)
-	{
-		if (value <= 0)
-			return PreloadThreadsUnlimited;
-		return System.Math.Max(4, value);
-	}
-
 	static string LoadLastGamePath()
 	{
 		var config = new ConfigFile();
@@ -826,23 +760,6 @@ public partial class FirstWindow : Control
 		config.Load(LauncherSettingsPath);
 		config.SetValue(LauncherSettingsSection, LauncherLastGamePathKey, path);
 		config.SetValue(LauncherSettingsSection, LauncherLastCoreProfileKey, NormalizeCoreProfileName(coreProfileName));
-		config.SetValue(LauncherSettingsSection, LauncherPreloadThreadsKey, NormalizePreloadThreadCount(SelectedPreloadThreads));
-		config.Save(LauncherSettingsPath);
-	}
-
-	static int LoadPreloadThreadCount()
-	{
-		var config = new ConfigFile();
-		if (config.Load(LauncherSettingsPath) != Error.Ok)
-			return 4;
-		return NormalizePreloadThreadCount((int)config.GetValue(LauncherSettingsSection, LauncherPreloadThreadsKey, 4).AsInt32());
-	}
-
-	static void SavePreloadThreadCount(int value)
-	{
-		var config = new ConfigFile();
-		config.Load(LauncherSettingsPath);
-		config.SetValue(LauncherSettingsSection, LauncherPreloadThreadsKey, NormalizePreloadThreadCount(value));
 		config.Save(LauncherSettingsPath);
 	}
 

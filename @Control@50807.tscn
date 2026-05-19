@@ -1,0 +1,46 @@
+[gd_scene format=3]
+
+[ext_resource type="FontFile" path="res://Fonts/MS Gothic.ttf" id="1_h4dpc"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_v5te3"]
+content_margin_left = 0.0
+content_margin_top = 0.0
+content_margin_right = 0.0
+content_margin_bottom = 0.0
+bg_color = Color(0, 0, 0, 0)
+border_color = Color(0, 0, 0, 0)
+
+[node name="_Control_50807" type="Control" unique_id=788042712]
+custom_minimum_size = Vector2(72, 18)
+layout_mode = 3
+anchors_preset = 0
+mouse_filter = 1
+metadata/line_no = 55
+
+[node name="_Panel_50806" type="Panel" parent="." unique_id=1238876398]
+custom_minimum_size = Vector2(72, 18)
+layout_mode = 0
+offset_right = 72.0
+offset_bottom = 18.0
+mouse_force_pass_scroll_events = false
+theme_override_styles/panel = SubResource("StyleBoxFlat_v5te3")
+metadata/generation = 14
+
+[node name="_Control_50804" type="Control" parent="_Panel_50806" unique_id=1730993983]
+custom_minimum_size = Vector2(72, 18)
+anchors_preset = 0
+offset_right = 72.0
+offset_bottom = 18.0
+mouse_filter = 2
+
+[node name="_Label_50805" type="Label" parent="_Panel_50806/_Control_50804" unique_id=649476528]
+clip_contents = true
+custom_minimum_size = Vector2(72, 18)
+layout_mode = 0
+offset_right = 72.0
+offset_bottom = 23.0
+theme_override_colors/font_color = Color(0.7529412, 0.7529412, 0.7529412, 1)
+theme_override_fonts/font = ExtResource("1_h4dpc")
+theme_override_font_sizes/font_size = 18
+text = "[0] 好的"
+clip_text = true

@@ -45,9 +45,11 @@ namespace MinorShift.Emuera.GameData.Variable
                 newSize = func.ArgLength;
             else if (varCode == VariableCode.ARGS)
                 newSize = func.ArgsLength;
+            else if (varCode == VariableCode.ARGF)
+                newSize = func.ArgFloatLength;
 			if (newSize > 0)
 			{
-				if((newSize < size) && ((varCode == VariableCode.ARG) || (varCode == VariableCode.ARGS)))
+				if((newSize < size) && ((varCode == VariableCode.ARG) || (varCode == VariableCode.ARGS) || (varCode == VariableCode.ARGF)))
 					newSize = size;
 				ret = creater(varCode, subKey, newSize);
 			}

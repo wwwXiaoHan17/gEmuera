@@ -1,0 +1,22 @@
+[gd_scene format=3]
+
+[ext_resource type="FontFile" path="res://Fonts/MS Gothic.ttf" id="1_uin6c"]
+
+[node name="_Control_50803" type="Control" unique_id=518280709]
+custom_minimum_size = Vector2(108, 18)
+layout_mode = 3
+anchors_preset = 0
+mouse_filter = 1
+metadata/line_no = 54
+
+[node name="_Label_50802" type="Label" parent="." unique_id=1617344120]
+clip_contents = true
+custom_minimum_size = Vector2(108, 18)
+layout_mode = 0
+offset_right = 108.0
+offset_bottom = 23.0
+theme_override_colors/font_color = Color(0.7529412, 0.7529412, 0.7529412, 1)
+theme_override_fonts/font = ExtResource("1_uin6c")
+theme_override_font_sizes/font_size = 18
+text = "需要选择吗？"
+clip_text = true

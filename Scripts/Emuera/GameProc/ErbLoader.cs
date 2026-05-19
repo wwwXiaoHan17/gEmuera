@@ -144,13 +144,14 @@ namespace MinorShift.Emuera.GameProc
 		/// 指定されたファイルを読み込む
 		/// </summary>
 		/// <param name="filename"></param>
-		public bool loadErbs(List<string> path, LabelDictionary labelDictionary)
+		public bool loadErbs(List<string> path, LabelDictionary labelDictionary, bool isLazyLoading = false)
 		{
 			string fname;
             List<string> isOnlyEvent = new List<string>();
             noError = true;
 			labelDic = labelDictionary;
-			labelDic.Initialized = false;
+			if (!isLazyLoading)
+				labelDic.Initialized = false;
 			foreach (string fpath in path)
 			{
 				if (fpath.StartsWith(Program.ErbDir, Config.SCIgnoreCase) && !Program.AnalysisMode)
@@ -160,16 +161,19 @@ namespace MinorShift.Emuera.GameProc
 				if (Program.AnalysisMode)
 					output.PrintSystemLine(fname + "読み込み中・・・");
 				//System.Windows.Forms.//Application.DoEvents();
-                loadErb(fpath, fname, isOnlyEvent);
+                loadErb(fpath, fname, isOnlyEvent, isLazyLoading);
 			}
             if (Program.AnalysisMode)
                 output.NewLine();
             ParserMediator.FlushWarningList();
-			setLabelsArg();
-			ParserMediator.FlushWarningList();
-			labelDic.Initialized = true;
-            checkScript();
-			ParserMediator.FlushWarningList();
+			if (!isLazyLoading)
+			{
+				setLabelsArg();
+				ParserMediator.FlushWarningList();
+				labelDic.Initialized = true;
+				checkScript();
+				ParserMediator.FlushWarningList();
+			}
 			parentProcess.scaningLine = null;
             isOnlyEvent.Clear();
             return noError;
@@ -333,7 +337,7 @@ namespace MinorShift.Emuera.GameProc
 		/// ファイル一つを読む
 		/// </summary>
 		/// <param name="filepath"></param>
-		private void loadErb(string filepath, string filename, List<string> isOnlyEvent)
+		private void loadErb(string filepath, string filename, List<string> isOnlyEvent, bool isLazyLoading = false)
 		{
 			//読み込んだファイルのパスを記録
 			//一部ファイルの再読み込み時の処理用
@@ -350,6 +354,7 @@ namespace MinorShift.Emuera.GameProc
 				LogicalLine nextLine = new NullLine();
 				LogicalLine lastLine = new NullLine();
 				FunctionLabelLine lastLabelLine = null;
+				List<FunctionLabelLine> tempFunctionLabels = new List<FunctionLabelLine>();
 				StringStream st = null;
 				ScriptPosition position = null;
 				int funcCount = 0;
@@ -408,6 +413,8 @@ namespace MinorShift.Emuera.GameProc
 							else// if (label is FunctionLabelLine)
 							{
 								labelDic.AddLabel(label);
+								if (isLazyLoading)
+									tempFunctionLabels.Add(label);
 								if (!label.IsEvent && (Config.WarnNormalFunctionOverloading || Program.AnalysisMode))
 								{
 									FunctionLabelLine seniorLabel = labelDic.GetSameNameLabel(label);
@@ -473,6 +480,16 @@ namespace MinorShift.Emuera.GameProc
 				addLine(new NullLine(), lastLine);
 				position = new ScriptPosition(eReader.Filename, -1);
 				ppstate.FileEnd(position);
+				if (isLazyLoading)
+				{
+					foreach (FunctionLabelLine label in tempFunctionLabels)
+					{
+						setLabelsArg(label);
+						labelDic.SortLabel(label);
+					}
+					foreach (FunctionLabelLine label in tempFunctionLabels)
+						checkFunctionWithCatch(label);
+				}
 			}
 			finally
 			{
@@ -495,29 +512,34 @@ namespace MinorShift.Emuera.GameProc
 			List<FunctionLabelLine> labelList = labelDic.GetAllLabels(false);
 			foreach (FunctionLabelLine label in labelList)
 			{
-				try
-				{
-					if (label.Arg != null)
-						continue;
-					parentProcess.scaningLine = label;
-					parseLabel(label);
-				}
-				catch (Exception exc)
-				{
-					uEmuera.Media.SystemSounds.Hand.Play();
-					string errmes = exc.Message;
-					if (!(exc is EmueraException))
-						errmes = exc.GetType().ToString() + ":" + errmes;
-					ParserMediator.Warn("関数@" + label.LabelName + " の引数のエラー:" + errmes, label, 2, true, false);
-					label.ErrMes = "ロード時に解析に失敗した関数が呼び出されました";
-                    label.IsError = true;
-				}
-				finally
-				{
-					parentProcess.scaningLine = null;
-				}
+				setLabelsArg(label);
 			}
 			labelDic.SortLabels();
+		}
+
+		private void setLabelsArg(FunctionLabelLine label)
+		{
+			try
+			{
+				if (label.Arg != null)
+					return;
+				parentProcess.scaningLine = label;
+				parseLabel(label);
+			}
+			catch (Exception exc)
+			{
+				uEmuera.Media.SystemSounds.Hand.Play();
+				string errmes = exc.Message;
+				if (!(exc is EmueraException))
+					errmes = exc.GetType().ToString() + ":" + errmes;
+				ParserMediator.Warn("関数@" + label.LabelName + " の引数のエラー:" + errmes, label, 2, true, false);
+				label.ErrMes = "ロード時に解析に失敗した関数が呼び出されました";
+				label.IsError = true;
+			}
+			finally
+			{
+				parentProcess.scaningLine = null;
+			}
 		}
 
 		private void parseLabel(FunctionLabelLine label)

@@ -1,0 +1,32 @@
+diff --git a/Emuera/UI/Game/ConsoleStyledString.cs b/Emuera/UI/Game/ConsoleStyledString.cs
+--- a/Emuera/UI/Game/ConsoleStyledString.cs
++++ b/Emuera/UI/Game/ConsoleStyledString.cs
+@@ -272,7 +272,7 @@ internal sealed class ConsoleStyledString : AConsoleColoredPart
+ 	{
+ 		if (string.IsNullOrEmpty(text))
+ 			return 0;
+-		if (RenderMode == TextDrawingMode.TEXTRENDERER && IsRasterFont && GdiFont != null)
++		if ((RenderMode == TextDrawingMode.TEXTRENDERER || RenderMode == null) && IsRasterFont && GdiFont != null)
+ 		{
+ 			TextFormatFlags flags = TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine;
+ 			return TextRenderer.MeasureText(text, GdiFont, new System.Drawing.Size(int.MaxValue, int.MaxValue), flags).Width;
+@@ -331,7 +331,7 @@ internal sealed class ConsoleStyledString : AConsoleColoredPart
+ 			return;
+ 		}
+ 
+-		if (RenderMode == TextDrawingMode.TEXTRENDERER && GdiFont != null && _gdiTexts != null)
++		if ((RenderMode == TextDrawingMode.TEXTRENDERER || RenderMode == null) && GdiFont != null && _gdiTexts != null)
+ 		{
+ 			var offsetX = 0.0f;
+ 			foreach (var text in _gdiTexts) offsetX += text.Width;
+diff --git a/Emuera/UI/Game/PrintStringBuffer.cs b/Emuera/UI/Game/PrintStringBuffer.cs
+--- a/Emuera/UI/Game/PrintStringBuffer.cs
++++ b/Emuera/UI/Game/PrintStringBuffer.cs
+@@ -566,7 +566,6 @@ internal sealed class PrintStringBuffer
+ 		int widthLimit = divWidth - css.PointX;
+ 		#endregion
+ 		string str = css.Text;
+-		SKFont font = css.Font;
+ 
+ 		//最適なサイズを二分探索する
+ 		var span = str.AsSpan();

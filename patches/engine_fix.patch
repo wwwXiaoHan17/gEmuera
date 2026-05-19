@@ -1,0 +1,345 @@
+diff --git a/Emuera/Runtime/Script/Data/LabelDictionary.cs b/Emuera/Runtime/Script/Data/LabelDictionary.cs
+--- a/Emuera/Runtime/Script/Data/LabelDictionary.cs
++++ b/Emuera/Runtime/Script/Data/LabelDictionary.cs
+@@ -237,6 +237,7 @@ internal sealed class LabelDictionary
+ 	//ファイル名に基づき、そのファイルに紐づくラベルを削除する
+ 	public void RemoveLabelWithPath(string fname)
+ 	{
++		bool removed = false;
+ 		List<string> removeFunctions = [];
+ 		foreach (var (functionName, functions) in labelAtDic)
+ 		{
+@@ -244,6 +245,7 @@ internal sealed class LabelDictionary
+ 
+ 			count -= removeCount;
+ 
++			removed |= removeCount > 0;
+ 			if (functions.Count == 0)
+ 				removeFunctions.Add(functionName);
+ 		}
+@@ -253,7 +255,28 @@ internal sealed class LabelDictionary
+ 			labelAtDic.Remove(rKey);
+ 		}
+ 
+-		invalidList.RemoveAll(line => IsMatch(fname, line));
++		removed |= invalidList.RemoveAll(line => IsMatch(fname, line)) > 0;
++
++		if (!removed)
++			return;
++
++		foreach (var labelName in labelDollarList.Keys.ToList())
++		{
++			var labels = labelDollarList[labelName];
++			foreach (var parent in labels.Keys.Where(line => IsMatch(fname, line)).ToList())
++			{
++				labels.Remove(parent);
++			}
++
++			if (labels.Count == 0)
++			{
++				labelDollarList.Remove(labelName);
++			}
++		}
++
++		// The sorted dictionaries keep direct references to FunctionLabelLine.
++		// Rebuild them after removing a loaded file, otherwise lazy re-loads can
++		// leave stale event labels and execute the same event multiple times.
++		SortLabels();
+ 
+ 		static bool IsMatch(string fname, FunctionLabelLine line)
+ 		{
+diff --git a/Emuera/Runtime/Script/Process.LazyLoading.cs b/Emuera/Runtime/Script/Process.LazyLoading.cs
+--- a/Emuera/Runtime/Script/Process.LazyLoading.cs
++++ b/Emuera/Runtime/Script/Process.LazyLoading.cs
+@@ -45,23 +45,41 @@ internal sealed partial class Process
+ 
+ 	public bool TryLazyLoadErb(string functionName)
+ 	{
+-		if (!LazyLoadingTable.TryGetValue(functionName, out List<string> value))
++		if (!LazyLoadingTable.TryGetValue(functionName, out List<string> value) || value.Count == 0)
+ 		{
+ 			return false;
+ 		}
+ 
++		List<string> filesToLoad = value.Distinct(Config.StrComper).ToList();
+ 		var loader = new ErbLoader(console, exm, this);
+-		if (loader.LoadErbList(value, labelDic).GetAwaiter().GetResult())
++		if (loader.LoadErbList(filesToLoad, labelDic).GetAwaiter().GetResult())
+ 		{
+ 			if (Program.AnalysisMode)
+ 			{
+-				foreach (var str in value)
++				foreach (var str in filesToLoad)
+ 					console.PrintSystemLine(string.Format(trsl.LazyLoadingDebugLoadingFile.Text, str));
+ 			}
+ 
+-			//For updating the table i need this
+-			//LazyLoadingTable.Remove(functionName); // 로딩이 끝나면 해당 테이블 값은 필요가 없음.
++			RemoveLazyLoadingEntriesForFiles(filesToLoad);
+ 			return true;
+ 		}
+@@ -67,6 +85,22 @@ internal sealed partial class Process
+ 		console.PrintSystemLine(string.Format(trsl.LazyLoadingErbFileNotFound.Text, functionName));
+ 		return false;
+ 	}
++
++	private void RemoveLazyLoadingEntriesForFiles(IReadOnlyCollection<string> loadedFiles)
++	{
++		var loadedFileSet = new HashSet<string>(loadedFiles, Config.StrComper);
++		foreach (var functionName in LazyLoadingTable.Keys.ToList())
++		{
++			LazyLoadingTable[functionName].RemoveAll(loadedFileSet.Contains);
++			if (LazyLoadingTable[functionName].Count == 0)
++				LazyLoadingTable.Remove(functionName);
++		}
++
++		foreach (var file in loadedFiles)
++		{
++			LazyLoadingFiles.Remove(file);
++		}
++	}
+ 
+ 	private List<string> LoadLazyLoadingFolders()
+ 	{
+@@ -363,6 +397,10 @@ internal sealed partial class Process
+ 		
+ 		try
+ 		{
++			var unchangedLabels = LazyLoadingTable
++				.SelectMany(item => item.Value.Select(path => (LabelName: item.Key, FileName: ToRelativeErbFileName(path))))
++				.ToList();
++
+ 			// =================================================================
+ 			// 1. 更新函数映射数据 (lazyloading.bin)
+ 			// =================================================================
+@@ -372,8 +410,7 @@ internal sealed partial class Process
+ 				dataWriter.Write(LAZY_VERSION);
+ 				
+ 				// 计算总数: 新增/修改的标签数 + 内存中未改变的标签数
+-				int totalFuncs = validLabelsToAppend.Count + LazyLoadingTable.Sum(x => x.Value.Count);
+-				dataWriter.Write(totalFuncs);
++				dataWriter.Write(validLabelsToAppend.Count + unchangedLabels.Count);
+ 
+ 				// 写入新增/修改的
+ 				foreach (var label in validLabelsToAppend)
+@@ -383,13 +420,11 @@ internal sealed partial class Process
+ 				}
+ 
+ 				// 写入内存中未改变的
+-				foreach (var item in LazyLoadingTable)
++				foreach (var item in unchangedLabels)
+ 				{
+-					// 注意：内存里的路径是完整路径，需要截取掉 Program.ErbDir 部分
+-					string relPath = item.Value[0][Program.ErbDir.Length..];
+-					dataWriter.Write(item.Key);
+-					dataWriter.Write(relPath);
++					dataWriter.Write(item.LabelName);
++					dataWriter.Write(item.FileName);
+ 				}
+ 			}
+@@ -431,6 +466,12 @@ internal sealed partial class Process
+ 		return true;
+ 	}
+ 
++	private static string ToRelativeErbFileName(string path)
++	{
++		return path.StartsWith(Program.ErbDir, Config.SCIgnoreCase)
++			? path[Program.ErbDir.Length..]
++			: Path.GetRelativePath(Program.ErbDir, path);
++	}
++
+ 	static string ErbPath(string a)
+ 	{
+ 		return string.Create(a.Length + "ERB/".Length, (a, b: "ERB/"), (span, tuple) =>
+diff --git a/Emuera/Runtime/Script/Statements/Function/Creator.Method.cs b/Emuera/Runtime/Script/Statements/Function/Creator.Method.cs
+--- a/Emuera/Runtime/Script/Statements/Function/Creator.Method.cs
++++ b/Emuera/Runtime/Script/Statements/Function/Creator.Method.cs
+@@ -9254,7 +9254,9 @@ public sealed class ExistFunctionMethod : FunctionMethod
+ 					bool existsInLazyTable = GlobalStatic.Process.TryLazyLoadErb(searchKey);
+ 					if (existsInLazyTable)
+ 					{
+-						func = GlobalStatic.LabelDictionary.GetNonEventLabel(searchKey);
++						func = GlobalStatic.LabelDictionary.GetNonEventLabel(searchKey) ?? GlobalStatic.LabelDictionary.GetNonEventLabel(functionname);
++						if (func == null)
++							return 0;
+ 						if (func.IsMethod)
+ 						{
+ 							if (func.MethodType == EraType.String)
+diff --git a/Emuera/UI/FontFactory.cs b/Emuera/UI/FontFactory.cs
+--- a/Emuera/UI/FontFactory.cs
++++ b/Emuera/UI/FontFactory.cs
+@@ -11,19 +11,15 @@ internal static class FontFactory
+ {
+ 	static readonly HashSet<string> rasterFontNames = new(StringComparer.OrdinalIgnoreCase)
+-	/*
+-	{
+-		"ＭＳ ゴシック", "MS Gothic", "MS UI Gothic",
+-		"MS PGothic",
+-		"SimHei",
+-		"ＭＳ 明朝", "MS Mincho", "MS PMincho",
+-		"SimSun", "NSimSun", "FangSong", "MingLiU", "PMingLiU"
+-	};
+-	*/
+ 	{
+ 		"ＭＳ ゴシック", "MS Gothic", "MS UI Gothic",
+ 		"MS PGothic",
+ 		"ＭＳ 明朝", "MS Mincho", "MS PMincho",
++		"黑体", "SimHei",
++		"宋体", "SimSun", "新宋体", "NSimSun",
++		"仿宋", "FangSong", "楷体", "KaiTi",
++		"微软雅黑", "Microsoft YaHei",
++		"MingLiU", "PMingLiU"
+ 	};
+ 
+ 	static readonly Dictionary<(string fontname, float fontSize, FontStyle font_style, SkiaSharpFontEdging edging, SkiaSharpFontHinting hinting), SKFont> fontDic = [];
+@@ -33,8 +29,11 @@ internal static class FontFactory
+ 	public static bool IsRasterFont(string fontName)
+ 	{
+-		if (string.IsNullOrEmpty(fontName))
++		if (string.IsNullOrWhiteSpace(fontName))
+ 			return false;
++		fontName = fontName.Trim();
++		if (fontName.StartsWith("@", StringComparison.Ordinal))
++			fontName = fontName[1..];
+ 		return rasterFontNames.Contains(fontName);
+ 	}
+diff --git a/Emuera/UI/Game/ConsoleStyledString.cs b/Emuera/UI/Game/ConsoleStyledString.cs
+--- a/Emuera/UI/Game/ConsoleStyledString.cs
++++ b/Emuera/UI/Game/ConsoleStyledString.cs
+@@ -170,7 +170,7 @@ internal sealed class ConsoleStyledString : AConsoleColoredPart
+ 
+ 		var gdiTextsWithFontList = new List<GdiTextsWithFont>();
+ 
+-		TextFormatFlags flags = TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix;
++		TextFormatFlags flags = TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine;
+ 		var size = TextRenderer.MeasureText(Text, GdiFont, new System.Drawing.Size(int.MaxValue, int.MaxValue), flags);
+ 
+ 		gdiTextsWithFontList.Add(new GdiTextsWithFont
+@@ -266,6 +266,18 @@ internal sealed class ConsoleStyledString : AConsoleColoredPart
+ 		textsWithFont.Width = paint.MeasureText(textsWithFont.Text);
+ 		return textsWithFont;
+ 	}
++
++	public int MeasureTextWidth(string text)
++	{
++		if (string.IsNullOrEmpty(text))
++			return 0;
++		if (RenderMode == TextDrawingMode.TEXTRENDERER && IsRasterFont && GdiFont != null)
++		{
++			TextFormatFlags flags = TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine;
++			return TextRenderer.MeasureText(text, GdiFont, new System.Drawing.Size(int.MaxValue, int.MaxValue), flags).Width;
++		}
++		return StringMeasure.GetDisplayLength(text, Font);
++	}
++
+ 	public SKFont Font { get; private set; }
+ 	SKFont _fallbackFont;
+ 	List<TextsWithFont> _texts;//フォントフォールバック用
+@@ -299,6 +311,8 @@ internal sealed class ConsoleStyledString : AConsoleColoredPart
+ 		string str = Text[index..];
+ 		Text = Text[..index];
+ 
++		if (GdiFont != null)
++			BuildGdiFallbacks();
+ 		BuildFallbacks();
+ 
+ 		ConsoleStyledString ret = new ConsoleStyledString(str, this.StringStyle, this.RenderMode, this.FontEdging, this.FontHinting, this.FontSize)
+diff --git a/Emuera/UI/Game/EmueraConsole.Print.cs b/Emuera/UI/Game/EmueraConsole.Print.cs
+--- a/Emuera/UI/Game/EmueraConsole.Print.cs
++++ b/Emuera/UI/Game/EmueraConsole.Print.cs
+@@ -606,12 +606,8 @@ internal sealed partial class EmueraConsole : IDisposable
+ 		int length = 0;
+ 		int width;
+ 		if (str != null)
+-			#region .NET 7化の弊害でPRINTC系の文字数カウントがおかしい不具合修正
+-			//length = Config.Encode.GetByteCount(str);
+-			length = Encoding.GetEncoding("Shift-JIS").GetByteCount(str);
+-		#endregion
++			length = LangManager.GetStrlenLang(str);
+ 		int printcLength = Config.PrintCLength;
+-		var font = new SKFont(SKTypeface.FromFamilyName(Style.Fontname), Config.DefaultFont.Size); 
++		var font = Config.DefaultFont;
+ 		if (font == null)
+ 		{
+ 			return str;
+diff --git a/Emuera/UI/Game/PrintStringBuffer.cs b/Emuera/UI/Game/PrintStringBuffer.cs
+--- a/Emuera/UI/Game/PrintStringBuffer.cs
++++ b/Emuera/UI/Game/PrintStringBuffer.cs
+@@ -581,7 +581,7 @@ internal sealed class PrintStringBuffer
+ 
+ 			test = span[..middle];
+-			if (StringMeasure.GetDisplayLength(test, font) <= widthLimit)
++			if (css.MeasureTextWidth(test.ToString()) <= widthLimit)
+ 			{
+ 				biggestFitting = middle;
+ 			}
+diff --git a/Emuera/UI/Game/image/GraphicsImage.cs b/Emuera/UI/Game/image/GraphicsImage.cs
+--- a/Emuera/UI/Game/image/GraphicsImage.cs
++++ b/Emuera/UI/Game/image/GraphicsImage.cs
+@@ -9,6 +9,7 @@ using System.Runtime.InteropServices;
+ using System.Linq;
+ using System.Runtime.CompilerServices;
++using System.Windows.Forms;
+ 
+ namespace MinorShift.Emuera.UI.Game.Image;
+ 
+@@ -233,24 +234,51 @@ internal sealed class GraphicsImage : AbstractImage
+ 		Font gdiFont = FontFactory.GetGdiFont(fontName, style, fontSize);
+ 		Color textColor = brush != null ? ((SolidBrush)brush).Color : Config.ForeColor;
+ 
+-		using var measurePaint = new SKPaint { Typeface = skFont.Typeface, TextSize = fontSize };
+-		float textWidth = measurePaint.MeasureText(text);
+-		int bmpW = Math.Max(1, (int)Math.Ceiling(textWidth) + 4);
+-		int bmpH = Math.Max(1, (int)Math.Ceiling(gdiFont.FontFamily.GetLineSpacing(gdiFont.Style) * gdiFont.Size / gdiFont.FontFamily.GetEmHeight(gdiFont.Style)) + 4);
++		bool useTextRenderer = Config.TextDrawingMode == TextDrawingMode.TEXTRENDERER;
++		TextFormatFlags flags = TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix | TextFormatFlags.PreserveGraphicsClipping | TextFormatFlags.SingleLine;
++		Size measuredSize;
++		if (useTextRenderer)
++		{
++			measuredSize = TextRenderer.MeasureText(text, gdiFont, new Size(int.MaxValue, int.MaxValue), flags);
++		}
++		else
++		{
++			using var measureBitmap = new Bitmap(1, 1);
++			using var measureGraphics = Graphics.FromImage(measureBitmap);
++			var measured = measureGraphics.MeasureString(text, gdiFont, int.MaxValue, StringFormat.GenericTypographic);
++			measuredSize = new Size((int)Math.Ceiling(measured.Width), (int)Math.Ceiling(measured.Height));
++		}
++		int bmpW = Math.Max(1, measuredSize.Width + 4);
++		int bmpH = Math.Max(1, Math.Max(measuredSize.Height, gdiFont.Height) + 4);
+ 
+ 		using var gdiBitmap = new Bitmap(bmpW, bmpH);
+ 		using var g = Graphics.FromImage(gdiBitmap);
+ 		g.Clear(Color.Transparent);
+-		g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
+ 		g.SmoothingMode = SmoothingMode.AntiAlias;
+ 
+-		using var gdiBrush = new SolidBrush(textColor);
+-		g.DrawString(text, gdiFont, gdiBrush, 0, 0, StringFormat.GenericTypographic);
+-
+-		if (pen != null)
++		if (useTextRenderer)
+ 		{
+-			using var penBrush = new SolidBrush(pen.Color);
+-			g.DrawString(text, gdiFont, penBrush, 0, 0, StringFormat.GenericTypographic);
++			g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.SingleBitPerPixelGridFit;
++			TextRenderer.DrawText(g, text, gdiFont, new System.Drawing.Point(0, 0), textColor, flags);
++			if (pen != null)
++			{
++				TextRenderer.DrawText(g, text, gdiFont, new System.Drawing.Point(0, 0), pen.Color, flags);
++			}
++		}
++		else
++		{
++			g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
++			using var gdiBrush = new SolidBrush(textColor);
++			g.DrawString(text, gdiFont, gdiBrush, 0, 0, StringFormat.GenericTypographic);
++
++			if (pen != null)
++			{
++				using var penBrush = new SolidBrush(pen.Color);
++				g.DrawString(text, gdiFont, penBrush, 0, 0, StringFormat.GenericTypographic);
++			}
+ 		}
+ 
+ 		using var skTemp = new SKBitmap(bmpW, bmpH, SKColorType.Bgra8888, SKAlphaType.Unpremul);

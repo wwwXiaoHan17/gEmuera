@@ -785,13 +785,18 @@ namespace MinorShift.Emuera.GameProc
 		void beginDataLoaded()
 		{
 			state.SystemState = SystemStateCode.LoadData_CallSystemLoad;
+			loadSystemLoadStartTick = Environment.TickCount;
 			
 			if (!callFunction("SYSTEM_LOADEND", false, false))
 				endSystemLoad();//存在しなければスキップ
 		}
 		void endSystemLoad()
 		{
+			GenericUtils.Info($"[LOADSAVE] SYSTEM_LOADEND: {Environment.TickCount - loadSystemLoadStartTick}ms");
 			state.SystemState = SystemStateCode.LoadData_CallEventLoad;
+			loadEventLoadStartTick = Environment.TickCount;
+			ResetLazyLoadingRuntimeStats();
+			PreloadEventLoadLazyErbs();
 			//EVENTLOADを呼び出してLoadData_CallEventLoadへ移行。
 			if (!callFunction("EVENTLOAD", false, true))
 			{
@@ -802,6 +807,8 @@ namespace MinorShift.Emuera.GameProc
 
 		void endEventLoad()
 		{
+			LogLazyLoadingRuntimeStats("EVENTLOAD");
+			GenericUtils.Info($"[LOADSAVE] EVENTLOAD: {Environment.TickCount - loadEventLoadStartTick}ms, total-after-file: {Environment.TickCount - loadDataStartTick}ms");
 			//@EVENTLOAD中にBEGIN命令が行われればここには来ない。
 			//ここに来たらBEGIN SHOP扱い。オートセーブはしない。
 			endAutoSave();
@@ -888,6 +895,9 @@ namespace MinorShift.Emuera.GameProc
 		}
 
 		int saveTarget = -1;
+		int loadDataStartTick = 0;
+		int loadSystemLoadStartTick = 0;
+		int loadEventLoadStartTick = 0;
 		void saveGameWaitInput()
 		{
 			if (systemResult == 100)
@@ -1011,8 +1021,10 @@ namespace MinorShift.Emuera.GameProc
 				return;
 			}
 
+			loadDataStartTick = Environment.TickCount;
 			if (!vEvaluator.LoadFrom((int)systemResult))
 				throw new ExeEE("ファイルのロード中に予期しないエラーが発生しました");
+			GenericUtils.Info($"[LOADSAVE] file load save{(int)systemResult:00}: {Environment.TickCount - loadDataStartTick}ms");
 			deletePrevState();
 			beginDataLoaded();
 		}

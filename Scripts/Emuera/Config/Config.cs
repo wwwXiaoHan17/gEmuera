@@ -118,6 +118,7 @@ namespace MinorShift.Emuera
 			if (SystemSaveInUTF8)
 				SaveEncode = Encoding.UTF8;
 			SystemSaveInBinary = instance.GetConfigValue<bool>(ConfigCode.SystemSaveInBinary);
+			ZipSaveData = instance.GetConfigValue<bool>(ConfigCode.ZipSaveData);
 			SystemIgnoreTripleSymbol = instance.GetConfigValue<bool>(ConfigCode.SystemIgnoreTripleSymbol);
 			SystemIgnoreStringSet = instance.GetConfigValue<bool>(ConfigCode.SystemIgnoreStringSet);
 			UseLazyLoading = instance.GetConfigValue<bool>(ConfigCode.UseLazyLoading);
@@ -530,6 +531,7 @@ namespace MinorShift.Emuera
 		public static bool SystemAllowFullSpace { get; private set; }
 		public static bool SystemSaveInUTF8 { get; private set; }
 		public static bool SystemSaveInBinary { get; private set; }
+		public static bool ZipSaveData { get; private set; }
 		public static bool CompatiFuncArgAutoConvert { get; private set; }
 		public static bool CompatiFuncArgOptional { get; private set; }
 		public static bool CompatiCallEvent { get; private set; }

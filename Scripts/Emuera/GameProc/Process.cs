@@ -67,8 +67,7 @@ namespace MinorShift.Emuera.GameProc
 				ParserMediator.Initialize(console);
 				Preload.Clear();
 				Preload.Load(Program.CsvDir);
-				Preload.Load(Program.ErbDir);
-				Preload.Load(Program.ContentDir);
+				Preload.Load(Program.ErbDir, !Config.UseLazyLoading);
 				MarkLoad("preload");
 				//コンフィグファイルに関するエラーの処理（コンフィグファイルはこの関数に入る前に読込済み）
 				if (ParserMediator.HasWarning)

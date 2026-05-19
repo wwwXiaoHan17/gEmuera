@@ -147,12 +147,13 @@ namespace MinorShift.Emuera
 		{
 			if (Program.IsSnakeProfile && !Program.AnalysisMode)
 			{
+				var logLines = new List<string>();
 				for (int i = 0; i < warningList.Count; i++)
 				{
 					ParserWarning warning = warningList[i];
 					string message = FormatWarning(warning);
 					if (snakeLoggedWarnings.Add(message))
-						Program.AppendSnakeStartupErrorLog(message);
+						logLines.Add(message);
 					if (warning.StackTrace != null)
 					{
 						string[] stacks = warning.StackTrace.Split('\n');
@@ -160,10 +161,11 @@ namespace MinorShift.Emuera
 						{
 							string stackLine = stacks[j];
 							if (snakeLoggedWarnings.Add(stackLine))
-								Program.AppendSnakeStartupErrorLog(stackLine);
+								logLines.Add(stackLine);
 						}
 					}
 				}
+				Program.AppendSnakeStartupErrorLog(logLines);
 				warningList.Clear();
 				return;
 			}

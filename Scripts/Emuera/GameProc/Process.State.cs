@@ -575,6 +575,8 @@ namespace MinorShift.Emuera.GameProc
 						}
                         else if (srcArgs.Arguments[i].GetOperandType() == typeof(Int64))
                             call.TopLabel.Arg[i].SetValue(srcArgs.TransporterInt[i], exm);
+                        else if (srcArgs.Arguments[i].GetOperandType() == typeof(double))
+                            call.TopLabel.Arg[i].SetValue(srcArgs.TransporterFloat[i], exm);
                         else
                             call.TopLabel.Arg[i].SetValue(srcArgs.TransporterStr[i], exm);
                     }

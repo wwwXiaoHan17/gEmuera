@@ -833,8 +833,10 @@ namespace MinorShift.Emuera.GameProc
 						if (result.State != EraDataState.OK)
 							throw new CodeEE("不正なデータをロードしようとしました");
 
+						loadDataStartTick = Environment.TickCount;
 						if (!vEvaluator.LoadFrom((int)target))
 							throw new ExeEE("ファイルのロード中に予期しないエラーが発生しました");
+						GenericUtils.Info($"[LOADSAVE] file load save{(int)target:00}: {Environment.TickCount - loadDataStartTick}ms");
 						state.ClearFunctionList();
 						state.SystemState = SystemStateCode.LoadData_DataLoaded;
 						return false;

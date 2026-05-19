@@ -22,18 +22,20 @@ namespace MinorShift.Emuera.Sub
 
 		public static void Load(string path)
 		{
+			Load(path, true);
+		}
+
+		public static void Load(string path, bool includeErb)
+		{
 			if (string.IsNullOrEmpty(path))
 				return;
 			if (Directory.Exists(path))
 			{
 				var query = Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
 					.AsParallel();
-				int degree = GetPreloadDegree();
-				if (degree > 0)
-					query = query.WithDegreeOfParallelism(degree);
-				query.Where(IsPreloadTarget).ForAll(LoadFile);
+				query.Where(file => IsPreloadTarget(file, includeErb)).ForAll(LoadFile);
 			}
-			else if (File.Exists(path) && IsPreloadTarget(path))
+			else if (File.Exists(path) && IsPreloadTarget(path, includeErb))
 			{
 				LoadFile(path);
 			}
@@ -47,22 +49,16 @@ namespace MinorShift.Emuera.Sub
 				Load(path);
 		}
 
-		static bool IsPreloadTarget(string path)
+		static bool IsPreloadTarget(string path, bool includeErb)
 		{
 			string ext = Path.GetExtension(path);
+			if (!includeErb && ext.Equals(".erb", StringComparison.OrdinalIgnoreCase))
+				return false;
 			return ext.Equals(".csv", StringComparison.OrdinalIgnoreCase)
 				|| ext.Equals(".erb", StringComparison.OrdinalIgnoreCase)
 				|| ext.Equals(".erh", StringComparison.OrdinalIgnoreCase)
 				|| ext.Equals(".erd", StringComparison.OrdinalIgnoreCase)
 				|| ext.Equals(".als", StringComparison.OrdinalIgnoreCase);
-		}
-
-		static int GetPreloadDegree()
-		{
-			int selected = global::FirstWindow.SelectedPreloadThreads;
-			if (selected <= 0)
-				return 0;
-			return Math.Max(4, selected);
 		}
 
 		static void LoadFile(string path)

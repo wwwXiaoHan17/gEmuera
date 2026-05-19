@@ -261,6 +261,27 @@ namespace MinorShift.Emuera
 			}
 		}
 
+		public static void AppendSnakeStartupErrorLog(IEnumerable<string> lines)
+		{
+			if (!IsSnakeProfile || string.IsNullOrEmpty(ExeDir) || lines == null)
+				return;
+
+			try
+			{
+				var pending = new List<string>();
+				foreach (string line in lines)
+				{
+					if (!string.IsNullOrEmpty(line))
+						pending.Add(line);
+				}
+				if (pending.Count != 0)
+					File.AppendAllLines(Path.Combine(ExeDir, "emuera_startup_errors.log"), pending);
+			}
+			catch
+			{
+			}
+		}
+
 		private static void ResetSnakeStartupErrorLog()
 		{
 			if (!IsSnakeProfile || string.IsNullOrEmpty(ExeDir))
