@@ -8,7 +8,7 @@ Emuera 是日本 eramaker 系列文字游戏的执行引擎，通过解析 `.ERB
 
 ## 开发者接手
 
-当前可运行路径、Core/Host 合同、迁移阶段、已知阻断和验证入口统一记录在 [当前实现与开发接手指南](../NewFrameworkDesign/DeveloperHandoff.md)。接手开发时以该文档、`AGENT.md`、`CODE_MAP.md` 和机器报告为准，不要把长期目标设计直接视为已完成实现。
+当前可运行路径、Core/Host 合同、已知阻断和验证入口以 [AGENTS.md](../AGENTS.md)（首读文档）与 [ERBAPI.md](../ERBAPI.md)（ERB 解释器接口）为准，不要把长期目标设计直接视为已完成实现。
 
 ## 特性
 
