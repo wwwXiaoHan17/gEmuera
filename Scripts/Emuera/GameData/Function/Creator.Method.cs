@@ -461,6 +461,9 @@ namespace MinorShift.Emuera.GameData.Function
                     throw new CodeEE(Name + "の引数(" + target.ToString() + ")が大きすぎます");
                 EraDataResult result = exm.VEvaluator.CheckData((int)target, type);
                 exm.VEvaluator.RESULTS = result.DataMes;
+                // Skiav12.1：RESULT:1 にセーブデータのバージョンを返す
+                //（ファイル不在等のエラー時 0、バージョン不一致または正常時に実際の値）。
+                exm.VEvaluator.RESULT_ARRAY[1] = result.Version;
                 return ((long)result.State);
             }
         }
