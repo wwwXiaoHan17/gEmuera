@@ -318,8 +318,8 @@ public partial class VirtualMouse : Node2D
 		// 打开时把机身收回可视区域：编辑器摆放的初始坐标 (961,370) 在部分机型上会偏出/压到屏幕边缘，
 		// 导致移动区无法被触及（问题3）；进入游戏后先钳制一次，保证移动区可用。
 		ClampBodyToViewport();
-		// 调试：打印机身当前屏幕位置，方便在 Godot 输出面板里定位四个区域该往哪点。
-		GD.Print($"[VirtualMouse] 启用: 机身位置 @({Mathf.RoundToInt(GlobalPosition.X)},{Mathf.RoundToInt(GlobalPosition.Y)}) 缩放={Scale.X:F3}");
+		// 调试：记录机身当前屏幕位置，方便真机排障时定位四个区域该往哪点（INPUT.VM.ENABLED，需开启 input debug）。
+		GenericUtils.InputTrace("INPUT.VM.ENABLED", () => $"启用: 机身位置 @({Mathf.RoundToInt(GlobalPosition.X)},{Mathf.RoundToInt(GlobalPosition.Y)}) 缩放={Scale.X:F3}");
 		// 打开时显示机身（含按钮标注）。
 		RefreshBodyVisibility();
 		EmueraContent.instance?.RefreshVirtualPointerVisibility();
@@ -459,7 +459,7 @@ public partial class VirtualMouse : Node2D
 		moved = false;
 		heldVk = 0;
 		wheelAccumY = 0f;
-		GD.Print($"[VirtualMouse] 按下区域: {RegionName(region)} @({Mathf.RoundToInt(globalPos.X)},{Mathf.RoundToInt(globalPos.Y)})");
+		GenericUtils.InputTrace("INPUT.VM.REGION_DOWN", () => $"按下区域: {RegionName(region)} @({Mathf.RoundToInt(globalPos.X)},{Mathf.RoundToInt(globalPos.Y)})");
 		// 可点击区域（左/右/滚轮）在「共享光标」处显示按下反馈环，确认点击落点
 		// （手指在机身上、落点在光标处，视觉分离需要反馈确认）。
 		// 移动区域不产生点击，不显示反馈环（避免拖动机身时无意义的闪光）。
@@ -477,7 +477,7 @@ public partial class VirtualMouse : Node2D
 		gestureElapsed = 0f;
 		longPressTriggered = false;
 		moved = false;
-		GD.Print($"[VirtualMouse] 按下区域: 触控板 @({Mathf.RoundToInt(globalPos.X)},{Mathf.RoundToInt(globalPos.Y)})");
+		GenericUtils.InputTrace("INPUT.VM.PAD_DOWN", () => $"按下区域: 触控板 @({Mathf.RoundToInt(globalPos.X)},{Mathf.RoundToInt(globalPos.Y)})");
 		// 触控板不显示反馈环：光标即点击落点，用户已能看到目标。
 	}
 
@@ -523,7 +523,7 @@ public partial class VirtualMouse : Node2D
 				if (!moved && (globalPos - pressGlobal).LengthSquared() >= MoveThresholdSquared)
 				{
 					moved = true;
-					GD.Print($"[VirtualMouse] 开始拖动机身 @({Mathf.RoundToInt(globalPos.X)},{Mathf.RoundToInt(globalPos.Y)})");
+					GenericUtils.InputTrace("INPUT.VM.BODY_DRAG_START", () => $"开始拖动机身 @({Mathf.RoundToInt(globalPos.X)},{Mathf.RoundToInt(globalPos.Y)})");
 				}
 				if (moved)
 					MoveComponentBy(delta);
@@ -581,7 +581,7 @@ public partial class VirtualMouse : Node2D
 			case RegionKind.Move:
 				// 移动区单点无动作（防误触）；拖动已随机身重定位完成。
 				if (moved)
-					GD.Print($"[VirtualMouse] 拖动机身结束 -> 机身位置 ({Mathf.RoundToInt(GlobalPosition.X)},{Mathf.RoundToInt(GlobalPosition.Y)})");
+					GenericUtils.InputTrace("INPUT.VM.BODY_DRAG_END", () => $"拖动机身结束 -> 机身位置 ({Mathf.RoundToInt(GlobalPosition.X)},{Mathf.RoundToInt(GlobalPosition.Y)})");
 				break;
 		}
 	}
@@ -719,7 +719,7 @@ public partial class VirtualMouse : Node2D
 		// MainWindow.MouseDown 的 WinInput.SetKeyPressed）。RESULT:1 由 VirtualCursorCommitClick
 		// 内部的 EmueraThread 提交路径负责。
 		Vector2 target = CurrentCursorGlobal();
-		GD.Print($"[VirtualMouse] {VkName(mouseVk)} 点击 @({Mathf.RoundToInt(target.X)},{Mathf.RoundToInt(target.Y)})");
+		GenericUtils.InputTrace("INPUT.VM.CLICK", () => $"{VkName(mouseVk)} 点击 @({Mathf.RoundToInt(target.X)},{Mathf.RoundToInt(target.Y)})");
 		WinInput.PulseVirtualKey(mouseVk);
 		EmueraContent.instance?.VirtualCursorCommitClick(target, mouseVk);
 	}
@@ -729,7 +729,7 @@ public partial class VirtualMouse : Node2D
 		heldVk = vk;
 		WinInput.SetVirtualKeyPressed(vk);
 		Vector2 target = CurrentCursorGlobal();
-		GD.Print($"[VirtualMouse] {VkName(vk)} 按住开始 @({Mathf.RoundToInt(target.X)},{Mathf.RoundToInt(target.Y)})");
+		GenericUtils.InputTrace("INPUT.VM.HOLD_START", () => $"{VkName(vk)} 按住开始 @({Mathf.RoundToInt(target.X)},{Mathf.RoundToInt(target.Y)})");
 		// 长按发生的时刻提交一次按下（按钮/空白点击），与 PC 按下鼠标键一致。
 		EmueraContent.instance?.VirtualCursorCommitClick(target, vk);
 	}
@@ -739,7 +739,7 @@ public partial class VirtualMouse : Node2D
 		if (heldVk == vk)
 			heldVk = 0;
 		WinInput.SetVirtualKeyReleased(vk);
-		GD.Print($"[VirtualMouse] {VkName(vk)} 按住结束");
+		GenericUtils.InputTrace("INPUT.VM.HOLD_END", () => $"{VkName(vk)} 按住结束");
 	}
 
 	void AccumulateWheel(float deltaY)
@@ -750,7 +750,7 @@ public partial class VirtualMouse : Node2D
 			// 上滑(deltaY<0) = 滚轮上滑(+1)；下滑(deltaY>0) = 滚轮下滑(-1)。
 			int step = wheelAccumY < 0f ? 1 : -1;
 			wheelAccumY -= Mathf.Sign(wheelAccumY) * WheelStepThresholdPx;
-			GD.Print($"[VirtualMouse] 滚轮{(step > 0 ? "上滑" : "下滑")}");
+			GenericUtils.InputTrace("INPUT.VM.WHEEL", () => $"滚轮{(step > 0 ? "上滑" : "下滑")}");
 			EmueraContent.instance?.VirtualCursorScrollWheel(step);
 		}
 	}

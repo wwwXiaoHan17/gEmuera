@@ -51,16 +51,14 @@ public partial class PerformanceBenchmark : Node
     {
         if (running)
         {
-            GD.PrintErr("基准测试已在运行中");
+            GenericUtils.Error("Benchmark: 拒绝重复运行 → 已在运行中");
             return;
         }
 
         running = true;
         results.Clear();
 
-        GD.Print("========================================");
-        GD.Print("gEmuera 性能基准测试");
-        GD.Print("========================================");
+        GenericUtils.PerfTrace("PERF.BENCH.START", () => "gEmuera 性能基准测试开始");
 
         // 场景 1: 大量文本输出
         await RunBenchmark("大量文本输出", CreateLargeTextScript(1000));
@@ -82,8 +80,7 @@ public partial class PerformanceBenchmark : Node
     /// </summary>
     async System.Threading.Tasks.Task RunBenchmark(string name, string erbScript)
     {
-        GD.Print($"\n[测试] {name}");
-        GD.Print($"脚本长度: {erbScript.Length} 字符");
+        GenericUtils.PerfTrace("PERF.BENCH.SCENARIO", () => $"场景开始: {name}（脚本 {erbScript.Length} 字符）");
 
         // 清理环境
         ClearConsole();
@@ -100,7 +97,7 @@ public partial class PerformanceBenchmark : Node
         var console = GlobalStatic.Console;
         if (console == null)
         {
-            GD.PrintErr($"Console 未初始化，跳过测试: {name}");
+            GenericUtils.Error($"Benchmark: 场景跳过 → Console 未初始化（{name}）");
             return;
         }
 
@@ -146,7 +143,7 @@ public partial class PerformanceBenchmark : Node
 
         results.Add(result);
 
-        GD.Print(result.ToString());
+        GenericUtils.PerfTrace("PERF.BENCH.RESULT", () => result.ToString());
     }
 
     void ExecuteTestScript(MinorShift.Emuera.GameView.EmueraConsole console, string script)
@@ -209,10 +206,6 @@ public partial class PerformanceBenchmark : Node
 
     void PrintSummary()
     {
-        GD.Print("\n========================================");
-        GD.Print("基准测试汇总");
-        GD.Print("========================================");
-
         double totalTime = 0;
         double totalAvgFrame = 0;
 
@@ -222,10 +215,9 @@ public partial class PerformanceBenchmark : Node
             totalAvgFrame += result.AvgFrameTimeMs;
         }
 
-        GD.Print($"总测试场景: {results.Count}");
-        GD.Print($"总耗时: {totalTime:F0}ms");
-        GD.Print($"平均帧时间: {totalAvgFrame / results.Count:F2}ms");
-        GD.Print("========================================\n");
+        double avgFrame = results.Count > 0 ? totalAvgFrame / results.Count : 0;
+        GenericUtils.PerfTrace("PERF.BENCH.SUMMARY",
+            () => $"基准测试汇总: 场景数={results.Count} 总耗时={totalTime:F0}ms 平均帧时间={avgFrame:F2}ms");
     }
 
     // ====== 测试脚本生成器 ======
@@ -307,11 +299,11 @@ public partial class PerformanceBenchmark : Node
         try
         {
             System.IO.File.WriteAllText(filePath, csv.ToString());
-            GD.Print($"基准测试结果已导出到: {filePath}");
+            GenericUtils.PerfTrace("PERF.BENCH.EXPORT", () => $"基准测试结果已导出: {filePath}");
         }
         catch (Exception ex)
         {
-            GD.PrintErr($"导出失败: {ex.Message}");
+            GenericUtils.Error($"Benchmark: 导出失败 → {ex.GetType().Name}: {ex.Message}");
         }
     }
 
