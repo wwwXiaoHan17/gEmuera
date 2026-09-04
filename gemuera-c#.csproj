@@ -9,6 +9,8 @@
   <ItemGroup>
     <!-- The pure Core contracts are consumed by the Godot host through net8.0. -->
     <ProjectReference Include="src\Core\GEmuera.Core.csproj" />
+    <!-- 外部插件契约程序集（字面名 Emuera，匹配插件按 'Emuera, 1.824' 的强引用编译）。 -->
+    <ProjectReference Include="src\EmueraFacade\Emuera.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Compile Remove="uEmuera-0.2.9d\**" />
@@ -21,6 +23,10 @@
     <Compile Remove="src\Core\**" />
     <EmbeddedResource Remove="src\Core\**" />
     <None Remove="src\Core\**" />
+    <!-- 外部插件契约程序集同上，独立编译，不入宿主 glob。 -->
+    <Compile Remove="src\EmueraFacade\**" />
+    <EmbeddedResource Remove="src\EmueraFacade\**" />
+    <None Remove="src\EmueraFacade\**" />
     <Compile Remove="tools\core-contracts\**" />
     <EmbeddedResource Remove="tools\core-contracts\**" />
     <None Remove="tools\core-contracts\**" />

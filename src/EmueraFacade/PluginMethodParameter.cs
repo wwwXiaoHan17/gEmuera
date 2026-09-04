@@ -1,5 +1,3 @@
-using MinorShift.Emuera.GameData.Expression;
-
 namespace MinorShift.Emuera.Runtime.Utils.PluginSystem
 {
 	public class PluginMethodParameter
@@ -28,17 +26,5 @@ namespace MinorShift.Emuera.Runtime.Utils.PluginSystem
 		public string strValue;
 		public long intValue;
 		public double floatValue;
-	}
-
-	internal static class PluginMethodParameterBuilder
-	{
-		internal static PluginMethodParameter ConvertTerm(IOperandTerm term, ExpressionMediator exm)
-		{
-			if (term.IsString)
-				return new PluginMethodParameter(term.GetStrValue(exm));
-			if (term.IsFloat)
-				return new PluginMethodParameter(term.GetFloatValue(exm));
-			return new PluginMethodParameter(term.GetIntValue(exm));
-		}
 	}
 }
