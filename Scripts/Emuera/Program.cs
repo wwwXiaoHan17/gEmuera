@@ -33,6 +33,9 @@ namespace MinorShift.Emuera
 		static LegacyCompatibilityProfile m1CompatibilityProfile;
 		static readonly LegacyCompatibilityProfile defaultCompatibilityProfile =
 			LegacyCompatibilityProfile.CreateForProfile("v24pure", scopedVariableInstructionsEnabled: true);
+		// 启动器侧会话推送：UI 层在会话配置时推送所选 profile，解释器不再反查启动器 UI 的静态状态。
+		// 未推送时保持 "v24pure"（与启动器 UI 侧的静态默认一致）。
+		static string launcherCompatibilityProfileId = "v24pure";
 		/*
 		コードの開始地点。
 		ここでMainWindowを作り、
@@ -557,15 +560,26 @@ namespace MinorShift.Emuera
 
 		private static EmueraCoreProfile DetectCoreProfile()
 		{
-			string launcherProfile = global::FirstWindow.SelectedCoreProfileName;
+			string launcherProfile = launcherCompatibilityProfileId;
 			return launcherProfile switch
 			{
-				global::FirstWindow.CoreProfileV24Pure => EmueraCoreProfile.V24Pure,
-				global::FirstWindow.CoreProfileSnake => EmueraCoreProfile.Snake,
-				global::FirstWindow.CoreProfileEraFl => EmueraCoreProfile.EraFl,
+				"v24pure" => EmueraCoreProfile.V24Pure,
+				"snake" => EmueraCoreProfile.Snake,
+				"erafl" => EmueraCoreProfile.EraFl,
 				_ => throw new InvalidOperationException(
 					$"Compatibility profile '{launcherProfile}' is not supported by the legacy bridge.")
 			};
+		}
+
+		/// <summary>
+		/// 启动器/会话宿主在启动 legacy worker 前推送所选兼容 profile。
+		/// 空值忽略，保持上次推送或默认 "v24pure"。
+		/// </summary>
+		public static void SetLauncherCompatibilityProfile(string profileId)
+		{
+			if (string.IsNullOrWhiteSpace(profileId))
+				return;
+			launcherCompatibilityProfileId = profileId;
 		}
 
 		private static EmueraCoreProfile ResolveCompatibilityProfile(string profileId)

@@ -102,6 +102,7 @@ public partial class FirstWindow : Control
 
 		SelectedGamePath = path.TrimEnd('/', '\\');
 		SelectedCoreProfileName = normalizedProfileName;
+		MinorShift.Emuera.Program.SetLauncherCompatibilityProfile(normalizedProfileName);
 		return true;
 	}
 
@@ -1842,6 +1843,7 @@ public partial class FirstWindow : Control
 		{
 			SelectedGamePath = saved;
 			SelectedCoreProfileName = LoadLastCoreProfileName();
+			MinorShift.Emuera.Program.SetLauncherCompatibilityProfile(SelectedCoreProfileName);
 			return saved;
 		}
 
@@ -1882,6 +1884,7 @@ public partial class FirstWindow : Control
 
 		SelectedGamePath = path.TrimEnd('/', '\\');
 		SelectedCoreProfileName = normalizedProfileName;
+		MinorShift.Emuera.Program.SetLauncherCompatibilityProfile(normalizedProfileName);
 		SaveLastGamePath(SelectedGamePath, SelectedCoreProfileName);
 	}
 
