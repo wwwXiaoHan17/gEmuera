@@ -324,8 +324,15 @@ Assert(
     && !legacyV24Profile.Snake.IsEnabled
     && !legacyV24Profile.EraFl.IsEnabled,
     "v24 legacy compatibility profile selected a game-specific policy.");
+// CALLSTR/TINPUTNF are Snake-only (absent from the checked-in v24 reference registry).
+// NOTE: PRINTN/PRINTVN/PRINTSN/PRINTFORMN/PRINTFORMSN/SKIPLOG are NOT Snake-only —
+// both references register them in BuiltInFunctionCode (PRINTN = 改行をしないで入力待ち,
+// vanilla-era Emuera); their v24pure visibility is correct despite the SNAKE_ handler
+// prefix in the shared store ("handler class prefixes are not dialect ownership evidence").
 Assert(
-    !legacyV24Profile.IsInstructionVisible("PRINTN")
+    !legacyV24Profile.IsInstructionVisible("CALLSTR")
+    && !legacyV24Profile.IsInstructionVisible("TINPUTNF")
+    && legacyV24Profile.IsInstructionVisible("PRINTN")
     && !legacyV24Profile.IsFunctionVisible("陷落状态"),
     "v24 legacy compatibility profile leaked a Snake-only registry member.");
 
@@ -362,7 +369,9 @@ Assert(
     && legacyEraFlProfile.UsesLazyResourceIndex,
     "eraFL legacy compatibility profile did not select its module policy.");
 Assert(
-    !legacyEraFlProfile.IsInstructionVisible("PRINTN")
+    !legacyEraFlProfile.IsInstructionVisible("CALLSTR")
+    && !legacyEraFlProfile.IsInstructionVisible("TINPUTNF")
+    && legacyEraFlProfile.IsInstructionVisible("PRINTN")
     && !legacyEraFlProfile.IsFunctionVisible("陷落状态"),
     "eraFL legacy compatibility profile leaked a Snake-only registry member.");
 
@@ -438,12 +447,20 @@ var consumedSnake = LegacyCompatibilityPlanConsumption.Validate(
     snakePlan.Dialect.Functions.Keys);
 Assert(consumedSnake.InstructionDescriptorCount == snakePlan.Dialect.Instructions.Count && consumedSnake.HasDescriptorOverrides,
     "Legacy plan consumption did not validate the selected instruction descriptor.");
+// 会话驱动校验（方向已反转）：会话注册表里未被计划声明的名字必须被拒绝；
+// 反之，计划多出的名字（如 snake 会话主动排除/条件可见）按条件可见性容忍并计数。
+var consumedSnakeNarrowSession = LegacyCompatibilityPlanConsumption.Validate(
+    snakePlan,
+    new[] { "PRINT" },
+    snakePlan.Dialect.Functions.Keys);
+Assert(consumedSnakeNarrowSession.ConditionallyHiddenDescriptorCount > 0,
+    "Legacy plan consumption did not tolerate conditionally hidden descriptors.");
 AssertThrows<InvalidOperationException>(
     () => LegacyCompatibilityPlanConsumption.Validate(
         snakePlan,
-        new[] { "PRINT" },
+        new[] { "PRINT", "UNDECLARED_LEGACY" },
         snakePlan.Dialect.Functions.Keys),
-    "A selected compatibility descriptor missing from the legacy registry was not rejected.");
+    "A legacy registry name missing from the compatibility plan was not rejected.");
 
 var descriptorRoute = CompatibilityDescriptorRoute<string, string>.Create(
     snakePlan,
@@ -463,14 +480,37 @@ AssertThrows<InvalidOperationException>(
         new Dictionary<string, string> { ["PRINT"] = "legacy-print" },
         new Dictionary<string, string> { ["RESULT"] = "legacy-result" }),
     "Descriptor route accepted a missing legacy instruction handler.");
-var emptyDescriptorPlan = new CompatibilityPlanBuilder(BuiltInDialectCatalog.CreateLegacyBaseline())
+// 内置方言目录的模块贡献已通电（生成清单）：BuiltIn v24 计划携带真实指令/函数描述符。
+// 会话驱动路由视图：会话名必须被计划声明（漂移门禁），计划多余名字按条件可见性跳过。
+var builtInSessionPlan = new CompatibilityPlanBuilder(BuiltInDialectCatalog.CreateLegacyBaseline())
     .Build("v24pure", new[] { "gemuera.v24" });
-var emptyDescriptorRoute = CompatibilityDescriptorRoute<string, string>.Create(
-    emptyDescriptorPlan,
-    new Dictionary<string, string>(),
-    new Dictionary<string, string>());
-Assert(emptyDescriptorRoute.Instructions.Count == 0 && emptyDescriptorRoute.Functions.Count == 0,
-    "Descriptor route did not preserve the empty descriptor baseline.");
+Assert(builtInSessionPlan.Dialect.Instructions.Count > 0 && builtInSessionPlan.Dialect.Functions.Count > 0,
+    "Built-in v24 module did not contribute the generated instruction/function inventory.");
+Assert(
+    CompatibilityDescriptorRoute<string, string>.TryCreateSessionView(
+        builtInSessionPlan,
+        new Dictionary<string, string>(),
+        new Dictionary<string, string>(),
+        out var emptySessionRoute)
+    && emptySessionRoute.Instructions.Count == 0
+    && emptySessionRoute.Functions.Count == 0,
+    "Session view did not preserve an empty legacy registry baseline.");
+Assert(
+    CompatibilityDescriptorRoute<string, string>.TryCreateSessionView(
+        builtInSessionPlan,
+        new Dictionary<string, string> { ["PRINT"] = "legacy-print" },
+        new Dictionary<string, string> { ["SETANIMETIMER"] = "legacy-timer" },
+        out var declaredSessionRoute)
+    && declaredSessionRoute.Instructions["PRINT"] == "legacy-print"
+    && declaredSessionRoute.Functions["SETANIMETIMER"] == "legacy-timer",
+    "Session view did not expose declared legacy handlers.");
+Assert(
+    !CompatibilityDescriptorRoute<string, string>.TryCreateSessionView(
+        builtInSessionPlan,
+        new Dictionary<string, string> { ["UNDECLARED_LEGACY"] = "drift" },
+        new Dictionary<string, string>(),
+        out _),
+    "Session view accepted a legacy instruction missing from the compatibility plan.");
 
 var v24EngineDescriptor = new ErbInterpreterDescriptor(
     "test.v24.only",
