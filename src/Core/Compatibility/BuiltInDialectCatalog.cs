@@ -30,7 +30,7 @@ public static class BuiltInDialectCatalog
         var catalog = new DialectModuleCatalog();
         catalog.Register(new DeclaredDialectModule(
             new DialectModuleDefinition("gemuera.v24", "1.0.0", 1),
-            Array.Empty<IDialectContribution>()));
+            V24Contributions()));
         catalog.Register(new DeclaredDialectModule(
             new DialectModuleDefinition(
                 "game.snake",
@@ -41,12 +41,34 @@ public static class BuiltInDialectCatalog
                     new ModuleDependencySnapshot("gemuera.v24", "[1.0.0,2.0.0)"),
                 },
                 portTypeIds: SnakePortTypeIds),
-            Array.Empty<IDialectContribution>()));
+            SnakeContributions()));
         catalog.Register(new DeclaredDialectModule(
             EraFlCompatibilityModule.CreateDefinition(),
-            Array.Empty<IDialectContribution>()));
+            EraFlContributions()));
         return catalog;
     }
+
+    // 描述符清单来自 LegacyDialectInventories.Generated.cs（引擎投影生成的镜像）。
+    // v24 = v24pure 会话表面；snake/erafl = 相对 v24 表面的差集。计划闭包是所选模块
+    // 清单的并集；个别 v24 名在 snake 会话被主动排除（如 BITMAP_CACHE_ENABLE 函数），
+    // 会话驱动路由/校验对这类"计划⊇会话"的差异按条件可见性容忍。
+    private static IDialectContribution[] V24Contributions() => new IDialectContribution[]
+    {
+        new LegacyInstructionInventoryContribution("gemuera.v24.instructions", "gemuera.v24", LegacyDialectInventories.V24InstructionNames),
+        new LegacyFunctionInventoryContribution("gemuera.v24.functions", "gemuera.v24", LegacyDialectInventories.V24Functions),
+    };
+
+    private static IDialectContribution[] SnakeContributions() => new IDialectContribution[]
+    {
+        new LegacyInstructionInventoryContribution("game.snake.instructions", "game.snake", LegacyDialectInventories.SnakeDeltaInstructionNames),
+        new LegacyFunctionInventoryContribution("game.snake.functions", "game.snake", LegacyDialectInventories.SnakeDeltaFunctions),
+    };
+
+    private static IDialectContribution[] EraFlContributions() => new IDialectContribution[]
+    {
+        new LegacyInstructionInventoryContribution("game.erafl.instructions", "game.erafl", LegacyDialectInventories.EraFlDeltaInstructionNames),
+        new LegacyFunctionInventoryContribution("game.erafl.functions", "game.erafl", LegacyDialectInventories.EraFlDeltaFunctions),
+    };
 
     /// <summary>
     /// Legacy launcher profile projection. It deliberately lists roots rather

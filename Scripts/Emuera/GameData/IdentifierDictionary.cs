@@ -627,10 +627,21 @@ namespace MinorShift.Emuera
 				return;
 			}
 
-			var route = CompatibilityDescriptorRoute<FunctionIdentifier, FunctionMethod>.Create(
+			// 描述符通道激活：会话驱动路由——投影注册表（已含方言 handler 变体）的每个
+			// 名字必须被计划声明；计划多出的名字按条件可见性跳过（如 scoped-variable
+			/// 关闭会话中的 VARI/VARS、snake 主动排除的个别 v24 函数）。清单漂移时记错并
+			// 回退到投影注册表，保证解析面完整。
+			if (!CompatibilityDescriptorRoute<FunctionIdentifier, FunctionMethod>.TryCreateSessionView(
 				plan,
 				instructionDic,
-				methodDic);
+				methodDic,
+				out CompatibilityDescriptorRoute<FunctionIdentifier, FunctionMethod> route))
+			{
+				GenericUtils.Error("[DIALECT] CompatibilityPlan descriptor surface does not cover the projected legacy registry; falling back to the projected registry.");
+				compatibilityInstructionDic = null;
+				compatibilityMethodDic = null;
+				return;
+			}
 			compatibilityInstructionDic = route.Instructions;
 			compatibilityMethodDic = route.Functions;
 		}

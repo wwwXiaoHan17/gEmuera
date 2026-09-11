@@ -99,7 +99,7 @@ public sealed class InstructionRegistryBuilder
     public void Register(InstructionDescriptor descriptor)
     {
         ArgumentNullException.ThrowIfNull(descriptor);
-        var key = ContractText.RequiredLookupKey(descriptor.Name, nameof(descriptor.Name));
+        var key = ContractText.RequiredFunctionLookupKey(descriptor.Name, nameof(descriptor.Name));
         if (!string.Equals(key, descriptor.Name, StringComparison.Ordinal))
             descriptor = descriptor with { Name = key };
         if (!_entries.TryAdd(key, descriptor))
@@ -122,7 +122,7 @@ public sealed class FunctionRegistryBuilder
     public void Register(FunctionDescriptor descriptor)
     {
         ArgumentNullException.ThrowIfNull(descriptor);
-        var key = ContractText.RequiredLookupKey(descriptor.Name, nameof(descriptor.Name));
+        var key = ContractText.RequiredFunctionLookupKey(descriptor.Name, nameof(descriptor.Name));
         if (!string.Equals(key, descriptor.Name, StringComparison.Ordinal))
             descriptor = descriptor with { Name = key };
         if (!_entries.TryAdd(key, descriptor))
@@ -303,12 +303,12 @@ public sealed class DialectPlan
 
     public bool TryGetInstruction(string name, out InstructionDescriptor descriptor)
     {
-        return Instructions.TryGetValue(ContractText.RequiredLookupKey(name, nameof(name)), out descriptor!);
+        return Instructions.TryGetValue(ContractText.RequiredFunctionLookupKey(name, nameof(name)), out descriptor!);
     }
 
     public bool TryGetFunction(string name, out FunctionDescriptor descriptor)
     {
-        return Functions.TryGetValue(ContractText.RequiredLookupKey(name, nameof(name)), out descriptor!);
+        return Functions.TryGetValue(ContractText.RequiredFunctionLookupKey(name, nameof(name)), out descriptor!);
     }
 }
 
