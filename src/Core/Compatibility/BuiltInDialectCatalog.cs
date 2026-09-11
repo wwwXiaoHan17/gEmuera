@@ -54,6 +54,10 @@ public static class BuiltInDialectCatalog
         catalog.Register(new DeclaredDialectModule(
             EraBlueCompatibilityModule.CreateDefinition(),
             EraBlueContributions()));
+        // era megaten：v24 基座 + 启动容错 quirk（面零增量，证据见 MegatenCompatibilityModule）。
+        catalog.Register(new DeclaredDialectModule(
+            MegatenCompatibilityModule.CreateDefinition(),
+            MegatenContributions()));
         return catalog;
     }
 
@@ -91,6 +95,12 @@ public static class BuiltInDialectCatalog
         new LegacyFunctionInventoryContribution("game.erablue.functions", "game.erablue", LegacyDialectInventories.EraBlueDeltaFunctions),
     };
 
+    private static IDialectContribution[] MegatenContributions() => new IDialectContribution[]
+    {
+        new LegacyInstructionInventoryContribution("game.megaten.instructions", "game.megaten", LegacyDialectInventories.MegatenDeltaInstructionNames),
+        new LegacyFunctionInventoryContribution("game.megaten.functions", "game.megaten", LegacyDialectInventories.MegatenDeltaFunctions),
+    };
+
     /// <summary>
     /// Legacy launcher profile projection. It deliberately lists roots rather
     /// than a pre-expanded closure, so <see cref="DialectModuleCatalog"/>
@@ -106,6 +116,7 @@ public static class BuiltInDialectCatalog
             "v18",
             new[] { "gemuera.v18" }));
         catalog.Register(EraBlueCompatibilityModule.CreateProfile());
+        catalog.Register(MegatenCompatibilityModule.CreateProfile());
         catalog.Register(new CompatibilityProfileDefinition(
             "snake",
             new[] { "game.snake" },

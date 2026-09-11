@@ -1662,5 +1662,15 @@ public static class LegacyDialectInventories
     {
     };
 
+    /// <summary>模块 game.megaten 的自有指令名（Ordinal 排序）。</summary>
+    public static readonly string[] MegatenDeltaInstructionNames =
+    {
+    };
+
+    /// <summary>模块 game.megaten 的自有表达式函数（名字 + 引擎真实返回类型，Ordinal 排序）。</summary>
+    public static readonly LegacyFunctionInventoryEntry[] MegatenDeltaFunctions =
+    {
+    };
+
 }
 

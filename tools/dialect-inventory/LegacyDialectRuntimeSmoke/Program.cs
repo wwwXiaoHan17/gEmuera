@@ -102,6 +102,10 @@ internal static class Program
             AssertPlanDeclaresSurface("erablue", erablueInstructions, erablueFunctions, exactInstructionCount: erablueInstructions.Count, exactFunctionCount: erablueFunctions.Count);
             Assert(erablueInstructions.Contains("SETANIMETIMER") && !erablueInstructions.Contains("CALLSTR"),
                 "erablue instruction surface drifted.");
+            object megaten = CreateProfile(profileType, "megaten", scopedVariableInstructionsEnabled: true);
+            var megatenInstructions = GetRegistryKeys(instructionType, "GetInstructionNameDic", profileType, megaten);
+            var megatenFunctions = GetRegistryKeys(functionType, "GetMethodList", profileType, megaten);
+            AssertPlanDeclaresSurface("megaten", megatenInstructions, megatenFunctions, exactInstructionCount: megatenInstructions.Count, exactFunctionCount: megatenFunctions.Count);
 
             Console.WriteLine("Legacy dialect runtime lookup smoke passed.");
             return 0;

@@ -56,6 +56,7 @@ namespace MinorShift.Emuera.Compatibility
 			new LegacyEraFlCompatibilityModule(),
 			new LegacyV18CompatibilityModule(),
 			new LegacyEraBlueCompatibilityModule(),
+			new LegacyMegatenCompatibilityModule(),
 		};
 
 		private static readonly IReadOnlyDictionary<string, ILegacyCompatibilityModule> modulesById =
@@ -71,6 +72,7 @@ namespace MinorShift.Emuera.Compatibility
 					["erafl"] = new HashSet<string>(StringComparer.Ordinal) { V24ModuleId, EraFlModuleId },
 					["v18"] = new HashSet<string>(StringComparer.Ordinal) { V18ModuleId },
 					["erablue"] = new HashSet<string>(StringComparer.Ordinal) { V24ModuleId, EraBlueCompatibilityModule.ModuleId },
+					["megaten"] = new HashSet<string>(StringComparer.Ordinal) { V24ModuleId, MegatenCompatibilityModule.ModuleId },
 				});
 
 		public static LegacyCompatibilityProfile Compose(
@@ -532,6 +534,15 @@ namespace MinorShift.Emuera.Compatibility
 		{
 			builder.ExposeInstructionNames(InstructionNames);
 		}
+	}
+
+	internal sealed class LegacyMegatenCompatibilityModule : ILegacyCompatibilityModule
+	{
+		// megaten 实测面增量：零（8396 ERB 全库扫描，方言外名零使用）。模块仅承载
+		// 血统与 quirk（启动容错，capability 声明于 Core MegatenCompatibilityModule）。
+		public string ModuleId => MegatenCompatibilityModule.ModuleId;
+		public void Declare(LegacyCompatibilityProfileBuilder builder) { }
+		public void Apply(LegacyCompatibilityProfileBuilder builder) { }
 	}
 
 	internal sealed class DisabledSnakeCompatibilityPolicy : ISnakeCompatibilityPolicy

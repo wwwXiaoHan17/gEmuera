@@ -18,6 +18,7 @@ internal static class Program
     private const string EraFlModuleId = "game.erafl";
     private const string V18ModuleId = "gemuera.v18";
     private const string EraBlueModuleId = "game.erablue";
+    private const string MegatenModuleId = "game.megaten";
 
     private static int Main(string[] args)
     {
@@ -41,6 +42,7 @@ internal static class Program
             object erafl = CreateProfile(profileType, "erafl", scopedVariableInstructionsEnabled: true);
             object v18 = CreateProfile(profileType, "v18", scopedVariableInstructionsEnabled: true);
             object erablue = CreateProfile(profileType, "erablue", scopedVariableInstructionsEnabled: true);
+            object megaten = CreateProfile(profileType, "megaten", scopedVariableInstructionsEnabled: true);
 
             var v24Instructions = GetRegistryKeys(instructionType, "GetInstructionNameDic", profileType, v24);
             var snakeInstructions = GetRegistryKeys(instructionType, "GetInstructionNameDic", profileType, snake);
@@ -52,6 +54,8 @@ internal static class Program
             var v18Functions = GetRegistry(functionType, "GetMethodList", profileType, v18);
             var erablueInstructions = GetRegistryKeys(instructionType, "GetInstructionNameDic", profileType, erablue);
             var erablueFunctions = GetRegistry(functionType, "GetMethodList", profileType, erablue);
+            var megatenInstructions = GetRegistryKeys(instructionType, "GetInstructionNameDic", profileType, megaten);
+            var megatenFunctions = GetRegistry(functionType, "GetMethodList", profileType, megaten);
 
             // 模块自有清单 = 表面差集（v24 基线 = v24pure 表面本身）。
             var snakeDeltaInstructions = ExceptSorted(snakeInstructions, v24Instructions);
@@ -60,6 +64,8 @@ internal static class Program
             var eraflDeltaFunctions = ExceptSorted(Keys(eraflFunctions), Keys(v24Functions));
             var erablueDeltaInstructions = ExceptSorted(erablueInstructions, v24Instructions);
             var erablueDeltaFunctions = ExceptSorted(Keys(erablueFunctions), Keys(v24Functions));
+            var megatenDeltaInstructions = ExceptSorted(megatenInstructions, v24Instructions);
+            var megatenDeltaFunctions = ExceptSorted(Keys(megatenFunctions), Keys(v24Functions));
 
             // 生成前哨兵校验：与 LegacyCompatibilityModules 的桥层名单锚定，防止投影语义意外漂移。
             Assert(v24Instructions.Contains("PRINT") && !v24Instructions.Contains("CALLSTR"),
@@ -93,6 +99,11 @@ internal static class Program
                 $"erablue function delta must be empty, got: {string.Join(',', erablueDeltaFunctions)}.");
             Assert(erablueDeltaInstructions.SetEquals(new HashSet<string>(StringComparer.Ordinal) { "SETANIMETIMER" }),
                 $"erablue instruction delta must be exactly SETANIMETIMER, got: {string.Join(',', erablueDeltaInstructions)}.");
+            // megaten 面增量必须为空（8396 ERB 零方言外名使用，实测 2026-09-12）。
+            Assert(megatenDeltaInstructions.Count == 0,
+                $"megaten instruction delta must be empty, got: {string.Join(',', megatenDeltaInstructions)}.");
+            Assert(megatenDeltaFunctions.Count == 0,
+                $"megaten function delta must be empty, got: {string.Join(',', megatenDeltaFunctions)}.");
 
             var functionReturnTypes = new Dictionary<string, string>(StringComparer.Ordinal);
             CollectReturnTypes(v24Functions, functionReturnTypes);
@@ -100,6 +111,7 @@ internal static class Program
             CollectReturnTypes(eraflFunctions, functionReturnTypes);
             CollectReturnTypes(v18Functions, functionReturnTypes);
             CollectReturnTypes(erablueFunctions, functionReturnTypes);
+            CollectReturnTypes(megatenFunctions, functionReturnTypes);
 
             string generatedCs = BuildGeneratedCs(
                 v24Instructions,
@@ -112,6 +124,8 @@ internal static class Program
                 Keys(v18Functions),
                 erablueDeltaInstructions,
                 erablueDeltaFunctions,
+                megatenDeltaInstructions,
+                megatenDeltaFunctions,
                 functionReturnTypes);
             string corePath = Path.Combine(repoRoot, "src", "Core", "Compatibility", "LegacyDialectInventories.Generated.cs");
             File.WriteAllText(corePath, generatedCs, new UTF8Encoding(false));
@@ -121,7 +135,8 @@ internal static class Program
                 snakeInstructions.Count, Keys(snakeFunctions).Count,
                 eraflInstructions.Count, Keys(eraflFunctions).Count,
                 v18Instructions.Count, Keys(v18Functions).Count,
-                erablueInstructions.Count, Keys(erablueFunctions).Count);
+                erablueInstructions.Count, Keys(erablueFunctions).Count,
+                megatenInstructions.Count, Keys(megatenFunctions).Count);
             string runnerPath = Path.Combine(repoRoot, "tools", "legacy-runner", "profiles.generated.json");
             File.WriteAllText(runnerPath, profilesJson, new UTF8Encoding(false));
 
@@ -186,6 +201,8 @@ internal static class Program
             HashSet<string> v18Functions,
             HashSet<string> erablueDeltaInstructions,
             HashSet<string> erablueDeltaFunctions,
+            HashSet<string> megatenDeltaInstructions,
+            HashSet<string> megatenDeltaFunctions,
             Dictionary<string, string> functionReturnTypes)
         {
             var builder = new StringBuilder();
@@ -215,6 +232,8 @@ internal static class Program
             AppendFunctionArray(builder, "V18Functions", v18Functions, functionReturnTypes, V18ModuleId);
             AppendNameArray(builder, "EraBlueDeltaInstructionNames", erablueDeltaInstructions, EraBlueModuleId);
             AppendFunctionArray(builder, "EraBlueDeltaFunctions", erablueDeltaFunctions, functionReturnTypes, EraBlueModuleId);
+            AppendNameArray(builder, "MegatenDeltaInstructionNames", megatenDeltaInstructions, MegatenModuleId);
+            AppendFunctionArray(builder, "MegatenDeltaFunctions", megatenDeltaFunctions, functionReturnTypes, MegatenModuleId);
             builder.AppendLine("}");
             builder.AppendLine();
             return builder.ToString();
@@ -260,13 +279,14 @@ internal static class Program
             int snakeInstructions, int snakeFunctions,
             int eraflInstructions, int eraflFunctions,
             int v18Instructions, int v18Functions,
-            int erablueInstructions, int erablueFunctions)
+            int erablueInstructions, int erablueFunctions,
+            int megatenInstructions, int megatenFunctions)
         {
             var root = new
             {
                 schemaVersion = "1.0.0",
                 generatedBy = "tools/dialect-inventory/LegacyDialectInventoryGenerator",
-                profileIds = new[] { "erablue", "erafl", "snake", "v18", "v24pure" },
+                profileIds = new[] { "erablue", "erafl", "megaten", "snake", "v18", "v24pure" },
                 profiles = new Dictionary<string, object>(StringComparer.Ordinal)
                 {
                     ["v24pure"] = new { modules = new[] { V24ModuleId }, instructionCount = v24Instructions, functionCount = v24Functions },
@@ -274,6 +294,7 @@ internal static class Program
                     ["erafl"] = new { modules = new[] { V24ModuleId, EraFlModuleId }, instructionCount = eraflInstructions, functionCount = eraflFunctions },
                     ["v18"] = new { modules = new[] { V18ModuleId }, instructionCount = v18Instructions, functionCount = v18Functions },
                     ["erablue"] = new { modules = new[] { V24ModuleId, EraBlueModuleId }, instructionCount = erablueInstructions, functionCount = erablueFunctions },
+                    ["megaten"] = new { modules = new[] { V24ModuleId, MegatenModuleId }, instructionCount = megatenInstructions, functionCount = megatenFunctions },
                 },
             };
             var options = new JsonSerializerOptions { WriteIndented = true };

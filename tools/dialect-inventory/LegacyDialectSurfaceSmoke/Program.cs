@@ -233,6 +233,20 @@ static class Program
                 "erablue 会话必须由 capability 账本派生启动容错为真（汉化 mod 依赖）。");
             Assert(!v24.ContinuesAfterStartupFault && snake.ContinuesAfterStartupFault,
                 "启动容错判定：v24pure 假、snake 真（capability 同源）。");
+
+            // era megaten（Emuera1824+v8.1 私改血统）：v24 基座、面零增量、仅启动容错 quirk。
+            // 实测证据：VELVET_ROOM.ERB:2860 的 DITEMTYPE:ARG:Persona(LOCALS)（私改文法）
+            // 在严格 v24 下致命退出，原生启动器容错继续。
+            LegacyCompatibilityProfile megaten = LegacyCompatibilityProfile.CreateForProfile("megaten", true);
+            Assert(megaten.ContinuesAfterStartupFault
+                && megaten.Plan.CapabilityIds.Count == 1
+                && megaten.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.MegatenCompatibilityModule.ContinueAfterStartupFaultCapability),
+                "megaten 计划必须恰好声明启动容错 capability。");
+            Assert(megaten.IsInstructionVisible("PRINT") && megaten.IsInstructionVisible("CALLSHARP"),
+                "megaten 保持 v24 基座指令面。");
+            Assert(!megaten.IsInstructionVisible("SETANIMETIMER") && !megaten.IsInstructionVisible("CALLSTR")
+                && !megaten.IsFunctionVisible("SQL_CONNECT"),
+                "megaten 面增量为零：不得泄漏 snake 系名字（游戏未使用）。");
             Assert(erablue.TryGetInstructionVariant("SETBGIMAGE", out var erablueBg)
                 && erablueBg == LegacyInstructionVariant.SetBgImageV24,
                 "erablue 的 SETBGIMAGE 必须继承 v24 基线变体。");

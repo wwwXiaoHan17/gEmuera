@@ -23,6 +23,7 @@ namespace MinorShift.Emuera
 		EraFl,
 		V18,
 		EraBlue,
+		Megaten,
 		SnakeModernMobile,
 	}
 
@@ -567,6 +568,7 @@ namespace MinorShift.Emuera
 				global::FirstWindow.CoreProfileEraFl => EmueraCoreProfile.EraFl,
 				global::FirstWindow.CoreProfileV18 => EmueraCoreProfile.V18,
 				global::FirstWindow.CoreProfileEraBlue => EmueraCoreProfile.EraBlue,
+				global::FirstWindow.CoreProfileMegaten => EmueraCoreProfile.Megaten,
 				_ => throw new InvalidOperationException(
 					$"Compatibility profile '{launcherProfile}' is not supported by the legacy bridge.")
 			};
@@ -581,6 +583,7 @@ namespace MinorShift.Emuera
 				"erafl" => EmueraCoreProfile.EraFl,
 				"v18" => EmueraCoreProfile.V18,
 				"erablue" => EmueraCoreProfile.EraBlue,
+				"megaten" => EmueraCoreProfile.Megaten,
 				_ => throw new InvalidOperationException(
 					$"Compatibility plan profile '{profileId}' is not supported by the legacy bridge.")
 			};
@@ -595,6 +598,7 @@ namespace MinorShift.Emuera
 				EmueraCoreProfile.EraFl => "erafl",
 				EmueraCoreProfile.V18 => "v18",
 				EmueraCoreProfile.EraBlue => "erablue",
+				EmueraCoreProfile.Megaten => "megaten",
 				_ => throw new InvalidOperationException(
 					$"Legacy core profile '{profile}' has no built-in compatibility plan."),
 			};

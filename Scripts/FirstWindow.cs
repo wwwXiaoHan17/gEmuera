@@ -42,6 +42,8 @@ public partial class FirstWindow : Control
 		public const string CoreProfileV18 = "v18";
 		// eraBlue（碧蓝度假村）：v24 基座 + SETANIMETIMER + 外部插件能力；legacy-runner 先行。
 		public const string CoreProfileEraBlue = "erablue";
+		// era megaten（Emuera1824+v8.1 私改血统）：v24 基座 + 启动容错；legacy-runner 先行。
+		public const string CoreProfileMegaten = "megaten";
 	// 保留旧配置值，避免升级时无法读取 launcher.cfg；启动器不再执行自动探测。
 	public const string CoreProfileAutomatic = "auto";
 
@@ -1926,6 +1928,11 @@ public partial class FirstWindow : Control
 		if (string.Equals(coreProfileName, CoreProfileEraBlue, System.StringComparison.OrdinalIgnoreCase))
 		{
 			normalizedProfileName = CoreProfileEraBlue;
+			return true;
+		}
+		if (string.Equals(coreProfileName, CoreProfileMegaten, System.StringComparison.OrdinalIgnoreCase))
+		{
+			normalizedProfileName = CoreProfileMegaten;
 			return true;
 		}
 
