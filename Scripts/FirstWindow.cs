@@ -40,6 +40,8 @@ public partial class FirstWindow : Control
 		// 旧游戏方言（emuera1824+v18 血统）：指令/函数面按 v18 参考注册表取证收缩，
 		// 仅供兼容诊断与 legacy-runner 使用；启动器 UI 暂不提供选项。
 		public const string CoreProfileV18 = "v18";
+		// eraBlue（碧蓝度假村）：v24 基座 + SETANIMETIMER + 外部插件能力；legacy-runner 先行。
+		public const string CoreProfileEraBlue = "erablue";
 	// 保留旧配置值，避免升级时无法读取 launcher.cfg；启动器不再执行自动探测。
 	public const string CoreProfileAutomatic = "auto";
 
@@ -1919,6 +1921,11 @@ public partial class FirstWindow : Control
 		if (string.Equals(coreProfileName, CoreProfileV18, System.StringComparison.OrdinalIgnoreCase))
 		{
 			normalizedProfileName = CoreProfileV18;
+			return true;
+		}
+		if (string.Equals(coreProfileName, CoreProfileEraBlue, System.StringComparison.OrdinalIgnoreCase))
+		{
+			normalizedProfileName = CoreProfileEraBlue;
 			return true;
 		}
 

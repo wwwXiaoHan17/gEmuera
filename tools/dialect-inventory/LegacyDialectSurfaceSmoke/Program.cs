@@ -217,6 +217,29 @@ static class Program
                 "v18 描述符数量与生成清单不一致。");
             Assert(v18.Plan.CapabilityIds.Count == 0, "v18 基线不应声明 quirk capability。");
 
+            // eraBlue（碧蓝度假村）：v24 基座 + SETANIMETIMER 增量 + 外部插件 capability。
+            // 血统：游戏自带 Emuera.NET 1824+v24+EMv18+EEv55 启动器；插件经 CALLSHARP 调用。
+            LegacyCompatibilityProfile erablue = LegacyCompatibilityProfile.CreateForProfile("erablue", true);
+            Assert(erablue.IsInstructionVisible("SETANIMETIMER") && erablue.IsInstructionVisible("CALLSHARP"),
+                "erablue 必须提供 SETANIMETIMER 指令与 CALLSHARP（插件调用）基座指令。");
+            Assert(!erablue.IsInstructionVisible("CALLSTR") && !erablue.IsFunctionVisible("SQL_CONNECT")
+                && !erablue.IsFunctionVisible("ACOS"),
+                "erablue 不得泄漏 snake 专属能力。");
+            Assert(erablue.Plan.CapabilityIds.Count == 2
+                && erablue.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.EraBlueCompatibilityModule.ExternalPluginCapability)
+                && erablue.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.EraBlueCompatibilityModule.ContinueAfterStartupFaultCapability),
+                "erablue 计划必须恰好声明外部插件 + 启动容错两个 capability。");
+            Assert(erablue.ContinuesAfterStartupFault,
+                "erablue 会话必须由 capability 账本派生启动容错为真（汉化 mod 依赖）。");
+            Assert(!v24.ContinuesAfterStartupFault && snake.ContinuesAfterStartupFault,
+                "启动容错判定：v24pure 假、snake 真（capability 同源）。");
+            Assert(erablue.TryGetInstructionVariant("SETBGIMAGE", out var erablueBg)
+                && erablueBg == LegacyInstructionVariant.SetBgImageV24,
+                "erablue 的 SETBGIMAGE 必须继承 v24 基线变体。");
+            Assert(erablue.Plan.Dialect.Instructions.Count == GEmuera.Core.Compatibility.LegacyDialectInventories.V24InstructionNames.Length + 1
+                && erablue.Plan.Dialect.Functions.Count == GEmuera.Core.Compatibility.LegacyDialectInventories.V24Functions.Length,
+                "erablue 描述符数量 != v24 + SETANIMETIMER 增量。");
+
             // 诊断提示（TryGetUnselectedModuleHint）：v24pure 下查询 snake 专属名字 → 归属 game.snake；
             // snake 会话查询其自身隐藏的函数形态 → 不提示。
             Assert(v24.TryGetUnselectedModuleHint("SETANIMETIMER", out string hintModule1) && hintModule1 == "game.snake",

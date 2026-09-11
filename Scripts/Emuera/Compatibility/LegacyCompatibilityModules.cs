@@ -55,6 +55,7 @@ namespace MinorShift.Emuera.Compatibility
 			new LegacySnakeCompatibilityModule(),
 			new LegacyEraFlCompatibilityModule(),
 			new LegacyV18CompatibilityModule(),
+			new LegacyEraBlueCompatibilityModule(),
 		};
 
 		private static readonly IReadOnlyDictionary<string, ILegacyCompatibilityModule> modulesById =
@@ -69,6 +70,7 @@ namespace MinorShift.Emuera.Compatibility
 					["snake"] = new HashSet<string>(StringComparer.Ordinal) { V24ModuleId, SnakeModuleId },
 					["erafl"] = new HashSet<string>(StringComparer.Ordinal) { V24ModuleId, EraFlModuleId },
 					["v18"] = new HashSet<string>(StringComparer.Ordinal) { V18ModuleId },
+					["erablue"] = new HashSet<string>(StringComparer.Ordinal) { V24ModuleId, EraBlueCompatibilityModule.ModuleId },
 				});
 
 		public static LegacyCompatibilityProfile Compose(
@@ -508,6 +510,27 @@ namespace MinorShift.Emuera.Compatibility
 			// erafl 显式绑定共享表的 SETANIMETIMER handler：绑定归属在模块声明中可见，
 			// 未来 snake 侧 handler 分叉时 erafl 在此固定自己的变体，不再隐式跟随共享表。
 			builder.SubstituteInstruction("SETANIMETIMER", LegacyInstructionVariant.SharedTable);
+		}
+	}
+
+	internal sealed class LegacyEraBlueCompatibilityModule : ILegacyCompatibilityModule
+	{
+		// eraBlue 实测依赖的 snake 系指令（与 erafl 同款）：おさわりエフェクト.ERB:69
+		// "SETANIMETIMER 50" 等。函数面零 snake 依赖（全库扫描 2026-09-12）；
+		// 插件经 CALLSHARP 调用（NEWGAME.ERB:99），属 v24(EM/EE) 基座能力。
+		private static readonly IReadOnlyCollection<string> InstructionNames =
+			Array.AsReadOnly(new[] { "SETANIMETIMER" });
+
+		public string ModuleId => EraBlueCompatibilityModule.ModuleId;
+		public void Declare(LegacyCompatibilityProfileBuilder builder)
+		{
+			// Declare 对所有会话执行：erablue 声明加入隐藏集（其它会话该指令本就隐藏，
+			// 零影响）；仅 erablue 会话的 Apply 才解除隐藏。
+			builder.DeclareInstructionNames(InstructionNames);
+		}
+		public void Apply(LegacyCompatibilityProfileBuilder builder)
+		{
+			builder.ExposeInstructionNames(InstructionNames);
 		}
 	}
 

@@ -1651,5 +1651,16 @@ public static class LegacyDialectInventories
         new LegacyFunctionInventoryEntry("VARSIZE", "Integer"),
     };
 
+    /// <summary>模块 game.erablue 的自有指令名（Ordinal 排序）。</summary>
+    public static readonly string[] EraBlueDeltaInstructionNames =
+    {
+        "SETANIMETIMER",
+    };
+
+    /// <summary>模块 game.erablue 的自有表达式函数（名字 + 引擎真实返回类型，Ordinal 排序）。</summary>
+    public static readonly LegacyFunctionInventoryEntry[] EraBlueDeltaFunctions =
+    {
+    };
+
 }
 

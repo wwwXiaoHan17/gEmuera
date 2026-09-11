@@ -192,6 +192,26 @@ namespace MinorShift.Emuera.Compatibility
 		}
 
 		/// <summary>
+		/// 方言无关的启动容错：任一选中方言声明 startup.continue-after-fault.v1 即在
+		/// ERB 解析警告后继续运行（snake 与 erablue 的启动器家族均为此行为；游戏自带
+		/// emuera.config 不开 CompatiErrorLine，靠启动器家族语义容错）。与
+		/// Snake.ContinuesAfterStartupFault 同源（snake policy 亦由该 capability 派生）。
+		/// </summary>
+		public bool ContinuesAfterStartupFault
+		{
+			get
+			{
+				string quirkId = GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.ContinueAfterStartupFault;
+				foreach (string capability in Plan.CapabilityIds)
+				{
+					if (string.Equals(capability, quirkId, StringComparison.Ordinal))
+						return true;
+				}
+				return false;
+			}
+		}
+
+		/// <summary>
 		/// 诊断提示：名字在当前会话中不可见（被隐藏），且声明它的方言模块未被本会话选中
 		/// （如 v24pure 会话中查询 snake 专属名字）时返回其归属模块 id。用于在报错文案里
 		/// 提示"该标识符属于 snake 系扩展，建议改用 snake 接口"。snake 会话中查询

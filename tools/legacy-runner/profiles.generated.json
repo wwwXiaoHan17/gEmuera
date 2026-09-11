@@ -2,6 +2,7 @@
   "schemaVersion": "1.0.0",
   "generatedBy": "tools/dialect-inventory/LegacyDialectInventoryGenerator",
   "profileIds": [
+    "erablue",
     "erafl",
     "snake",
     "v18",
@@ -37,6 +38,14 @@
       ],
       "instructionCount": 417,
       "functionCount": 160
+    },
+    "erablue": {
+      "modules": [
+        "gemuera.v24",
+        "game.erablue"
+      ],
+      "instructionCount": 562,
+      "functionCount": 266
     }
   }
 }

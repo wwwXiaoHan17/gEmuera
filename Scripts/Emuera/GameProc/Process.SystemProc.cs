@@ -176,8 +176,9 @@ namespace MinorShift.Emuera.GameProc
 			}
 			// TODO: Snake compatibility fallback — allow startup to continue despite ERB parse warnings.
 			// Standard v24 behavior is to exit on unrecoverable parse errors (see else-if below).
-			// Remove once snake scripts are cleaned up; use CompatiErrorLine config in the meantime.
-			if ((!noError) && (!Config.CompatiErrorLine) && Program.Compatibility.Snake.ContinuesAfterStartupFault)
+			// 2026-09 起该判定方言无关化：任一选中方言声明 startup.continue-after-fault.v1
+			// 即继续（snake 与 erablue 启动器家族同款语义，capability 账本驱动）。
+			if ((!noError) && (!Config.CompatiErrorLine) && Program.Compatibility.ContinuesAfterStartupFault)
 			{
 				console.PrintSystemLine("Snake互換モード: ERB解析警告がありますが起動を継続します");
 				console.PrintSystemLine("emuera.logにログを出力します");
