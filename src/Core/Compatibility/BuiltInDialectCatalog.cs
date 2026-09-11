@@ -83,7 +83,8 @@ public static class BuiltInDialectCatalog
             new[] { "gemuera.v24" }));
         catalog.Register(new CompatibilityProfileDefinition(
             "snake",
-            new[] { "game.snake" }));
+            new[] { "game.snake" },
+            requiredCapabilityIds: SnakeCompatibilityCapabilities.RequiredCapabilityIds));
         catalog.Register(EraFlCompatibilityModule.CreateProfile());
         return catalog;
     }

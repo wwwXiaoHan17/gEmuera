@@ -227,6 +227,9 @@ namespace MinorShift.Emuera.Compatibility
 			snake = policy ?? throw new ArgumentNullException(nameof(policy));
 		}
 
+		/// <summary>会话计划携带的 quirk capability 清单（模块声明进 profile，policy 据此派生）。</summary>
+		public GEmuera.Core.Compatibility.CompatibilityPlan Plan => plan;
+
 		public void SetEraFlPolicy(IEraFlCompatibilityPolicy policy)
 		{
 			eraFl = policy ?? throw new ArgumentNullException(nameof(policy));
@@ -402,7 +405,7 @@ namespace MinorShift.Emuera.Compatibility
 			builder.ExposeInstructionNames(InstructionNames);
 			builder.ExposeFunctionNames(FunctionNames);
 			builder.HideFunctionNames(SnakeExcludedFunctionNames);
-			builder.SetSnakePolicy(LegacySnakeCompatibilityPolicy.Instance);
+			builder.SetSnakePolicy(LegacySnakeCompatibilityPolicy.FromCapabilities(builder.Plan.CapabilityIds));
 			// snake 覆盖 v24 基线：SETBGIMAGE 用 snake 变体；FOR 回退共享表原条目
 			//（snake 的 FOR 文法即共享表注册的 REPEAT 内核，EXTENDED 标志保持不变）。
 			builder.SubstituteInstruction("FOR", LegacyInstructionVariant.SharedTable);
@@ -430,7 +433,7 @@ namespace MinorShift.Emuera.Compatibility
 		public void Apply(LegacyCompatibilityProfileBuilder builder)
 		{
 			builder.ExposeInstructionNames(InstructionNames);
-			builder.SetEraFlPolicy(LegacyEraFlCompatibilityPolicy.Instance);
+			builder.SetEraFlPolicy(LegacyEraFlCompatibilityPolicy.FromCapabilities(builder.Plan.CapabilityIds));
 			// erafl 显式绑定共享表的 SETANIMETIMER handler：绑定归属在模块声明中可见，
 			// 未来 snake 侧 handler 分叉时 erafl 在此固定自己的变体，不再隐式跟随共享表。
 			builder.SubstituteInstruction("SETANIMETIMER", LegacyInstructionVariant.SharedTable);
@@ -453,15 +456,29 @@ namespace MinorShift.Emuera.Compatibility
 
 	internal sealed class LegacySnakeCompatibilityPolicy : ISnakeCompatibilityPolicy
 	{
-		public static readonly LegacySnakeCompatibilityPolicy Instance = new LegacySnakeCompatibilityPolicy();
+		// quirk capability 账本驱动：每个布尔属性 = snake profile 声明的对应 id 是否在场
+		//（映射表见 SnakeCompatibilityCapabilities.PolicyPropertyByCapabilityId，
+		// 映射穷尽性由 SurfaceSmoke 反射断言把关）。
+		private readonly IReadOnlyCollection<string> capabilities;
+
+		private LegacySnakeCompatibilityPolicy(IReadOnlyCollection<string> capabilities)
+		{
+			this.capabilities = capabilities ?? throw new ArgumentNullException(nameof(capabilities));
+		}
+
+		public static LegacySnakeCompatibilityPolicy FromCapabilities(IReadOnlyCollection<string> capabilityIds)
+		{
+			return new LegacySnakeCompatibilityPolicy(capabilityIds);
+		}
+
 		public bool IsEnabled => true;
-		public bool UsesParserDiagnostics => true;
-		public bool AllowsUserDefinedVariableResolution => true;
-		public bool AllowsPrivateArguments => true;
-		public bool AllowsExtraCallArguments => true;
-		public bool AllowsScopedVariablePreRegistration => true;
-		public bool ContinuesAfterStartupFault => true;
-		public bool UsesFastDisplayRefresh => true;
+		public bool UsesParserDiagnostics => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.ParserDiagnostics);
+		public bool AllowsUserDefinedVariableResolution => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.UserDefinedVariableResolution);
+		public bool AllowsPrivateArguments => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.PrivateArguments);
+		public bool AllowsExtraCallArguments => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.ExtraCallArguments);
+		public bool AllowsScopedVariablePreRegistration => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.ScopedVariablePreRegistration);
+		public bool ContinuesAfterStartupFault => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.ContinueAfterStartupFault);
+		public bool UsesFastDisplayRefresh => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.FastDisplayRefresh);
 		public bool UsesLazyResourceIndex => true;
 	}
 
@@ -497,18 +514,34 @@ namespace MinorShift.Emuera.Compatibility
 
 	internal sealed class LegacyEraFlCompatibilityPolicy : IEraFlCompatibilityPolicy
 	{
-		public static readonly LegacyEraFlCompatibilityPolicy Instance = new LegacyEraFlCompatibilityPolicy();
+		// 布尔型/开关型 quirk 由 capability 账本派生（erafl profile 声明），
+		// 算法型行为（GMap、指针归一化）仍委托 Core 模块的确定性实现。
+		private readonly IReadOnlyCollection<string> capabilities;
+
+		private LegacyEraFlCompatibilityPolicy(IReadOnlyCollection<string> capabilities)
+		{
+			this.capabilities = capabilities ?? throw new ArgumentNullException(nameof(capabilities));
+		}
+
+		public static LegacyEraFlCompatibilityPolicy FromCapabilities(IReadOnlyCollection<string> capabilityIds)
+		{
+			return new LegacyEraFlCompatibilityPolicy(capabilityIds);
+		}
+
 		public bool IsEnabled => true;
-		public bool UsesExtendedDisplayHistory => true;
+		public bool UsesExtendedDisplayHistory => capabilities.Contains(EraFlCompatibilityModule.DisplayExtendedHistoryBehavior);
 		public string TaskStartRoomLookupFunction => EraFlCompatibilityModule.TaskStartRoomLookupFunction;
 		public string GMapQuestType => EraFlCompatibilityModule.GMapQuestType;
-		public bool IsOmittedDefaultArgument(char currentToken) => EraFlCompatibilityModule.IsOmittedDefaultArgument(currentToken);
+		public bool IsOmittedDefaultArgument(char currentToken) =>
+			capabilities.Contains(EraFlCompatibilityModule.InputOmittedDefaultArgumentBehavior)
+			&& EraFlCompatibilityModule.IsOmittedDefaultArgument(currentToken);
 		public bool IsPointerInputMetadataOption(string optionText) => EraFlCompatibilityModule.IsPointerInputMetadataOption(optionText);
 		public int NormalizePointerButtonResult(int mouseButton) => EraFlCompatibilityModule.NormalizePointerButtonResult(mouseButton);
 		public string NormalizePointerIntegerSubmission(string input, int mouseButton, bool waitingForInteger) =>
 			EraFlCompatibilityModule.NormalizePointerIntegerSubmission(input, mouseButton, waitingForInteger);
 		public bool ShouldSubmitBlankPointerStringInput(int mouseButton, bool waitingForString) =>
-			EraFlCompatibilityModule.ShouldSubmitBlankPointerStringInput(mouseButton, waitingForString);
+			capabilities.Contains(EraFlCompatibilityModule.PointerBlankStringBehavior)
+			&& EraFlCompatibilityModule.ShouldSubmitBlankPointerStringInput(mouseButton, waitingForString);
 		public bool TryRecoverQuestStartRoomIndex(string functionName, long returnedRoomIndex, string requestedRoomTag, long mapId, string questType, string[,] mapData, out long recoveredRoomIndex) =>
 			EraFlCompatibilityModule.TryRecoverQuestStartRoomIndex(
 				functionName,

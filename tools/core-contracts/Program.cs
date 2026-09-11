@@ -812,7 +812,9 @@ var facadeSnake = await facade.SwitchAsync(
     "legacy.save.v1");
 Assert(facadeSnake.IsCommitted, "Legacy facade did not switch to the Snake backend.");
 Assert(facade.CurrentPlan?.Dialect.Ports.Single().PortTypeId == "IExtraArgumentPolicy", "Legacy facade discarded requested ports.");
-Assert(facade.CurrentPlan?.CapabilityIds.SequenceEqual(new[] { "runtime.audio.v1" }) == true, "Legacy facade discarded requested capabilities.");
+Assert(facade.CurrentPlan?.CapabilityIds.Contains("runtime.audio.v1") == true
+    && facade.CurrentPlan?.CapabilityIds.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.ExtraCallArguments) == true,
+    "Legacy facade discarded requested or profile-declared capabilities.");
 Assert(facade.CurrentPlan?.SaveProfileId == "legacy.save.v1", "Legacy facade discarded the save profile id.");
 Assert(facade.IsBackendRunning && facade.BackendGeneration == facade.Current?.Generation, "Legacy backend generation diverged from the committed plan.");
 Assert(legacyBackend.Events.SequenceEqual(new[]
@@ -911,6 +913,9 @@ Assert(
     eraFlFacade.CurrentPlan?.CapabilityIds.SequenceEqual(new[]
     {
         "display.dynamic-map-transaction.v1",
+        "display.extended-history.v1",
+        "input.omitted-default-argument.v1",
+        "input.pointer-blank-string.v1",
         "input.pointer-button.v1",
         "markup.div-v2.v1",
         "markup.image-dual-src.v1",

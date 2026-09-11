@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using MinorShift.Emuera.Compatibility;
 
 static class Program
@@ -122,11 +124,50 @@ static class Program
                 && timerErafl == LegacyInstructionVariant.SharedTable,
                 "erafl 的 SETANIMETIMER 必须显式绑定共享表 handler。");
 
-            // capability 账本：erafl 声明 markup 系能力，v24pure/snake 不声明。
-            // 这是 capability id 的契约级消费（[LOAD] 日志与真机诊断依赖它）。
-            Assert(erafl.Plan.CapabilityIds.Count > 0, "erafl 模块必须声明 capability 清单。");
-            Assert(v24.Plan.CapabilityIds.Count == 0, "v24pure 不应声明 capability。");
-            Assert(snake.Plan.CapabilityIds.Count == 0, "snake 不应声明 capability。");
+            // capability 账本（quirk ledger）：snake 声明 7 项解析/调用/显示 quirk，erafl 声明
+            // markup 系 + 3 项布尔 policy quirk，v24pure 不声明任何 quirk。
+            // [LOAD] 日志输出的能力清单即此账本的运行期消费。
+            foreach (string quirkId in GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.RequiredCapabilityIds)
+            {
+                Assert(snake.Plan.CapabilityIds.Contains(quirkId), $"snake 计划必须声明 quirk capability：{quirkId}。");
+                Assert(!v24.Plan.CapabilityIds.Contains(quirkId), $"v24pure 不得声明 snake quirk：{quirkId}。");
+                Assert(!erafl.Plan.CapabilityIds.Contains(quirkId), $"erafl 不得声明 snake quirk：{quirkId}。");
+            }
+            Assert(erafl.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.EraFlCompatibilityModule.DisplayExtendedHistoryBehavior)
+                && erafl.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.EraFlCompatibilityModule.InputOmittedDefaultArgumentBehavior)
+                && erafl.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.EraFlCompatibilityModule.PointerBlankStringBehavior),
+                "erafl 计划必须声明三项布尔 policy quirk（display.extended-history / input.omitted-default-argument / input.pointer-blank-string）。");
+            Assert(v24.Plan.CapabilityIds.Count == 0, "v24pure 不应声明任何 capability。");
+
+            // quirk 账本 → policy 映射穷尽性：ISnakeCompatibilityPolicy 的全部布尔属性
+            //（除 IsEnabled 与已语义塌缩的 UsesLazyResourceIndex）必须能被映射表覆盖，
+            // 且映射表引用的属性名真实存在于接口——新增 policy 属性而不登记 capability 时在此失败。
+            var snakePolicyProperties = typeof(ISnakeCompatibilityPolicy)
+                .GetProperties()
+                .Where(property => property.PropertyType == typeof(bool)
+                    && property.Name != nameof(ISnakeCompatibilityPolicy.IsEnabled)
+                    && property.Name != nameof(ISnakeCompatibilityPolicy.UsesLazyResourceIndex))
+                .Select(property => property.Name)
+                .OrderBy(name => name, StringComparer.Ordinal)
+                .ToArray();
+            var mappedProperties = GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.PolicyPropertyByCapabilityId.Values
+                .OrderBy(name => name, StringComparer.Ordinal)
+                .ToArray();
+            Assert(snakePolicyProperties.SequenceEqual(mappedProperties),
+                $"蛇系 policy 属性与 capability 映射表不穷尽：接口=[{string.Join(',', snakePolicyProperties)}] 映射=[{string.Join(',', mappedProperties)}]。");
+
+            // policy 取值由账本派生：snake 全真、v24pure 全假、erafl 的三项 quirk 生效。
+            Assert(snake.Snake.AllowsPrivateArguments && snake.Snake.AllowsExtraCallArguments
+                && snake.Snake.UsesParserDiagnostics && snake.Snake.ContinuesAfterStartupFault,
+                "snake 会话的 quirk policy 必须由 capability 账本派生为真。");
+            Assert(!v24.Snake.AllowsPrivateArguments && !v24.Snake.UsesFastDisplayRefresh,
+                "v24pure 会话不得激活任何蛇系 quirk。");
+            Assert(erafl.EraFl.UsesExtendedDisplayHistory
+                && erafl.EraFl.IsOmittedDefaultArgument(',')
+                && erafl.EraFl.ShouldSubmitBlankPointerStringInput(2, true),
+                "erafl 会话的三项布尔 quirk 必须由 capability 账本派生为真。");
+            Assert(!v24.EraFl.UsesExtendedDisplayHistory && !v24.EraFl.IsOmittedDefaultArgument(','),
+                "v24pure 会话不得激活 erafl quirk。");
 
             // 描述符通道（生成清单）：plan.Dialect.Instructions/Functions 必须非空且与
             // LegacyDialectInventories 生成数据逐量一致——这是描述符路由激活的前置契约。
