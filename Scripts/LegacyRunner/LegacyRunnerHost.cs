@@ -132,6 +132,10 @@ namespace gEmuera.LegacyRunner
             }
             catch (Exception ex)
             {
+                // 原始异常先落日志：Load 阶段抛错时 _report 尚未创建，Fail 的 AddError
+                // 会被跳过，随后 Finish 阶段的次生 NRE 会把根因完全掩盖
+                //（2026-09-12 两次实测踩坑：配置超界/CJK 编码错误的根因均因此丢失）。
+                GD.PushError("Legacy runner startup failed: " + ex);
                 Fail("runner_start_failed", ex.GetType().Name + ": " + ex.Message, 70);
             }
         }

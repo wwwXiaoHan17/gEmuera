@@ -83,7 +83,7 @@ function Get-SupportedCompatibilityProfile {
     if (-not (Test-Path -LiteralPath $generatedPath -PathType Leaf)) {
         throw "profiles.generated.json is missing; run tools/dialect-inventory/LegacyDialectInventoryGenerator first."
     }
-    $generated = Get-Content -LiteralPath $generatedPath -Raw | ConvertFrom-Json
+    $generated = Get-Content -LiteralPath $generatedPath -Raw -Encoding UTF8 | ConvertFrom-Json
     return @($generated.profileIds | ForEach-Object { [string]$_ })
 }
 
@@ -265,7 +265,7 @@ try {
         throw "M0 runner requires Godot 4.7 Mono; captured: $godotVersion"
     }
 
-    $baseConfig = Get-Content -LiteralPath $configPathResolved -Raw | ConvertFrom-Json
+    $baseConfig = Get-Content -LiteralPath $configPathResolved -Raw -Encoding UTF8 | ConvertFrom-Json
     if ($GameRoot) { $baseConfig.gameRoot = [IO.Path]::GetFullPath($GameRoot) }
     if ($Profile) { $baseConfig.profile = $Profile }
     if (-not $baseConfig.gameRoot -or -not (Test-Path -LiteralPath $baseConfig.gameRoot -PathType Container)) {
@@ -369,7 +369,7 @@ try {
         if (-not (Test-Path -LiteralPath $existingIdentityPath -PathType Leaf)) {
             throw "Existing identity directory has no identity.json: $existingIdentity"
         }
-        $identityReport = Get-Content -LiteralPath $existingIdentityPath -Raw | ConvertFrom-Json
+        $identityReport = Get-Content -LiteralPath $existingIdentityPath -Raw -Encoding UTF8 | ConvertFrom-Json
         if ((Get-NormalizedFullPath -Path $identityReport.source.root) -ne (Get-NormalizedFullPath -Path $projectRootResolved)) {
             throw 'Existing identity source root does not match this project.'
         }

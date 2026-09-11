@@ -37,12 +37,11 @@ public partial class FirstWindow : Control
 		public const string CoreProfileV24Pure = "v24pure";
 		public const string CoreProfileSnake = "snake";
 		public const string CoreProfileEraFl = "erafl";
-		// 旧游戏方言（emuera1824+v18 血统）：指令/函数面按 v18 参考注册表取证收缩，
-		// 仅供兼容诊断与 legacy-runner 使用；启动器 UI 暂不提供选项。
+		// 旧游戏方言（emuera1824+v18 血统）：指令/函数面按 v18 参考注册表取证收缩。
 		public const string CoreProfileV18 = "v18";
-		// eraBlue（碧蓝度假村）：v24 基座 + SETANIMETIMER + 外部插件能力；legacy-runner 先行。
+		// eraBlue（碧蓝度假村）：v24 基座 + SETANIMETIMER + 外部插件能力。
 		public const string CoreProfileEraBlue = "erablue";
-		// era megaten（Emuera1824+v8.1 私改血统）：v24 基座 + 启动容错；legacy-runner 先行。
+		// era megaten（Emuera1824+v8.1 私改血统）：v24 基座 + 启动容错。
 		public const string CoreProfileMegaten = "megaten";
 	// 保留旧配置值，避免升级时无法读取 launcher.cfg；启动器不再执行自动探测。
 	public const string CoreProfileAutomatic = "auto";
@@ -1050,6 +1049,9 @@ public partial class FirstWindow : Control
 		compatibilityProfileOption.AddItem(CoreProfileV24Pure);
 		compatibilityProfileOption.AddItem(CoreProfileSnake);
 		compatibilityProfileOption.AddItem(CoreProfileEraFl);
+		compatibilityProfileOption.AddItem(CoreProfileV18);
+		compatibilityProfileOption.AddItem(CoreProfileEraBlue);
+		compatibilityProfileOption.AddItem(CoreProfileMegaten);
 		compatibilityProfileOption.Select(GetManualProfileOptionIndex());
 		compatibilityProfileOption.ItemSelected += OnManualProfileSelected;
 		compatibilityProfileOption.Visible = AdvancedCompatibilityEnabled;
@@ -1076,6 +1078,9 @@ public partial class FirstWindow : Control
 			0 => CoreProfileV24Pure,
 			1 => CoreProfileSnake,
 			2 => CoreProfileEraFl,
+			3 => CoreProfileV18,
+			4 => CoreProfileEraBlue,
+			5 => CoreProfileMegaten,
 			_ => CoreProfileV24Pure,
 		};
 		SaveCompatibilitySettings();
@@ -1125,6 +1130,9 @@ public partial class FirstWindow : Control
 		{
 			CoreProfileSnake => 1,
 			CoreProfileEraFl => 2,
+			CoreProfileV18 => 3,
+			CoreProfileEraBlue => 4,
+			CoreProfileMegaten => 5,
 			_ => 0,
 		};
 	}
