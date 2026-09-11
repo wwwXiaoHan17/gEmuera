@@ -128,6 +128,26 @@ static class Program
             Assert(v24.Plan.CapabilityIds.Count == 0, "v24pure 不应声明 capability。");
             Assert(snake.Plan.CapabilityIds.Count == 0, "snake 不应声明 capability。");
 
+            // 描述符通道（生成清单）：plan.Dialect.Instructions/Functions 必须非空且与
+            // LegacyDialectInventories 生成数据逐量一致——这是描述符路由激活的前置契约。
+            Assert(v24.Plan.Dialect.Instructions.Count == GEmuera.Core.Compatibility.LegacyDialectInventories.V24InstructionNames.Length,
+                "v24pure 指令描述符数量与生成清单不一致。");
+            Assert(v24.Plan.Dialect.Functions.Count == GEmuera.Core.Compatibility.LegacyDialectInventories.V24Functions.Length,
+                "v24pure 函数描述符数量与生成清单不一致。");
+            Assert(snake.Plan.Dialect.Instructions.Count
+                    == GEmuera.Core.Compatibility.LegacyDialectInventories.V24InstructionNames.Length
+                    + GEmuera.Core.Compatibility.LegacyDialectInventories.SnakeDeltaInstructionNames.Length,
+                "snake 指令描述符数量 != v24 + snake 增量。");
+            Assert(erafl.Plan.Dialect.Instructions.Count
+                    == GEmuera.Core.Compatibility.LegacyDialectInventories.V24InstructionNames.Length
+                    + GEmuera.Core.Compatibility.LegacyDialectInventories.EraFlDeltaInstructionNames.Length,
+                "erafl 指令描述符数量 != v24 + erafl 增量。");
+            Assert(erafl.Plan.Dialect.TryGetInstruction("SETANIMETIMER", out var eraflTimer)
+                && eraflTimer.ModuleId == "game.erafl",
+                "erafl 计划必须由 game.erafl 模块声明 SETANIMETIMER 指令。");
+            Assert(!v24.Plan.Dialect.TryGetInstruction("CALLSTR", out _),
+                "v24pure 计划不得声明 snake 专属指令 CALLSTR。");
+
             // 诊断提示（TryGetUnselectedModuleHint）：v24pure 下查询 snake 专属名字 → 归属 game.snake；
             // snake 会话查询其自身隐藏的函数形态 → 不提示。
             Assert(v24.TryGetUnselectedModuleHint("SETANIMETIMER", out string hintModule1) && hintModule1 == "game.snake",

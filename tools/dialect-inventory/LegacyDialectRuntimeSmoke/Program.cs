@@ -74,6 +74,18 @@ internal static class Program
             AssertV24ScopedVariableParser(legacyAssembly, instructionType, profileType, v24);
             AssertPluginFloatParameter(legacyAssembly);
 
+            // 描述符通道漂移门禁：plan 清单（LegacyDialectInventories 生成镜像）必须覆盖
+            // 引擎真实投影的每个名字。v24pure/snake/erafl 三闭包逐名核对——引擎注册表或
+            // 方言桥层名单变化而未重新生成清单时，这里必须失败。
+            object erafl = CreateProfile(profileType, "erafl", scopedVariableInstructionsEnabled: true);
+            var eraflInstructions = GetRegistryKeys(instructionType, "GetInstructionNameDic", profileType, erafl);
+            var eraflFunctions = GetRegistryKeys(functionType, "GetMethodList", profileType, erafl);
+            AssertPlanDeclaresSurface("v24pure", v24Instructions, v24Functions, exactInstructionCount: v24Instructions.Count, exactFunctionCount: v24Functions.Count);
+            // snake 闭包 = v24 ∪ snakeΔ；函数侧计划比会话多 2 个（BITMAP_CACHE_ENABLE、
+            // SETANIMETIMER 函数形态：v24 可见、snake 主动排除——条件可见性的已知差）。
+            AssertPlanDeclaresSurface("snake", snakeInstructions, snakeFunctions, exactInstructionCount: snakeInstructions.Count, exactFunctionCount: snakeFunctions.Count + 2);
+            AssertPlanDeclaresSurface("erafl", eraflInstructions, eraflFunctions, exactInstructionCount: eraflInstructions.Count, exactFunctionCount: eraflFunctions.Count);
+
             Console.WriteLine("Legacy dialect runtime lookup smoke passed.");
             return 0;
         }
@@ -86,6 +98,34 @@ internal static class Program
 
     private static Type RequiredType(Assembly assembly, string fullName) =>
         assembly.GetType(fullName, throwOnError: false) ?? throw new InvalidOperationException($"Missing legacy type: {fullName}.");
+
+    /// <summary>
+    /// 会话驱动等价断言：profile 计划（BuiltInDialectCatalog + 生成清单）必须声明引擎投影
+    /// 表面的每个指令/函数名，且数量与预期一致（数量断言捕捉"计划比预期多/少了名字"的漂移）。
+    /// </summary>
+    private static void AssertPlanDeclaresSurface(
+        string profileId,
+        HashSet<string> sessionInstructions,
+        HashSet<string> sessionFunctions,
+        int exactInstructionCount,
+        int exactFunctionCount)
+    {
+        var plan = GEmuera.Core.Compatibility.BuiltInDialectCatalog.CreateLegacySessionPlan(profileId);
+        foreach (string name in sessionInstructions)
+        {
+            Assert(plan.Dialect.Instructions.ContainsKey(name),
+                $"Profile '{profileId}' plan does not declare legacy instruction '{name}' (regenerate LegacyDialectInventories).");
+        }
+        foreach (string name in sessionFunctions)
+        {
+            Assert(plan.Dialect.Functions.ContainsKey(name),
+                $"Profile '{profileId}' plan does not declare legacy function '{name}' (regenerate LegacyDialectInventories).");
+        }
+        Assert(plan.Dialect.Instructions.Count == exactInstructionCount,
+            $"Profile '{profileId}' plan declares {plan.Dialect.Instructions.Count} instructions, expected {exactInstructionCount}.");
+        Assert(plan.Dialect.Functions.Count == exactFunctionCount,
+            $"Profile '{profileId}' plan declares {plan.Dialect.Functions.Count} functions, expected {exactFunctionCount}.");
+    }
 
     private static object CreateProfile(Type profileType, string profileId, bool scopedVariableInstructionsEnabled)
     {
