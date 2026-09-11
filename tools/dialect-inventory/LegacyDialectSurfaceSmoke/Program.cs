@@ -148,6 +148,17 @@ static class Program
             Assert(!v24.Plan.Dialect.TryGetInstruction("CALLSTR", out _),
                 "v24pure 计划不得声明 snake 专属指令 CALLSTR。");
 
+            // 蛇系函数参数契约（重载差异名集，snake 模块声明）：仅 snake 会话激活。
+            Assert(snake.UsesDialectFunctionContract("ABS")
+                && snake.UsesDialectFunctionContract("SQRT")
+                && snake.UsesDialectFunctionContract("UNCHECKED_ADD"),
+                "snake 会话必须激活蛇系参数契约名集。");
+            Assert(!v24.UsesDialectFunctionContract("ABS")
+                && !v24.UsesDialectFunctionContract("SQRT"),
+                "v24pure 会话不得激活蛇系参数契约。");
+            Assert(!erafl.UsesDialectFunctionContract("ABS"),
+                "erafl 会话继承 v24 参数契约（不激活蛇系名集）。");
+
             // 诊断提示（TryGetUnselectedModuleHint）：v24pure 下查询 snake 专属名字 → 归属 game.snake；
             // snake 会话查询其自身隐藏的函数形态 → 不提示。
             Assert(v24.TryGetUnselectedModuleHint("SETANIMETIMER", out string hintModule1) && hintModule1 == "game.snake",

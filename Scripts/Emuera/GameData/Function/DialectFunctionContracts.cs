@@ -21,7 +21,9 @@ namespace MinorShift.Emuera.GameData.Function
 			FunctionMethod method,
 			LegacyCompatibilityProfile compatibility)
 		{
-			bool snake = compatibility.Snake.IsEnabled;
+			// 蛇系契约的选择权在方言模块（snake Apply 声明重载差异名集）；
+			// 本类只持有各名字的 CheckArgumentType 差异实现。
+			bool snake = compatibility.UsesDialectFunctionContract(name);
 			switch (name)
 			{
 				case "ABS":

@@ -123,6 +123,10 @@ namespace MinorShift.Emuera.Compatibility
 		// 指令名（大写规范化）→ 模块声明的 handler 变体。Declare/Apply 阶段按注册顺序
 		// 后写覆盖（Compose 保证 Apply 晚于全部 Declare，因此选中模块的变体覆盖基线声明）。
 		private readonly Dictionary<string, LegacyInstructionVariant> instructionVariants = new Dictionary<string, LegacyInstructionVariant>(StringComparer.Ordinal);
+		// 激活"蛇系参数契约"的函数名集合（snake 模块 Apply 声明）：
+		// 这些同名函数在 snake 与 v24 参考中重载形态不同，DialectFunctionContracts
+		/// 据此选择 CheckArgumentType 包装；checker 实现仍由该类集中持有。
+		private readonly HashSet<string> dialectFunctionContractNames = new HashSet<string>(StringComparer.Ordinal);
 		private string declaringModuleId = "";
 		private ISnakeCompatibilityPolicy snake = DisabledSnakeCompatibilityPolicy.Instance;
 		private IEraFlCompatibilityPolicy eraFl = DisabledEraFlCompatibilityPolicy.Instance;
@@ -241,6 +245,22 @@ namespace MinorShift.Emuera.Compatibility
 			instructionVariants[name.Trim().ToUpperInvariant()] = variant;
 		}
 
+		/// <summary>
+		/// 模块的函数参数契约贡献：声明"本会话对这些同名函数使用蛇系重载契约"。
+		/// 名单来自 snake 与 v24 参考注册表的重载差异差集；仅选中该模块的会话激活。
+		/// </summary>
+		public void ActivateDialectFunctionContracts(IEnumerable<string> names)
+		{
+			if (names == null)
+				throw new ArgumentNullException(nameof(names));
+			foreach (string name in names)
+			{
+				if (string.IsNullOrWhiteSpace(name))
+					throw new ArgumentException("Function contract names must not be empty.", nameof(names));
+				dialectFunctionContractNames.Add(name.Trim());
+			}
+		}
+
 		public LegacyCompatibilityProfile Build()
 		{
 			return new LegacyCompatibilityProfile(
@@ -254,6 +274,7 @@ namespace MinorShift.Emuera.Compatibility
 				scopedInstructionNames,
 				methodProjectedFunctionNames,
 				instructionVariants,
+				dialectFunctionContractNames,
 				hiddenNameOwners);
 		}
 	}
@@ -301,6 +322,18 @@ namespace MinorShift.Emuera.Compatibility
 
 	internal sealed class LegacySnakeCompatibilityModule : ILegacyCompatibilityModule
 	{
+		// 蛇系参数契约名集：这些同名函数在 snake 与 v24 参考注册表中重载形态不同
+		//（DialectFunctionContracts 逐名提供 CheckArgumentType 差异）。激活后该会话
+		// 使用蛇系契约；v24pure/erafl 会话保持 v24 形态。
+		private static readonly IReadOnlyCollection<string> DivergentFunctionContractNames =
+			Array.AsReadOnly(new[]
+			{
+				"ABS", "ARGLEN", "CBGSETSPRITE", "CBRT", "EXISTVAR", "EXPONENT",
+				"GETVAR", "GETVARS", "LIMIT", "LOG", "LOG10", "POWER", "SIGN",
+				"SPRITECREATE", "SPRITECREATEFROMFILE", "SQRT", "TOINT",
+				"UNCHECKED_ADD", "UNCHECKED_MUL", "UNCHECKED_NEG", "UNCHECKED_SUB",
+			});
+
 		// Public-key delta between the checked-in v24 and Snake reference
 		// registries. Handler class prefixes are not dialect ownership evidence.
 		private static readonly IReadOnlyCollection<string> InstructionNames =
@@ -374,6 +407,8 @@ namespace MinorShift.Emuera.Compatibility
 			//（snake 的 FOR 文法即共享表注册的 REPEAT 内核，EXTENDED 标志保持不变）。
 			builder.SubstituteInstruction("FOR", LegacyInstructionVariant.SharedTable);
 			builder.SubstituteInstruction("SETBGIMAGE", LegacyInstructionVariant.SetBgImageSnake);
+			// 蛇系函数参数契约（重载差异名集）随模块激活。
+			builder.ActivateDialectFunctionContracts(DivergentFunctionContractNames);
 		}
 	}
 

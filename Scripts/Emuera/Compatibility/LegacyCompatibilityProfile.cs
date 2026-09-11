@@ -85,6 +85,7 @@ namespace MinorShift.Emuera.Compatibility
 		private readonly ISet<string> methodProjectedFunctionNames;
 		private readonly IReadOnlyDictionary<string, string> hiddenNameOwners;
 		private readonly IReadOnlyDictionary<string, LegacyInstructionVariant> instructionVariants;
+		private readonly ISet<string> dialectFunctionContractNames;
 		private readonly bool scopedVariableInstructionsEnabled;
 
 		internal LegacyCompatibilityProfile(
@@ -98,6 +99,7 @@ namespace MinorShift.Emuera.Compatibility
 			IEnumerable<string> scopedInstructionNames,
 			IEnumerable<string> methodProjectedFunctionNames,
 			IReadOnlyDictionary<string, LegacyInstructionVariant> instructionVariants,
+			IEnumerable<string> dialectFunctionContractNames,
 			IReadOnlyDictionary<string, string> hiddenNameOwners = null)
 		{
 			ProfileId = profileId;
@@ -111,6 +113,8 @@ namespace MinorShift.Emuera.Compatibility
 			this.methodProjectedFunctionNames = new HashSet<string>(methodProjectedFunctionNames, StringComparer.Ordinal);
 			this.instructionVariants = instructionVariants
 				?? new Dictionary<string, LegacyInstructionVariant>(StringComparer.Ordinal);
+			this.dialectFunctionContractNames = new HashSet<string>(
+				dialectFunctionContractNames ?? Array.Empty<string>(), StringComparer.Ordinal);
 			this.hiddenNameOwners = hiddenNameOwners
 				?? new Dictionary<string, string>(StringComparer.Ordinal);
 		}
@@ -174,6 +178,17 @@ namespace MinorShift.Emuera.Compatibility
 			if (string.IsNullOrWhiteSpace(instructionName))
 				return false;
 			return instructionVariants.TryGetValue(instructionName.Trim().ToUpperInvariant(), out variant);
+		}
+
+		/// <summary>
+		/// 该会话是否对同名函数使用蛇系参数契约（重载差异名集，由 snake 模块声明激活）。
+		/// 名字规范化与 IsFunctionVisible 一致（Trim）。未激活模块的会话恒为 false。
+		/// </summary>
+		public bool UsesDialectFunctionContract(string functionName)
+		{
+			if (string.IsNullOrWhiteSpace(functionName))
+				return false;
+			return dialectFunctionContractNames.Contains(functionName.Trim());
 		}
 
 		/// <summary>
