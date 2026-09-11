@@ -54,6 +54,14 @@ Emuera 核心编译器以 C# 编写，为减少开发成本、方便 AI 对接�
   （Godot.NET.Sdk 依赖 Godot 环境解析，命令行下常因 SDK resolver/证书问题失败）。
 - **构建成功的判定**：检查 `.godot/mono/temp/bin/Debug/gemuera-c#.dll` 时间戳已更新，
   不要等进程退出——无头/受限环境下 Godot 可能卡在收尾阶段，但编译早已完成。
+- **方言/兼容层改动的门禁集**（2026-09）：改动 `Scripts/Emuera/Compatibility/`、指令/函数
+  注册表或方言名单后，依次跑三个契约冒烟（任一红了不得提 PR）：
+  `dotnet run --project tools/dialect-inventory/LegacyDialectSurfaceSmoke`、
+  `dotnet run --project tools/dialect-inventory/LegacyDialectRuntimeSmoke`、
+  `dotnet run --project tools/core-contracts/CoreContractSmoke.csproj`；
+  引擎注册表/方言清单变化后先 `dotnet run --project tools/dialect-inventory/LegacyDialectInventoryGenerator -- <项目根>`
+  再生清单（`LegacyDialectInventories.Generated.cs` + `tools/legacy-runner/profiles.generated.json`），
+  最后用 legacy-runner 做 v24pure/snake/erafl 三 profile 无头执行级冒烟。
 - Android 相关结论必须以 APK 实测为准；桌面端仅用于调试。
 
 ## 架构速览
