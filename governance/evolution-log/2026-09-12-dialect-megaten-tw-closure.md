@@ -39,3 +39,9 @@
 1. v18 语义级差异（文法/行为层，需真机差分）。
 2. 启动器 UI 的 v18/erablue/megaten 选项与目录路由。
 3. LegacyRunnerHost Fail 路径可观测性小修 + identity 回读 CJK 修复。
+
+## 补遗（同日收尾）
+
+1. **启动器 UI 接入**：高级兼容下拉增至六 profile（v18/erablue/megaten 可选）。compat 目录路由零改动即支持新方言——`DirectoryRouteProfileCatalog` 本就是 `BuiltInDialectCatalog.CreateLegacyProfileCatalog()`，新 profile 注册时路由自动生效（这是"单一事实源"设计的直接红利：UI 选项是唯一需要手工同步的点，目录路由不是）。
+2. **LegacyRunnerHost Fail 掩码修复**：_Ready catch 先 `GD.PushError` 原始异常——Load 阶段异常曾两次被次生 NRE 完全掩盖。
+3. **identity 回读 CJK 修复**：ps1 三处 `Get-Content` 补 `-Encoding UTF8`；erablue 真实游戏带 `-ExistingIdentityDirectory` 实测通过（上轮正是此场景失败）。CJK 路径 checklist 第四条补全："**读** JSON 也要 -Encoding UTF8，不只写"。
