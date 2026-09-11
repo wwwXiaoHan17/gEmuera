@@ -93,6 +93,41 @@ static class Program
             Assert(snake.IsInstructionVisible("SETANIMETIMER"), "snake 会话丢失了 SETANIMETIMER 指令。");
             Assert(!snake.IsFunctionVisible("SETANIMETIMER"), "snake 会话泄漏了参考源码不存在的 SETANIMETIMER 函数形态。");
 
+            // 指令变体表（模块替换贡献）：同名指令的 handler 变体由模块声明，取代投影缝硬编码。
+            // 预期与迁移前 CreateProfileInstruction 的行为逐位一致：
+            //   v24pure/erafl 的 FOR 走 v24 计数文法，snake 的 FOR 回退共享表；
+            //   SETBGIMAGE 三态：v24pure/erafl=V24 变体，snake=SNAKE 变体；
+            //   erafl 的 SETANIMETIMER 显式绑定共享表（模块化绑定归属，防 snake 侧分叉时隐式跟随）。
+            Assert(v24.TryGetInstructionVariant("FOR", out LegacyInstructionVariant forV24)
+                && forV24 == LegacyInstructionVariant.ForCountV24,
+                "v24pure 的 FOR 必须绑定 v24 计数文法变体。");
+            Assert(v24.TryGetInstructionVariant("SETBGIMAGE", out LegacyInstructionVariant bgV24)
+                && bgV24 == LegacyInstructionVariant.SetBgImageV24,
+                "v24pure 的 SETBGIMAGE 必须绑定 v24 变体。");
+            Assert(!v24.TryGetInstructionVariant("SETANIMETIMER", out _),
+                "v24pure 不应声明 SETANIMETIMER 变体绑定。");
+            Assert(snake.TryGetInstructionVariant("FOR", out LegacyInstructionVariant forSnake)
+                && forSnake == LegacyInstructionVariant.SharedTable,
+                "snake 的 FOR 必须显式回退共享表（覆盖 v24 基线声明）。");
+            Assert(snake.TryGetInstructionVariant("SETBGIMAGE", out LegacyInstructionVariant bgSnake)
+                && bgSnake == LegacyInstructionVariant.SetBgImageSnake,
+                "snake 的 SETBGIMAGE 必须绑定 snake 变体。");
+            Assert(erafl.TryGetInstructionVariant("FOR", out LegacyInstructionVariant forErafl)
+                && forErafl == LegacyInstructionVariant.ForCountV24,
+                "erafl 的 FOR 继承 v24 基线计数文法。");
+            Assert(erafl.TryGetInstructionVariant("SETBGIMAGE", out LegacyInstructionVariant bgErafl)
+                && bgErafl == LegacyInstructionVariant.SetBgImageV24,
+                "erafl 的 SETBGIMAGE 继承 v24 基线变体（与迁移前行为一致）。");
+            Assert(erafl.TryGetInstructionVariant("SETANIMETIMER", out LegacyInstructionVariant timerErafl)
+                && timerErafl == LegacyInstructionVariant.SharedTable,
+                "erafl 的 SETANIMETIMER 必须显式绑定共享表 handler。");
+
+            // capability 账本：erafl 声明 markup 系能力，v24pure/snake 不声明。
+            // 这是 capability id 的契约级消费（[LOAD] 日志与真机诊断依赖它）。
+            Assert(erafl.Plan.CapabilityIds.Count > 0, "erafl 模块必须声明 capability 清单。");
+            Assert(v24.Plan.CapabilityIds.Count == 0, "v24pure 不应声明 capability。");
+            Assert(snake.Plan.CapabilityIds.Count == 0, "snake 不应声明 capability。");
+
             // 诊断提示（TryGetUnselectedModuleHint）：v24pure 下查询 snake 专属名字 → 归属 game.snake；
             // snake 会话查询其自身隐藏的函数形态 → 不提示。
             Assert(v24.TryGetUnselectedModuleHint("SETANIMETIMER", out string hintModule1) && hintModule1 == "game.snake",
