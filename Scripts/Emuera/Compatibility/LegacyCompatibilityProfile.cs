@@ -84,6 +84,7 @@ namespace MinorShift.Emuera.Compatibility
 		private readonly ISet<string> scopedInstructionNames;
 		private readonly ISet<string> methodProjectedFunctionNames;
 		private readonly IReadOnlyDictionary<string, string> hiddenNameOwners;
+		private readonly IReadOnlyDictionary<string, LegacyInstructionVariant> instructionVariants;
 		private readonly bool scopedVariableInstructionsEnabled;
 
 		internal LegacyCompatibilityProfile(
@@ -96,6 +97,7 @@ namespace MinorShift.Emuera.Compatibility
 			IEnumerable<string> hiddenFunctionNames,
 			IEnumerable<string> scopedInstructionNames,
 			IEnumerable<string> methodProjectedFunctionNames,
+			IReadOnlyDictionary<string, LegacyInstructionVariant> instructionVariants,
 			IReadOnlyDictionary<string, string> hiddenNameOwners = null)
 		{
 			ProfileId = profileId;
@@ -107,6 +109,8 @@ namespace MinorShift.Emuera.Compatibility
 			this.hiddenFunctionNames = new HashSet<string>(hiddenFunctionNames, StringComparer.Ordinal);
 			this.scopedInstructionNames = new HashSet<string>(scopedInstructionNames, StringComparer.Ordinal);
 			this.methodProjectedFunctionNames = new HashSet<string>(methodProjectedFunctionNames, StringComparer.Ordinal);
+			this.instructionVariants = instructionVariants
+				?? new Dictionary<string, LegacyInstructionVariant>(StringComparer.Ordinal);
 			this.hiddenNameOwners = hiddenNameOwners
 				?? new Dictionary<string, string>(StringComparer.Ordinal);
 		}
@@ -158,6 +162,18 @@ namespace MinorShift.Emuera.Compatibility
 			if (string.IsNullOrWhiteSpace(functionName))
 				return false;
 			return methodProjectedFunctionNames.Contains(functionName.Trim());
+		}
+
+		/// <summary>
+		/// 查询模块为该指令声明的 handler 变体。名字规范化与 IsInstructionVisible 一致
+		/// （Trim + 大写）。返回 false 表示无替换贡献，投影时使用共享表原条目。
+		/// </summary>
+		public bool TryGetInstructionVariant(string instructionName, out LegacyInstructionVariant variant)
+		{
+			variant = LegacyInstructionVariant.SharedTable;
+			if (string.IsNullOrWhiteSpace(instructionName))
+				return false;
+			return instructionVariants.TryGetValue(instructionName.Trim().ToUpperInvariant(), out variant);
 		}
 
 		/// <summary>

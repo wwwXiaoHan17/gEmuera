@@ -20,6 +20,24 @@ namespace MinorShift.Emuera.Compatibility
 	}
 
 	/// <summary>
+	/// 模块声明的指令 handler 变体选择。同名指令在不同方言上游里可能保持名字但更换文法
+	/// （如 FOR 的计数形态、SETBGIMAGE 的双变体）；模块在这里只声明"选哪个变体"这一数据，
+	/// 变体的实际构造由 FunctionIdentifier 在会话注册表投影时完成，保持 handler 封装。
+	/// SharedTable 表示显式回退到共享 handler 表的原条目（用于子方言覆盖基线模块的替换）。
+	/// </summary>
+	internal enum LegacyInstructionVariant
+	{
+		/// <summary>使用共享 handler 表的原条目，不做替换。</summary>
+		SharedTable,
+		/// <summary>v24 的 FOR 计数文法（REPEAT 内核 + ForNext 实参构造器）。</summary>
+		ForCountV24,
+		/// <summary>v24 的 SETBGIMAGE。</summary>
+		SetBgImageV24,
+		/// <summary>snake 的 SETBGIMAGE。</summary>
+		SetBgImageSnake,
+	}
+
+	/// <summary>
 	/// Composes the legacy bridge from the exact frozen Core module closure.
 	/// The complete legacy handler tables remain implementation detail; only
 	/// these module declarations decide their parser-visible surfaces.
@@ -102,6 +120,9 @@ namespace MinorShift.Emuera.Compatibility
 		// 隐藏名 → 声明它的方言模块 id（Declare/Hide 阶段记录，Expose 移除）。
 		// 用于"该标识符属于未选中模块"的诊断提示（如 v24pure 下提示改用 snake）。
 		private readonly Dictionary<string, string> hiddenNameOwners = new Dictionary<string, string>(StringComparer.Ordinal);
+		// 指令名（大写规范化）→ 模块声明的 handler 变体。Declare/Apply 阶段按注册顺序
+		// 后写覆盖（Compose 保证 Apply 晚于全部 Declare，因此选中模块的变体覆盖基线声明）。
+		private readonly Dictionary<string, LegacyInstructionVariant> instructionVariants = new Dictionary<string, LegacyInstructionVariant>(StringComparer.Ordinal);
 		private string declaringModuleId = "";
 		private ISnakeCompatibilityPolicy snake = DisabledSnakeCompatibilityPolicy.Instance;
 		private IEraFlCompatibilityPolicy eraFl = DisabledEraFlCompatibilityPolicy.Instance;
@@ -207,6 +228,19 @@ namespace MinorShift.Emuera.Compatibility
 			eraFl = policy ?? throw new ArgumentNullException(nameof(policy));
 		}
 
+		/// <summary>
+		/// 模块的指令替换贡献：声明"该名字在本会话中使用哪个 handler 变体"。
+		/// 名字按 IsInstructionVisible 同一语义规范化（Trim + 大写）。
+		/// 基线模块（如 v24）在 Apply 注册默认变体，子方言模块在后续 Apply 中
+		/// 覆盖为自己的变体或显式回退 SharedTable。
+		/// </summary>
+		public void SubstituteInstruction(string name, LegacyInstructionVariant variant)
+		{
+			if (string.IsNullOrWhiteSpace(name))
+				throw new ArgumentException("Instruction name must not be empty.", nameof(name));
+			instructionVariants[name.Trim().ToUpperInvariant()] = variant;
+		}
+
 		public LegacyCompatibilityProfile Build()
 		{
 			return new LegacyCompatibilityProfile(
@@ -219,6 +253,7 @@ namespace MinorShift.Emuera.Compatibility
 				hiddenFunctionNames,
 				scopedInstructionNames,
 				methodProjectedFunctionNames,
+				instructionVariants,
 				hiddenNameOwners);
 		}
 	}
@@ -255,7 +290,13 @@ namespace MinorShift.Emuera.Compatibility
 				builder.DeclareScopedInstructionNames(ScopedInstructionNames);
 				builder.DeclareMethodProjectedFunctionNames(MethodProjectedFunctionNames);
 			}
-		public void Apply(LegacyCompatibilityProfileBuilder builder) { }
+		public void Apply(LegacyCompatibilityProfileBuilder builder)
+		{
+			// v24 基线变体：所有含 v24 基座的会话（v24pure/snake/erafl）先落这两条，
+			// 子方言模块在自己的 Apply 里按需覆盖。
+			builder.SubstituteInstruction("FOR", LegacyInstructionVariant.ForCountV24);
+			builder.SubstituteInstruction("SETBGIMAGE", LegacyInstructionVariant.SetBgImageV24);
+		}
 	}
 
 	internal sealed class LegacySnakeCompatibilityModule : ILegacyCompatibilityModule
@@ -329,6 +370,10 @@ namespace MinorShift.Emuera.Compatibility
 			builder.ExposeFunctionNames(FunctionNames);
 			builder.HideFunctionNames(SnakeExcludedFunctionNames);
 			builder.SetSnakePolicy(LegacySnakeCompatibilityPolicy.Instance);
+			// snake 覆盖 v24 基线：SETBGIMAGE 用 snake 变体；FOR 回退共享表原条目
+			//（snake 的 FOR 文法即共享表注册的 REPEAT 内核，EXTENDED 标志保持不变）。
+			builder.SubstituteInstruction("FOR", LegacyInstructionVariant.SharedTable);
+			builder.SubstituteInstruction("SETBGIMAGE", LegacyInstructionVariant.SetBgImageSnake);
 		}
 	}
 
@@ -351,6 +396,9 @@ namespace MinorShift.Emuera.Compatibility
 		{
 			builder.ExposeInstructionNames(InstructionNames);
 			builder.SetEraFlPolicy(LegacyEraFlCompatibilityPolicy.Instance);
+			// erafl 显式绑定共享表的 SETANIMETIMER handler：绑定归属在模块声明中可见，
+			// 未来 snake 侧 handler 分叉时 erafl 在此固定自己的变体，不再隐式跟随共享表。
+			builder.SubstituteInstruction("SETANIMETIMER", LegacyInstructionVariant.SharedTable);
 		}
 	}
 
