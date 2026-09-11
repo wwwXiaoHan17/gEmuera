@@ -200,6 +200,23 @@ static class Program
             Assert(!erafl.UsesDialectFunctionContract("ABS"),
                 "erafl 会话继承 v24 参数契约（不激活蛇系名集）。");
 
+            // v18 基线方言（emuera_v18_exported 双源取证）：独立闭包 {gemuera.v18}，
+            // 表面 = v24 投影减 39 指令 + 110 函数的 v24 后增差集；无 quirk capability。
+            LegacyCompatibilityProfile v18 = LegacyCompatibilityProfile.CreateForProfile("v18", true);
+            Assert(v18.IsInstructionVisible("PRINT") && v18.IsFunctionVisible("ABS"),
+                "v18 丢失基线指令/函数。");
+            Assert(!v18.IsInstructionVisible("SETBGIMAGE") && !v18.IsInstructionVisible("PRINTN")
+                && !v18.IsInstructionVisible("VARI") && !v18.IsInstructionVisible("VARS")
+                && !v18.IsInstructionVisible("CALLSTR") && !v18.IsInstructionVisible("SKIPLOG"),
+                "v18 泄漏了 v24 后增或 snake 专属指令。");
+            Assert(!v18.IsFunctionVisible("GETVAR") && !v18.IsFunctionVisible("DT_CREATE")
+                && !v18.IsFunctionVisible("XML_DOCUMENT") && !v18.IsFunctionVisible("SQL_CONNECT"),
+                "v18 泄漏了 v24 后增或 snake 专属函数。");
+            Assert(v18.Plan.Dialect.Instructions.Count == GEmuera.Core.Compatibility.LegacyDialectInventories.V18InstructionNames.Length
+                && v18.Plan.Dialect.Functions.Count == GEmuera.Core.Compatibility.LegacyDialectInventories.V18Functions.Length,
+                "v18 描述符数量与生成清单不一致。");
+            Assert(v18.Plan.CapabilityIds.Count == 0, "v18 基线不应声明 quirk capability。");
+
             // 诊断提示（TryGetUnselectedModuleHint）：v24pure 下查询 snake 专属名字 → 归属 game.snake；
             // snake 会话查询其自身隐藏的函数形态 → 不提示。
             Assert(v24.TryGetUnselectedModuleHint("SETANIMETIMER", out string hintModule1) && hintModule1 == "game.snake",

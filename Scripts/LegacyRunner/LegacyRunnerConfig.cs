@@ -306,19 +306,17 @@ namespace gEmuera.LegacyRunner
 
 		static void ValidateSupportedProfile(string value, string error)
 		{
-			if (!string.Equals(value, global::FirstWindow.CoreProfileV24Pure, StringComparison.OrdinalIgnoreCase)
-				&& !string.Equals(value, global::FirstWindow.CoreProfileSnake, StringComparison.OrdinalIgnoreCase)
-				&& !string.Equals(value, global::FirstWindow.CoreProfileEraFl, StringComparison.OrdinalIgnoreCase))
+			// 单一事实源：FirstWindow.TryNormalizeCoreProfileName（引擎 profile 常量）。
+			// 新增方言只需在 FirstWindow 登记，此处不再维护独立名单。
+			if (!global::FirstWindow.TryNormalizeCoreProfileName(value, out _))
 				throw new InvalidDataException(error);
 		}
 
 		static string NormalizeProfile(string value)
 		{
-			if (string.Equals(value, global::FirstWindow.CoreProfileSnake, StringComparison.OrdinalIgnoreCase))
-				return global::FirstWindow.CoreProfileSnake;
-			if (string.Equals(value, global::FirstWindow.CoreProfileEraFl, StringComparison.OrdinalIgnoreCase))
-				return global::FirstWindow.CoreProfileEraFl;
-			return global::FirstWindow.CoreProfileV24Pure;
+			return global::FirstWindow.TryNormalizeCoreProfileName(value, out string normalized)
+				? normalized
+				: global::FirstWindow.CoreProfileV24Pure;
 		}
 	}
 }

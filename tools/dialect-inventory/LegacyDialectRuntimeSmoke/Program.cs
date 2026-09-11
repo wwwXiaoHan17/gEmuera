@@ -80,11 +80,22 @@ internal static class Program
             object erafl = CreateProfile(profileType, "erafl", scopedVariableInstructionsEnabled: true);
             var eraflInstructions = GetRegistryKeys(instructionType, "GetInstructionNameDic", profileType, erafl);
             var eraflFunctions = GetRegistryKeys(functionType, "GetMethodList", profileType, erafl);
+            object v18 = CreateProfile(profileType, "v18", scopedVariableInstructionsEnabled: true);
+            var v18Instructions = GetRegistryKeys(instructionType, "GetInstructionNameDic", profileType, v18);
+            var v18Functions = GetRegistryKeys(functionType, "GetMethodList", profileType, v18);
+            // v18 基线隔离抽查：v24 后增指令/函数不得进入 v18 会话表面。
+            Assert(!v18Instructions.Contains("SETBGIMAGE") && !v18Instructions.Contains("PRINTN") && !v18Instructions.Contains("VARI"),
+                "v18 surface leaked v24-era instructions.");
+            Assert(v18Instructions.Contains("PRINT") && v18Instructions.Contains("CALL"),
+                "v18 lost baseline instructions.");
+            Assert(!v18Functions.Contains("GETVAR") && !v18Functions.Contains("XML_DOCUMENT") && v18Functions.Contains("ABS"),
+                "v18 function surface drifted from the v18 reference registry.");
             AssertPlanDeclaresSurface("v24pure", v24Instructions, v24Functions, exactInstructionCount: v24Instructions.Count, exactFunctionCount: v24Functions.Count);
             // snake 闭包 = v24 ∪ snakeΔ；函数侧计划比会话多 2 个（BITMAP_CACHE_ENABLE、
             // SETANIMETIMER 函数形态：v24 可见、snake 主动排除——条件可见性的已知差）。
             AssertPlanDeclaresSurface("snake", snakeInstructions, snakeFunctions, exactInstructionCount: snakeInstructions.Count, exactFunctionCount: snakeFunctions.Count + 2);
             AssertPlanDeclaresSurface("erafl", eraflInstructions, eraflFunctions, exactInstructionCount: eraflInstructions.Count, exactFunctionCount: eraflFunctions.Count);
+            AssertPlanDeclaresSurface("v18", v18Instructions, v18Functions, exactInstructionCount: v18Instructions.Count, exactFunctionCount: v18Functions.Count);
 
             Console.WriteLine("Legacy dialect runtime lookup smoke passed.");
             return 0;

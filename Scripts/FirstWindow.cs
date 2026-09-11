@@ -34,9 +34,12 @@ public partial class FirstWindow : Control
 	// 也避免大目录树扫描拖慢启动器。
 	const int MaxLauncherScanDepth = 2;
 	const int MaxScanMessages = 6;
-	public const string CoreProfileV24Pure = "v24pure";
-	public const string CoreProfileSnake = "snake";
-	public const string CoreProfileEraFl = "erafl";
+		public const string CoreProfileV24Pure = "v24pure";
+		public const string CoreProfileSnake = "snake";
+		public const string CoreProfileEraFl = "erafl";
+		// 旧游戏方言（emuera1824+v18 血统）：指令/函数面按 v18 参考注册表取证收缩，
+		// 仅供兼容诊断与 legacy-runner 使用；启动器 UI 暂不提供选项。
+		public const string CoreProfileV18 = "v18";
 	// 保留旧配置值，避免升级时无法读取 launcher.cfg；启动器不再执行自动探测。
 	public const string CoreProfileAutomatic = "auto";
 
@@ -1892,7 +1895,8 @@ public partial class FirstWindow : Control
 			: CoreProfileV24Pure;
 	}
 
-	static bool TryNormalizeCoreProfileName(string coreProfileName, out string normalizedProfileName)
+	// 引擎 profile 名的单一事实源校验：launcher、legacy-runner 配置加载、会话宿主共用。
+	internal static bool TryNormalizeCoreProfileName(string coreProfileName, out string normalizedProfileName)
 	{
 		normalizedProfileName = null;
 		// launcher.cfg 与 Legacy runner 是旧入口，保留三个已存在 profile 的大小写兼容；
@@ -1910,6 +1914,11 @@ public partial class FirstWindow : Control
 		if (string.Equals(coreProfileName, CoreProfileEraFl, System.StringComparison.OrdinalIgnoreCase))
 		{
 			normalizedProfileName = CoreProfileEraFl;
+			return true;
+		}
+		if (string.Equals(coreProfileName, CoreProfileV18, System.StringComparison.OrdinalIgnoreCase))
+		{
+			normalizedProfileName = CoreProfileV18;
 			return true;
 		}
 

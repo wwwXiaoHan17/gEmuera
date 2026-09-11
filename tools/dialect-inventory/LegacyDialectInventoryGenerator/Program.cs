@@ -16,6 +16,7 @@ internal static class Program
     private const string V24ModuleId = "gemuera.v24";
     private const string SnakeModuleId = "game.snake";
     private const string EraFlModuleId = "game.erafl";
+    private const string V18ModuleId = "gemuera.v18";
 
     private static int Main(string[] args)
     {
@@ -37,13 +38,16 @@ internal static class Program
             object v24 = CreateProfile(profileType, "v24pure", scopedVariableInstructionsEnabled: true);
             object snake = CreateProfile(profileType, "snake", scopedVariableInstructionsEnabled: true);
             object erafl = CreateProfile(profileType, "erafl", scopedVariableInstructionsEnabled: true);
+            object v18 = CreateProfile(profileType, "v18", scopedVariableInstructionsEnabled: true);
 
             var v24Instructions = GetRegistryKeys(instructionType, "GetInstructionNameDic", profileType, v24);
             var snakeInstructions = GetRegistryKeys(instructionType, "GetInstructionNameDic", profileType, snake);
             var eraflInstructions = GetRegistryKeys(instructionType, "GetInstructionNameDic", profileType, erafl);
+            var v18Instructions = GetRegistryKeys(instructionType, "GetInstructionNameDic", profileType, v18);
             var v24Functions = GetRegistry(functionType, "GetMethodList", profileType, v24);
             var snakeFunctions = GetRegistry(functionType, "GetMethodList", profileType, snake);
             var eraflFunctions = GetRegistry(functionType, "GetMethodList", profileType, erafl);
+            var v18Functions = GetRegistry(functionType, "GetMethodList", profileType, v18);
 
             // 模块自有清单 = 表面差集（v24 基线 = v24pure 表面本身）。
             var snakeDeltaInstructions = ExceptSorted(snakeInstructions, v24Instructions);
@@ -66,19 +70,34 @@ internal static class Program
                 "snake-only function SQL_CONNECT visibility drifted.");
             Assert(Keys(v24Functions).Contains("陥落状態") || Keys(snakeFunctions).Contains("陥落状態"),
                 "CJK built-in function 陥落状態 vanished from every surface.");
+            // v18 哨兵：独立基线面 = v24 引擎投影减 v24 后增差集（双源取证 2026-09-12）。
+            Assert(v18Instructions.Contains("PRINT") && v18Functions is not null,
+                "v18 surface lost baseline PRINT.");
+            Assert(!v18Instructions.Contains("SETBGIMAGE") && !v18Instructions.Contains("PRINTN")
+                && !v18Instructions.Contains("VARI") && !v18Instructions.Contains("VARS")
+                && !v18Instructions.Contains("CALLSTR"),
+                "v18 surface leaked v24-era or snake-only instructions.");
+            Assert(!Keys(v18Functions).Contains("GETVAR") && !Keys(v18Functions).Contains("DT_CREATE")
+                && !Keys(v18Functions).Contains("XML_DOCUMENT"),
+                "v18 surface leaked v24-era functions.");
+            Assert(Keys(v18Functions).Contains("ABS") && Keys(v18Functions).Contains("SQRT"),
+                "v18 lost baseline expression functions.");
 
             var functionReturnTypes = new Dictionary<string, string>(StringComparer.Ordinal);
             CollectReturnTypes(v24Functions, functionReturnTypes);
             CollectReturnTypes(snakeFunctions, functionReturnTypes);
             CollectReturnTypes(eraflFunctions, functionReturnTypes);
+            CollectReturnTypes(v18Functions, functionReturnTypes);
 
             string generatedCs = BuildGeneratedCs(
                 v24Instructions,
                 snakeDeltaInstructions,
                 eraflDeltaInstructions,
+                v18Instructions,
                 Keys(v24Functions),
                 snakeDeltaFunctions,
                 eraflDeltaFunctions,
+                Keys(v18Functions),
                 functionReturnTypes);
             string corePath = Path.Combine(repoRoot, "src", "Core", "Compatibility", "LegacyDialectInventories.Generated.cs");
             File.WriteAllText(corePath, generatedCs, new UTF8Encoding(false));
@@ -86,7 +105,8 @@ internal static class Program
             string profilesJson = BuildProfilesJson(
                 v24Instructions.Count, Keys(v24Functions).Count,
                 snakeInstructions.Count, Keys(snakeFunctions).Count,
-                eraflInstructions.Count, Keys(eraflFunctions).Count);
+                eraflInstructions.Count, Keys(eraflFunctions).Count,
+                v18Instructions.Count, Keys(v18Functions).Count);
             string runnerPath = Path.Combine(repoRoot, "tools", "legacy-runner", "profiles.generated.json");
             File.WriteAllText(runnerPath, profilesJson, new UTF8Encoding(false));
 
@@ -140,41 +160,46 @@ internal static class Program
         }
     }
 
-    private static string BuildGeneratedCs(
-        HashSet<string> v24Instructions,
-        HashSet<string> snakeDeltaInstructions,
-        HashSet<string> eraflDeltaInstructions,
-        HashSet<string> v24Functions,
-        HashSet<string> snakeDeltaFunctions,
-        HashSet<string> eraflDeltaFunctions,
-        Dictionary<string, string> functionReturnTypes)
-    {
-        var builder = new StringBuilder();
-        builder.AppendLine("// <auto-generated>");
-        builder.AppendLine("// 由 tools/dialect-inventory/LegacyDialectInventoryGenerator 从引擎真实投影生成。");
-        builder.AppendLine("// 引擎注册表或方言桥层名单变化后必须重新生成：dotnet run --project tools/dialect-inventory/LegacyDialectInventoryGenerator -- <repo-root>");
-        builder.AppendLine("// 手工修改会被下次生成覆盖。函数清单含 CJK 标识符（陥落状態/陷落状态），文件必须保持 UTF-8。");
-        builder.AppendLine("// </auto-generated>");
-        builder.AppendLine("#nullable enable");
-        builder.AppendLine();
-        builder.AppendLine("namespace GEmuera.Core.Compatibility;");
-        builder.AppendLine();
-        builder.AppendLine("/// <summary>");
-        builder.AppendLine("/// 方言模块的自有指令/函数清单（描述符贡献数据）。v24 = v24pure 会话表面；");
-        builder.AppendLine("/// snake/erafl 增量为对应会话表面相对 v24 表面的差集。单一事实源是引擎投影，本文件是生成镜像。");
-        builder.AppendLine("/// </summary>");
-        builder.AppendLine("public static class LegacyDialectInventories");
-        builder.AppendLine("{");
-        AppendNameArray(builder, "V24InstructionNames", v24Instructions, V24ModuleId);
-        AppendNameArray(builder, "SnakeDeltaInstructionNames", snakeDeltaInstructions, SnakeModuleId);
-        AppendNameArray(builder, "EraFlDeltaInstructionNames", eraflDeltaInstructions, EraFlModuleId);
-        AppendFunctionArray(builder, "V24Functions", v24Functions, functionReturnTypes, V24ModuleId);
-        AppendFunctionArray(builder, "SnakeDeltaFunctions", snakeDeltaFunctions, functionReturnTypes, SnakeModuleId);
-        AppendFunctionArray(builder, "EraFlDeltaFunctions", eraflDeltaFunctions, functionReturnTypes, EraFlModuleId);
-        builder.AppendLine("}");
-        builder.AppendLine();
-        return builder.ToString();
-    }
+        private static string BuildGeneratedCs(
+            HashSet<string> v24Instructions,
+            HashSet<string> snakeDeltaInstructions,
+            HashSet<string> eraflDeltaInstructions,
+            HashSet<string> v18Instructions,
+            HashSet<string> v24Functions,
+            HashSet<string> snakeDeltaFunctions,
+            HashSet<string> eraflDeltaFunctions,
+            HashSet<string> v18Functions,
+            Dictionary<string, string> functionReturnTypes)
+        {
+            var builder = new StringBuilder();
+            builder.AppendLine("// <auto-generated>");
+            builder.AppendLine("// 由 tools/dialect-inventory/LegacyDialectInventoryGenerator 从引擎真实投影生成。");
+            builder.AppendLine("// 引擎注册表或方言桥层名单变化后必须重新生成：dotnet run --project tools/dialect-inventory/LegacyDialectInventoryGenerator -- <repo-root>");
+            builder.AppendLine("// 手工修改会被下次生成覆盖。函数清单含 CJK 标识符（陥落状態/陷落状态），文件必须保持 UTF-8。");
+            builder.AppendLine("// </auto-generated>");
+            builder.AppendLine("#nullable enable");
+            builder.AppendLine();
+            builder.AppendLine("namespace GEmuera.Core.Compatibility;");
+            builder.AppendLine();
+            builder.AppendLine("/// <summary>");
+            builder.AppendLine("/// 方言模块的自有指令/函数清单（描述符贡献数据）。v24 = v24pure 会话表面；");
+            builder.AppendLine("/// snake/erafl 增量为对应会话表面相对 v24 表面的差集；v18 为独立基线的完整表面");
+            builder.AppendLine("///（v24 引擎投影减 v24 后增差集）。单一事实源是引擎投影，本文件是生成镜像。");
+            builder.AppendLine("/// </summary>");
+            builder.AppendLine("public static class LegacyDialectInventories");
+            builder.AppendLine("{");
+            AppendNameArray(builder, "V24InstructionNames", v24Instructions, V24ModuleId);
+            AppendNameArray(builder, "SnakeDeltaInstructionNames", snakeDeltaInstructions, SnakeModuleId);
+            AppendNameArray(builder, "EraFlDeltaInstructionNames", eraflDeltaInstructions, EraFlModuleId);
+            AppendNameArray(builder, "V18InstructionNames", v18Instructions, V18ModuleId);
+            AppendFunctionArray(builder, "V24Functions", v24Functions, functionReturnTypes, V24ModuleId);
+            AppendFunctionArray(builder, "SnakeDeltaFunctions", snakeDeltaFunctions, functionReturnTypes, SnakeModuleId);
+            AppendFunctionArray(builder, "EraFlDeltaFunctions", eraflDeltaFunctions, functionReturnTypes, EraFlModuleId);
+            AppendFunctionArray(builder, "V18Functions", v18Functions, functionReturnTypes, V18ModuleId);
+            builder.AppendLine("}");
+            builder.AppendLine();
+            return builder.ToString();
+        }
 
     private static void AppendNameArray(StringBuilder builder, string fieldName, HashSet<string> names, string moduleId)
     {
@@ -211,26 +236,28 @@ internal static class Program
         builder.AppendLine();
     }
 
-    private static string BuildProfilesJson(
-        int v24Instructions, int v24Functions,
-        int snakeInstructions, int snakeFunctions,
-        int eraflInstructions, int eraflFunctions)
-    {
-        var root = new
+        private static string BuildProfilesJson(
+            int v24Instructions, int v24Functions,
+            int snakeInstructions, int snakeFunctions,
+            int eraflInstructions, int eraflFunctions,
+            int v18Instructions, int v18Functions)
         {
-            schemaVersion = "1.0.0",
-            generatedBy = "tools/dialect-inventory/LegacyDialectInventoryGenerator",
-            profileIds = new[] { "erafl", "snake", "v24pure" },
-            profiles = new Dictionary<string, object>(StringComparer.Ordinal)
+            var root = new
             {
-                ["v24pure"] = new { modules = new[] { V24ModuleId }, instructionCount = v24Instructions, functionCount = v24Functions },
-                ["snake"] = new { modules = new[] { V24ModuleId, SnakeModuleId }, instructionCount = snakeInstructions, functionCount = snakeFunctions },
-                ["erafl"] = new { modules = new[] { V24ModuleId, EraFlModuleId }, instructionCount = eraflInstructions, functionCount = eraflFunctions },
-            },
-        };
-        var options = new JsonSerializerOptions { WriteIndented = true };
-        return JsonSerializer.Serialize(root, options) + "\n";
-    }
+                schemaVersion = "1.0.0",
+                generatedBy = "tools/dialect-inventory/LegacyDialectInventoryGenerator",
+                profileIds = new[] { "erafl", "snake", "v18", "v24pure" },
+                profiles = new Dictionary<string, object>(StringComparer.Ordinal)
+                {
+                    ["v24pure"] = new { modules = new[] { V24ModuleId }, instructionCount = v24Instructions, functionCount = v24Functions },
+                    ["snake"] = new { modules = new[] { V24ModuleId, SnakeModuleId }, instructionCount = snakeInstructions, functionCount = snakeFunctions },
+                    ["erafl"] = new { modules = new[] { V24ModuleId, EraFlModuleId }, instructionCount = eraflInstructions, functionCount = eraflFunctions },
+                    ["v18"] = new { modules = new[] { V18ModuleId }, instructionCount = v18Instructions, functionCount = v18Functions },
+                },
+            };
+            var options = new JsonSerializerOptions { WriteIndented = true };
+            return JsonSerializer.Serialize(root, options) + "\n";
+        }
 
     private static HashSet<string> ExceptSorted(HashSet<string> from, HashSet<string> subtract)
     {

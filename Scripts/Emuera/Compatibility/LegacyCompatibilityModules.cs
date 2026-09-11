@@ -47,12 +47,14 @@ namespace MinorShift.Emuera.Compatibility
 		private const string V24ModuleId = "gemuera.v24";
 		private const string SnakeModuleId = "game.snake";
 		private const string EraFlModuleId = "game.erafl";
+		private const string V18ModuleId = "gemuera.v18";
 
 		private static readonly ILegacyCompatibilityModule[] modules =
 		{
 			new LegacyV24CompatibilityModule(),
 			new LegacySnakeCompatibilityModule(),
 			new LegacyEraFlCompatibilityModule(),
+			new LegacyV18CompatibilityModule(),
 		};
 
 		private static readonly IReadOnlyDictionary<string, ILegacyCompatibilityModule> modulesById =
@@ -66,6 +68,7 @@ namespace MinorShift.Emuera.Compatibility
 					["v24pure"] = new HashSet<string>(StringComparer.Ordinal) { V24ModuleId },
 					["snake"] = new HashSet<string>(StringComparer.Ordinal) { V24ModuleId, SnakeModuleId },
 					["erafl"] = new HashSet<string>(StringComparer.Ordinal) { V24ModuleId, EraFlModuleId },
+					["v18"] = new HashSet<string>(StringComparer.Ordinal) { V18ModuleId },
 				});
 
 		public static LegacyCompatibilityProfile Compose(
@@ -218,6 +221,19 @@ namespace MinorShift.Emuera.Compatibility
 			foreach (string name in names)
 			{
 				hiddenFunctionNames.Add(name);
+				RecordHiddenOwner(name);
+			}
+		}
+
+		/// <summary>
+		/// Apply 阶段的指令隐藏：选中本模块的会话把基线可见的指令从表面移除
+		///（如 v18 会话隐藏 v24 后增指令）。与 HideFunctionNames 对称。
+		/// </summary>
+		public void HideInstructionNames(IEnumerable<string> names)
+		{
+			foreach (string name in names)
+			{
+				hiddenInstructionNames.Add(name);
 				RecordHiddenOwner(name);
 			}
 		}
@@ -412,6 +428,61 @@ namespace MinorShift.Emuera.Compatibility
 			builder.SubstituteInstruction("SETBGIMAGE", LegacyInstructionVariant.SetBgImageSnake);
 			// 蛇系函数参数契约（重载差异名集）随模块激活。
 			builder.ActivateDialectFunctionContracts(DivergentFunctionContractNames);
+		}
+	}
+
+	internal sealed class LegacyV18CompatibilityModule : ILegacyCompatibilityModule
+	{
+		// v18 参考（emuera_v18_exported）注册表相对 v24 参考（emuera.em-master）的差集取证：
+		// 指令 266 ⊂ 305、函数 160 ⊂ 270，v18 无独有名。以下为"v24 注册而 v18 未注册"的
+		// 名单（指令 39 + 函数 110，2026-09-12 双源脚本取证）；选中 v18 模块的会话隐藏它们。
+		// 证据提取：双方 FunctionCode 枚举 + FunctionIdentifier/Creator 注册引用逐一比对。
+		private static readonly IReadOnlyCollection<string> V24OnlyInstructionNames =
+			Array.AsReadOnly(new[]
+			{
+				"BINPUT", "BINPUTS", "BREAKBUTTON", "CALLSHARP", "CLEARBGIMAGE", "DT_COLUMN_OPTIONS",
+				"FORCE_BEGIN", "FORCE_QUIT", "FORCE_QUIT_AND_RESTART", "HTML_PRINT_ISLAND",
+				"HTML_PRINT_ISLAND_CLEAR", "INPUTANY", "ONEBINPUT", "ONEBINPUTS", "PLAYBGM",
+				"PLAYSOUND", "PRINTFORMN", "PRINTFORMSN", "PRINTN", "PRINTSN", "PRINTVN",
+				"QUIT_AND_RESTART", "REMOVEBGIMAGE", "SETBGIMAGE", "SETBGMVOLUME", "SETSOUNDVOLUME",
+				"SKIPLOG", "STOPBGM", "STOPSOUND", "TOOLTIP_CUSTOM", "TOOLTIP_FORMAT", "TOOLTIP_IMG",
+				"TOOLTIP_SETFONT", "TOOLTIP_SETFONTSIZE", "TRYCALLF", "TRYCALLFORMF", "UPDATECHECK",
+				"VARI", "VARS",
+			});
+
+		private static readonly IReadOnlyCollection<string> V24OnlyFunctionNames =
+			Array.AsReadOnly(new[]
+			{
+				"ARRAYMSORTEX", "BITMAP_CACHE_ENABLE", "CHKGLOBALDATA", "CHKVARDATA", "CLEARMEMORY",
+				"DT_CELL_GET", "DT_CELL_GETS", "DT_CELL_ISNULL", "DT_CELL_SET", "DT_CLEAR",
+				"DT_COLUMN_ADD", "DT_COLUMN_EXIST", "DT_COLUMN_LENGTH", "DT_COLUMN_NAMES",
+				"DT_COLUMN_REMOVE", "DT_CREATE", "DT_EXIST", "DT_FROMXML", "DT_NOCASE", "DT_RELEASE",
+				"DT_ROW_ADD", "DT_ROW_LENGTH", "DT_ROW_REMOVE", "DT_ROW_SET", "DT_SELECT", "DT_TOXML",
+				"ENUMFILES", "ENUMFUNCBEGINSWITH", "ENUMFUNCENDSWITH", "ENUMFUNCWITH",
+				"ENUMMACROBEGINSWITH", "ENUMMACROENDSWITH", "ENUMMACROWITH", "ENUMVARBEGINSWITH",
+				"ENUMVARENDSWITH", "ENUMVARWITH", "ERDNAME", "EXISTFILE", "EXISTFUNCTION", "EXISTMETH",
+				"EXISTSOUND", "EXISTVAR", "FIND_VARDATA", "FLOWINPUT", "FLOWINPUTS", "GDASHSTYLE",
+				"GDRAWGWITHROTATE", "GDRAWLINE", "GDRAWTEXT", "GETDISPLAYLINE", "GETDOINGFUNCTION",
+				"GETMEMORYUSAGE", "GETMETH", "GETMETHS", "GETTEXTBOX", "GETVAR", "GETVARS",
+				"GGETBRUSH", "GGETFONT", "GGETFONTSIZE", "GGETFONTSTYLE", "GGETPEN", "GGETPENWIDTH",
+				"GGETTEXTSIZE", "GROTATE", "HOTKEY_STATE", "HOTKEY_STATE_INIT", "HTML_STRINGLEN",
+				"HTML_STRINGLINES", "HTML_SUBSTRING", "ISDEFINED", "MAP_CLEAR", "MAP_CREATE",
+				"MAP_EXIST", "MAP_FROMXML", "MAP_GET", "MAP_GETKEYS", "MAP_HAS", "MAP_RELEASE",
+				"MAP_REMOVE", "MAP_SET", "MAP_SIZE", "MAP_TOXML", "MOUSEB", "MOVETEXTBOX",
+				"OUTPUTLOG", "REGEXPMATCH", "RESUMETEXTBOX", "SETTEXTBOX", "SETVAR",
+				"SPRITEDISPOSEALL", "VARSETEX", "XML_ADDATTRIBUTE", "XML_ADDATTRIBUTE_BYNAME",
+				"XML_ADDNODE", "XML_ADDNODE_BYNAME", "XML_DOCUMENT", "XML_EXIST", "XML_GET",
+				"XML_GET_BYNAME", "XML_RELEASE", "XML_REMOVEATTRIBUTE", "XML_REMOVEATTRIBUTE_BYNAME",
+				"XML_REMOVENODE", "XML_REMOVENODE_BYNAME", "XML_REPLACE", "XML_REPLACE_BYNAME",
+				"XML_SET", "XML_SET_BYNAME", "XML_TOSTR",
+			});
+
+		public string ModuleId => "gemuera.v18";
+		public void Declare(LegacyCompatibilityProfileBuilder builder) { }
+		public void Apply(LegacyCompatibilityProfileBuilder builder)
+		{
+			builder.HideInstructionNames(V24OnlyInstructionNames);
+			builder.HideFunctionNames(V24OnlyFunctionNames);
 		}
 	}
 
