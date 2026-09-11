@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "1.0.0",
+  "generatedBy": "tools/dialect-inventory/LegacyDialectInventoryGenerator",
+  "profileIds": [
+    "erafl",
+    "snake",
+    "v24pure"
+  ],
+  "profiles": {
+    "v24pure": {
+      "modules": [
+        "gemuera.v24"
+      ],
+      "instructionCount": 561,
+      "functionCount": 266
+    },
+    "snake": {
+      "modules": [
+        "gemuera.v24",
+        "game.snake"
+      ],
+      "instructionCount": 668,
+      "functionCount": 349
+    },
+    "erafl": {
+      "modules": [
+        "gemuera.v24",
+        "game.erafl"
+      ],
+      "instructionCount": 562,
+      "functionCount": 266
+    }
+  }
+}
