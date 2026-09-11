@@ -87,7 +87,15 @@ namespace MinorShift.Emuera.GameProc
 				ParserMediator.Initialize(console);
 				ParserMediator.BindCompatibilityPlan(Program.CurrentCompatibilityPlan);
 				if (ParserMediator.CurrentCompatibilityPlan != null)
-					GenericUtils.Info($"[LOAD] CompatibilityPlan={ParserMediator.CurrentCompatibilityPlan.CanonicalHash}");
+				{
+					// capability id 是方言模块的差异账本（如 erafl 的 markup.div-v2.v1），
+					// 在加载日志落一份，让真机诊断与无头 fixture 能直接核对会话能力面。
+					var capabilityPlan = ParserMediator.CurrentCompatibilityPlan;
+					GenericUtils.Info(
+						capabilityPlan.CapabilityIds.Count == 0
+							? $"[LOAD] CompatibilityPlan={capabilityPlan.CanonicalHash}"
+							: $"[LOAD] CompatibilityPlan={capabilityPlan.CanonicalHash} Capabilities={string.Join(',', capabilityPlan.CapabilityIds)}");
+				}
 				Preload.Clear();
 				Preload.Load(Program.CsvDir);
 				Preload.Load(Program.ErbDir, !Config.UseLazyLoading);
