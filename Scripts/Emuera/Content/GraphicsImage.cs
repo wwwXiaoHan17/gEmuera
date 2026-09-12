@@ -1084,7 +1084,14 @@ namespace MinorShift.Emuera.Content
 					renderWidth = Math.Max(1, (int)uEmuera.Utils.GetDisplayLength(text, font));
 				int renderHeight = Math.Max(1, Fontsize + 6);
 				var item = EmueraMain.SubmitTextRender(text, Fontname, Fontsize, Fontstyle, brushColor, renderWidth, renderHeight);
-				if (item == null || !item.Completed.Wait(500) || item.ResultImage == null)
+				if (item == null || item.ResultImage == null)
+					return false;
+				// 原实现 Wait(500) 超时即 return false——主线程一次 >500ms 的抖动就会
+				// 静默丢弃本次 GDRAWSTRING 文本（可观测差异）。ERB 语义要求同步完成；
+				// 文本渲染组件随场景每帧消费队列，完成只受应用生命期约束（后台线程
+				// 随进程退出终止），因此无界等待才是忠实语义，超时兜底反而制造缺陷。
+				item.Completed.Wait(Timeout.Infinite);
+				if (item.ResultImage == null)
 					return false;
 				BlendRect(godotImage, item.ResultImage,
 					new Godot.Rect2I(0, 0, item.ResultImage.GetWidth(), item.ResultImage.GetHeight()),
