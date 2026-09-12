@@ -41,3 +41,29 @@
 
 - Pain 2 SIMD 复试前提：byte→float 向量转换 + 通道 deinterleave 全向量化（消掉 gather/scatter 标量段）。
 - Pain 3 的 256 槽环形队列与 Pain 1 的行级烘焙仍留档（前者需会话协议重设计，后者需真机 DPI 矩阵）。
+
+## 补遗二：环形队列实测裁决 + Android 首启验证清单（同日）
+
+### 环形队列（Pain 3）实测裁决
+
+精读修正审计印象：`EnqueueUI` 满槽行为是**倍增压容**（`GrowUiRingLocked`）而非丢弃/阻塞——不存在"溢出丢失"；消费侧已是**帧预算制批消费**（Android 128 条/9ms、桌面 96 条/7ms 每帧）；水位计数（pendingUiActions/pendingDisplayActions）与等待原语（WaitForUiFrameAfter/WaitForDisplayWorkDrained）均已存在。"256 槽"只是初容量。
+
+补齐观测（零语义差异）：`uiQueueHighWaterMark`/`uiQueueGrowCount`（FlushUI 尾部更新、扩容处低频 Warning）+ `GetUiQueueStats()` + legacy-runner 结束时 `[UIQUEUE]` 落 godot.log。
+
+**实测数据（真实游戏全流程到 first_wait）**：
+- eraTW（snake，4110 ERB）：`highWaterMark=2 growCount=0 capacity=256`
+- megaten（snake 面，8396 ERB、5522 行加载）：highWaterMark=2 growCount=0 capacity=256（注：本分支无方言线 profile 白名单，megaten 以 snake 面跑——队列水位与 profile 无关）
+
+**裁决**：消费预算完全罩住生产，256 初容量在真实负载下水位个位数——**现状即最优，无需调容量/背压**。扩容路径保留为极端突发的正确性兜底（不丢语义），观测使其从静默变为可诊断（若未来某游戏触发 grow，Warning 会直接指认）。
+
+### Android 首启验证清单（W2/W3，交真机执行）
+
+**W2 合成源 CPU pin（120s 滚动窗豁免释放）**：
+1. 用例：图形密集游戏的连续 G 系合成场景（eraTW 魔法使系/erablue 效果页）跑 ≥5 分钟；
+2. 观察点：(a) 合成卡顿是否改善；(b) 整体 RSS/纹理内存涨幅——预期上限 ≈ 120s 窗内活跃合成源像素总量（正常 <30MB 量级），若异常增长或 OOM 即记录；
+3. 紧急回退：`SpriteManager.IsRecentCompositionSource` 返回 false 即恢复原释放策略（改一行重出包）。
+
+**W3 GDRAWSTRING 无界等待**：
+1. 用例：任何调用 GDRAWSTRING 的游戏（erablue/汉化系）正常游玩 + 制造主线程重载（快速滚动+连续点击）；
+2. 观察点：G 系文本是否完整渲染（修复点=原 500ms 超时静默丢文本）；worker 是否卡死（画面停但主线程响应）；
+3. 卡死首查点：`EmueraTextRenderComponent` 场景生命周期——若组件随场景释放而 pending item 未完成，worker 会永挂于 `item.Completed.Wait(Timeout.Infinite)`；表现为 ERB 停跑、UI 仍动。此场景需改为"场景释放时完成或取消挂起项"，届时回调本条修正。
