@@ -49,10 +49,11 @@ namespace gEmuera.LegacyRunner
         {
             if (console == null || !console.IsWaitingInput)
                 return false;
-            // 按钮选择等待（IntButton/StrButton/AnyValue，如标题菜单 PRINTBUTTON）同样是需要外部输入的
-            // 等待点：erablue 标题即 IntButton，漏判会导致 first_wait 永远检测不到（2026-09-04 实证）。
-            return console.IsWaitingInputSomething || console.IsWaitingEnterKey || console.IsWaitAnyKey
-                || console.IsWaitingValueSelection;
+            // 值/按钮选择型等待用 IsWaitingValueSelection（含 IntValue/StrValue/AnyValue/
+            // IntButton/StrButton）——erablue 标题菜单是 IntButton 等待，旧的
+            // IsWaitingInputSomething 只认 IntValue/StrValue，导致 first_wait 永远检测不到
+            //（与 ef3ba1d 面板侧修复同类缺口）。EnterKey/AnyKey 纯推进等待保持原判定。
+            return console.IsWaitingValueSelection || console.IsWaitingEnterKey || console.IsWaitAnyKey;
         }
 
         public LegacyReplayTick Tick(EmueraConsole console, long elapsedMs)

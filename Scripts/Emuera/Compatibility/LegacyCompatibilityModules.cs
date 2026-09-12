@@ -20,6 +20,24 @@ namespace MinorShift.Emuera.Compatibility
 	}
 
 	/// <summary>
+	/// 模块声明的指令 handler 变体选择。同名指令在不同方言上游里可能保持名字但更换文法
+	/// （如 FOR 的计数形态、SETBGIMAGE 的双变体）；模块在这里只声明"选哪个变体"这一数据，
+	/// 变体的实际构造由 FunctionIdentifier 在会话注册表投影时完成，保持 handler 封装。
+	/// SharedTable 表示显式回退到共享 handler 表的原条目（用于子方言覆盖基线模块的替换）。
+	/// </summary>
+	internal enum LegacyInstructionVariant
+	{
+		/// <summary>使用共享 handler 表的原条目，不做替换。</summary>
+		SharedTable,
+		/// <summary>v24 的 FOR 计数文法（REPEAT 内核 + ForNext 实参构造器）。</summary>
+		ForCountV24,
+		/// <summary>v24 的 SETBGIMAGE。</summary>
+		SetBgImageV24,
+		/// <summary>snake 的 SETBGIMAGE。</summary>
+		SetBgImageSnake,
+	}
+
+	/// <summary>
 	/// Composes the legacy bridge from the exact frozen Core module closure.
 	/// The complete legacy handler tables remain implementation detail; only
 	/// these module declarations decide their parser-visible surfaces.
@@ -29,6 +47,7 @@ namespace MinorShift.Emuera.Compatibility
 		private const string V24ModuleId = "gemuera.v24";
 		private const string SnakeModuleId = "game.snake";
 		private const string EraFlModuleId = "game.erafl";
+		private const string V18ModuleId = "gemuera.v18";
 		// megaten 模块 id（常量在 Core 侧 MegatenCompatibilityModule 中定义）。
 		private const string MegatenModuleId = "game.megaten";
 
@@ -37,7 +56,9 @@ namespace MinorShift.Emuera.Compatibility
 			new LegacyV24CompatibilityModule(),
 			new LegacySnakeCompatibilityModule(),
 			new LegacyEraFlCompatibilityModule(),
-			// megaten：纯策略模块，不声明/解除任何名字的可见性。
+			new LegacyV18CompatibilityModule(),
+			new LegacyEraBlueCompatibilityModule(),
+			// megaten：策略 + 启动容错 capability 模块（Apply 注入策略，见类定义）。
 			new LegacyMegatenCompatibilityModule(),
 		};
 
@@ -52,6 +73,8 @@ namespace MinorShift.Emuera.Compatibility
 					["v24pure"] = new HashSet<string>(StringComparer.Ordinal) { V24ModuleId },
 					["snake"] = new HashSet<string>(StringComparer.Ordinal) { V24ModuleId, SnakeModuleId },
 					["erafl"] = new HashSet<string>(StringComparer.Ordinal) { V24ModuleId, EraFlModuleId },
+					["v18"] = new HashSet<string>(StringComparer.Ordinal) { V18ModuleId },
+					["erablue"] = new HashSet<string>(StringComparer.Ordinal) { V24ModuleId, EraBlueCompatibilityModule.ModuleId },
 					// megaten 闭包 = v24 基线 + game.megaten（与 erafl 同构）。
 					["megaten"] = new HashSet<string>(StringComparer.Ordinal) { V24ModuleId, MegatenModuleId },
 				});
@@ -108,6 +131,13 @@ namespace MinorShift.Emuera.Compatibility
 		// 隐藏名 → 声明它的方言模块 id（Declare/Hide 阶段记录，Expose 移除）。
 		// 用于"该标识符属于未选中模块"的诊断提示（如 v24pure 下提示改用 snake）。
 		private readonly Dictionary<string, string> hiddenNameOwners = new Dictionary<string, string>(StringComparer.Ordinal);
+		// 指令名（大写规范化）→ 模块声明的 handler 变体。Declare/Apply 阶段按注册顺序
+		// 后写覆盖（Compose 保证 Apply 晚于全部 Declare，因此选中模块的变体覆盖基线声明）。
+		private readonly Dictionary<string, LegacyInstructionVariant> instructionVariants = new Dictionary<string, LegacyInstructionVariant>(StringComparer.Ordinal);
+		// 激活"蛇系参数契约"的函数名集合（snake 模块 Apply 声明）：
+		// 这些同名函数在 snake 与 v24 参考中重载形态不同，DialectFunctionContracts
+		/// 据此选择 CheckArgumentType 包装；checker 实现仍由该类集中持有。
+		private readonly HashSet<string> dialectFunctionContractNames = new HashSet<string>(StringComparer.Ordinal);
 		private string declaringModuleId = "";
 		private ISnakeCompatibilityPolicy snake = DisabledSnakeCompatibilityPolicy.Instance;
 		private IEraFlCompatibilityPolicy eraFl = DisabledEraFlCompatibilityPolicy.Instance;
@@ -205,14 +235,59 @@ namespace MinorShift.Emuera.Compatibility
 			}
 		}
 
+		/// <summary>
+		/// Apply 阶段的指令隐藏：选中本模块的会话把基线可见的指令从表面移除
+		///（如 v18 会话隐藏 v24 后增指令）。与 HideFunctionNames 对称。
+		/// </summary>
+		public void HideInstructionNames(IEnumerable<string> names)
+		{
+			foreach (string name in names)
+			{
+				hiddenInstructionNames.Add(name);
+				RecordHiddenOwner(name);
+			}
+		}
+
 		public void SetSnakePolicy(ISnakeCompatibilityPolicy policy)
 		{
 			snake = policy ?? throw new ArgumentNullException(nameof(policy));
 		}
 
+		/// <summary>会话计划携带的 quirk capability 清单（模块声明进 profile，policy 据此派生）。</summary>
+		public GEmuera.Core.Compatibility.CompatibilityPlan Plan => plan;
+
 		public void SetEraFlPolicy(IEraFlCompatibilityPolicy policy)
 		{
 			eraFl = policy ?? throw new ArgumentNullException(nameof(policy));
+		}
+
+		/// <summary>
+		/// 模块的指令替换贡献：声明"该名字在本会话中使用哪个 handler 变体"。
+		/// 名字按 IsInstructionVisible 同一语义规范化（Trim + 大写）。
+		/// 基线模块（如 v24）在 Apply 注册默认变体，子方言模块在后续 Apply 中
+		/// 覆盖为自己的变体或显式回退 SharedTable。
+		/// </summary>
+		public void SubstituteInstruction(string name, LegacyInstructionVariant variant)
+		{
+			if (string.IsNullOrWhiteSpace(name))
+				throw new ArgumentException("Instruction name must not be empty.", nameof(name));
+			instructionVariants[name.Trim().ToUpperInvariant()] = variant;
+		}
+
+		/// <summary>
+		/// 模块的函数参数契约贡献：声明"本会话对这些同名函数使用蛇系重载契约"。
+		/// 名单来自 snake 与 v24 参考注册表的重载差异差集；仅选中该模块的会话激活。
+		/// </summary>
+		public void ActivateDialectFunctionContracts(IEnumerable<string> names)
+		{
+			if (names == null)
+				throw new ArgumentNullException(nameof(names));
+			foreach (string name in names)
+			{
+				if (string.IsNullOrWhiteSpace(name))
+					throw new ArgumentException("Function contract names must not be empty.", nameof(names));
+				dialectFunctionContractNames.Add(name.Trim());
+			}
 		}
 
 		// megaten：Apply 阶段由 LegacyMegatenCompatibilityModule 注入启用策略。
@@ -235,6 +310,8 @@ namespace MinorShift.Emuera.Compatibility
 				hiddenFunctionNames,
 				scopedInstructionNames,
 				methodProjectedFunctionNames,
+				instructionVariants,
+				dialectFunctionContractNames,
 				hiddenNameOwners);
 		}
 	}
@@ -271,11 +348,29 @@ namespace MinorShift.Emuera.Compatibility
 				builder.DeclareScopedInstructionNames(ScopedInstructionNames);
 				builder.DeclareMethodProjectedFunctionNames(MethodProjectedFunctionNames);
 			}
-		public void Apply(LegacyCompatibilityProfileBuilder builder) { }
+		public void Apply(LegacyCompatibilityProfileBuilder builder)
+		{
+			// v24 基线变体：所有含 v24 基座的会话（v24pure/snake/erafl）先落这两条，
+			// 子方言模块在自己的 Apply 里按需覆盖。
+			builder.SubstituteInstruction("FOR", LegacyInstructionVariant.ForCountV24);
+			builder.SubstituteInstruction("SETBGIMAGE", LegacyInstructionVariant.SetBgImageV24);
+		}
 	}
 
 	internal sealed class LegacySnakeCompatibilityModule : ILegacyCompatibilityModule
 	{
+		// 蛇系参数契约名集：这些同名函数在 snake 与 v24 参考注册表中重载形态不同
+		//（DialectFunctionContracts 逐名提供 CheckArgumentType 差异）。激活后该会话
+		// 使用蛇系契约；v24pure/erafl 会话保持 v24 形态。
+		private static readonly IReadOnlyCollection<string> DivergentFunctionContractNames =
+			Array.AsReadOnly(new[]
+			{
+				"ABS", "ARGLEN", "CBGSETSPRITE", "CBRT", "EXISTVAR", "EXPONENT",
+				"GETVAR", "GETVARS", "LIMIT", "LOG", "LOG10", "POWER", "SIGN",
+				"SPRITECREATE", "SPRITECREATEFROMFILE", "SQRT", "TOINT",
+				"UNCHECKED_ADD", "UNCHECKED_MUL", "UNCHECKED_NEG", "UNCHECKED_SUB",
+			});
+
 		// Public-key delta between the checked-in v24 and Snake reference
 		// registries. Handler class prefixes are not dialect ownership evidence.
 		private static readonly IReadOnlyCollection<string> InstructionNames =
@@ -344,7 +439,68 @@ namespace MinorShift.Emuera.Compatibility
 			builder.ExposeInstructionNames(InstructionNames);
 			builder.ExposeFunctionNames(FunctionNames);
 			builder.HideFunctionNames(SnakeExcludedFunctionNames);
-			builder.SetSnakePolicy(LegacySnakeCompatibilityPolicy.Instance);
+			builder.SetSnakePolicy(LegacySnakeCompatibilityPolicy.FromCapabilities(builder.Plan.CapabilityIds));
+			// snake 覆盖 v24 基线：SETBGIMAGE 用 snake 变体；FOR 回退共享表原条目
+			//（snake 的 FOR 文法即共享表注册的 REPEAT 内核，EXTENDED 标志保持不变）。
+			builder.SubstituteInstruction("FOR", LegacyInstructionVariant.SharedTable);
+			builder.SubstituteInstruction("SETBGIMAGE", LegacyInstructionVariant.SetBgImageSnake);
+			// 蛇系函数参数契约（重载差异名集）随模块激活。
+			builder.ActivateDialectFunctionContracts(DivergentFunctionContractNames);
+		}
+	}
+
+	internal sealed class LegacyV18CompatibilityModule : ILegacyCompatibilityModule
+	{
+		// v18 参考（emuera_v18_exported）注册表相对 v24 参考（emuera.em-master）的差集取证：
+		// 指令 266 ⊂ 305、函数 160 ⊂ 270，v18 无独有名。以下为"v24 注册而 v18 未注册"的
+		// 名单（指令 39 + 函数 110，2026-09-12 双源脚本取证）；选中 v18 模块的会话隐藏它们。
+		// 证据提取：双方 FunctionCode 枚举 + FunctionIdentifier/Creator 注册引用逐一比对。
+		private static readonly IReadOnlyCollection<string> V24OnlyInstructionNames =
+			Array.AsReadOnly(new[]
+			{
+				"BINPUT", "BINPUTS", "BREAKBUTTON", "CALLSHARP", "CLEARBGIMAGE", "DT_COLUMN_OPTIONS",
+				"FORCE_BEGIN", "FORCE_QUIT", "FORCE_QUIT_AND_RESTART", "HTML_PRINT_ISLAND",
+				"HTML_PRINT_ISLAND_CLEAR", "INPUTANY", "ONEBINPUT", "ONEBINPUTS", "PLAYBGM",
+				"PLAYSOUND", "PRINTFORMN", "PRINTFORMSN", "PRINTN", "PRINTSN", "PRINTVN",
+				"QUIT_AND_RESTART", "REMOVEBGIMAGE", "SETBGIMAGE", "SETBGMVOLUME", "SETSOUNDVOLUME",
+				"SKIPLOG", "STOPBGM", "STOPSOUND", "TOOLTIP_CUSTOM", "TOOLTIP_FORMAT", "TOOLTIP_IMG",
+				"TOOLTIP_SETFONT", "TOOLTIP_SETFONTSIZE", "TRYCALLF", "TRYCALLFORMF", "UPDATECHECK",
+				"VARI", "VARS",
+			});
+
+		private static readonly IReadOnlyCollection<string> V24OnlyFunctionNames =
+			Array.AsReadOnly(new[]
+			{
+				"ARRAYMSORTEX", "BITMAP_CACHE_ENABLE", "CHKGLOBALDATA", "CHKVARDATA", "CLEARMEMORY",
+				"DT_CELL_GET", "DT_CELL_GETS", "DT_CELL_ISNULL", "DT_CELL_SET", "DT_CLEAR",
+				"DT_COLUMN_ADD", "DT_COLUMN_EXIST", "DT_COLUMN_LENGTH", "DT_COLUMN_NAMES",
+				"DT_COLUMN_REMOVE", "DT_CREATE", "DT_EXIST", "DT_FROMXML", "DT_NOCASE", "DT_RELEASE",
+				"DT_ROW_ADD", "DT_ROW_LENGTH", "DT_ROW_REMOVE", "DT_ROW_SET", "DT_SELECT", "DT_TOXML",
+				"ENUMFILES", "ENUMFUNCBEGINSWITH", "ENUMFUNCENDSWITH", "ENUMFUNCWITH",
+				"ENUMMACROBEGINSWITH", "ENUMMACROENDSWITH", "ENUMMACROWITH", "ENUMVARBEGINSWITH",
+				"ENUMVARENDSWITH", "ENUMVARWITH", "ERDNAME", "EXISTFILE", "EXISTFUNCTION", "EXISTMETH",
+				"EXISTSOUND", "EXISTVAR", "FIND_VARDATA", "FLOWINPUT", "FLOWINPUTS", "GDASHSTYLE",
+				"GDRAWGWITHROTATE", "GDRAWLINE", "GDRAWTEXT", "GETDISPLAYLINE", "GETDOINGFUNCTION",
+				"GETMEMORYUSAGE", "GETMETH", "GETMETHS", "GETTEXTBOX", "GETVAR", "GETVARS",
+				"GGETBRUSH", "GGETFONT", "GGETFONTSIZE", "GGETFONTSTYLE", "GGETPEN", "GGETPENWIDTH",
+				"GGETTEXTSIZE", "GROTATE", "HOTKEY_STATE", "HOTKEY_STATE_INIT", "HTML_STRINGLEN",
+				"HTML_STRINGLINES", "HTML_SUBSTRING", "ISDEFINED", "MAP_CLEAR", "MAP_CREATE",
+				"MAP_EXIST", "MAP_FROMXML", "MAP_GET", "MAP_GETKEYS", "MAP_HAS", "MAP_RELEASE",
+				"MAP_REMOVE", "MAP_SET", "MAP_SIZE", "MAP_TOXML", "MOUSEB", "MOVETEXTBOX",
+				"OUTPUTLOG", "REGEXPMATCH", "RESUMETEXTBOX", "SETTEXTBOX", "SETVAR",
+				"SPRITEDISPOSEALL", "VARSETEX", "XML_ADDATTRIBUTE", "XML_ADDATTRIBUTE_BYNAME",
+				"XML_ADDNODE", "XML_ADDNODE_BYNAME", "XML_DOCUMENT", "XML_EXIST", "XML_GET",
+				"XML_GET_BYNAME", "XML_RELEASE", "XML_REMOVEATTRIBUTE", "XML_REMOVEATTRIBUTE_BYNAME",
+				"XML_REMOVENODE", "XML_REMOVENODE_BYNAME", "XML_REPLACE", "XML_REPLACE_BYNAME",
+				"XML_SET", "XML_SET_BYNAME", "XML_TOSTR",
+			});
+
+		public string ModuleId => "gemuera.v18";
+		public void Declare(LegacyCompatibilityProfileBuilder builder) { }
+		public void Apply(LegacyCompatibilityProfileBuilder builder)
+		{
+			builder.HideInstructionNames(V24OnlyInstructionNames);
+			builder.HideFunctionNames(V24OnlyFunctionNames);
 		}
 	}
 
@@ -380,7 +536,31 @@ namespace MinorShift.Emuera.Compatibility
 		public void Apply(LegacyCompatibilityProfileBuilder builder)
 		{
 			builder.ExposeInstructionNames(InstructionNames);
-			builder.SetEraFlPolicy(LegacyEraFlCompatibilityPolicy.Instance);
+			builder.SetEraFlPolicy(LegacyEraFlCompatibilityPolicy.FromCapabilities(builder.Plan.CapabilityIds));
+			// erafl 显式绑定共享表的 SETANIMETIMER handler：绑定归属在模块声明中可见，
+			// 未来 snake 侧 handler 分叉时 erafl 在此固定自己的变体，不再隐式跟随共享表。
+			builder.SubstituteInstruction("SETANIMETIMER", LegacyInstructionVariant.SharedTable);
+		}
+	}
+
+	internal sealed class LegacyEraBlueCompatibilityModule : ILegacyCompatibilityModule
+	{
+		// eraBlue 实测依赖的 snake 系指令（与 erafl 同款）：おさわりエフェクト.ERB:69
+		// "SETANIMETIMER 50" 等。函数面零 snake 依赖（全库扫描 2026-09-12）；
+		// 插件经 CALLSHARP 调用（NEWGAME.ERB:99），属 v24(EM/EE) 基座能力。
+		private static readonly IReadOnlyCollection<string> InstructionNames =
+			Array.AsReadOnly(new[] { "SETANIMETIMER" });
+
+		public string ModuleId => EraBlueCompatibilityModule.ModuleId;
+		public void Declare(LegacyCompatibilityProfileBuilder builder)
+		{
+			// Declare 对所有会话执行：erablue 声明加入隐藏集（其它会话该指令本就隐藏，
+			// 零影响）；仅 erablue 会话的 Apply 才解除隐藏。
+			builder.DeclareInstructionNames(InstructionNames);
+		}
+		public void Apply(LegacyCompatibilityProfileBuilder builder)
+		{
+			builder.ExposeInstructionNames(InstructionNames);
 		}
 	}
 
@@ -400,15 +580,29 @@ namespace MinorShift.Emuera.Compatibility
 
 	internal sealed class LegacySnakeCompatibilityPolicy : ISnakeCompatibilityPolicy
 	{
-		public static readonly LegacySnakeCompatibilityPolicy Instance = new LegacySnakeCompatibilityPolicy();
+		// quirk capability 账本驱动：每个布尔属性 = snake profile 声明的对应 id 是否在场
+		//（映射表见 SnakeCompatibilityCapabilities.PolicyPropertyByCapabilityId，
+		// 映射穷尽性由 SurfaceSmoke 反射断言把关）。
+		private readonly IReadOnlyCollection<string> capabilities;
+
+		private LegacySnakeCompatibilityPolicy(IReadOnlyCollection<string> capabilities)
+		{
+			this.capabilities = capabilities ?? throw new ArgumentNullException(nameof(capabilities));
+		}
+
+		public static LegacySnakeCompatibilityPolicy FromCapabilities(IReadOnlyCollection<string> capabilityIds)
+		{
+			return new LegacySnakeCompatibilityPolicy(capabilityIds);
+		}
+
 		public bool IsEnabled => true;
-		public bool UsesParserDiagnostics => true;
-		public bool AllowsUserDefinedVariableResolution => true;
-		public bool AllowsPrivateArguments => true;
-		public bool AllowsExtraCallArguments => true;
-		public bool AllowsScopedVariablePreRegistration => true;
-		public bool ContinuesAfterStartupFault => true;
-		public bool UsesFastDisplayRefresh => true;
+		public bool UsesParserDiagnostics => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.ParserDiagnostics);
+		public bool AllowsUserDefinedVariableResolution => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.UserDefinedVariableResolution);
+		public bool AllowsPrivateArguments => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.PrivateArguments);
+		public bool AllowsExtraCallArguments => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.ExtraCallArguments);
+		public bool AllowsScopedVariablePreRegistration => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.ScopedVariablePreRegistration);
+		public bool ContinuesAfterStartupFault => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.ContinueAfterStartupFault);
+		public bool UsesFastDisplayRefresh => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.FastDisplayRefresh);
 		public bool UsesLazyResourceIndex => true;
 	}
 
@@ -465,18 +659,34 @@ namespace MinorShift.Emuera.Compatibility
 
 	internal sealed class LegacyEraFlCompatibilityPolicy : IEraFlCompatibilityPolicy
 	{
-		public static readonly LegacyEraFlCompatibilityPolicy Instance = new LegacyEraFlCompatibilityPolicy();
+		// 布尔型/开关型 quirk 由 capability 账本派生（erafl profile 声明），
+		// 算法型行为（GMap、指针归一化）仍委托 Core 模块的确定性实现。
+		private readonly IReadOnlyCollection<string> capabilities;
+
+		private LegacyEraFlCompatibilityPolicy(IReadOnlyCollection<string> capabilities)
+		{
+			this.capabilities = capabilities ?? throw new ArgumentNullException(nameof(capabilities));
+		}
+
+		public static LegacyEraFlCompatibilityPolicy FromCapabilities(IReadOnlyCollection<string> capabilityIds)
+		{
+			return new LegacyEraFlCompatibilityPolicy(capabilityIds);
+		}
+
 		public bool IsEnabled => true;
-		public bool UsesExtendedDisplayHistory => true;
+		public bool UsesExtendedDisplayHistory => capabilities.Contains(EraFlCompatibilityModule.DisplayExtendedHistoryBehavior);
 		public string TaskStartRoomLookupFunction => EraFlCompatibilityModule.TaskStartRoomLookupFunction;
 		public string GMapQuestType => EraFlCompatibilityModule.GMapQuestType;
-		public bool IsOmittedDefaultArgument(char currentToken) => EraFlCompatibilityModule.IsOmittedDefaultArgument(currentToken);
+		public bool IsOmittedDefaultArgument(char currentToken) =>
+			capabilities.Contains(EraFlCompatibilityModule.InputOmittedDefaultArgumentBehavior)
+			&& EraFlCompatibilityModule.IsOmittedDefaultArgument(currentToken);
 		public bool IsPointerInputMetadataOption(string optionText) => EraFlCompatibilityModule.IsPointerInputMetadataOption(optionText);
 		public int NormalizePointerButtonResult(int mouseButton) => EraFlCompatibilityModule.NormalizePointerButtonResult(mouseButton);
 		public string NormalizePointerIntegerSubmission(string input, int mouseButton, bool waitingForInteger) =>
 			EraFlCompatibilityModule.NormalizePointerIntegerSubmission(input, mouseButton, waitingForInteger);
 		public bool ShouldSubmitBlankPointerStringInput(int mouseButton, bool waitingForString) =>
-			EraFlCompatibilityModule.ShouldSubmitBlankPointerStringInput(mouseButton, waitingForString);
+			capabilities.Contains(EraFlCompatibilityModule.PointerBlankStringBehavior)
+			&& EraFlCompatibilityModule.ShouldSubmitBlankPointerStringInput(mouseButton, waitingForString);
 		public bool TryRecoverQuestStartRoomIndex(string functionName, long returnedRoomIndex, string requestedRoomTag, long mapId, string questType, string[,] mapData, out long recoveredRoomIndex) =>
 			EraFlCompatibilityModule.TryRecoverQuestStartRoomIndex(
 				functionName,

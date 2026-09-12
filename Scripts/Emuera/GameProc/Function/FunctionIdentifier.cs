@@ -121,9 +121,10 @@ namespace MinorShift.Emuera.GameProc.Function
 
 		/// <summary>
 		/// Some upstream dialects retain the same public instruction name while
-		/// changing its grammar. Select that immutable handler while the session
-		/// registry is projected so parsing and execution do not need profile
-		/// branches on their hot paths.
+		/// changing its grammar. The variant selection is declared by the dialect
+		/// modules (LegacyCompatibilityModules); this method only constructs the
+		/// selected immutable handler while the session registry is projected, so
+		/// parsing and execution do not need profile branches on their hot paths.
 		/// </summary>
 		private static FunctionIdentifier CreateProfileInstruction(
 			FunctionIdentifier source,
@@ -131,17 +132,19 @@ namespace MinorShift.Emuera.GameProc.Function
 		{
 			if (source.Method != null)
 				return source;
-			if (source.Code == FunctionCode.FOR && !compatibility.Snake.IsEnabled)
-				return new FunctionIdentifier(
-					source.Name,
-					source.Code,
-					new REPEAT_Instruction(true, ArgumentParser.CreateForNextArgumentBuilder(true)));
-			if (source.Code != FunctionCode.SETBGIMAGE)
+			if (!compatibility.TryGetInstructionVariant(source.Name, out LegacyInstructionVariant variant)
+				|| variant == LegacyInstructionVariant.SharedTable)
 				return source;
 
-			AbstractInstruction instruction = compatibility.Snake.IsEnabled
-				? new SNAKE_SETBGIMAGE_Instruction()
-				: new V24_SETBGIMAGE_Instruction();
+			// 变体 handler 类是本类型的私有嵌套类，构造知识集中在此，不向模块侧泄漏。
+			AbstractInstruction instruction = variant switch
+			{
+				LegacyInstructionVariant.ForCountV24 =>
+					new REPEAT_Instruction(true, ArgumentParser.CreateForNextArgumentBuilder(true)),
+				LegacyInstructionVariant.SetBgImageV24 => new V24_SETBGIMAGE_Instruction(),
+				LegacyInstructionVariant.SetBgImageSnake => new SNAKE_SETBGIMAGE_Instruction(),
+				_ => throw new System.InvalidOperationException($"Unknown dialect instruction variant: {variant}."),
+			};
 			return new FunctionIdentifier(source.Name, source.Code, instruction);
 		}
 		private static void addPrintFunction(FunctionCode code)

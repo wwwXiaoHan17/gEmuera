@@ -34,6 +34,12 @@ public static class EraFlCompatibilityModule
     public const string PointerButtonCapability = "input.pointer-button.v1";
     public const string DynamicSpriteCapability = "resource.dynamic-sprite.v1";
 
+    /// <summary>空白指针输入直接提交字符串等待（IEraFlCompatibilityPolicy.ShouldSubmitBlankPointerStringInput）。</summary>
+    public const string PointerBlankStringBehavior = "input.pointer-blank-string.v1";
+
+    /// <summary>扩展显示历史（IEraFlCompatibilityPolicy.UsesExtendedDisplayHistory）。</summary>
+    public const string DisplayExtendedHistoryBehavior = "display.extended-history.v1";
+
     public const string TaskStartRoomLookupFunction = "HO_FIND_ROOM_BY_TAG";
     public const string TaskStartRoomTag = "任务開始地点";
     public const string TaskStartRoomIdMarker = "[ROOM_ID:200]";
@@ -49,6 +55,10 @@ public static class EraFlCompatibilityModule
             DynamicMapCapability,
             PointerButtonCapability,
             DynamicSpriteCapability,
+            // 布尔型 policy quirk（IEraFlCompatibilityPolicy 逐项从本清单派生）：
+            InputOmittedDefaultArgumentBehavior,
+            PointerBlankStringBehavior,
+            DisplayExtendedHistoryBehavior,
         });
 
     private static readonly ReadOnlyCollection<BehaviorPortSnapshot> DefaultBehaviorPorts =

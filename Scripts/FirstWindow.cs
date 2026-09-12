@@ -27,11 +27,15 @@ public partial class FirstWindow : Control
 	// 也避免大目录树扫描拖慢启动器。
 	const int MaxLauncherScanDepth = 2;
 	const int MaxScanMessages = 6;
-	public const string CoreProfileV24Pure = "v24pure";
-	public const string CoreProfileSnake = "snake";
-	public const string CoreProfileEraFl = "erafl";
-	// megaten：eraMegaten 适配 profile（高级兼容下拉第 4 项）。
-	public const string CoreProfileMegaten = "megaten";
+		public const string CoreProfileV24Pure = "v24pure";
+		public const string CoreProfileSnake = "snake";
+		public const string CoreProfileEraFl = "erafl";
+		// 旧游戏方言（emuera1824+v18 血统）：指令/函数面按 v18 参考注册表取证收缩。
+		public const string CoreProfileV18 = "v18";
+		// eraBlue（碧蓝度假村）：v24 基座 + SETANIMETIMER + 外部插件能力。
+		public const string CoreProfileEraBlue = "erablue";
+		// era megaten（Emuera1824+v8.1 私改血统）：v24 基座 + 启动容错。
+		public const string CoreProfileMegaten = "megaten";
 	// 保留旧配置值，避免升级时无法读取 launcher.cfg；启动器不再执行自动探测。
 	public const string CoreProfileAutomatic = "auto";
 
@@ -1025,7 +1029,8 @@ public partial class FirstWindow : Control
 		compatibilityProfileOption.AddItem(CoreProfileV24Pure);
 		compatibilityProfileOption.AddItem(CoreProfileSnake);
 		compatibilityProfileOption.AddItem(CoreProfileEraFl);
-		// megaten：高级兼容下拉第 4 项（跟随现有 3 项模式）。
+		compatibilityProfileOption.AddItem(CoreProfileV18);
+		compatibilityProfileOption.AddItem(CoreProfileEraBlue);
 		compatibilityProfileOption.AddItem(CoreProfileMegaten);
 		compatibilityProfileOption.Select(GetManualProfileOptionIndex());
 		compatibilityProfileOption.ItemSelected += OnManualProfileSelected;
@@ -1053,8 +1058,9 @@ public partial class FirstWindow : Control
 			0 => CoreProfileV24Pure,
 			1 => CoreProfileSnake,
 			2 => CoreProfileEraFl,
-			// megaten：下拉索引 3 → megaten profile。
-			3 => CoreProfileMegaten,
+			3 => CoreProfileV18,
+			4 => CoreProfileEraBlue,
+			5 => CoreProfileMegaten,
 			_ => CoreProfileV24Pure,
 		};
 		SaveCompatibilitySettings();
@@ -1081,9 +1087,6 @@ public partial class FirstWindow : Control
 			return CoreProfileSnake;
 		if (string.Equals(profileName, CoreProfileEraFl, System.StringComparison.OrdinalIgnoreCase))
 			return CoreProfileEraFl;
-		// megaten：手动配置值的大小写归一化（与既有三项同模式）。
-		if (string.Equals(profileName, CoreProfileMegaten, System.StringComparison.OrdinalIgnoreCase))
-			return CoreProfileMegaten;
 		// 旧版本曾把“自动识别”写入配置，回退后按安全的 v24 基线处理。
 		return CoreProfileV24Pure;
 	}
@@ -1094,8 +1097,9 @@ public partial class FirstWindow : Control
 		{
 			CoreProfileSnake => 1,
 			CoreProfileEraFl => 2,
-			// megaten：下拉索引 3。
-			CoreProfileMegaten => 3,
+			CoreProfileV18 => 3,
+			CoreProfileEraBlue => 4,
+			CoreProfileMegaten => 5,
 			_ => 0,
 		};
 	}
@@ -1176,12 +1180,7 @@ public partial class FirstWindow : Control
 
 	public override void _ExitTree()
 	{
-		// 注意：写法不能用 GetViewport()?.SizeChanged -= ... 形式——null 条件赋值/复合赋值是
-		// C# 预览特性（CS8652），项目 LangVersion=latest 不支持；_ExitTree 时节点可能已脱离
-		// 树、GetViewport() 可能为 null，因此改为显式判空后取消订阅。
-		var launcherViewport = GetViewport();
-		if (launcherViewport != null)
-			launcherViewport.SizeChanged -= OnLauncherViewportSizeChanged;
+		GetViewport()?.SizeChanged -= OnLauncherViewportSizeChanged;
 		if (OS.GetName() == "Android")
 			GetTree().OnRequestPermissionsResult -= OnPermissionsResult;
 	}
@@ -1592,18 +1591,9 @@ public partial class FirstWindow : Control
 				string gameRoot = CombineDirectory(profileRoot, gameDirectoryName);
 				if (!IsEraGameDirectory(gameRoot))
 				{
-					// 2026-09-07：发行包常见 compat/<profile>/发布包外层/游戏根 的嵌套结构
-					//（如 EraMegan3.54正式汉化版β/[2026.4.14]MGT...）。直接递归查找游戏根，
-					// 沿用 v24 lane 的嵌套扫描与深度上限；外层目录不再作为问题刷扫描消息，
-					// 找不到游戏的空分支也保持静默（与 v24 lane 行为一致）。
-					ScanNestedEraGameDirectories(
-						gameRoot,
-						1,
-						profileId,
-						LauncherGameSource.CompatibilityDirectory,
-						entries,
-						addedPaths,
-						scanMessages);
+					AddScanMessage(
+						scanMessages,
+						$"兼容目录 compat/{profileId}/{gameDirectoryName} 不是有效游戏目录，已跳过（不递归扫描）。");
 					continue;
 				}
 
@@ -1886,7 +1876,8 @@ public partial class FirstWindow : Control
 			: CoreProfileV24Pure;
 	}
 
-	static bool TryNormalizeCoreProfileName(string coreProfileName, out string normalizedProfileName)
+	// 引擎 profile 名的单一事实源校验：launcher、legacy-runner 配置加载、会话宿主共用。
+	internal static bool TryNormalizeCoreProfileName(string coreProfileName, out string normalizedProfileName)
 	{
 		normalizedProfileName = null;
 		// launcher.cfg 与 Legacy runner 是旧入口，保留三个已存在 profile 的大小写兼容；
@@ -1906,7 +1897,16 @@ public partial class FirstWindow : Control
 			normalizedProfileName = CoreProfileEraFl;
 			return true;
 		}
-		// megaten：launcher.cfg/runner 旧入口的大小写兼容（与 erafl 同模式）。
+		if (string.Equals(coreProfileName, CoreProfileV18, System.StringComparison.OrdinalIgnoreCase))
+		{
+			normalizedProfileName = CoreProfileV18;
+			return true;
+		}
+		if (string.Equals(coreProfileName, CoreProfileEraBlue, System.StringComparison.OrdinalIgnoreCase))
+		{
+			normalizedProfileName = CoreProfileEraBlue;
+			return true;
+		}
 		if (string.Equals(coreProfileName, CoreProfileMegaten, System.StringComparison.OrdinalIgnoreCase))
 		{
 			normalizedProfileName = CoreProfileMegaten;

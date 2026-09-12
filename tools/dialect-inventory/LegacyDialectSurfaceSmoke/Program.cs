@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using MinorShift.Emuera.Compatibility;
 
 static class Program
@@ -92,6 +94,165 @@ static class Program
             // snake 会话：指令可见、函数形态隐藏（snake 参考无函数版，Creator.cs 只有 GETANIMETIMER）。
             Assert(snake.IsInstructionVisible("SETANIMETIMER"), "snake 会话丢失了 SETANIMETIMER 指令。");
             Assert(!snake.IsFunctionVisible("SETANIMETIMER"), "snake 会话泄漏了参考源码不存在的 SETANIMETIMER 函数形态。");
+
+            // 指令变体表（模块替换贡献）：同名指令的 handler 变体由模块声明，取代投影缝硬编码。
+            // 预期与迁移前 CreateProfileInstruction 的行为逐位一致：
+            //   v24pure/erafl 的 FOR 走 v24 计数文法，snake 的 FOR 回退共享表；
+            //   SETBGIMAGE 三态：v24pure/erafl=V24 变体，snake=SNAKE 变体；
+            //   erafl 的 SETANIMETIMER 显式绑定共享表（模块化绑定归属，防 snake 侧分叉时隐式跟随）。
+            Assert(v24.TryGetInstructionVariant("FOR", out LegacyInstructionVariant forV24)
+                && forV24 == LegacyInstructionVariant.ForCountV24,
+                "v24pure 的 FOR 必须绑定 v24 计数文法变体。");
+            Assert(v24.TryGetInstructionVariant("SETBGIMAGE", out LegacyInstructionVariant bgV24)
+                && bgV24 == LegacyInstructionVariant.SetBgImageV24,
+                "v24pure 的 SETBGIMAGE 必须绑定 v24 变体。");
+            Assert(!v24.TryGetInstructionVariant("SETANIMETIMER", out _),
+                "v24pure 不应声明 SETANIMETIMER 变体绑定。");
+            Assert(snake.TryGetInstructionVariant("FOR", out LegacyInstructionVariant forSnake)
+                && forSnake == LegacyInstructionVariant.SharedTable,
+                "snake 的 FOR 必须显式回退共享表（覆盖 v24 基线声明）。");
+            Assert(snake.TryGetInstructionVariant("SETBGIMAGE", out LegacyInstructionVariant bgSnake)
+                && bgSnake == LegacyInstructionVariant.SetBgImageSnake,
+                "snake 的 SETBGIMAGE 必须绑定 snake 变体。");
+            Assert(erafl.TryGetInstructionVariant("FOR", out LegacyInstructionVariant forErafl)
+                && forErafl == LegacyInstructionVariant.ForCountV24,
+                "erafl 的 FOR 继承 v24 基线计数文法。");
+            Assert(erafl.TryGetInstructionVariant("SETBGIMAGE", out LegacyInstructionVariant bgErafl)
+                && bgErafl == LegacyInstructionVariant.SetBgImageV24,
+                "erafl 的 SETBGIMAGE 继承 v24 基线变体（与迁移前行为一致）。");
+            Assert(erafl.TryGetInstructionVariant("SETANIMETIMER", out LegacyInstructionVariant timerErafl)
+                && timerErafl == LegacyInstructionVariant.SharedTable,
+                "erafl 的 SETANIMETIMER 必须显式绑定共享表 handler。");
+
+            // capability 账本（quirk ledger）：snake 声明 7 项解析/调用/显示 quirk，erafl 声明
+            // markup 系 + 3 项布尔 policy quirk，v24pure 不声明任何 quirk。
+            // [LOAD] 日志输出的能力清单即此账本的运行期消费。
+            foreach (string quirkId in GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.RequiredCapabilityIds)
+            {
+                Assert(snake.Plan.CapabilityIds.Contains(quirkId), $"snake 计划必须声明 quirk capability：{quirkId}。");
+                Assert(!v24.Plan.CapabilityIds.Contains(quirkId), $"v24pure 不得声明 snake quirk：{quirkId}。");
+                Assert(!erafl.Plan.CapabilityIds.Contains(quirkId), $"erafl 不得声明 snake quirk：{quirkId}。");
+            }
+            Assert(erafl.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.EraFlCompatibilityModule.DisplayExtendedHistoryBehavior)
+                && erafl.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.EraFlCompatibilityModule.InputOmittedDefaultArgumentBehavior)
+                && erafl.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.EraFlCompatibilityModule.PointerBlankStringBehavior),
+                "erafl 计划必须声明三项布尔 policy quirk（display.extended-history / input.omitted-default-argument / input.pointer-blank-string）。");
+            Assert(v24.Plan.CapabilityIds.Count == 0, "v24pure 不应声明任何 capability。");
+
+            // quirk 账本 → policy 映射穷尽性：ISnakeCompatibilityPolicy 的全部布尔属性
+            //（除 IsEnabled 与已语义塌缩的 UsesLazyResourceIndex）必须能被映射表覆盖，
+            // 且映射表引用的属性名真实存在于接口——新增 policy 属性而不登记 capability 时在此失败。
+            var snakePolicyProperties = typeof(ISnakeCompatibilityPolicy)
+                .GetProperties()
+                .Where(property => property.PropertyType == typeof(bool)
+                    && property.Name != nameof(ISnakeCompatibilityPolicy.IsEnabled)
+                    && property.Name != nameof(ISnakeCompatibilityPolicy.UsesLazyResourceIndex))
+                .Select(property => property.Name)
+                .OrderBy(name => name, StringComparer.Ordinal)
+                .ToArray();
+            var mappedProperties = GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.PolicyPropertyByCapabilityId.Values
+                .OrderBy(name => name, StringComparer.Ordinal)
+                .ToArray();
+            Assert(snakePolicyProperties.SequenceEqual(mappedProperties),
+                $"蛇系 policy 属性与 capability 映射表不穷尽：接口=[{string.Join(',', snakePolicyProperties)}] 映射=[{string.Join(',', mappedProperties)}]。");
+
+            // policy 取值由账本派生：snake 全真、v24pure 全假、erafl 的三项 quirk 生效。
+            Assert(snake.Snake.AllowsPrivateArguments && snake.Snake.AllowsExtraCallArguments
+                && snake.Snake.UsesParserDiagnostics && snake.Snake.ContinuesAfterStartupFault,
+                "snake 会话的 quirk policy 必须由 capability 账本派生为真。");
+            Assert(!v24.Snake.AllowsPrivateArguments && !v24.Snake.UsesFastDisplayRefresh,
+                "v24pure 会话不得激活任何蛇系 quirk。");
+            Assert(erafl.EraFl.UsesExtendedDisplayHistory
+                && erafl.EraFl.IsOmittedDefaultArgument(',')
+                && erafl.EraFl.ShouldSubmitBlankPointerStringInput(2, true),
+                "erafl 会话的三项布尔 quirk 必须由 capability 账本派生为真。");
+            Assert(!v24.EraFl.UsesExtendedDisplayHistory && !v24.EraFl.IsOmittedDefaultArgument(','),
+                "v24pure 会话不得激活 erafl quirk。");
+
+            // 描述符通道（生成清单）：plan.Dialect.Instructions/Functions 必须非空且与
+            // LegacyDialectInventories 生成数据逐量一致——这是描述符路由激活的前置契约。
+            Assert(v24.Plan.Dialect.Instructions.Count == GEmuera.Core.Compatibility.LegacyDialectInventories.V24InstructionNames.Length,
+                "v24pure 指令描述符数量与生成清单不一致。");
+            Assert(v24.Plan.Dialect.Functions.Count == GEmuera.Core.Compatibility.LegacyDialectInventories.V24Functions.Length,
+                "v24pure 函数描述符数量与生成清单不一致。");
+            Assert(snake.Plan.Dialect.Instructions.Count
+                    == GEmuera.Core.Compatibility.LegacyDialectInventories.V24InstructionNames.Length
+                    + GEmuera.Core.Compatibility.LegacyDialectInventories.SnakeDeltaInstructionNames.Length,
+                "snake 指令描述符数量 != v24 + snake 增量。");
+            Assert(erafl.Plan.Dialect.Instructions.Count
+                    == GEmuera.Core.Compatibility.LegacyDialectInventories.V24InstructionNames.Length
+                    + GEmuera.Core.Compatibility.LegacyDialectInventories.EraFlDeltaInstructionNames.Length,
+                "erafl 指令描述符数量 != v24 + erafl 增量。");
+            Assert(erafl.Plan.Dialect.TryGetInstruction("SETANIMETIMER", out var eraflTimer)
+                && eraflTimer.ModuleId == "game.erafl",
+                "erafl 计划必须由 game.erafl 模块声明 SETANIMETIMER 指令。");
+            Assert(!v24.Plan.Dialect.TryGetInstruction("CALLSTR", out _),
+                "v24pure 计划不得声明 snake 专属指令 CALLSTR。");
+
+            // 蛇系函数参数契约（重载差异名集，snake 模块声明）：仅 snake 会话激活。
+            Assert(snake.UsesDialectFunctionContract("ABS")
+                && snake.UsesDialectFunctionContract("SQRT")
+                && snake.UsesDialectFunctionContract("UNCHECKED_ADD"),
+                "snake 会话必须激活蛇系参数契约名集。");
+            Assert(!v24.UsesDialectFunctionContract("ABS")
+                && !v24.UsesDialectFunctionContract("SQRT"),
+                "v24pure 会话不得激活蛇系参数契约。");
+            Assert(!erafl.UsesDialectFunctionContract("ABS"),
+                "erafl 会话继承 v24 参数契约（不激活蛇系名集）。");
+
+            // v18 基线方言（emuera_v18_exported 双源取证）：独立闭包 {gemuera.v18}，
+            // 表面 = v24 投影减 39 指令 + 110 函数的 v24 后增差集；无 quirk capability。
+            LegacyCompatibilityProfile v18 = LegacyCompatibilityProfile.CreateForProfile("v18", true);
+            Assert(v18.IsInstructionVisible("PRINT") && v18.IsFunctionVisible("ABS"),
+                "v18 丢失基线指令/函数。");
+            Assert(!v18.IsInstructionVisible("SETBGIMAGE") && !v18.IsInstructionVisible("PRINTN")
+                && !v18.IsInstructionVisible("VARI") && !v18.IsInstructionVisible("VARS")
+                && !v18.IsInstructionVisible("CALLSTR") && !v18.IsInstructionVisible("SKIPLOG"),
+                "v18 泄漏了 v24 后增或 snake 专属指令。");
+            Assert(!v18.IsFunctionVisible("GETVAR") && !v18.IsFunctionVisible("DT_CREATE")
+                && !v18.IsFunctionVisible("XML_DOCUMENT") && !v18.IsFunctionVisible("SQL_CONNECT"),
+                "v18 泄漏了 v24 后增或 snake 专属函数。");
+            Assert(v18.Plan.Dialect.Instructions.Count == GEmuera.Core.Compatibility.LegacyDialectInventories.V18InstructionNames.Length
+                && v18.Plan.Dialect.Functions.Count == GEmuera.Core.Compatibility.LegacyDialectInventories.V18Functions.Length,
+                "v18 描述符数量与生成清单不一致。");
+            Assert(v18.Plan.CapabilityIds.Count == 0, "v18 基线不应声明 quirk capability。");
+
+            // eraBlue（碧蓝度假村）：v24 基座 + SETANIMETIMER 增量 + 外部插件 capability。
+            // 血统：游戏自带 Emuera.NET 1824+v24+EMv18+EEv55 启动器；插件经 CALLSHARP 调用。
+            LegacyCompatibilityProfile erablue = LegacyCompatibilityProfile.CreateForProfile("erablue", true);
+            Assert(erablue.IsInstructionVisible("SETANIMETIMER") && erablue.IsInstructionVisible("CALLSHARP"),
+                "erablue 必须提供 SETANIMETIMER 指令与 CALLSHARP（插件调用）基座指令。");
+            Assert(!erablue.IsInstructionVisible("CALLSTR") && !erablue.IsFunctionVisible("SQL_CONNECT")
+                && !erablue.IsFunctionVisible("ACOS"),
+                "erablue 不得泄漏 snake 专属能力。");
+            Assert(erablue.Plan.CapabilityIds.Count == 2
+                && erablue.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.EraBlueCompatibilityModule.ExternalPluginCapability)
+                && erablue.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.EraBlueCompatibilityModule.ContinueAfterStartupFaultCapability),
+                "erablue 计划必须恰好声明外部插件 + 启动容错两个 capability。");
+            Assert(erablue.ContinuesAfterStartupFault,
+                "erablue 会话必须由 capability 账本派生启动容错为真（汉化 mod 依赖）。");
+            Assert(!v24.ContinuesAfterStartupFault && snake.ContinuesAfterStartupFault,
+                "启动容错判定：v24pure 假、snake 真（capability 同源）。");
+
+            // era megaten（Emuera1824+v8.1 私改血统）：v24 基座、面零增量、仅启动容错 quirk。
+            // 实测证据：VELVET_ROOM.ERB:2860 的 DITEMTYPE:ARG:Persona(LOCALS)（私改文法）
+            // 在严格 v24 下致命退出，原生启动器容错继续。
+            LegacyCompatibilityProfile megaten = LegacyCompatibilityProfile.CreateForProfile("megaten", true);
+            Assert(megaten.ContinuesAfterStartupFault
+                && megaten.Plan.CapabilityIds.Count == 1
+                && megaten.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.MegatenCompatibilityModule.ContinueAfterStartupFaultCapability),
+                "megaten 计划必须恰好声明启动容错 capability。");
+            Assert(megaten.IsInstructionVisible("PRINT") && megaten.IsInstructionVisible("CALLSHARP"),
+                "megaten 保持 v24 基座指令面。");
+            Assert(!megaten.IsInstructionVisible("SETANIMETIMER") && !megaten.IsInstructionVisible("CALLSTR")
+                && !megaten.IsFunctionVisible("SQL_CONNECT"),
+                "megaten 面增量为零：不得泄漏 snake 系名字（游戏未使用）。");
+            Assert(erablue.TryGetInstructionVariant("SETBGIMAGE", out var erablueBg)
+                && erablueBg == LegacyInstructionVariant.SetBgImageV24,
+                "erablue 的 SETBGIMAGE 必须继承 v24 基线变体。");
+            Assert(erablue.Plan.Dialect.Instructions.Count == GEmuera.Core.Compatibility.LegacyDialectInventories.V24InstructionNames.Length + 1
+                && erablue.Plan.Dialect.Functions.Count == GEmuera.Core.Compatibility.LegacyDialectInventories.V24Functions.Length,
+                "erablue 描述符数量 != v24 + SETANIMETIMER 增量。");
 
             // 诊断提示（TryGetUnselectedModuleHint）：v24pure 下查询 snake 专属名字 → 归属 game.snake；
             // snake 会话查询其自身隐藏的函数形态 → 不提示。

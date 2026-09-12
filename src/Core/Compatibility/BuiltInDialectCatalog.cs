@@ -30,7 +30,7 @@ public static class BuiltInDialectCatalog
         var catalog = new DialectModuleCatalog();
         catalog.Register(new DeclaredDialectModule(
             new DialectModuleDefinition("gemuera.v24", "1.0.0", 1),
-            Array.Empty<IDialectContribution>()));
+            V24Contributions()));
         catalog.Register(new DeclaredDialectModule(
             new DialectModuleDefinition(
                 "game.snake",
@@ -41,16 +41,65 @@ public static class BuiltInDialectCatalog
                     new ModuleDependencySnapshot("gemuera.v24", "[1.0.0,2.0.0)"),
                 },
                 portTypeIds: SnakePortTypeIds),
-            Array.Empty<IDialectContribution>()));
+            SnakeContributions()));
         catalog.Register(new DeclaredDialectModule(
             EraFlCompatibilityModule.CreateDefinition(),
-            Array.Empty<IDialectContribution>()));
-        // megaten：eraMegaten 游戏适配方言（eraFL 镜像骨架），依赖 v24 基线，纯声明模块。
+            EraFlContributions()));
+        // v18 基线方言（emuera1824+v18 血统）：独立基座（不依赖 gemuera.v24），会话表面 =
+        // v24 引擎投影减去"v24 注册而 v18 参考未注册"的差集（桥层 LegacyV18CompatibilityModule）。
+        catalog.Register(new DeclaredDialectModule(
+            new DialectModuleDefinition("gemuera.v18", "1.0.0", 1),
+            V18Contributions()));
+        // eraBlue（碧蓝度假村）：v24 基座 + SETANIMETIMER 可见性增量 + 外部插件 capability 声明。
+        catalog.Register(new DeclaredDialectModule(
+            EraBlueCompatibilityModule.CreateDefinition(),
+            EraBlueContributions()));
+        // era megaten：v24 基座 + 启动容错 quirk（面零增量，证据见 MegatenCompatibilityModule）。
         catalog.Register(new DeclaredDialectModule(
             MegatenCompatibilityModule.CreateDefinition(),
-            Array.Empty<IDialectContribution>()));
+            MegatenContributions()));
         return catalog;
     }
+
+    // 描述符清单来自 LegacyDialectInventories.Generated.cs（引擎投影生成的镜像）。
+    // v24 = v24pure 会话表面；snake/erafl = 相对 v24 表面的差集。计划闭包是所选模块
+    // 清单的并集；个别 v24 名在 snake 会话被主动排除（如 BITMAP_CACHE_ENABLE 函数），
+    // 会话驱动路由/校验对这类"计划⊇会话"的差异按条件可见性容忍。
+    private static IDialectContribution[] V24Contributions() => new IDialectContribution[]
+    {
+        new LegacyInstructionInventoryContribution("gemuera.v24.instructions", "gemuera.v24", LegacyDialectInventories.V24InstructionNames),
+        new LegacyFunctionInventoryContribution("gemuera.v24.functions", "gemuera.v24", LegacyDialectInventories.V24Functions),
+    };
+
+    private static IDialectContribution[] SnakeContributions() => new IDialectContribution[]
+    {
+        new LegacyInstructionInventoryContribution("game.snake.instructions", "game.snake", LegacyDialectInventories.SnakeDeltaInstructionNames),
+        new LegacyFunctionInventoryContribution("game.snake.functions", "game.snake", LegacyDialectInventories.SnakeDeltaFunctions),
+    };
+
+    private static IDialectContribution[] EraFlContributions() => new IDialectContribution[]
+    {
+        new LegacyInstructionInventoryContribution("game.erafl.instructions", "game.erafl", LegacyDialectInventories.EraFlDeltaInstructionNames),
+        new LegacyFunctionInventoryContribution("game.erafl.functions", "game.erafl", LegacyDialectInventories.EraFlDeltaFunctions),
+    };
+
+    private static IDialectContribution[] V18Contributions() => new IDialectContribution[]
+    {
+        new LegacyInstructionInventoryContribution("gemuera.v18.instructions", "gemuera.v18", LegacyDialectInventories.V18InstructionNames),
+        new LegacyFunctionInventoryContribution("gemuera.v18.functions", "gemuera.v18", LegacyDialectInventories.V18Functions),
+    };
+
+    private static IDialectContribution[] EraBlueContributions() => new IDialectContribution[]
+    {
+        new LegacyInstructionInventoryContribution("game.erablue.instructions", "game.erablue", LegacyDialectInventories.EraBlueDeltaInstructionNames),
+        new LegacyFunctionInventoryContribution("game.erablue.functions", "game.erablue", LegacyDialectInventories.EraBlueDeltaFunctions),
+    };
+
+    private static IDialectContribution[] MegatenContributions() => new IDialectContribution[]
+    {
+        new LegacyInstructionInventoryContribution("game.megaten.instructions", "game.megaten", LegacyDialectInventories.MegatenDeltaInstructionNames),
+        new LegacyFunctionInventoryContribution("game.megaten.functions", "game.megaten", LegacyDialectInventories.MegatenDeltaFunctions),
+    };
 
     /// <summary>
     /// Legacy launcher profile projection. It deliberately lists roots rather
@@ -64,12 +113,15 @@ public static class BuiltInDialectCatalog
             "v24pure",
             new[] { "gemuera.v24" }));
         catalog.Register(new CompatibilityProfileDefinition(
-            "snake",
-            new[] { "game.snake" }));
-        catalog.Register(EraFlCompatibilityModule.CreateProfile());
-        // megaten：注册 profile 定义后，compat\megaten\<game> 目录路由经由
-        // DirectoryRouteProfileCatalog（同一 catalog）自动获得支持。
+            "v18",
+            new[] { "gemuera.v18" }));
+        catalog.Register(EraBlueCompatibilityModule.CreateProfile());
         catalog.Register(MegatenCompatibilityModule.CreateProfile());
+        catalog.Register(new CompatibilityProfileDefinition(
+            "snake",
+            new[] { "game.snake" },
+            requiredCapabilityIds: SnakeCompatibilityCapabilities.RequiredCapabilityIds));
+        catalog.Register(EraFlCompatibilityModule.CreateProfile());
         return catalog;
     }
 

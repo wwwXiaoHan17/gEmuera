@@ -97,6 +97,8 @@ namespace MinorShift.Emuera.Compatibility
 		private readonly ISet<string> scopedInstructionNames;
 		private readonly ISet<string> methodProjectedFunctionNames;
 		private readonly IReadOnlyDictionary<string, string> hiddenNameOwners;
+		private readonly IReadOnlyDictionary<string, LegacyInstructionVariant> instructionVariants;
+		private readonly ISet<string> dialectFunctionContractNames;
 		private readonly bool scopedVariableInstructionsEnabled;
 
 		internal LegacyCompatibilityProfile(
@@ -111,6 +113,8 @@ namespace MinorShift.Emuera.Compatibility
 			IEnumerable<string> hiddenFunctionNames,
 			IEnumerable<string> scopedInstructionNames,
 			IEnumerable<string> methodProjectedFunctionNames,
+			IReadOnlyDictionary<string, LegacyInstructionVariant> instructionVariants,
+			IEnumerable<string> dialectFunctionContractNames,
 			IReadOnlyDictionary<string, string> hiddenNameOwners = null)
 		{
 			ProfileId = profileId;
@@ -123,6 +127,10 @@ namespace MinorShift.Emuera.Compatibility
 			this.hiddenFunctionNames = new HashSet<string>(hiddenFunctionNames, StringComparer.Ordinal);
 			this.scopedInstructionNames = new HashSet<string>(scopedInstructionNames, StringComparer.Ordinal);
 			this.methodProjectedFunctionNames = new HashSet<string>(methodProjectedFunctionNames, StringComparer.Ordinal);
+			this.instructionVariants = instructionVariants
+				?? new Dictionary<string, LegacyInstructionVariant>(StringComparer.Ordinal);
+			this.dialectFunctionContractNames = new HashSet<string>(
+				dialectFunctionContractNames ?? Array.Empty<string>(), StringComparer.Ordinal);
 			this.hiddenNameOwners = hiddenNameOwners
 				?? new Dictionary<string, string>(StringComparer.Ordinal);
 		}
@@ -176,6 +184,49 @@ namespace MinorShift.Emuera.Compatibility
 			if (string.IsNullOrWhiteSpace(functionName))
 				return false;
 			return methodProjectedFunctionNames.Contains(functionName.Trim());
+		}
+
+		/// <summary>
+		/// 查询模块为该指令声明的 handler 变体。名字规范化与 IsInstructionVisible 一致
+		/// （Trim + 大写）。返回 false 表示无替换贡献，投影时使用共享表原条目。
+		/// </summary>
+		public bool TryGetInstructionVariant(string instructionName, out LegacyInstructionVariant variant)
+		{
+			variant = LegacyInstructionVariant.SharedTable;
+			if (string.IsNullOrWhiteSpace(instructionName))
+				return false;
+			return instructionVariants.TryGetValue(instructionName.Trim().ToUpperInvariant(), out variant);
+		}
+
+		/// <summary>
+		/// 该会话是否对同名函数使用蛇系参数契约（重载差异名集，由 snake 模块声明激活）。
+		/// 名字规范化与 IsFunctionVisible 一致（Trim）。未激活模块的会话恒为 false。
+		/// </summary>
+		public bool UsesDialectFunctionContract(string functionName)
+		{
+			if (string.IsNullOrWhiteSpace(functionName))
+				return false;
+			return dialectFunctionContractNames.Contains(functionName.Trim());
+		}
+
+		/// <summary>
+		/// 方言无关的启动容错：任一选中方言声明 startup.continue-after-fault.v1 即在
+		/// ERB 解析警告后继续运行（snake 与 erablue 的启动器家族均为此行为；游戏自带
+		/// emuera.config 不开 CompatiErrorLine，靠启动器家族语义容错）。与
+		/// Snake.ContinuesAfterStartupFault 同源（snake policy 亦由该 capability 派生）。
+		/// </summary>
+		public bool ContinuesAfterStartupFault
+		{
+			get
+			{
+				string quirkId = GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.ContinueAfterStartupFault;
+				foreach (string capability in Plan.CapabilityIds)
+				{
+					if (string.Equals(capability, quirkId, StringComparison.Ordinal))
+						return true;
+				}
+				return false;
+			}
 		}
 
 		/// <summary>

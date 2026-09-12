@@ -156,6 +156,20 @@ internal static class ContractText
         return normalized;
     }
 
+    /// <summary>
+    /// 方言标识符键的宽松校验：旧核心的注册表包含 CJK 标识符（如 snake 系的
+    /// 陥落状態/陷落状态 兜底函数，它同时以 METHOD 投影出现在指令表面），
+    /// 只要求"字母（含 Unicode）开头 + 字母/数字/下划线"。指令与函数两个注册器
+    /// 共用本变体；RequiredLookupKey 保留给纯枚举名场景。
+    /// </summary>
+    public static string RequiredFunctionLookupKey(string? value, string parameterName)
+    {
+        var normalized = Required(value, parameterName);
+        if (!System.Text.RegularExpressions.Regex.IsMatch(normalized, "^[\\p{Lu}\\p{Ll}\\p{Lo}][\\p{Lu}\\p{Ll}\\p{Lo}0-9_]*$", System.Text.RegularExpressions.RegexOptions.CultureInvariant))
+            throw new ArgumentException($"Invalid function lookup key: {normalized}", parameterName);
+        return normalized;
+    }
+
     public static string RequiredIdentifier(string? value, string parameterName)
     {
         var normalized = Required(value, parameterName);

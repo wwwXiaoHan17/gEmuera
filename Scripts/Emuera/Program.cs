@@ -21,7 +21,8 @@ namespace MinorShift.Emuera
 		V24Pure,
 		Snake,
 		EraFl,
-		// megaten：eraMegaten 适配（eraFL 镜像），仅新增枚举值，不改既有分支。
+		V18,
+		EraBlue,
 		Megaten,
 		SnakeModernMobile,
 	}
@@ -568,6 +569,8 @@ namespace MinorShift.Emuera
 				"v24pure" => EmueraCoreProfile.V24Pure,
 				"snake" => EmueraCoreProfile.Snake,
 				"erafl" => EmueraCoreProfile.EraFl,
+				"v18" => EmueraCoreProfile.V18,
+				"erablue" => EmueraCoreProfile.EraBlue,
 				// megaten：launcher 显式选择时映射到新枚举值。
 				"megaten" => EmueraCoreProfile.Megaten,
 				_ => throw new InvalidOperationException(
@@ -593,7 +596,8 @@ namespace MinorShift.Emuera
 				"v24pure" => EmueraCoreProfile.V24Pure,
 				"snake" => EmueraCoreProfile.Snake,
 				"erafl" => EmueraCoreProfile.EraFl,
-				// megaten：会话 plan 的 profile id 映射（compat\megaten 路由共用）。
+				"v18" => EmueraCoreProfile.V18,
+				"erablue" => EmueraCoreProfile.EraBlue,
 				"megaten" => EmueraCoreProfile.Megaten,
 				_ => throw new InvalidOperationException(
 					$"Compatibility plan profile '{profileId}' is not supported by the legacy bridge.")
@@ -607,7 +611,8 @@ namespace MinorShift.Emuera
 				EmueraCoreProfile.V24Pure => "v24pure",
 				EmueraCoreProfile.Snake => "snake",
 				EmueraCoreProfile.EraFl => "erafl",
-				// megaten：枚举值 → 内置兼容计划 profile id。
+				EmueraCoreProfile.V18 => "v18",
+				EmueraCoreProfile.EraBlue => "erablue",
 				EmueraCoreProfile.Megaten => "megaten",
 				_ => throw new InvalidOperationException(
 					$"Legacy core profile '{profile}' has no built-in compatibility plan."),

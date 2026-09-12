@@ -73,6 +73,20 @@ function Resolve-GodotExecutable {
     return $candidate.FullName
 }
 
+function Get-SupportedCompatibilityProfile {
+    # Single source of truth: engine-exported profiles.generated.json
+    # (regenerate via tools/dialect-inventory/LegacyDialectInventoryGenerator
+    # whenever the engine registry or dialect lists change).
+    # NOTE: keep this file ASCII-only; PowerShell 5.1 reads BOM-less scripts
+    # with the ANSI codepage and non-ASCII comments corrupt nearby statements.
+    $generatedPath = Join-Path $PSScriptRoot 'profiles.generated.json'
+    if (-not (Test-Path -LiteralPath $generatedPath -PathType Leaf)) {
+        throw "profiles.generated.json is missing; run tools/dialect-inventory/LegacyDialectInventoryGenerator first."
+    }
+    $generated = Get-Content -LiteralPath $generatedPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    return @($generated.profileIds | ForEach-Object { [string]$_ })
+}
+
 function Quote-ProcessArgument {
     param([string]$Value)
     return '"' + $Value.Replace('"', '\"') + '"'
@@ -251,14 +265,15 @@ try {
         throw "M0 runner requires Godot 4.7 Mono; captured: $godotVersion"
     }
 
-    $baseConfig = Get-Content -LiteralPath $configPathResolved -Raw | ConvertFrom-Json
+    $baseConfig = Get-Content -LiteralPath $configPathResolved -Raw -Encoding UTF8 | ConvertFrom-Json
     if ($GameRoot) { $baseConfig.gameRoot = [IO.Path]::GetFullPath($GameRoot) }
     if ($Profile) { $baseConfig.profile = $Profile }
     if (-not $baseConfig.gameRoot -or -not (Test-Path -LiteralPath $baseConfig.gameRoot -PathType Container)) {
         throw 'An existing game root must be supplied through -GameRoot or the config file.'
     }
-    if ($baseConfig.profile -notin @('v24pure', 'snake', 'erafl', 'megaten')) {
-        throw 'Profile must be v24pure, snake, erafl, or megaten.'
+    $supportedProfiles = Get-SupportedCompatibilityProfile
+    if ($baseConfig.profile -notin $supportedProfiles) {
+        throw "Profile must be one of: $($supportedProfiles -join ', ')."
     }
     $sessionIsolationProperty = $baseConfig.PSObject.Properties['sessionIsolationMode']
     $sessionIsolationMode = if ($null -eq $sessionIsolationProperty) { 'baseline' } else { [string]$sessionIsolationProperty.Value }
@@ -294,8 +309,8 @@ try {
         if (-not $alternateSession.gameRoot -or -not (Test-Path -LiteralPath $alternateSession.gameRoot -PathType Container)) {
             throw 'cross-aba alternate session requires an existing gameRoot.'
         }
-        if ($alternateSession.profile -notin @('v24pure', 'snake', 'erafl', 'megaten')) {
-            throw 'cross-aba alternate session profile must be v24pure, snake, erafl, or megaten.'
+        if ($alternateSession.profile -notin $supportedProfiles) {
+            throw "cross-aba alternate session profile must be one of: $($supportedProfiles -join ', ')."
         }
         $alternateSourceGameRoot = [IO.Path]::GetFullPath([string]$alternateSession.gameRoot)
         $alternateProfile = [string]$alternateSession.profile
@@ -354,7 +369,7 @@ try {
         if (-not (Test-Path -LiteralPath $existingIdentityPath -PathType Leaf)) {
             throw "Existing identity directory has no identity.json: $existingIdentity"
         }
-        $identityReport = Get-Content -LiteralPath $existingIdentityPath -Raw | ConvertFrom-Json
+        $identityReport = Get-Content -LiteralPath $existingIdentityPath -Raw -Encoding UTF8 | ConvertFrom-Json
         if ((Get-NormalizedFullPath -Path $identityReport.source.root) -ne (Get-NormalizedFullPath -Path $projectRootResolved)) {
             throw 'Existing identity source root does not match this project.'
         }

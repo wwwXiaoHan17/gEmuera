@@ -15,7 +15,8 @@ public sealed record LegacyCompatibilityConsumptionSnapshot(
     int InstructionDescriptorCount,
     int FunctionDescriptorCount,
     int PortCount,
-    int CapabilityCount)
+    int CapabilityCount,
+    int ConditionallyHiddenDescriptorCount = 0)
 {
     public bool HasDescriptorOverrides =>
         InstructionDescriptorCount > 0 || FunctionDescriptorCount > 0;
@@ -35,23 +36,27 @@ public static class LegacyCompatibilityPlanConsumption
         var instructions = NormalizeLegacyNames(legacyInstructionNames, nameof(legacyInstructionNames));
         var functions = NormalizeLegacyNames(legacyFunctionNames, nameof(legacyFunctionNames));
 
-        foreach (var descriptor in plan.Dialect.Instructions.Values)
+        // 会话驱动校验：会话注册表实际暴露的每个名字必须被计划声明，否则是引擎/清单
+        // 漂移，直接失败。方向与旧实现相反——旧实现要求"计划声明的名字都在注册表中"，
+        // 那会把条件可见性误判为错误：v24 的 VARI/VARS 在 scoped-variable 关闭的会话
+        // 不在注册表里，但必须留在计划清单中供开启的会话路由；snake 主动排除的个别
+        // v24 函数（如 BITMAP_CACHE_ENABLE）同理。描述符归属模块由 CompatibilityPlanBuilder
+        // 在构建期强制（claims-an-unselected-module 检查），此处不再重复。
+        foreach (var name in instructions)
         {
-            EnsureSelectedModule(plan, descriptor.ModuleId, $"instruction '{descriptor.Name}'");
-            if (!instructions.Contains(descriptor.Name))
+            if (!plan.Dialect.Instructions.ContainsKey(name))
             {
                 throw new InvalidOperationException(
-                    $"Compatibility plan instruction '{descriptor.Name}' is not registered by the legacy parser.");
+                    $"Legacy instruction '{name}' is not declared by the compatibility plan.");
             }
         }
 
-        foreach (var descriptor in plan.Dialect.Functions.Values)
+        foreach (var name in functions)
         {
-            EnsureSelectedModule(plan, descriptor.ModuleId, $"function '{descriptor.Name}'");
-            if (!functions.Contains(descriptor.Name))
+            if (!plan.Dialect.Functions.ContainsKey(name))
             {
                 throw new InvalidOperationException(
-                    $"Compatibility plan function '{descriptor.Name}' is not registered by the legacy parser.");
+                    $"Legacy function '{name}' is not declared by the compatibility plan.");
             }
         }
 
@@ -62,7 +67,9 @@ public static class LegacyCompatibilityPlanConsumption
             plan.Dialect.Instructions.Count,
             plan.Dialect.Functions.Count,
             plan.Dialect.Ports.Count,
-            plan.CapabilityIds.Count);
+            plan.CapabilityIds.Count,
+            (plan.Dialect.Instructions.Count - instructions.Count)
+                + (plan.Dialect.Functions.Count - functions.Count));
     }
 
     private static HashSet<string> NormalizeLegacyNames(
@@ -77,18 +84,5 @@ public static class LegacyCompatibilityPlanConsumption
             normalized.Add(name.Trim().ToUpperInvariant());
         }
         return normalized;
-    }
-
-    private static void EnsureSelectedModule(
-        CompatibilityPlan plan,
-        string moduleId,
-        string descriptorLabel)
-    {
-        if (!plan.Dialect.Modules.Any(module =>
-                string.Equals(module.ModuleId, moduleId, StringComparison.Ordinal)))
-        {
-            throw new InvalidOperationException(
-                $"Compatibility plan {descriptorLabel} claims unselected module '{moduleId}'.");
-        }
     }
 }

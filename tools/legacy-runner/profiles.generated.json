@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "1.0.0",
+  "generatedBy": "tools/dialect-inventory/LegacyDialectInventoryGenerator",
+  "profileIds": [
+    "erablue",
+    "erafl",
+    "megaten",
+    "snake",
+    "v18",
+    "v24pure"
+  ],
+  "profiles": {
+    "v24pure": {
+      "modules": [
+        "gemuera.v24"
+      ],
+      "instructionCount": 561,
+      "functionCount": 266
+    },
+    "snake": {
+      "modules": [
+        "gemuera.v24",
+        "game.snake"
+      ],
+      "instructionCount": 668,
+      "functionCount": 349
+    },
+    "erafl": {
+      "modules": [
+        "gemuera.v24",
+        "game.erafl"
+      ],
+      "instructionCount": 562,
+      "functionCount": 266
+    },
+    "v18": {
+      "modules": [
+        "gemuera.v18"
+      ],
+      "instructionCount": 417,
+      "functionCount": 160
+    },
+    "erablue": {
+      "modules": [
+        "gemuera.v24",
+        "game.erablue"
+      ],
+      "instructionCount": 562,
+      "functionCount": 266
+    },
+    "megaten": {
+      "modules": [
+        "gemuera.v24",
+        "game.megaten"
+      ],
+      "instructionCount": 561,
+      "functionCount": 266
+    }
+  }
+}
