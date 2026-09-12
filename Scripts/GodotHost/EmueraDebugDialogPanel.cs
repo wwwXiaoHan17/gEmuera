@@ -140,7 +140,12 @@ namespace gEmuera.GodotHost
 			BeforeShow?.Invoke(); // 桌面端宿主在此应用窗口几何；Android 覆盖层为 null
 			Visible = true;
 			if (hostWindow != null)
+			{
 				hostWindow.Show();
+				// 嵌入子窗口（gl_compatibility 下桌面/移动端共用）首次 Show 不触发合成，
+				// 需唤醒 kick，否则面板空白，用户需手动缩放主窗口才能显示（实证见方法注释）。
+				EmueraDebugDialogPanel.KickEmbeddedComposite(hostWindow, this);
+			}
 			while (snapshotQueue.TryDequeue(out _)) { } // 丢弃旧会话残留快照
 		}
 
@@ -150,7 +155,10 @@ namespace gEmuera.GodotHost
 			{
 				Visible = true;
 				if (hostWindow != null)
+				{
 					hostWindow.Show();
+					EmueraDebugDialogPanel.KickEmbeddedComposite(hostWindow, this);
+				}
 			}
 			// 聚焦输入框而非窗口自身。
 			if (addExpressionInput != null)
@@ -694,6 +702,36 @@ namespace gEmuera.GodotHost
 			return new Vector2I(
 				(int)ProjectSettings.GetSetting("display/window/size/viewport_width", 1280),
 				(int)ProjectSettings.GetSetting("display/window/size/viewport_height", 720));
+		}
+
+		/// <summary>
+		/// 嵌入子窗口首次 Show 后合成缺失时的唤醒：尺寸往返触发视口重建，一帧后内容
+		/// 显隐往返强制内容重绘。gl_compatibility 下 Godot 把子 Window 强制嵌入主窗口
+		/// （无独立 OS 窗口），该路径首帧合成不提交（2026-09-13 Win32 枚举+截图实证：
+		/// Show 后窗口矩形/内容均不渲染，主窗口 resize 才出现）。非嵌入（Forward+ 原生
+		/// 窗口）时为空操作。悬浮诊断窗（RuntimeDiagnosticsPanel）同症状共用。
+		/// </summary>
+		public static void KickEmbeddedComposite(Window window, Control content)
+		{
+			if (window == null || !GodotObject.IsInstanceValid(window) || !window.IsInsideTree())
+				return;
+			var root = window.GetTree().Root;
+			if (window.GetWindowId() != root.GetWindowId())
+				return; // 非嵌入（独立原生窗口），无需唤醒
+
+			Vector2I baseSize = window.Size;
+			window.Size = new Vector2I(baseSize.X + 2, baseSize.Y + 2);
+			window.GetTree().CreateTimer(0.05).Timeout += () =>
+			{
+				if (!GodotObject.IsInstanceValid(window) || !window.IsInsideTree())
+					return;
+				window.Size = baseSize;
+				if (content != null && GodotObject.IsInstanceValid(content))
+				{
+					content.Visible = false;
+					content.Visible = true;
+				}
+			};
 		}
 	}
 }

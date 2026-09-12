@@ -112,6 +112,10 @@ public partial class QuickFloatingWindow : Window
 		}
 		SetProcess(true);
 		Show();
+		// 嵌入子窗口首次 Show 合成缺失唤醒（同 EmueraDebugDialogPanel，gl_compatibility
+		// 桌面端子 Window 强制嵌入，2026-09-13 实证；内容为本窗唯一子面板）。
+		var contentChild = GetChildCount() > 0 ? GetChild(0) as Control : null;
+		global::gEmuera.GodotHost.EmueraDebugDialogPanel.KickEmbeddedComposite(this, contentChild);
 	}
 
 	void OnPadHidden()
