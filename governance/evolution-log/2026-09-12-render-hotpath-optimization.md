@@ -27,3 +27,17 @@
 1. 行级烘焙纹理（Pain 1 深水区，需缩放矩阵验证）。
 2. SkiaSharp 合成后端（Pain 2 主刀，位级对齐测试先行——RoundTripChannel 怪癖是硬门槛）。
 3. Android 首启验证 W2/W3 实效（合成源内存涨幅 + G 系文本渲染无卡死）。
+
+## 补遗：ColorMatrix 替换路线双否决（同日）
+
+1. **v24pure/snake fixture 补跑**：上一提交声明"无回归"但未实跑（惯性声明错误）——本日补跑双 Passed，提交声明与证据对齐。
+2. **Skia SKColorFilter 否决**：位对齐工具 150,752 比较中 49,969 不匹配（alpha=0 强置全零 + 舍入差异）。零可观测差异约束下不可替换。
+3. **gather/scatter SIMD 否决**：位级对齐成功达成过（零差异），但 1Mpx×30 实测 **0.94x 无收益**——负优化不合入。过程的两个副产品价值更高：
+   - **ToByte 舍入语义确证 = banker's**（Godot Mathf.RoundToInt = Math.Round 默认 ToEven：165.5→166、90.5→90）。此前 away-from-zero 假设是错的，注释已固化防后人重蹈。
+   - **float 向量判奇必须走整数域**：BitwiseAnd(floatVector, 1.0f) 是位模式与运算，不是数值判奇——中点全部失效的根因。
+4. **方法论沉淀**：位对齐工具是"替换路线"的裁决设施（采样空间+双路比对+证据输出）；性能路线必须配 bench，"位级对齐成功"≠"值得合入"。
+
+## 后续路线更新
+
+- Pain 2 SIMD 复试前提：byte→float 向量转换 + 通道 deinterleave 全向量化（消掉 gather/scatter 标量段）。
+- Pain 3 的 256 槽环形队列与 Pain 1 的行级烘焙仍留档（前者需会话协议重设计，后者需真机 DPI 矩阵）。
