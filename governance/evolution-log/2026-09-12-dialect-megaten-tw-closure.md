@@ -45,3 +45,17 @@
 1. **启动器 UI 接入**：高级兼容下拉增至六 profile（v18/erablue/megaten 可选）。compat 目录路由零改动即支持新方言——`DirectoryRouteProfileCatalog` 本就是 `BuiltInDialectCatalog.CreateLegacyProfileCatalog()`，新 profile 注册时路由自动生效（这是"单一事实源"设计的直接红利：UI 选项是唯一需要手工同步的点，目录路由不是）。
 2. **LegacyRunnerHost Fail 掩码修复**：_Ready catch 先 `GD.PushError` 原始异常——Load 阶段异常曾两次被次生 NRE 完全掩盖。
 3. **identity 回读 CJK 修复**：ps1 三处 `Get-Content` 补 `-Encoding UTF8`；erablue 真实游戏带 `-ExistingIdentityDirectory` 实测通过（上轮正是此场景失败）。CJK 路径 checklist 第四条补全："**读** JSON 也要 -Encoding UTF8，不只写"。
+
+## 补遗二：吸收 origin/dev PR #5（524122 的 megaten 适配），双取证线合成（2026-09-12 晚）
+
+**背景**：用户合并了 524122 的 eraMegaten 适配进 dev（09-07），与我的 megaten 模块（09-12）同 ModuleId 对撞。关键认知：**两版针对不同游戏版本与故障模式**——他测 eraMegaten 3.54 汉化版（Emuera.NET 0.2.6 宿主，IC 配置组合致 823 条警告拒跑→3 个大小写/遮蔽门控端口 + 13 处引擎门控）；我测 Var.157_3.43 安卓版（Emuera1824+v8.1 宿主，私改文法致命退出→启动容错 quirk）。**合成而非取舍**。
+
+**合成方案**（merge 提交 4c9fd34，两条分支各一份）：
+- Core 模块：他的 3 端口+SaveProfileId+defaultPorts + 我的 continue-after-fault capability，requiredCapabilityIds=[容错]；
+- 接线：取本线单一事实源（LegacyRunnerConfig 委托 FirstWindow、ps1/schema 吃 profiles.generated.json）——他的硬编码第四名方案被生成清单覆盖；
+- 桥层：并集（V18/EraBlue/账本 + IMegatenCompatibilityPolicy 全套；模块类取他的注入版）；
+- render 分支同轮 merge origin/dev（零冲突）+ core-contracts PRINTN 前提修真最小子集。
+
+**其他吸收**（随 merge 自然带入）：安卓导出四连修（SQLitePCLRaw 强制下载/assets-text 导出 SJIS 映射/compat 递归找根/.import keep）、LegacyRunnerHost 早期 Fail NRE 守卫（比本线 render 版更全，覆盖 config 未载路径）、DialectInventory.psm1 BOM（cp936 脆弱——本线踩过的同款坑）、AGENTS.md 游戏适配铁律（与本线方言方法论同向）。
+
+**教训**：1) **同 ModuleId 对撞先问"是不是同一个游戏版本"**——不同版本的同一游戏家族可能需要互补 quirk 集，合并语义是并集不是二选一。2) 部分克隆（promisor）仓库的按需对象获取走仓库配置代理，命令行 -c 不继承——lazy fetch 失败先查 `git config http.proxy`。3) 用户报的代理端口可能与实际监听不符（7890→实际 7897），netstat 一查便知。
