@@ -2590,6 +2590,7 @@ namespace MinorShift.Emuera.GameData.Variable
 			{
 				result.State = EraDataState.FILENOTFOUND;
 				result.DataMes = "----";
+				result.Version = 0;
 				return result;
 			}
 			FileStream fs = null;
@@ -2614,10 +2615,12 @@ namespace MinorShift.Emuera.GameData.Variable
 					{
 						result.State = EraDataState.VIRSION_ERROR;
 						result.DataMes = "セーブデータのバーションが異なります";
+						result.Version = version;
 						return result;
 					}
 					result.State = EraDataState.OK;
 					result.DataMes = reader.ReadString();
+					result.Version = version;
 					return result;
 					//result.State = EraDataState.ETC_ERROR;
 					//result.DataMes = "セーブデータが壊れています";
@@ -2641,10 +2644,12 @@ namespace MinorShift.Emuera.GameData.Variable
 				{
 					result.State = EraDataState.VIRSION_ERROR;
 					result.DataMes = "セーブデータのバーションが異なります";
+					result.Version = version;
 					return result;
 				}
 				result.State = EraDataState.OK;
 				result.DataMes = bReader.ReadString();
+				result.Version = version;
 				return result;
 			}
 			catch (FileEE fee)

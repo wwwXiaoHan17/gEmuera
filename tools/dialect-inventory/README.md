@@ -47,8 +47,8 @@ snapshot hash 只包含已选择 module 和规范化注册描述，不包含 ava
 ## 双上游接口差异报告
 
 `powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File tools\dialect-inventory\Invoke-LegacyDialectUpstreamDiff.ps1 -ProjectRoot . -V24ProjectRoot 'E:\MyCode\Era\emuera.em-master' -SnakeProjectRoot 'E:\MyCode\Era\emuera_lazyloading_selfmodified_version-main-skiasharp'
-powershell -NoProfile -ExecutionPolicy Bypass -File tools\dialect-inventory\Test-LegacyDialectUpstreamDiff.ps1 -ProjectRoot . -V24ProjectRoot 'E:\MyCode\Era\emuera.em-master' -SnakeProjectRoot 'E:\MyCode\Era\emuera_lazyloading_selfmodified_version-main-skiasharp'
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\dialect-inventory\Invoke-LegacyDialectUpstreamDiff.ps1 -ProjectRoot . -V24ProjectRoot 'E:\MyCode\Era\emuera.em-master' -SnakeProjectRoot 'E:\MyCode\Era\emuera_lazyloading_selfmodified_version-develop-skiasharp (2)\emuera_lazyloading_selfmodified_version-develop-skiasharp'
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\dialect-inventory\Test-LegacyDialectUpstreamDiff.ps1 -ProjectRoot . -V24ProjectRoot 'E:\MyCode\Era\emuera.em-master' -SnakeProjectRoot 'E:\MyCode\Era\emuera_lazyloading_selfmodified_version-develop-skiasharp (2)\emuera_lazyloading_selfmodified_version-develop-skiasharp'
 `
 
 - 公钥集合、profile 可见性声明、参数/返回类型与运行时执行四类门禁全部通过时报告 esult=Passed。

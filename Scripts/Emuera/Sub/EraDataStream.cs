@@ -23,6 +23,9 @@ namespace MinorShift.Emuera.Sub
 	{
 		public EraDataState State = EraDataState.OK;
 		public string DataMes = "";
+		// Skiav12.1：CHKDATA RESULT:1 用。ファイル不在等のエラー時は 0 のまま、
+		// バージョン不一致または正常時に実際のバージョンを代入。
+		public long Version;
 	}
 
 	/// <summary>

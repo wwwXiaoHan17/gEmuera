@@ -978,6 +978,78 @@ check1break:
 			if (erdNameToIntDics.ContainsKey(varname))
 				throw new CodeEE(varname + "は既に定義されています", sc);
 			erdNameToIntDics.Add(varname, dict);
+
+			// Skiav8.0：用户定义变量 CSV 旁的 .als 别名（VAR.als / 多维 VAR@N.als）。
+			// 别名注入 erdNameToIntDics[varname]，不覆盖 CSV 已有同名定义。
+			for (int i = 0; i < filepaths.Count; i++)
+			{
+				string aliasPath = Path.Combine(
+					Path.GetDirectoryName(filepaths[i]),
+					Path.GetFileNameWithoutExtension(filepaths[i]) + ".als");
+				loadAliasesForUserDefined(aliasPath, dict);
+			}
+		}
+
+		/// <summary>
+		/// 为用户定义变量加载 .als 别名文件，注入 erdNameToIntDics[varname] 字典。
+		/// 与系统变量的 loadAliases 不同：系统变量写入 aliases[targetIndex] 数组，
+		/// 用户变量没有 VariableCode 枚举索引，只能写入字典；重复别名静默跳过（CSV 优先，Skiav8.0 语义）。
+		/// </summary>
+		private void loadAliasesForUserDefined(string aliasPath, Dictionary<string, int> targetDict)
+		{
+			string resolvedAliasPath = uEmuera.Utils.ResolveExistingFilePath(aliasPath);
+			if (!string.IsNullOrEmpty(resolvedAliasPath))
+				aliasPath = resolvedAliasPath;
+			if (!uEmuera.Utils.FileExists(aliasPath))
+				return;
+			EraStreamReader eReader = new EraStreamReader(false);
+			if (!eReader.OpenOnCache(aliasPath))
+			{
+				output.PrintError(eReader.Filename + "のオープンに失敗しました");
+				return;
+			}
+			ScriptPosition position = null;
+			try
+			{
+				StringStream st = null;
+				Span<CsvFieldRange> fields = stackalloc CsvFieldRange[2];
+				while ((st = eReader.ReadEnabledLine()) != null)
+				{
+					position = new ScriptPosition(eReader.Filename, eReader.LineNo);
+					string source = st.RowString;
+					int startOffset = st.CurrentPosition;
+					int tokenCount = ReadCsvHeadFields(source, startOffset, fields);
+					if (tokenCount < 2)
+					{
+						ParserMediator.Warn("\",\"が必要です", position, 1);
+						continue;
+					}
+					int index;
+					if (!Int32.TryParse(source.AsSpan(fields[0].Start, fields[0].Length), out index))
+					{
+						ParserMediator.Warn("一つ目の値を整数値に変換できません", position, 1);
+						continue;
+					}
+					string aliasName = GetTrimmedFieldString(source, fields[1]);
+					if (string.IsNullOrEmpty(aliasName))
+						continue;
+					// 别名不覆盖 CSV 中已有的同名定义
+					if (!targetDict.ContainsKey(aliasName))
+						targetDict.Add(aliasName, index);
+				}
+			}
+			catch
+			{
+				uEmuera.Media.SystemSounds.Hand.Play();
+				if (position != null)
+					ParserMediator.Warn("予期しないエラーが発生しました", position, 3);
+				else
+					output.PrintError("予期しないエラーが発生しました");
+			}
+			finally
+			{
+				eReader.Close();
+			}
 		}
 
 		public void RegisterUserDefinedNameData(List<string> filepaths, string varname, int varlength, bool disp, ScriptPosition sc)

@@ -10,10 +10,10 @@ Emuera 核心编译器以 C# 编写，为减少开发成本、方便 AI 对接�
 
 - 首要运行与测试目标：Android/手机端，方案以导出 APK 可用为准。
 - 桌面端可用于调试，但不能替代 APK 验证结论。
-- 参考实现：`E:\MyCode\Era\emuera_lazyloading_selfmodified_version-main-skiasharp`、`E:\MyCode\Era\emuera.em-master`（v24）、`E:\MyCode\GodotCode\gemuera\uEmuera-0.2.9d`、`E:\MyCode\GodotCode\gemuera\XEmuera-0.5.1等`。
+- 参考实现：`E:\MyCode\Era\emuera_lazyloading_selfmodified_version-develop-skiasharp (2)\emuera_lazyloading_selfmodified_version-develop-skiasharp`（snake fork，Skiav12.1，2026-09-04 盘点基线，zip 解压无 git 历史）、`E:\MyCode\Era\emuera.em-master`（v24）、`E:\MyCode\GodotCode\gemuera\uEmuera-0.2.9d`、`E:\MyCode\GodotCode\gemuera\XEmuera-0.5.1等`。
 - 涉及 Godot 架构、UI、性能、平台适配时，使用 `godot-master` skill 辅助判断。
 - Snake 接口（`emuera_lazyloading_*`）语义对齐：修改 `Scripts/Emuera/` 解释器前对照
-  `E:\MyCode\Era\emuera_lazyloading_selfmodified_version-develop-skiasharp`，保证 ERB 语义不偏离。
+  `E:\MyCode\Era\emuera_lazyloading_selfmodified_version-develop-skiasharp (2)\emuera_lazyloading_selfmodified_version-develop-skiasharp`（CHANGELOG.md 即版本变更契约），保证 ERB 语义不偏离。
 
 ## 必读与配套文档
 
