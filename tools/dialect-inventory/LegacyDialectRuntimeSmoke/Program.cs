@@ -318,7 +318,10 @@ internal static class Program
 
         object parameter = convertTerm.Invoke(null, new object?[] { term, null })
             ?? throw new InvalidOperationException("PluginMethodParameterBuilder.ConvertTerm returned null.");
-        Type parameterType = RequiredType(legacyAssembly, "MinorShift.Emuera.Runtime.Utils.PluginSystem.PluginMethodParameter");
+        // Phase C 起 PluginMethodParameter 宿主在契约程序集 src/EmueraFacade（字面名 Emuera.dll，
+        // 命名空间保持 MinorShift.Emuera.Runtime.Utils.PluginSystem 不变），不在 gemuera-c#.dll；
+        // 从返回实例取运行时类型，断言与宿主程序集位置解耦。
+        Type parameterType = parameter.GetType();
         bool isFloat = (bool)(parameterType.GetField("isFloat", BindingFlags.Instance | BindingFlags.Public)?.GetValue(parameter)
             ?? throw new InvalidOperationException("PluginMethodParameter.isFloat was not found."));
         bool isString = (bool)(parameterType.GetField("isString", BindingFlags.Instance | BindingFlags.Public)?.GetValue(parameter)
