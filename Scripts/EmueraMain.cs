@@ -208,7 +208,7 @@ public partial class EmueraMain : Node
 		// VirtualMouse._Ready 的 MoveIntoOwnLayer 会把它移入专用 CanvasLayer(Layer=90)，
 		// 恒盖在内容(HTML div z 基准 1024)之上、光标/菜单/弹窗之下。
 		// 移动端自动启用；桌面端用系统菜单的鼠标按钮手动开启。
-		var mouseScene = GD.Load<PackedScene>("res://鼠标.tscn");
+		var mouseScene = GD.Load<PackedScene>("res://assets/scenes/鼠标.tscn");
 		if (mouseScene != null)
 		{
 			var mouse = mouseScene.Instantiate();

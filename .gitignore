@@ -1,76 +1,70 @@
-# Godot 4+ specific ignores
-# 注意：.import 侧车文件（如 main.jpg.import、*.ttf.import）是导入设置，官方要求提交 VCS，
-# 不要把它们加入 ignore。真正应忽略的是 .godot/（其下 imported/ 才是可再生的二进制缓存）。
+# ============================================================
+# Godot 4 工程
+# ============================================================
+# .godot/（含 imported/ 二进制缓存）是可再生目录，整体忽略。
+# 注意：*.import 侧车文件是导入设置（importer/uid/params），官方要求提交 VCS，勿加入忽略。
 .godot/
-
-# Android 导出工程（Godot 导出时生成在 Build/android/，编译产物不入库）
-/Build/android/
-
-# 预编译原生库（Android 导出前由 csproj 从 NuGet 包自愈恢复，不入库）
-/Build/NativeLibs/
-
-# Build output
-.mono/
-bin/
-obj/
-
-# gdUnit4 6.1.3 ships its CLI as source under this directory.
-!addons/gdUnit4/bin/
-!addons/gdUnit4/bin/**
-
-# OS files
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# IDE
-.vs/
-.vscode/
-*.user
-*.suo
-
-# Local AI operation logs
-action_maps/
-
-# Reference/legacy code (not part of this project)
-uEmuera-0.2.9d/
-XEmuera-0.5.1/
-
-# Game content (too large for git, users provide their own)
-eraAkumaMaid*/
-era*/
-
-# Export templates
 /export/
+
+# ============================================================
+# 构建与导出产物（统一落在 Build/ 下管理，不入库）
+# ============================================================
+# Godot Android 导出工程（导出时生成）
+/Build/android/
+# 预编译原生库（Android 导出前由 csproj 从 NuGet 包自愈恢复）
+/Build/NativeLibs/
 *.apk
 *.aab
 *.idsig
 *.exe
 *.pck
-*.console.exe
+.mono/
+bin/
+obj/
 
-# Node.js (tooling)
+# gdUnit4 6.1.3 以源码形式内置 CLI，保留入库
+!addons/gdUnit4/bin/
+!addons/gdUnit4/bin/**
+
+# ============================================================
+# AI / IDE 本地目录
+# ============================================================
+.zcode/
+.claude/worktrees/
+.trae/
+.vs/
+.vscode/
+.idea/
+.fleet/
+*.sln.iml
+*.user
+*.suo
+
+# ============================================================
+# Node.js 工具链
+# ============================================================
 node_modules/
 
-# IDE-specific (TRAE)
-.trae/
-
-# Build artifacts
-artifacts/
-
-# Test report output (gdUnit4 HTML/xml)
+# ============================================================
+# 测试与报告输出（gdUnit4 HTML/xml、xUnit 等）
+# ============================================================
 reports/
+TestResults/
+TestResults.xml
+*.trx
+*.coverage
+*.coveragexml
+coverage/
 
-# Stray test output
-1600
-
-# Logs, crash dumps, and one-off diagnostic output
+# ============================================================
+# 日志与临时文件
+# ============================================================
 *.log
 *.dmp
 *.stackdump
 logs/
-
-# Temporary files and editor recovery copies
+# 本地 AI 操作日志
+action_maps/
 *.tmp
 *.temp
 *.bak
@@ -80,18 +74,14 @@ logs/
 *.rej
 *~
 
-# Test and coverage output
-TestResults/
-TestResults.xml
-*.trx
-*.coverage
-*.coveragexml
-coverage/
+# ============================================================
+# 游戏内容（体积过大，不入库；玩家/打包脚本自备）
+# ============================================================
+era*/
 
-# Additional IDE metadata
-.idea/
-.fleet/
-*.sln.iml
-
-# Local worktrees created by Agent/Workflow tooling
-.claude/worktrees/
+# ============================================================
+# 系统文件
+# ============================================================
+.DS_Store
+Thumbs.db
+desktop.ini
