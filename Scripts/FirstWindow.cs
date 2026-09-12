@@ -1,6 +1,7 @@
 using Godot;
 using GEmuera.Core.Compatibility;
 using gEmuera.Diagnostics;
+using gEmuera.GodotHost;
 using System.Collections.Generic;
 using System.IO;
 
@@ -8,15 +9,7 @@ public partial class FirstWindow : Control
 {
 	const string ProjectGitHubUrl = "https://github.com/wwwXiaoHan17/gEmuera";
 	const string FeedbackQqGroup = "413675556";
-	const string LauncherSettingsPath = "user://launcher.cfg";
-	const string LauncherSettingsSection = "launcher";
-	const string LauncherLastGamePathKey = "last_game_path";
-	const string LauncherLastCoreProfileKey = "last_core_profile";
-	const string LauncherAdvancedCompatibilityKey = "advanced_compatibility";
-	const string LauncherManualCoreProfileKey = "manual_core_profile";
-	// WS1（引擎侧）读取这两个键的契约，键名不可改名。
-	const string LauncherEmueraDebugModeKey = "emuera_debug_mode";
-	const string LauncherDebugShowWindowKey = "debug_show_window";
+	// user://launcher.cfg [launcher] 的读写统一走 gEmuera.GodotHost.LauncherSettingsStore。
 	const string CompatibilityDirectoryName = "compat";
 	const string SnakeDirectoryName = "snake";
 	const int LauncherScrollBarWidth = 24;
@@ -104,6 +97,7 @@ public partial class FirstWindow : Control
 
 		SelectedGamePath = path.TrimEnd('/', '\\');
 		SelectedCoreProfileName = normalizedProfileName;
+		MinorShift.Emuera.Program.SetLauncherCompatibilityProfile(normalizedProfileName);
 		return true;
 	}
 
@@ -844,27 +838,13 @@ public partial class FirstWindow : Control
 
 	static void LoadLauncherDebugSettings()
 	{
-		var config = new ConfigFile();
-		if (config.Load(LauncherSettingsPath) != Error.Ok)
-			return;
-
-		EmueraDebugModeEnabled = config.GetValue(
-			LauncherSettingsSection,
-			LauncherEmueraDebugModeKey,
-			false).AsBool();
-		DebugShowWindowEnabled = config.GetValue(
-			LauncherSettingsSection,
-			LauncherDebugShowWindowKey,
-			true).AsBool();
+		EmueraDebugModeEnabled = LauncherSettingsStore.LoadEmueraDebugMode();
+		DebugShowWindowEnabled = LauncherSettingsStore.LoadDebugShowWindow();
 	}
 
 	static void SaveLauncherDebugSettings()
 	{
-		var config = new ConfigFile();
-		config.Load(LauncherSettingsPath);
-		config.SetValue(LauncherSettingsSection, LauncherEmueraDebugModeKey, EmueraDebugModeEnabled);
-		config.SetValue(LauncherSettingsSection, LauncherDebugShowWindowKey, DebugShowWindowEnabled);
-		config.Save(LauncherSettingsPath);
+		LauncherSettingsStore.SaveDebugSettings(EmueraDebugModeEnabled, DebugShowWindowEnabled);
 	}
 
 	/// <summary>
@@ -1083,27 +1063,14 @@ public partial class FirstWindow : Control
 
 	static void LoadCompatibilitySettings()
 	{
-		var config = new ConfigFile();
-		if (config.Load(LauncherSettingsPath) != Error.Ok)
-			return;
-
-		AdvancedCompatibilityEnabled = config.GetValue(
-			LauncherSettingsSection,
-			LauncherAdvancedCompatibilityKey,
-			false).AsBool();
-		ManualCoreProfileName = NormalizeManualCoreProfileName(config.GetValue(
-			LauncherSettingsSection,
-			LauncherManualCoreProfileKey,
-			CoreProfileV24Pure).AsString());
+		AdvancedCompatibilityEnabled = LauncherSettingsStore.LoadAdvancedCompatibility();
+		ManualCoreProfileName = NormalizeManualCoreProfileName(
+			LauncherSettingsStore.LoadManualCoreProfileName(CoreProfileV24Pure));
 	}
 
 	static void SaveCompatibilitySettings()
 	{
-		var config = new ConfigFile();
-		config.Load(LauncherSettingsPath);
-		config.SetValue(LauncherSettingsSection, LauncherAdvancedCompatibilityKey, AdvancedCompatibilityEnabled);
-		config.SetValue(LauncherSettingsSection, LauncherManualCoreProfileKey, ManualCoreProfileName);
-		config.Save(LauncherSettingsPath);
+		LauncherSettingsStore.SaveCompatibilitySettings(AdvancedCompatibilityEnabled, ManualCoreProfileName);
 	}
 
 	static string NormalizeManualCoreProfileName(string profileName)
@@ -1867,6 +1834,7 @@ public partial class FirstWindow : Control
 		{
 			SelectedGamePath = saved;
 			SelectedCoreProfileName = LoadLastCoreProfileName();
+			MinorShift.Emuera.Program.SetLauncherCompatibilityProfile(SelectedCoreProfileName);
 			return saved;
 		}
 
@@ -1907,6 +1875,7 @@ public partial class FirstWindow : Control
 
 		SelectedGamePath = path.TrimEnd('/', '\\');
 		SelectedCoreProfileName = normalizedProfileName;
+		MinorShift.Emuera.Program.SetLauncherCompatibilityProfile(normalizedProfileName);
 		SaveLastGamePath(SelectedGamePath, SelectedCoreProfileName);
 	}
 
@@ -1960,20 +1929,12 @@ public partial class FirstWindow : Control
 
 	static string LoadLastGamePath()
 	{
-		var config = new ConfigFile();
-		if (config.Load(LauncherSettingsPath) != Error.Ok)
-			return null;
-
-		return config.GetValue(LauncherSettingsSection, LauncherLastGamePathKey, "").As<string>();
+		return LauncherSettingsStore.LoadLastGamePath();
 	}
 
 	static string LoadLastCoreProfileName()
 	{
-		var config = new ConfigFile();
-		if (config.Load(LauncherSettingsPath) != Error.Ok)
-			return CoreProfileV24Pure;
-
-		return NormalizeCoreProfileName(config.GetValue(LauncherSettingsSection, LauncherLastCoreProfileKey, CoreProfileV24Pure).As<string>());
+		return NormalizeCoreProfileName(LauncherSettingsStore.LoadLastCoreProfileName(CoreProfileV24Pure));
 	}
 
 	static void SaveLastGamePath(string path, string coreProfileName)
@@ -1983,11 +1944,7 @@ public partial class FirstWindow : Control
 		if (!TryNormalizeCoreProfileName(coreProfileName, out string normalizedProfileName))
 			return;
 
-		var config = new ConfigFile();
-		config.Load(LauncherSettingsPath);
-		config.SetValue(LauncherSettingsSection, LauncherLastGamePathKey, path);
-		config.SetValue(LauncherSettingsSection, LauncherLastCoreProfileKey, normalizedProfileName);
-		config.Save(LauncherSettingsPath);
+		LauncherSettingsStore.SaveLastGamePath(path, normalizedProfileName);
 	}
 
 	static string FindFirstEraGameDirectory(string root, int maxDepth)

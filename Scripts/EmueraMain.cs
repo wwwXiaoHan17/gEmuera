@@ -101,29 +101,16 @@ public partial class EmueraMain : Node
 		CallDeferred(nameof(StartGameDeferred));
 	}
 
-	const string LauncherSettingsPath = "user://launcher.cfg";
-	const string LauncherSettingsSection = "launcher";
-	const string LauncherEmueraDebugModeKey = "emuera_debug_mode";
-	const string LauncherDebugShowWindowKey = "debug_show_window";
-
 	/// <summary>
-	/// 从 user://launcher.cfg [launcher] 读取 Emuera DEBUG 开关并应用到会话启动链：
+	/// 从 user://launcher.cfg [launcher]（唯一读写点 LauncherSettingsStore）读取 Emuera DEBUG 开关并应用到会话启动链：
 	/// emuera_debug_mode → debug 标志（与 Export 位或）；debug_show_window →
 	/// EmueraThread.DebugShowWindowOverride → Program.DebugShowWindowOverride（launcher
 	/// 覆盖 debug.config，默认 true，仅在 DEBUG 模式下生效）。
 	/// </summary>
 	void ApplyLauncherDebugSettings()
 	{
-		bool emueraDebugMode = false;
-		bool showWindow = true;
-		var config = new ConfigFile();
-		if (config.Load(LauncherSettingsPath) == Error.Ok)
-		{
-			emueraDebugMode = config.GetValue(
-				LauncherSettingsSection, LauncherEmueraDebugModeKey, false).AsBool();
-			showWindow = config.GetValue(
-				LauncherSettingsSection, LauncherDebugShowWindowKey, true).AsBool();
-		}
+		bool emueraDebugMode = gEmuera.GodotHost.LauncherSettingsStore.LoadEmueraDebugMode();
+		bool showWindow = gEmuera.GodotHost.LauncherSettingsStore.LoadDebugShowWindow();
 		if (emueraDebugMode)
 			debug = true;
 		debugShowWindowOverride = showWindow;

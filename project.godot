@@ -18,11 +18,6 @@ prototype_runtime=true
 typed_ports=true
 pixel_store=true
 
-[autoload]
-
-AppBootstrap="*res://Scripts/GodotHost/AppBootstrap.cs"
-PlatformGateway="*res://Scripts/GodotHost/PlatformGateway.cs"
-
 [display]
 
 window/stretch/mode="canvas_items"
