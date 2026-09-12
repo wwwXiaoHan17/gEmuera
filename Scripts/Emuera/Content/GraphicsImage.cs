@@ -1,3 +1,4 @@
+using System.Numerics;
 using MinorShift._Library;
 using System;
 using System.Collections.Generic;
@@ -440,16 +441,35 @@ namespace MinorShift.Emuera.Content
 				return sub;
 			int w = sub.GetWidth();
 			int h = sub.GetHeight();
+			byte[] data = sub.GetData();
+			data = ApplyColorMatrixBytes(data, cm);
+			// Write the transformed buffer back once. Keeping the image mutation
+			// batched avoids repeated native interop calls and minimizes GC pressure.
+			sub.SetData(w, h, false, Godot.Image.Format.Rgba8, data);
+			return sub;
+		}
 
-			// Hoist matrix entries out of the pixel loop so each pixel only performs
-			// arithmetic and byte writes. This path is used when GPU submission is not
-			// available or times out.
+		// ApplyColorMatrix 的纯字节算术（无 Godot 依赖）：拆出供
+		// LegacyCompositionBitAlignTest 做替换路线的位级对齐实测。
+		// 语义逐位不变：byte/255f → 5×4 矩阵乘 → ToByte。
+		//
+		// 2026-09-12 两条替换路线经位对齐工具实测否决（证据见工具输出）：
+		//  1) Skia SKColorFilter：~1/3 采样像素不一致（alpha=0 输出强置全零 + 舍入
+		//     路径差异），零可观测差异约束下不可用；
+		//  2) System.Numerics gather/scatter SIMD：位级可对齐（150,752 采样零差异，
+		//     含 banker's 舍入显式构造），但 1Mpx×30 实测 0.94x 无净收益——通道
+		//     gather/scatter 的标量开销与未向量化的 byte/255 除法稀释了矩阵乘收益。
+		//     后续 SIMD 复试前提：byte→float 向量转换 + 通道 deinterleave 全向量化。
+		//
+		// ToByte 舍入语义确证：Godot Mathf.RoundToInt = Math.Round 默认 ToEven
+		//（banker's，x.5→偶数，如 165.5→166、90.5→90）——勿按 away-from-zero 理解。
+		internal static byte[] ApplyColorMatrixBytes(byte[] data, float[][] cm)
+		{
 			float m00 = cm[0][0], m10 = cm[1][0], m20 = cm[2][0], m30 = cm[3][0], m40 = cm[4][0];
 			float m01 = cm[0][1], m11 = cm[1][1], m21 = cm[2][1], m31 = cm[3][1], m41 = cm[4][1];
 			float m02 = cm[0][2], m12 = cm[1][2], m22 = cm[2][2], m32 = cm[3][2], m42 = cm[4][2];
 			float m03 = cm[0][3], m13 = cm[1][3], m23 = cm[2][3], m33 = cm[3][3], m43 = cm[4][3];
 
-			byte[] data = sub.GetData();
 			for (int i = 0; i + 3 < data.Length; i += 4)
 			{
 				float r = data[i] / 255.0f;
@@ -467,11 +487,7 @@ namespace MinorShift.Emuera.Content
 				data[i + 2] = ToByte(nb);
 				data[i + 3] = ToByte(na);
 			}
-
-			// Write the transformed buffer back once. Keeping the image mutation
-			// batched avoids repeated native interop calls and minimizes GC pressure.
-			sub.SetData(w, h, false, Godot.Image.Format.Rgba8, data);
-			return sub;
+			return data;
 		}
 
 		static byte ToByte(float value)
