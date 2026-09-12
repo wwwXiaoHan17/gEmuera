@@ -492,6 +492,7 @@ internal static class GenericUtils
             ? new InputReplayBuffer(cfg.InputReplayMaxEvents)
             : null;
         _saveLogOperationTrail.Clear();
+        ResetAutoDiagnosticExport();
 
         scrollTraceSequence = 0;
         scrollTraceCoreLinesRemaining = 0;
@@ -1298,6 +1299,38 @@ internal static class GenericUtils
         if (_runtimeConfig != null && _runtimeConfig.BreadcrumbWriteOnExport)
             DiagnosticLogExporter.WriteBreadcrumb(_runtimeConfig, "BREADCRUMB.WRITE", "event=after_export ok=" + ok);
         return ok;
+    }
+
+    // —— emuera.log 自动触发诊断导出（2026-09-12）——
+    // 引擎在游戏报错路径自动写出 emuera.log（启动致命错误/解析警告容错/运行中错误）。
+    // 此前 gemuera 侧诊断日志只能靠菜单手工导出；现在首个 emuera.log 落盘时会话内
+    // 自动导出一次（含错误上下文，最有排障价值），后续报错不再重复导出文件。
+    static int autoDiagnosticExported;
+
+    /// <summary>
+    /// 引擎自动写出 emuera.log 时调用：会话内首次触发 gemuera 诊断导出（主线程执行）。
+    /// 幂等；线程安全（Interlocked 抢占 + EnqueueUI 切主线程，导出与手工触发同路径）。
+    /// </summary>
+    public static void AutoExportDiagnosticOnEmueraLog(string emueraLogPath)
+    {
+        if (System.Threading.Interlocked.Exchange(ref autoDiagnosticExported, 1) != 0)
+            return;
+        string stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+        EnqueueUI(() =>
+        {
+            string diagnosticPath = GetDefaultDiagnosticLogPath("auto_" + stamp);
+            // 触发记录写在导出之前：让 auto 日志自身包含触发链（emuera.log 路径），
+            // 排障时单文件自足；导出结果另由后续日志/面板可见。
+            Info(EmueraLogCategory.General, () =>
+                $"[SaveLog] auto-export triggered by emuera.log at {emueraLogPath}; exporting to {diagnosticPath}");
+            ExportDiagnosticLog(diagnosticPath, out _);
+        });
+    }
+
+    /// <summary>会话重置时清自动导出标志（与 _saveLogOperationTrail 等会话态一致）。</summary>
+    static void ResetAutoDiagnosticExport()
+    {
+        System.Threading.Interlocked.Exchange(ref autoDiagnosticExported, 0);
     }
 
     public static bool ExportDiagnosticPackage(string outputDirectory, out string errorMessage)
