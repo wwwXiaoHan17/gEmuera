@@ -490,6 +490,60 @@ namespace MinorShift.Emuera.Content
 			return data;
 		}
 
+		// GDrawGWithMask 的纯字节算术（无 Godot 依赖），拆出供位对齐工具与 bench 裁决。
+		// 语义：maskByte = mask.R（mask.A<255 时改用 mask.A）；==0 跳过保持 dst；
+		// ==255 直拷；其余 (src*ma + dst*ia)>>8（ma=mask+1——整数域，无浮点舍入）。
+		//
+		// 2026-09-12 替换路线裁决（详见 LegacyCompositionBitAlignTest 与进化记录）：
+		//  1) Skia blend：推演否决——maskByte 的 R/A 特殊规则、ma=mask+1 量化、>>8 截断
+		//     三重非标准语义在 SKBlendMode 中无对应（ColorMatrix 实测已证 Skia 混合的
+		//     alpha 预乘路径不可对齐）。
+		//  2) SIMD：混合和 src*ma+dst*ia ≤ 255*256+255*255=130,305 溢出 16 位向量域，
+		//     必须双 widen 到 uint 域 + mask 四通道广播 gather。基线实测 11.2 ms/Mpx
+		//     （ColorMatrix 标量基线 41.8 ms/Mpx 下 gather/scatter SIMD 尚且 0.94x 无收益；
+		//     本循环标量更便宜 3.7 倍而向量化复杂度更高）——推演否决，负优化不实现。
+		internal static bool BlendWithMaskBytes(
+			byte[] dstData, int dw, int dh,
+			byte[] srcData, int srcW,
+			byte[] maskData, int maskW,
+			int w, int h, int destX, int destY)
+		{
+			bool modified = false;
+			for (int y = 0; y < h; y++)
+			{
+				int dy = destY + y;
+				if (dy < 0 || dy >= dh) continue;
+				for (int x = 0; x < w; x++)
+				{
+					int dx = destX + x;
+					if (dx < 0 || dx >= dw) continue;
+					int mi = (y * maskW + x) * 4;
+					int maskByte = maskData[mi];
+					if (maskData[mi + 3] < 255)
+						maskByte = maskData[mi + 3];
+					if (maskByte == 0) continue;
+					int si = (y * srcW + x) * 4;
+					int di = (dy * dw + dx) * 4;
+					if (maskByte == 255)
+					{
+						dstData[di] = srcData[si]; dstData[di+1] = srcData[si+1];
+						dstData[di+2] = srcData[si+2]; dstData[di+3] = srcData[si+3];
+					}
+					else
+					{
+						int ma = maskByte + 1;
+						int ia = 256 - ma;
+						dstData[di]   = (byte)((srcData[si]   * ma + dstData[di]   * ia) >> 8);
+						dstData[di+1] = (byte)((srcData[si+1] * ma + dstData[di+1] * ia) >> 8);
+						dstData[di+2] = (byte)((srcData[si+2] * ma + dstData[di+2] * ia) >> 8);
+						dstData[di+3] = (byte)((srcData[si+3] * ma + dstData[di+3] * ia) >> 8);
+					}
+					modified = true;
+				}
+			}
+			return modified;
+		}
+
 		static byte ToByte(float value)
 		{
 			return (byte)Godot.Mathf.Clamp(Godot.Mathf.RoundToInt(value * 255.0f), 0, 255);
@@ -721,39 +775,7 @@ namespace MinorShift.Emuera.Content
 				byte[] dstData = godotImage.GetData();
 				byte[] srcData = srcGra.godotImage.GetData();
 				byte[] maskData = maskGra.godotImage.GetData();
-				bool modified = false;
-				for (int y = 0; y < h; y++)
-				{
-					int dy = destPoint.Y + y;
-					if (dy < 0 || dy >= dh) continue;
-					for (int x = 0; x < w; x++)
-					{
-						int dx = destPoint.X + x;
-						if (dx < 0 || dx >= dw) continue;
-						int mi = (y * maskW + x) * 4;
-						int maskByte = maskData[mi];
-						if (maskData[mi + 3] < 255)
-							maskByte = maskData[mi + 3];
-						if (maskByte == 0) continue;
-						int si = (y * srcW + x) * 4;
-						int di = (dy * dw + dx) * 4;
-						if (maskByte == 255)
-						{
-							dstData[di] = srcData[si]; dstData[di+1] = srcData[si+1];
-							dstData[di+2] = srcData[si+2]; dstData[di+3] = srcData[si+3];
-						}
-						else
-						{
-							int ma = maskByte + 1;
-							int ia = 256 - ma;
-							dstData[di]   = (byte)((srcData[si]   * ma + dstData[di]   * ia) >> 8);
-							dstData[di+1] = (byte)((srcData[si+1] * ma + dstData[di+1] * ia) >> 8);
-							dstData[di+2] = (byte)((srcData[si+2] * ma + dstData[di+2] * ia) >> 8);
-							dstData[di+3] = (byte)((srcData[si+3] * ma + dstData[di+3] * ia) >> 8);
-						}
-						modified = true;
-					}
-				}
+				bool modified = BlendWithMaskBytes(dstData, dw, dh, srcData, srcW, maskData, maskW, w, h, destPoint.X, destPoint.Y);
 				if (modified)
 				{
 					// Push mask-composited bytes only when a pixel actually changed. Some

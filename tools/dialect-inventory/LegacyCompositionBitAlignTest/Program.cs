@@ -54,6 +54,7 @@ internal static class Program
             Console.WriteLine(skiaMismatches > 0
                 ? "VERDICT: Skia SKColorFilter is NOT bit-aligned — route rejected under the zero-observable-difference mandate."
                 : "VERDICT: Skia SKColorFilter aligned in this sample space.");
+            BenchmarkMaskBlend(30);
             return 0;
         }
         catch (Exception exception)
@@ -61,6 +62,42 @@ internal static class Program
             Console.Error.WriteLine(exception);
             return 1;
         }
+    }
+
+    private static void BenchmarkMaskBlend(int rounds)
+    {
+        var blend = ResolveLegacyApply("BlendWithMaskBytes");
+        var random = new Random(20260912);
+        int size = 1024; // 1Mpx 方形
+        var dst = new byte[size * size * 4];
+        var src = new byte[size * size * 4];
+        var mask = new byte[size * size * 4];
+        random.NextBytes(dst);
+        random.NextBytes(src);
+        // mask 覆盖三分支：0（跳过）/255（直拷）/中间（整数混合），alpha 通道混入 <255 触发 R→A 切换。
+        for (int i = 0; i < size * size; i++)
+        {
+            int r = random.Next(100);
+            mask[i * 4] = r == 0 ? (byte)0 : r == 1 ? (byte)255 : (byte)random.Next(256);
+            mask[i * 4 + 3] = r == 2 ? (byte)200 : (byte)255;
+        }
+        int destX = 3, destY = 5; // 含边界裁剪路径
+        var args = new object[] { dst, size, size, src, size, mask, size, size - 8, size - 10, destX, destY };
+        _ = blend.Invoke(null, args)!;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        for (int i = 0; i < rounds; i++)
+        {
+            args[0] = dst;
+            _ = blend.Invoke(null, args)!;
+        }
+        sw.Stop();
+        double msPerMpx = sw.ElapsedMilliseconds / (double)rounds;
+        Console.WriteLine($"mask-blend baseline: {msPerMpx:F1} ms/Mpx (scalar; {rounds} rounds)");
+        // 裁决基准：<10ms/Mpx 即远低于一帧预算的零头，任何替换路线（含理论 SIMD 2-4x）
+        // 的绝对收益都在噪声级——与 ColorMatrix 的 0.94x 先验共同构成"不做"的依据。
+        Console.WriteLine(msPerMpx < 10.0
+            ? "VERDICT: mask-blend is not a hot spot at this cost — replacement routes rejected on magnitude grounds."
+            : $"VERDICT: mask-blend costs {msPerMpx:F1} ms/Mpx — replacement may be worth revisiting with full vectorization.");
     }
 
     private static MethodInfo ResolveLegacyApply(string methodName)

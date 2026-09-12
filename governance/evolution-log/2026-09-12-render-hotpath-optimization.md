@@ -67,3 +67,20 @@
 1. 用例：任何调用 GDRAWSTRING 的游戏（erablue/汉化系）正常游玩 + 制造主线程重载（快速滚动+连续点击）；
 2. 观察点：G 系文本是否完整渲染（修复点=原 500ms 超时静默丢文本）；worker 是否卡死（画面停但主线程响应）；
 3. 卡死首查点：`EmueraTextRenderComponent` 场景生命周期——若组件随场景释放而 pending item 未完成，worker 会永挂于 `item.Completed.Wait(Timeout.Infinite)`；表现为 ERB 停跑、UI 仍动。此场景需改为"场景释放时完成或取消挂起项"，届时回调本条修正。
+
+## 补遗三：三大 CPU 字节循环终局表（同日）
+
+GDrawGWithMask 掩码循环（目标点名的第三个）裁决收口：拆纯函数 + Skia 推演否决
+（maskByte 的 R/A 特殊规则、ma=mask+1 量化、>>8 截断三重非标准语义无 SKBlendMode 对应）
++ SIMD 推演否决（混合和 130,305 溢出 16 位域须 uint 双 widen；基线 11.2 ms/Mpx 对比
+ColorMatrix 41.8 ms/Mpx 基线下 SIMD 尚且 0.94x 的实测先验——更便宜基线 × 更高复杂度=无净收益）。
+
+| 循环 | 标量基线 | 替换路线裁决 | 依据 |
+|---|---|---|---|
+| ApplyColorMatrix | 41.8 ms/Mpx | Skia 否决；SIMD 否决 | 150,752 比对 49,969 不匹配；SIMD 位级对齐但 0.94x |
+| GRotate | ~逐像素旋转 | 语义禁区 | banker's 取整+引擎探测表+覆盖顺序不可复刻 |
+| GDrawGWithMask | 11.2 ms/Mpx | Skia 推演否决；SIMD 推演否决 | 三重非标准语义；溢出约束+先验类比 |
+
+**三大循环的共同终局：CPU 标量即语义约束下的最优形态**（ColorMatrix 另有 64 项 memoize
+兜住重复合成）。Android IO 税子项已由合成源 pin 单独解决。后续唯一现实的 Pain 2 深水区是
+行级烘焙（Pain 1 同源）与真机 DPI 矩阵验证，见前述路线。
