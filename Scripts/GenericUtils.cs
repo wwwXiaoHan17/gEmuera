@@ -1800,6 +1800,22 @@ internal static class GenericUtils
     }
 
     /// <summary>
+    /// 企业级说明：输出结构化性能报告日志，event_id 与 data 原样写入结构化记录（docs/logging-convention.md §2）。
+    /// 与 InputTrace 家族对称，但不做文本截断——性能报告不含用户输入。message/data 延迟构造，
+    /// 仅在等级/类别/限流全部通过后执行。
+    /// </summary>
+    public static void PerfTrace(string eventId, Func<string> messageFactory, Func<string> dataFactory = null,
+        [CallerMemberName] string member = "",
+        [CallerFilePath] string file = "",
+        [CallerLineNumber] int line = 0)
+    {
+        if (!IsLogEnabled(EmueraLogLevel.Info, EmueraLogCategory.Performance))
+            return;
+        LogStructured(EmueraLogLevel.Info, EmueraLogCategory.Performance, eventId, dataFactory,
+            messageFactory, member, file, line);
+    }
+
+    /// <summary>
     /// 企业级说明：输出结构化图片诊断日志，event_id 与 data 原样写入结构化记录。
     /// 路径脱敏，长路径截断，不输出像素或二进制。
     /// </summary>

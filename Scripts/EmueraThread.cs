@@ -238,7 +238,8 @@ public class EmueraThread
 				catch (Exception ex)
 				{
 					// 兜底：定时器回调抛出的异常不应终止 worker 线程（与输入路径的防御一致）。
-					Godot.GD.PrintErr("[EmueraThread] Timer.Update failed: " + ex);
+					// Error 级经路由后由 sink 自动 PushError 镜像到 Godot 控制台。
+					GenericUtils.Error("EmueraThread: Timer.Update 异常 → " + ex.GetType().Name + ": " + ex.Message);
 				}
 			}
 

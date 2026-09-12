@@ -23,6 +23,7 @@ Emuera 核心编译器以 C# 编写，为减少开发成本、方便 AI 对接�
 | `governance/`                                   | 按需     | Agent 自我进化机制：任务复盘记录（evolution-log/）+ 用户提示词模式库（prompt-patterns/）。任务结束提交 PR 前按 `governance/README.md` 写进化记录 |
 | `addons/gdUnit4/ADDON.md`                       | 按需     | GDUnit4 插件使用指南（WHY/WHEN/WHERE/HOW），用 GDUnit 做 TDD 时阅读                  |
 | `ERBAPI.md`                                     | ERB解释器接口 | 需要为新的Era游戏做适配，且当前的Erb语法解析无法实现时，又或者需要更新Erb语法解释器时，指导Agent对接              |
+| `docs/logging-convention.md`                    | 按需     | 日志内容层规范：文案句式、EventId 命名空间、语言政策、文件落点清单、旁路禁令。新增诊断日志或排查日志问题前阅读                |
 | `readme/README.md`（另有 en/ja 版）              | 项目概述   | 项目结构、构建、致谢；结构变更后请同步更新                                       |
 
 > 历史 `docs/OriginalFrameworkDesign/`、`docs/gEmueraCodeWiki/`、`docs/staging/` 已删除（其内容已过时或被本文与 `src/Core/` 取代）。
