@@ -832,6 +832,15 @@ namespace MinorShift.Emuera.GameView
 
 			if (outputLog(filename, hideInfo))
 			{
+				// 游戏报错自动触发 save_log：仅引擎自发的 emuera.log（basename 精确匹配且
+				// 非隐藏信息模式），不误触游戏 OUTPUTLOG 自定义名与菜单带时间戳快照。
+				// 会话内首次触发；导出经主线程队列执行（legacy-runner 场景导出落在
+				// runtime-game 副本内，随副本清理，不污染真机目录）。
+				if (!hideInfo
+					&& string.Equals(Path.GetFileName(filename), "emuera.log", StringComparison.OrdinalIgnoreCase))
+				{
+					global::GenericUtils.AutoExportDiagnosticOnEmueraLog(filename);
+				}
 				if (window.Created)
 				{
 					string displayFilename = runnerDefaultLogRedirected
