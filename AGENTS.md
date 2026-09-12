@@ -24,10 +24,10 @@ Emuera 核心编译器以 C# 编写，为减少开发成本、方便 AI 对接�
 | `addons/gdUnit4/ADDON.md`                       | 按需     | GDUnit4 插件使用指南（WHY/WHEN/WHERE/HOW），用 GDUnit 做 TDD 时阅读                  |
 | `ERBAPI.md`                                     | ERB解释器接口 | 需要为新的Era游戏做适配，且当前的Erb语法解析无法实现时，又或者需要更新Erb语法解释器时，指导Agent对接              |
 | `readme/README.md`（另有 en/ja 版）              | 项目概述   | 项目结构、构建、致谢；结构变更后请同步更新                                       |
-| `_CLAUDE.md`                                    | 归档参考   | 原 Claude/AI 工具执行指南（已由本文替代），含详细规则可备查                                    |
 
-> 历史 `docs/NewFrameworkDesign/`、`docs/OriginalFrameworkDesign/`、`docs/gEmueraCodeWiki/`、
-> `docs/staging/`、`docs/plans/` 已删除（其内容已过时或被本文与 `src/Core/` 取代）。
+> 历史 `docs/OriginalFrameworkDesign/`、`docs/gEmueraCodeWiki/`、`docs/staging/` 已删除（其内容已过时或被本文与 `src/Core/` 取代）。
+> `docs/plans/2026-08-11-spike-checkpoint-pipeline-workflow.md`（检查点管线工作流 spike 记录）与 `docs/NewFrameworkDesign/generated/dialect-registry-snapshots.json`（方言证据快照）仍保留且在使用中。
+> 原 AI 执行指南 `_CLAUDE.md` 亦已删除（2026-08-05），内容见 git 历史。
 > 不要重新创建 M0/M1…M7 之类"阶段代号"命名，AGENT 初见必须能从名字直接理解用途。
 
 ## 使用的工具与项目
@@ -44,6 +44,8 @@ Emuera 核心编译器以 C# 编写，为减少开发成本、方便 AI 对接�
 
 - GDUnit4：测试 Godot 场景与需 Godot 组件的功能。
 - xUnit：测试 Emuera 核心（ERB 语法解释器）的纯 C# 逻辑。
+
+**游戏适配铁律（2026-09-07 起强制）**：为任何 Era 游戏做适配时，行为差异**必须**以方言模块方式实现（eraFL 模式：Core 声明模块 + BuiltInDialectCatalog 注册 + LegacyCompatibilityModule 的 Declare/Apply 会话门控 + policy flag 消费），**禁止直接修改 v24 基线共享路径**（Parser/VM/字典的未门控代码）。判断标准：改动在 v24pure/snake/erafl 会话下必须逐字节等价，并以方言快照名录对比（新旧 profile 指令/函数清单零差异）作为"未选择侧不变"的硬证据。参考先例：`governance/evolution-log/2026-08-22-erafl-dialect-manifest.md` 与 `2026-09-07-eramegan-adaptation.md`（含一次违规返工的完整记录）。
 
 任务结束后，删除冗余的临时测试文件，避免造成垃圾文件。
 
@@ -75,7 +77,7 @@ project.godot -> first_window.tscn -> FirstWindow._Ready()
 - `Scripts/Emuera/GameProc/` — ERB 加载、逻辑行解析、label 索引、脚本执行状态机、lazy loading。
 - `Scripts/Emuera/GameData/` — 变量、表达式、常量、函数方法、角色数据。
 - `Scripts/Emuera/Content/` — 图片、精灵、Graphics surface、ColorMatrix 绘制。
-- `Scripts/Emuera/LegacyRunner/` — 旧版显示/输入回放诊断（原 `Scripts/M0/`，命名空间 `gEmuera.LegacyRunner`）。
+- `Scripts/LegacyRunner/` — 旧版显示/输入回放诊断（原 `Scripts/M0/`，命名空间 `gEmuera.LegacyRunner`）。
 - `Scripts/GodotHost/` — Godot 生命周期/平台桥组件（AppBootstrap、PlatformGateway、Emuera*Component）。
 - `Scripts/uEmuera/` — `System.Drawing` / `System.Windows.Forms` 兼容层。
 - `Scripts/Diagnostics/` — 运行期诊断、日志路由、导出、输入回放、诊断面板。
@@ -98,6 +100,16 @@ project.godot -> first_window.tscn -> FirstWindow._Ready()
 5. **编译产物不入库**：`.gitignore` 已排除 `.godot/`、`bin/`、`obj/`、`Build/NativeLibs/`、
    `Build/android/`、`*.apk/aab/exe/pck/idsig`、`reports/`、`artifacts/`。不要把新的编译/导出物加进 git。
    构建/打包相关文件夹（android 导出工程、NativeLibs、Fixtures、APK 产物）统一放在根目录 `Build/` 下管理。
+6. **C# 文件规模与细分**：新建文件硬上限 1500 行；既有 >2000 行文件"只减不增"，触碰时按功能域
+   顺手拆分（`Type.Feature.cs` partial 模式，纯移动不混逻辑改动）。拆分前必须核对仓库六类路径
+   钉扎/链接机制（方言证据链、契约测试、tools 工程源链接、场景脚本引用等），详见
+   [FILE_STANDARD.md](FILE_STANDARD.md) §6。
+7. **游戏内容与运行产物不得进入项目根（res://）**：Godot 编辑器会递归扫描导入 res:// 下全部资源，
+   一个 era 游戏意味着上千 CSV/上万文件，会令编辑器卡死并在游戏目录生成大量 `*.translation` 垃圾
+   （2026-09-07 实证：经 junction 链入后编辑器导入 1457 个 translation 文件）。因此：游戏本体只放
+   启动器扫描根（桌面编辑器运行=Godot exe 同级 `compat\<profile>\<游戏>`；Android=
+   `/storage/emulated/0/emuera/`）；`legacy-runner` 的 `-OutputDirectory` 必须指向**项目外**目录
+   （如 `D:\gemuera-reports\`）；禁止用 junction/symlink/复制把游戏放进 `D:\gemuera` 内。
 
 定位文件：优先用 CodeGraph（`codegraph explore "符号名"`）或 `src/Core`/`Scripts` 目录结构判断；
 不要靠猜测。

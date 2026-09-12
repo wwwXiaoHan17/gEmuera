@@ -1,16 +1,16 @@
 {
     "schemaVersion":  "1.0.0",
     "workPackage":  "M0-DIA-02",
-    "generatedAtUtc":  "2026-08-22T06:17:15.8211686Z",
+    "generatedAtUtc":  "2026-09-06T21:49:49.9082914Z",
     "executionStatus":  "InProgress",
     "gateStatus":  "Blocked",
     "blockerCode":  "EvidenceMissing",
     "result":  "Partial",
-    "sourceInventoryHash":  "4321bc45f00296bab4c4478fbfd9ee25d5772fc34afc3480d0e34cdbf203d32a",
-    "snapshotSetHash":  "bc73f6dea6a2d9f954ad1abff84672919b9406ab9dfbe9590e023524bc5e3bae",
+    "sourceInventoryHash":  "75d3b5af40388ab458e420309a8877603d810eb69e1d817d2162f8a647cf0032",
+    "snapshotSetHash":  "221a6c67d87d0328e12ed8b7c378fb212487ae58feecb0bfcf074b6e6be09c8a",
     "testProjectionInvariant":  {
                                     "status":  "Passed",
-                                    "v24ProfileHash":  "7d441a3a13ad668cf37116b44c0b817bff882c60e879dfed9336696b42004d2a",
+                                    "v24ProfileHash":  "0e121788a714b9533f78dcabfe9da1ad1d7fbce08f65c74be86cd46bb0d7dc51",
                                     "assertion":  "The v24 surface excludes the exact Snake public-key delta declared by the legacy profile boundary."
                                 },
     "currentRuntimeIsolation":  {
@@ -25,8 +25,8 @@
                      "v24":  {
                                  "schemaVersion":  "1.0.0",
                                  "profileId":  "v24pure",
-                                 "sourceInventoryHash":  "4321bc45f00296bab4c4478fbfd9ee25d5772fc34afc3480d0e34cdbf203d32a",
-                                 "canonicalHash":  "7d441a3a13ad668cf37116b44c0b817bff882c60e879dfed9336696b42004d2a",
+                                 "sourceInventoryHash":  "75d3b5af40388ab458e420309a8877603d810eb69e1d817d2162f8a647cf0032",
+                                 "canonicalHash":  "0e121788a714b9533f78dcabfe9da1ad1d7fbce08f65c74be86cd46bb0d7dc51",
                                  "nameComparison":  "Ordinal profile surface (legacy comparer remains a separate compatibility contract)",
                                  "instructionCount":  303,
                                  "expressionFunctionCount":  266,
@@ -6297,8 +6297,8 @@
                      "snake":  {
                                    "schemaVersion":  "1.0.0",
                                    "profileId":  "snake",
-                                   "sourceInventoryHash":  "4321bc45f00296bab4c4478fbfd9ee25d5772fc34afc3480d0e34cdbf203d32a",
-                                   "canonicalHash":  "657a5226dbdaef1059965cd3cd632aee5428970de32db8732995ecbbb936a3e6",
+                                   "sourceInventoryHash":  "75d3b5af40388ab458e420309a8877603d810eb69e1d817d2162f8a647cf0032",
+                                   "canonicalHash":  "c1756ab31d5574e9921dd94cd3af754a7a2aac65107a1ce02b56be8ae74d0f6d",
                                    "nameComparison":  "Ordinal profile surface (legacy comparer remains a separate compatibility contract)",
                                    "instructionCount":  326,
                                    "expressionFunctionCount":  349,
@@ -13735,8 +13735,8 @@
                      "erafl":  {
                                    "schemaVersion":  "1.0.0",
                                    "profileId":  "erafl",
-                                   "sourceInventoryHash":  "4321bc45f00296bab4c4478fbfd9ee25d5772fc34afc3480d0e34cdbf203d32a",
-                                   "canonicalHash":  "743dd1f4ee9ca2406842514d3a797fd686f10ba47d0f9e2e35b00515c3bb31fd",
+                                   "sourceInventoryHash":  "75d3b5af40388ab458e420309a8877603d810eb69e1d817d2162f8a647cf0032",
+                                   "canonicalHash":  "8163be966c54cdb03457809acd6b4a58f8bcc6f977593fbd71969a60578d9714",
                                    "nameComparison":  "Ordinal profile surface (legacy comparer remains a separate compatibility contract)",
                                    "instructionCount":  304,
                                    "expressionFunctionCount":  266,

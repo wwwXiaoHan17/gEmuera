@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Text;
@@ -440,7 +440,7 @@ namespace MinorShift.Emuera
 					case DefinedNameType.SystemVariable:
 						//システム変数の上書きは不可
                         errMes = "変数名" + varName + "はEmueraの変数名として使われています";
-                        warnLevel = 2;
+                        warnLevel = Program.Compatibility.Megaten.AllowsPrivateSystemVariableShadowing ? 1 : 2; // megaten 门控（P3）：私有 #DIM 遮蔽内置变量降为警告级 1；Disabled 下仍为 2。
 						break;
 					case DefinedNameType.UserMacro:
 						//字句解析がうまくいっていれば本来あり得ないはず
@@ -560,7 +560,8 @@ namespace MinorShift.Emuera
 				else
 				{
 					ParserMediator.Warn("コード中でローカル変数を@付きで呼ぶことは推奨されません(代わりに*.ERHファイルの利用を検討してください)", line, 1, false, false);
-					if (Config.ICFunction)
+					// megaten 门控（P1）：函数标签查询大小写归一化跟随 ICVariable；Disabled 下与仅 ICFunction 等价。
+					if (Config.ICFunction || (Config.ICVariable && Program.Compatibility.Megaten.UsesVariableCaseForFunctionLabelLookup))
 						subKey = subKey.ToUpper();
 				}
                 LocalVariableToken retLocal = vl.GetExistLocalVariableToken(subKey);
@@ -653,7 +654,8 @@ namespace MinorShift.Emuera
 
 		public UserDefinedRefMethod GetRefMethod(string codeStr)
 		{
-			if (Config.ICFunction)
+			// megaten 门控（P1）：查询侧大小写跟随 ICVariable；Disabled 下与仅 ICFunction 等价。
+			if (Config.ICFunction || (Config.ICVariable && Program.Compatibility.Megaten.UsesVariableCaseForFunctionLabelLookup))
 				codeStr = codeStr.ToUpper();
             UserDefinedRefMethod ref_method = null;
 			if (refmethodDic.TryGetValue(codeStr, out ref_method))
@@ -663,7 +665,8 @@ namespace MinorShift.Emuera
 
 		public IOperandTerm GetFunctionMethod(LabelDictionary labelDic, string codeStr, IOperandTerm[] arguments, bool userDefinedOnly)
 		{
-			if (Config.ICFunction)
+			// megaten 门控（P1）：查询侧大小写跟随 ICVariable；Disabled 下与仅 ICFunction 等价。
+			if (Config.ICFunction || (Config.ICVariable && Program.Compatibility.Megaten.UsesVariableCaseForFunctionLabelLookup))
 				codeStr = codeStr.ToUpper();
 			if (arguments == null)//引数なし、名前のみの探索
 			{

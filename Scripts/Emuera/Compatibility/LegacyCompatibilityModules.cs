@@ -29,12 +29,16 @@ namespace MinorShift.Emuera.Compatibility
 		private const string V24ModuleId = "gemuera.v24";
 		private const string SnakeModuleId = "game.snake";
 		private const string EraFlModuleId = "game.erafl";
+		// megaten 模块 id（常量在 Core 侧 MegatenCompatibilityModule 中定义）。
+		private const string MegatenModuleId = "game.megaten";
 
 		private static readonly ILegacyCompatibilityModule[] modules =
 		{
 			new LegacyV24CompatibilityModule(),
 			new LegacySnakeCompatibilityModule(),
 			new LegacyEraFlCompatibilityModule(),
+			// megaten：纯策略模块，不声明/解除任何名字的可见性。
+			new LegacyMegatenCompatibilityModule(),
 		};
 
 		private static readonly IReadOnlyDictionary<string, ILegacyCompatibilityModule> modulesById =
@@ -48,6 +52,8 @@ namespace MinorShift.Emuera.Compatibility
 					["v24pure"] = new HashSet<string>(StringComparer.Ordinal) { V24ModuleId },
 					["snake"] = new HashSet<string>(StringComparer.Ordinal) { V24ModuleId, SnakeModuleId },
 					["erafl"] = new HashSet<string>(StringComparer.Ordinal) { V24ModuleId, EraFlModuleId },
+					// megaten 闭包 = v24 基线 + game.megaten（与 erafl 同构）。
+					["megaten"] = new HashSet<string>(StringComparer.Ordinal) { V24ModuleId, MegatenModuleId },
 				});
 
 		public static LegacyCompatibilityProfile Compose(
@@ -105,6 +111,8 @@ namespace MinorShift.Emuera.Compatibility
 		private string declaringModuleId = "";
 		private ISnakeCompatibilityPolicy snake = DisabledSnakeCompatibilityPolicy.Instance;
 		private IEraFlCompatibilityPolicy eraFl = DisabledEraFlCompatibilityPolicy.Instance;
+		// megaten 策略默认 Disabled：未选中模块不 Apply 时保持基线行为。
+		private IMegatenCompatibilityPolicy megaten = DisabledMegatenCompatibilityPolicy.Instance;
 
 		private readonly bool scopedVariableInstructionsEnabled;
 
@@ -207,6 +215,12 @@ namespace MinorShift.Emuera.Compatibility
 			eraFl = policy ?? throw new ArgumentNullException(nameof(policy));
 		}
 
+		// megaten：Apply 阶段由 LegacyMegatenCompatibilityModule 注入启用策略。
+		public void SetMegatenPolicy(IMegatenCompatibilityPolicy policy)
+		{
+			megaten = policy ?? throw new ArgumentNullException(nameof(policy));
+		}
+
 		public LegacyCompatibilityProfile Build()
 		{
 			return new LegacyCompatibilityProfile(
@@ -215,6 +229,8 @@ namespace MinorShift.Emuera.Compatibility
 				scopedVariableInstructionsEnabled,
 				snake,
 				eraFl,
+				// megaten 策略随 Build 传入 LegacyCompatibilityProfile。
+				megaten,
 				hiddenInstructionNames,
 				hiddenFunctionNames,
 				scopedInstructionNames,
@@ -332,6 +348,20 @@ namespace MinorShift.Emuera.Compatibility
 		}
 	}
 
+	// megaten：纯策略模块。注册表表面与 v24 完全一致（不隐藏/暴露任何名字），
+	// 仅在会话选中 game.megaten 时注入启用策略；三个门控行为全部由引擎侧
+	// 读取 Program.Compatibility.Megaten 的 flag 决定。
+	internal sealed class LegacyMegatenCompatibilityModule : ILegacyCompatibilityModule
+	{
+		public string ModuleId => MegatenCompatibilityModule.ModuleId;
+		// Declare 无需隐藏任何名字：megaten 不改变指令/函数可见性，零声明即与 v24 一致。
+		public void Declare(LegacyCompatibilityProfileBuilder builder) { }
+		public void Apply(LegacyCompatibilityProfileBuilder builder)
+		{
+			builder.SetMegatenPolicy(LegacyMegatenCompatibilityPolicy.Instance);
+		}
+	}
+
 	internal sealed class LegacyEraFlCompatibilityModule : ILegacyCompatibilityModule
 	{
 		// eraFL 实测依赖的 snake 系指令（handler 由共享仓 snake 侧注册，erafl 只声明
@@ -380,6 +410,27 @@ namespace MinorShift.Emuera.Compatibility
 		public bool ContinuesAfterStartupFault => true;
 		public bool UsesFastDisplayRefresh => true;
 		public bool UsesLazyResourceIndex => true;
+	}
+
+	// megaten 默认策略：三个 flag 全 false，保证 v24pure/snake/erafl 会话下
+	// 13 处引擎门控点的布尔表达式与回退前基线完全等价。
+	internal sealed class DisabledMegatenCompatibilityPolicy : IMegatenCompatibilityPolicy
+	{
+		public static readonly DisabledMegatenCompatibilityPolicy Instance = new DisabledMegatenCompatibilityPolicy();
+		public bool IsEnabled => false;
+		public bool UsesVariableCaseForFunctionLabelLookup => false;
+		public bool AllowsOutAsVariableNameAfterRefKeyword => false;
+		public bool AllowsPrivateSystemVariableShadowing => false;
+	}
+
+	// megaten 启用策略：三个 flag 全 true，仅在 megaten 会话的 Apply 阶段注入。
+	internal sealed class LegacyMegatenCompatibilityPolicy : IMegatenCompatibilityPolicy
+	{
+		public static readonly LegacyMegatenCompatibilityPolicy Instance = new LegacyMegatenCompatibilityPolicy();
+		public bool IsEnabled => true;
+		public bool UsesVariableCaseForFunctionLabelLookup => true;
+		public bool AllowsOutAsVariableNameAfterRefKeyword => true;
+		public bool AllowsPrivateSystemVariableShadowing => true;
 	}
 
 	internal sealed class DisabledEraFlCompatibilityPolicy : IEraFlCompatibilityPolicy

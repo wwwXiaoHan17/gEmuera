@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 using MinorShift.Emuera.Sub;
@@ -306,7 +306,8 @@ namespace MinorShift.Emuera.GameData.Variable
 				key = key.ToUpper();
 			if (subStr != null)
 			{
-				if (Config.ICFunction)
+				// megaten 门控（P1）：LOCAL@ 子键查询大小写跟随 ICVariable；Disabled 下与仅 ICFunction 等价。
+				if (Config.ICFunction || (Config.ICVariable && Program.Compatibility.Megaten.UsesVariableCaseForFunctionLabelLookup))
 					subStr = subStr.ToUpper();
 				if (localvarNameDic.TryGetValue(key, out ret))
 					return new VariableIdentifier(ret, subStr);

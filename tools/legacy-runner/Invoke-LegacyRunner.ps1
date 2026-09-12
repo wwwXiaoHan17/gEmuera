@@ -257,8 +257,8 @@ try {
     if (-not $baseConfig.gameRoot -or -not (Test-Path -LiteralPath $baseConfig.gameRoot -PathType Container)) {
         throw 'An existing game root must be supplied through -GameRoot or the config file.'
     }
-    if ($baseConfig.profile -notin @('v24pure', 'snake', 'erafl')) {
-        throw 'Profile must be v24pure, snake, or erafl.'
+    if ($baseConfig.profile -notin @('v24pure', 'snake', 'erafl', 'megaten')) {
+        throw 'Profile must be v24pure, snake, erafl, or megaten.'
     }
     $sessionIsolationProperty = $baseConfig.PSObject.Properties['sessionIsolationMode']
     $sessionIsolationMode = if ($null -eq $sessionIsolationProperty) { 'baseline' } else { [string]$sessionIsolationProperty.Value }
@@ -294,8 +294,8 @@ try {
         if (-not $alternateSession.gameRoot -or -not (Test-Path -LiteralPath $alternateSession.gameRoot -PathType Container)) {
             throw 'cross-aba alternate session requires an existing gameRoot.'
         }
-        if ($alternateSession.profile -notin @('v24pure', 'snake', 'erafl')) {
-            throw 'cross-aba alternate session profile must be v24pure, snake, or erafl.'
+        if ($alternateSession.profile -notin @('v24pure', 'snake', 'erafl', 'megaten')) {
+            throw 'cross-aba alternate session profile must be v24pure, snake, erafl, or megaten.'
         }
         $alternateSourceGameRoot = [IO.Path]::GetFullPath([string]$alternateSession.gameRoot)
         $alternateProfile = [string]$alternateSession.profile

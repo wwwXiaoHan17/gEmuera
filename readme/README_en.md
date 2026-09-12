@@ -6,6 +6,10 @@ A cross-platform Emuera text game engine port built with Godot 4.7 + .NET 8.0.
 
 Emuera is the execution engine for Japanese eramaker-series text games, parsing `.ERB` script files and `.CSV` data files to run games. This project replaces the original Windows Forms / GDI+ rendering stack with Godot's node system, enabling cross-platform support for desktop and Android.
 
+## Developer Handoff
+
+For AI/developer onboarding, [AGENTS.md](../AGENTS.md) at the repository root is the authoritative entry point (project overview, required documents, build & verification, architecture overview, collaboration rules); when extending the ERB interpreter interface, see [ERBAPI.md](../ERBAPI.md). [DeveloperHandoff.md](../NewFrameworkDesign/DeveloperHandoff.md) is an outdated snapshot dated 2026-07-17, kept only as a historical archive; do not treat its long-term design goals as already implemented.
+
 ## Features
 
 - Unified `Emuera1824+v24+EMv18+EEv55` core
@@ -146,8 +150,8 @@ gemuera-c#/
 │   │   ├── Content/           # Image/resource management
 │   │   ├── GameData/          # Data models, expressions, variables
 │   │   ├── GameProc/          # Script execution engine
-│   │   ├── GameView/          # Console emulation and rendering
-│   │   └── LegacyRunner/      # Legacy display/input-replay diagnostics
+│   │   └── GameView/          # Console emulation and rendering
+│   ├── LegacyRunner/          # Legacy display/input-replay diagnostics (formerly Scripts/M0, namespace gEmuera.LegacyRunner)
 │   ├── GodotHost/             # Godot lifecycle/platform bridge
 │   ├── Shaders/
 │   │   └── color_matrix.gdshader
@@ -172,13 +176,17 @@ gemuera-c#/
 
 ## Building
 
-```bash
-# Desktop build
-dotnet build
+> **Note**: Do not run `dotnet build` directly — `Godot.NET.Sdk` depends on the Godot environment and often fails on the command line due to SDK resolver/certificate issues.
 
-# Android build (requires .NET 9.0 SDK)
-dotnet build -p:GodotTargetPlatform=android
+C# compilation/build uses the Godot 4.7 mono headless build:
+
+```bash
+Godot_v4.7-stable_mono_win64_console.exe --headless --path <project root> --build-solutions --quit
 ```
+
+Success check: verify that the timestamp of `.godot/mono/temp/bin/Debug/gemuera-c#.dll` has been updated — do not wait for the process to exit; in headless/restricted environments Godot may hang during finalization, but compilation has already finished.
+
+Android build artifacts are managed under `Build/`; Android-related conclusions must be verified with an actual APK — desktop is for debugging only.
 
 ## Acknowledgments
 

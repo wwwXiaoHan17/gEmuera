@@ -8,7 +8,7 @@
   "properties": {
     "schemaVersion": { "const": "1.0.0" },
     "gameRoot": { "type": "string" },
-    "profile": { "enum": ["v24pure", "snake", "erafl"] },
+    "profile": { "enum": ["v24pure", "snake", "erafl", "megaten"] },
     "sessionIsolationMode": { "enum": ["baseline", "canary"] },
     "inProcessSessionCycle": { "enum": ["disabled", "aba", "cross-aba"] },
     "inProcessSessionSwitchCount": { "type": "integer", "minimum": 2, "maximum": 100 },
@@ -18,7 +18,7 @@
       "required": ["gameRoot", "profile"],
       "properties": {
         "gameRoot": { "type": "string" },
-        "profile": { "enum": ["v24pure", "snake", "erafl"] }
+        "profile": { "enum": ["v24pure", "snake", "erafl", "megaten"] }
       }
     },
     "outputDirectory": { "type": "string" },
