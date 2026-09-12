@@ -5173,7 +5173,8 @@ namespace MinorShift.Emuera.GameData.Function
 			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
 			{
 				string name = arguments[0].GetStrValue(exm);
-				if (Config.ICFunction)
+				// megaten 门控（P1）：EXISTFUNCTION 查询大小写跟随 ICVariable；Disabled 下与仅 ICFunction 等价。
+				if (Config.ICFunction || (Config.ICVariable && Program.Compatibility.Megaten.UsesVariableCaseForFunctionLabelLookup))
 					name = name.ToUpper();
 
 				if (FunctionMethodCreator.GetMethodList(Program.Compatibility).TryGetValue(name, out var method))

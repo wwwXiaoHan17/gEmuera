@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Net.Http;
@@ -1160,7 +1160,8 @@ namespace MinorShift.Emuera.GameProc.Function
 					return;
 				}
 				SpCallFArgment callfArg = (SpCallFArgment)func.Argument;
-				if (Config.ICFunction)
+				// megaten 门控（P1）：CALLF 常量函数名查询大小写跟随 ICVariable；Disabled 下与仅 ICFunction 等价。
+				if (Config.ICFunction || (Config.ICVariable && Program.Compatibility.Megaten.UsesVariableCaseForFunctionLabelLookup))
 					callfArg.ConstStr = callfArg.ConstStr.ToUpper();
 				try
 				{
@@ -3775,7 +3776,8 @@ namespace MinorShift.Emuera.GameProc.Function
 
 				StringStream st = new StringStream(scriptLine);
 				string labelName = LexicalAnalyzer.ReadString(st, StrEndWith.LeftParenthesis_Bracket_Comma_Semicolon).Trim();
-				if (Config.ICFunction)
+				// megaten 门控（P1）：CALLS 动态脚本行函数名查询大小写跟随 ICVariable；Disabled 下与仅 ICFunction 等价。
+				if (Config.ICFunction || (Config.ICVariable && Program.Compatibility.Megaten.UsesVariableCaseForFunctionLabelLookup))
 					labelName = labelName.ToUpper();
 				char cur = st.Current;
 
@@ -3861,7 +3863,8 @@ namespace MinorShift.Emuera.GameProc.Function
 				}
 				SpCallArgment callArg = (SpCallArgment)func.Argument;
 				string labelName = callArg.ConstStr;
-				if (Config.ICFunction)
+				// megaten 门控（P1）：CALL/JUMP 常量标签查询大小写跟随 ICVariable；Disabled 下与仅 ICFunction 等价。
+				if (Config.ICFunction || (Config.ICVariable && Program.Compatibility.Megaten.UsesVariableCaseForFunctionLabelLookup))
 					labelName = labelName.ToUpper();
 				CalledFunction call = CalledFunction.CallFunction(GlobalStatic.Process, labelName, func);
 				if ((call == null) && (!func.Function.IsTry()))
@@ -3907,7 +3910,8 @@ namespace MinorShift.Emuera.GameProc.Function
 				else
 				{
 					labelName = spCallArg.FuncnameTerm.GetStrValue(exm);
-					if (Config.ICFunction)
+					// megaten 门控（P1）：CALLFORM 动态函数名查询大小写跟随 ICVariable；Disabled 下与仅 ICFunction 等价。
+					if (Config.ICFunction || (Config.ICVariable && Program.Compatibility.Megaten.UsesVariableCaseForFunctionLabelLookup))
 						labelName = labelName.ToUpper();
 					call = CalledFunction.CallFunction(GlobalStatic.Process, labelName, func);
 				}
@@ -3958,7 +3962,8 @@ namespace MinorShift.Emuera.GameProc.Function
 			public override void DoInstruction(ExpressionMediator exm, InstructionLine func, ProcessState state)
 			{
 				string labelName = func.Argument.ConstStr;
-				if (Config.ICFunction)
+				// megaten 门控（P1）：CALLEVENT 事件函数名查询大小写跟随 ICVariable；Disabled 下与仅 ICFunction 等价。
+				if (Config.ICFunction || (Config.ICVariable && Program.Compatibility.Megaten.UsesVariableCaseForFunctionLabelLookup))
 					labelName = labelName.ToUpper();
 				CalledFunction call = CalledFunction.CallEventFunction(GlobalStatic.Process, labelName, func);
 				if (call == null)

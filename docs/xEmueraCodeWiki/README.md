@@ -12,10 +12,13 @@ XEmuera 是 Emuera (一个 ERA 游戏脚本引擎) 的跨平台移动端移植�
 | [GameEngine.md](./GameEngine.md) | 游戏执行引擎（Process 状态机） |
 | [ScriptSystem.md](./ScriptSystem.md) | ERB/CSV 脚本加载与解析系统 |
 | [RenderingSystem.md](./RenderingSystem.md) | 显示与渲染管线 |
-| [DataModel.md](./DataModel.md) | 变量系统与数据模型 |
-| [Configuration.md](./Configuration.md) | 配置系统 |
-| [Dependencies.md](./Dependencies.md) | 依赖关系与平台适配 |
-| [BuildAndRun.md](./BuildAndRun.md) | 项目构建与运行方式 |
+| [VariableSystem.md](./VariableSystem.md) | 变量系统与数据模型 |
+| [ConfigSystem.md](./ConfigSystem.md) | 配置系统 |
+| [DependencyGraph.md](./DependencyGraph.md) | 项目间依赖与 NuGet 包依赖 |
+| [HowToRun.md](./HowToRun.md) | 项目构建与运行方式 |
+| [PlatformAbstraction.md](./PlatformAbstraction.md) | 平台抽象层与移动端移植适配 |
+| [I18nSystem.md](./I18nSystem.md) | 多语言系统 (I18n) |
+| [Glossary.md](./Glossary.md) | 术语表 |
 
 ## 项目基本信息
 

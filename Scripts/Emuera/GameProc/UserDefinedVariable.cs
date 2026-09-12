@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 using MinorShift.Emuera.Sub;
@@ -190,8 +190,14 @@ namespace MinorShift.Emuera.GameProc
 						ret.Out = true;
 						ret.Static = false;
 						break;
-					case "OUT":
-						if (staticDefined && !ret.Reference && (wc.EOL || wc.Current.Type == ',' || wc.Current.Type == '='))
+				case "OUT":
+					// megaten 门控（P2）：#DIM REF 后的名字位允许 OUT 作为变量名。
+					// Disabled 下 (ret.Reference && false)=false，整个条件退化为原
+					// staticDefined && !ret.Reference && (...)，与回退前基线完全等价。
+					if ((staticDefined && !ret.Reference
+							|| (ret.Reference && Program.Compatibility.Megaten.AllowsOutAsVariableNameAfterRefKeyword))
+						&& ret.Name == null
+						&& (wc.EOL || wc.Current.Type == ',' || wc.Current.Type == '='))
 						{
 							ret.Name = keyword;
 							goto whilebreak;
