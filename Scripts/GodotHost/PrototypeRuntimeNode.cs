@@ -80,11 +80,15 @@ public partial class PrototypeRuntimeNode : Node
 
 	private void OnRequestToggle()
 	{
+		// 调试浮层的 profile 轮换：v24pure → snake → erafl → megaten → v24pure。
+		// megaten 是 2026-09-07 新增的方言 profile（eraMegaten 适配），此前轮换缺环。
 		string nextProfile = string.Equals(ProfileId, FirstWindow.CoreProfileV24Pure, StringComparison.OrdinalIgnoreCase)
 			? FirstWindow.CoreProfileSnake
 			: string.Equals(ProfileId, FirstWindow.CoreProfileSnake, StringComparison.OrdinalIgnoreCase)
 				? FirstWindow.CoreProfileEraFl
-				: FirstWindow.CoreProfileV24Pure;
+				: string.Equals(ProfileId, FirstWindow.CoreProfileEraFl, StringComparison.OrdinalIgnoreCase)
+					? FirstWindow.CoreProfileMegaten
+					: FirstWindow.CoreProfileV24Pure;
 		QueueCommand(token => SwitchProfileAsync(nextProfile, token));
 	}
 
@@ -200,6 +204,8 @@ public partial class PrototypeRuntimeNode : Node
 		{
 			FirstWindow.CoreProfileSnake => "gemuera.snake",
 			FirstWindow.CoreProfileEraFl => GEmuera.Core.Compatibility.EraFlCompatibilityModule.SaveProfileId,
+			// megaten 此前落到默认分支 gemuera.v24，调试会话的存档 profile 指向错误（2026-09-07）。
+			FirstWindow.CoreProfileMegaten => GEmuera.Core.Compatibility.MegatenCompatibilityModule.SaveProfileId,
 			_ => "gemuera.v24",
 		};
 		return new SessionSelection(
@@ -249,6 +255,9 @@ public partial class PrototypeRuntimeNode : Node
 			return FirstWindow.CoreProfileSnake;
 		if (string.Equals(profile, FirstWindow.CoreProfileEraFl, StringComparison.OrdinalIgnoreCase))
 			return FirstWindow.CoreProfileEraFl;
+		// megaten 会话此前落到默认分支，右上角调试浮层误显示 v24pure（2026-09-07 eraMegaten 实证）。
+		if (string.Equals(profile, FirstWindow.CoreProfileMegaten, StringComparison.OrdinalIgnoreCase))
+			return FirstWindow.CoreProfileMegaten;
 		return FirstWindow.CoreProfileV24Pure;
 	}
 

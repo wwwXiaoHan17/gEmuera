@@ -52,6 +52,10 @@
 
   <ItemGroup Condition=" '$(GodotTargetPlatform)' == 'android' ">
 	<PackageDownload Include="SkiaSharp.NativeAssets.Android" Version="[2.88.8]" />
+	<!-- Godot 的 android 构建是纯 net9.0+RID，不会走 net6.0-android31.0 依赖组，
+	     bundle_e_sqlite3 的 android 传递依赖（含 libe_sqlite3.so 的 .aar）永远拉不进缓存。
+	     用 PackageDownload 强制下载，供 RestoreAndroidSqliteNativeLibrary 自愈提取（2026-09-07 实证）。 -->
+	<PackageDownload Include="SQLitePCLRaw.lib.e_sqlite3.android" Version="[2.1.12]" />
     <None Include="Build\NativeLibs\android\arm64-v8a\libe_sqlite3.so" CopyToOutputDirectory="PreserveNewest" TargetPath="libe_sqlite3.so" />
 	<None Include="$(NuGetPackageRoot)skiasharp.nativeassets.android\2.88.8\runtimes\android-arm64\native\libSkiaSharp.so" CopyToOutputDirectory="PreserveNewest" TargetPath="libSkiaSharp.so" />
   </ItemGroup>

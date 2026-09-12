@@ -4,7 +4,7 @@
 
 最重要的规则：**先确定改动属于哪一条执行路径；先证明未选择侧不变，再实现选择侧。**
 
-> 当前工作区没有 `NewFrameworkDesign/`、`OriginalFrameworkDesign/` 或 `CODE_MAP.md`。不要把这些缺失文件、旧 generated 报告或历史计数当成当前架构的权威。当前权威顺序为：C# 公共签名与调用点 → `tools/core-contracts` 合同 → `tools/dialect-inventory` 静态合同 → 针对实际 ERB 行为的可重复 fixture/trace。
+> 当前工作区没有 `OriginalFrameworkDesign/` 或 `CODE_MAP.md`；`NewFrameworkDesign/` 仅保留历史交接快照 `DeveloperHandoff.md`。不要把这些缺失文件、旧 generated 报告或历史计数当成当前架构的权威。当前权威顺序为：C# 公共签名与调用点 → `tools/core-contracts` 合同 → `tools/dialect-inventory` 静态合同 → 针对实际 ERB 行为的可重复 fixture/trace。
 
 ## 1. 当前架构结论
 

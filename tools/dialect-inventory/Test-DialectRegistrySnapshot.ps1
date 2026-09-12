@@ -90,9 +90,11 @@ try {
     Assert-SnapshotContract ($report.profiles.v24.instructionCount -eq 303) "Unexpected runtime v24 instruction count: $($report.profiles.v24.instructionCount)."
     Assert-SnapshotContract ($report.profiles.v24.expressionFunctionCount -eq 266) "Unexpected runtime v24 expression function count: $($report.profiles.v24.expressionFunctionCount)."
     Assert-SnapshotContract ($report.profiles.snake.instructionCount -eq 326) "Unexpected runtime Snake instruction count: $($report.profiles.snake.instructionCount)."
-    Assert-SnapshotContract ($report.profiles.snake.expressionFunctionCount -eq 347) "Unexpected runtime Snake expression function count: $($report.profiles.snake.expressionFunctionCount)."
+    # 2026-09-07 对齐真实注册表值：erafl 方言清单提交（92ad2a7，snake 侧 +MGBGM/MGBGMSTOP 系）
+    # 后未同步这两个断言，属存量红；349/85 与当前快照及 RuntimeSmoke 一致。
+    Assert-SnapshotContract ($report.profiles.snake.expressionFunctionCount -eq 349) "Unexpected runtime Snake expression function count: $($report.profiles.snake.expressionFunctionCount)."
     Assert-SnapshotContract ($report.diff.snakeOnlyInstructionCount -eq 23) 'Unexpected Snake-only instruction diff count.'
-    Assert-SnapshotContract ($report.diff.snakeOnlyExpressionFunctionCount -eq 83) 'Unexpected Snake-only expression function diff count.'
+    Assert-SnapshotContract ($report.diff.snakeOnlyExpressionFunctionCount -eq 85) 'Unexpected Snake-only expression function diff count.'
     Assert-SnapshotContract ((Test-Path -LiteralPath $reportPath -PathType Leaf)) 'Registry snapshot report was not written.'
 
     Write-Output 'M0 dialect registry snapshot contract tests passed.'

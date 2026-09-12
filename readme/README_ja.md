@@ -6,6 +6,10 @@ Godot 4.7 + .NET 8.0 によるクロスプラットフォーム Emuera テキス
 
 Emuera は日本の eramaker 系テキストゲームの実行エンジンで、`.ERB` スクリプトファイルと `.CSV` データファイルを解析してゲームを実行します。本プロジェクトは、オリジナルの Windows Forms / GDI+ レンダリングを Godot ノードシステムに置き換え、デスクトップと Android のクロスプラットフォーム対応を実現しています。
 
+## 開発者の引き継ぎ
+
+AI/開発者の引き継ぎは、リポジトリルートの [AGENTS.md](../AGENTS.md) が権威あるエントリポイントです（プロジェクト概要、必読ドキュメント、ビルドと検証、アーキテクチャ概要、協力ルール）。ERB インタプリタの拡張については [ERBAPI.md](../ERBAPI.md) を参照してください。[DeveloperHandoff.md](../NewFrameworkDesign/DeveloperHandoff.md) は 2026-07-17 時点の古いスナップショットであり、歴史的アーカイブとしての参考資料です。その中の長期設計目標を実装済みと見なさないでください。
+
 ## 特徴
 
 - 統一された `Emuera1824+v24+EMv18+EEv55` コア
@@ -139,8 +143,8 @@ gemuera-c#/
 │   │   ├── Content/           # 画像/リソース管理
 │   │   ├── GameData/          # データモデル、式、変数
 │   │   ├── GameProc/          # スクリプト実行エンジン
-│   │   ├── GameView/          # コンソールエミュレーションとレンダリング
-│   │   └── LegacyRunner/      # レガシー表示/入力リプレイ診断
+│   │   └── GameView/          # コンソールエミュレーションとレンダリング
+│   ├── LegacyRunner/          # レガシー表示/入力リプレイ診断（旧 Scripts/M0、名前空間 gEmuera.LegacyRunner）
 │   ├── GodotHost/             # Godot ライフサイクル/プラットフォームブリッジ
 │   ├── Shaders/
 │   │   └── color_matrix.gdshader
@@ -165,13 +169,17 @@ gemuera-c#/
 
 ## ビルド
 
-```bash
-# デスクトップビルド
-dotnet build
+> **注意**：`dotnet build` を直接実行しないでください。`Godot.NET.Sdk` は Godot 環境に依存して解決されるため、コマンドラインでは SDK resolver/証明書の問題で失敗しやすいです。
 
-# Android ビルド（.NET 9.0 SDK 必要）
-dotnet build -p:GodotTargetPlatform=android
+C# のコンパイル/ビルドには Godot 4.7 mono のヘッドレスビルドを使用します：
+
+```bash
+Godot_v4.7-stable_mono_win64_console.exe --headless --path <プロジェクトルート> --build-solutions --quit
 ```
+
+ビルド成功の判定：`.godot/mono/temp/bin/Debug/gemuera-c#.dll` のタイムスタンプが更新されていることを確認してください。プロセスの終了を待つ必要はありません。ヘッドレス/制限環境では Godot が終了処理で止まることがありますが、コンパイル自体はすでに完了しています。
+
+Android のビルド成果物は `Build/` 配下で管理します。Android に関する結論は APK 実機テストを基準とし、デスクトップはデバッグ専用です。
 
 ## 謝辞
 

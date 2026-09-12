@@ -8,7 +8,7 @@ Emuera 是日本 eramaker 系列文字游戏的执行引擎，通过解析 `.ERB
 
 ## 开发者接手
 
-当前可运行路径、Core/Host 合同、迁移阶段、已知阻断和验证入口统一记录在 [当前实现与开发接手指南](../NewFrameworkDesign/DeveloperHandoff.md)。接手开发时以该文档、`AGENT.md`、`CODE_MAP.md` 和机器报告为准，不要把长期目标设计直接视为已完成实现。
+AI/开发者接手以仓库根目录 [AGENTS.md](../AGENTS.md) 为权威入口（项目简介、必读与配套文档、构建与验证、架构速览、协作规则）；需要扩展 ERB 解释器接口时参见 [ERBAPI.md](../ERBAPI.md)。[DeveloperHandoff.md](../NewFrameworkDesign/DeveloperHandoff.md) 是 2026-07-17 的历史存档快照，仅作参考；不要把其中的长期目标设计直接视为已完成实现。
 
 ## 特性
 
@@ -157,8 +157,8 @@ gemuera-c#/
 │   │   ├── Content/           # 图片/资源管理
 │   │   ├── GameData/          # 数据模型、表达式、变量
 │   │   ├── GameProc/          # 脚本执行引擎
-│   │   ├── GameView/          # 控制台模拟和渲染
-│   │   └── LegacyRunner/      # 旧版显示/输入回放诊断（LegacyRunner）
+│   │   └── GameView/          # 控制台模拟和渲染
+│   ├── LegacyRunner/          # 旧版显示/输入回放诊断（原 Scripts/M0，命名空间 gEmuera.LegacyRunner）
 │   ├── GodotHost/             # Godot 生命周期/平台桥
 │   ├── Shaders/
 │   │   └── color_matrix.gdshader
@@ -176,13 +176,17 @@ gemuera-c#/
 
 ## 构建
 
-```bash
-# 桌面端构建
-dotnet build
+> **注意**：不要直接 `dotnet build`——`Godot.NET.Sdk` 依赖 Godot 环境解析，命令行下常因 SDK resolver/证书问题失败。
 
-# Android 构建（需要 .NET 9.0 SDK）
-dotnet build -p:GodotTargetPlatform=android
+C# 编译/构建使用 Godot 4.7 mono 无头构建：
+
+```bash
+Godot_v4.7-stable_mono_win64_console.exe --headless --path <项目根> --build-solutions --quit
 ```
+
+构建成功的判定：检查 `.godot/mono/temp/bin/Debug/gemuera-c#.dll` 时间戳已更新，不要等进程退出——无头/受限环境下 Godot 可能卡在收尾阶段，但编译早已完成。
+
+Android 构建产物统一放在 `Build/` 下管理；Android 相关结论必须以 APK 实测为准，桌面端仅用于调试。
 
 ## 致谢
 

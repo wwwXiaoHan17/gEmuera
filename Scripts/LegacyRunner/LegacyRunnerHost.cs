@@ -581,6 +581,16 @@ namespace gEmuera.LegacyRunner
         {
             try
             {
+                // 配置加载失败（_Ready 早期 Fail）时 _config/_report 均为 null：
+                // 此时不可能产出任何报告，必须带着原始失败原因直接退出，
+                // 否则下方 _config.CaptureScreenshot 解引用会 NRE，把真实错误
+                // （如 max_runtime_ms_out_of_range）掩盖成空报告 + exit 74。
+                if (_config == null)
+                {
+                    GD.PushError("Legacy runner aborted before config load: reason=" + reason + " exitCode=" + exitCode);
+                    GetTree().Quit(exitCode);
+                    return;
+                }
                 var screenshot = new LegacyScreenshotEvidence();
                 if (_config.CaptureScreenshot)
                 {
@@ -622,7 +632,8 @@ namespace gEmuera.LegacyRunner
             }
             catch (Exception ex)
             {
-                GD.PushError("Legacy legacy runner report failure: " + ex);
+                // 带上原始 reason，避免上报路径自身的异常掩盖真正的失败原因
+                GD.PushError("Legacy legacy runner report failure (reason=" + reason + ", exitCode=" + exitCode + "): " + ex);
                 exitCode = 74;
             }
             GetTree().Quit(exitCode);

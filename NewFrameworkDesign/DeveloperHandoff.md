@@ -1,8 +1,18 @@
 # 当前实现与开发接手指南
 
+> **历史快照声明**：本文档是 2026-07-17 的交接快照，仅供历史参考。权威入口为根目录 `AGENTS.md`（项目规则）与 `ERBAPI.md`（解释器扩展）。
+>
+> 已知过时要点（正文中相关表述以本声明为准）：
+>
+> - `tests/GEmuera.Core.Tests` xUnit 测试工程已存在（20 个测试，2026-08-15 起）。
+> - `src/Core` 目标框架实为 `net8.0;net9.0`（非 `net10.0`）。
+> - `tools/m3-m7` 已于 2026-08-07 重命名并入 `tools/governance/`，现 `tools/` 有 11 个工具目录（dialect-inventory、legacy-runner、save-baseline、core-contracts、governance 等）。
+> - `CODE_MAP.md`、`IDEAS.md` 已删除。
+> - M0-M7 阶段代号已全部清除并禁止使用（M0→LegacyRunner、M6→Experiment、M7→Governance）。
+
 > 快照基线：GitHub `dev` 分支提交 `8e67d392a0c5d3b463d0572f222e4a6ad210a3f4`，2026-07-17。
 
-本文只回答当前项目**已经具备什么、由谁负责、从哪里继续开发**。它不是更新日志，也不以“文件或类型已经存在”推导“迁移阶段已经完成”。阶段放行状态仍以 [M0M2ImplementationBaseline](M0M2ImplementationBaseline.md)、[KnownLimitations](KnownLimitations.md) 和机器报告为准。
+本文只回答当前项目**已经具备什么、由谁负责、从哪里继续开发**。它不是更新日志，也不以“文件或类型已经存在”推导“迁移阶段已经完成”。阶段放行状态仍以 M0M2ImplementationBaseline（已于 2026-08-07 删除，内容见 git 历史）、KnownLimitations（已于 2026-08-07 删除，内容见 git 历史）和机器报告为准。
 
 ## 接手结论
 
@@ -41,7 +51,7 @@ project.godot
 
 ## 已有的可运行引擎能力
 
-现有 legacy 引擎已承载 `.ERB`/`.CSV` 加载、表达式和变量、指令执行、存档、HTML/图片/形状、按钮输入、声音、SQLite/Map/XML/DataTable 扩展以及 v24/Snake 兼容分支。实际公开功能概览见 [项目 README](../readme/README.md)，代码定位以 [CODE_MAP](../CODE_MAP.md) 为准。
+现有 legacy 引擎已承载 `.ERB`/`.CSV` 加载、表达式和变量、指令执行、存档、HTML/图片/形状、按钮输入、声音、SQLite/Map/XML/DataTable 扩展以及 v24/Snake 兼容分支。实际公开功能概览见 [项目 README](../readme/README.md)，代码定位以 CODE_MAP（已于 2026-07-25 提交 d24f656 删除，内容见 git 历史）为准。
 
 主要 owner 如下：
 
@@ -126,7 +136,7 @@ Godot host 还具有：
 | [`session-state-inventory`](../tools/session-state-inventory) | 固定 `GlobalStatic`/`Program` 会话根状态 |
 | [`dialect-inventory`](../tools/dialect-inventory) | DIA-01 至 DIA-17 静态库存、解析、归属、组合和 fixture contract |
 | [`core-contracts`](../tools/core-contracts) | Core smoke 与 Core -> Godot 反向依赖守卫 |
-| [`m3-m7`](../tools/m3-m7) | implementation inventory、work-package schema 和治理合同测试 |
+| `m3-m7`（2026-08-07 重命名并入 `tools/governance/`，含 work-package schema 等，见 git 历史） | implementation inventory、work-package schema 和治理合同测试 |
 | [`doc-guards`](../tools/doc-guards) | 文档结构、链接和稳定条款门禁 |
 
 真实 Era 游戏字节、APK、大报告和设备日志不属于仓库源码。工具可以生成报告，但没有绑定 fixture、artifact hash、设备和签署时，结果必须保持 `Uncovered` 或 `Blocked`。
@@ -165,7 +175,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\core-contracts\Test-Co
 powershell -NoProfile -ExecutionPolicy Bypass -File tools\doc-guards\Invoke-DocGuard.ps1
 ```
 
-当前没有正式的 `tests/Core/*.Tests.csproj` xUnit 测试工程。不要在交付说明中声称已经运行不存在的 xUnit suite。
+当前没有正式的 `tests/Core/*.Tests.csproj` xUnit 测试工程。不要在交付说明中声称已经运行不存在的 xUnit suite。（已过时，见顶部声明）
 
 ### 当前已知非绿色门禁
 
@@ -181,15 +191,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\dialect-inventory\Test
 | 要继续的工作 | 首先阅读 | 首先修改/检查 | 最小反馈 |
 | --- | --- | --- | --- |
 | ERB 指令/函数/变量 | [ERBAPI](../ERBAPI.md) | `FunctionIdentifier.cs`、`ArgumentBuilder.cs`、`Creator.Method*.cs`、变量 descriptor | 对应 RED 测试、build、DIA inventory |
-| 方言/profile | [DialectExtensionSystem](DialectExtensionSystem.md) | `dialect-classification.json`、Compatibility catalog、plan consumer | DIA 对应 contract，未选择模块不变性 |
-| legacy 会话隔离 | [M1CoreRuntimeContractSlice](M1CoreRuntimeContractSlice.md) | `LegacySessionFacade.cs`、`LegacySessionBackend.cs`、static root inventory | Core smoke、A/B/A、memory/rollback |
+| 方言/profile | DialectExtensionSystem（已于 2026-08-07 删除，内容见 git 历史） | `dialect-classification.json`、Compatibility catalog、plan consumer | DIA 对应 contract，未选择模块不变性 |
+| legacy 会话隔离 | M1CoreRuntimeContractSlice（已于 2026-08-07 删除，内容见 git 历史） | `LegacySessionFacade.cs`、`LegacySessionBackend.cs`、static root inventory | Core smoke、A/B/A、memory/rollback |
 | Prototype host | 本文 Godot host 章节 | `Scripts/GodotHost/Prototype*.cs`、`main.tscn` | `PrototypeHostRegressionTest.gd` |
-| 显示 DTO/M2 | [M0M2ImplementationBaseline](M0M2ImplementationBaseline.md) | legacy display inventory、`DisplayDtos.cs`、tee | tree/timeline golden；默认 renderer 不切换 |
-| 资源/PixelStore | [M4ResourceGraphics](M4ResourceGraphics.md) | `src/Core/Resources`、resource bridge ledger | pixel diff、generation/revision、Node/RID ledger |
-| 输入/平台/SAF | [M5PlatformComposition](M5PlatformComposition.md) | input contracts、PlatformGateway、旧 Android path | input trace、撤权恢复、真机和旧路径回退 |
-| 存档 | [SaveFormat](SaveFormat.md) | legacy codec、`src/Core/Save`、save-baseline | profile 明确、只读原件、隔离 round-trip |
-| 构建/Android | [HowToRun](HowToRun.md) | csproj、export preset、ToolchainLock 候选 | export/APK hash、安装启动和设备报告 |
-| 文档/阶段状态 | [AIDevelopmentWorkflow](AIDevelopmentWorkflow.md) | 对应权威文档和机器状态 | doc guard；不擅自提升 gate |
+| 显示 DTO/M2 | M0M2ImplementationBaseline | legacy display inventory、`DisplayDtos.cs`、tee | tree/timeline golden；默认 renderer 不切换 |
+| 资源/PixelStore | M4ResourceGraphics（已于 2026-08-07 删除，内容见 git 历史） | `src/Core/Resources`、resource bridge ledger | pixel diff、generation/revision、Node/RID ledger |
+| 输入/平台/SAF | M5PlatformComposition（已于 2026-08-07 删除，内容见 git 历史） | input contracts、PlatformGateway、旧 Android path | input trace、撤权恢复、真机和旧路径回退 |
+| 存档 | SaveFormat（已于 2026-08-07 删除，内容见 git 历史） | legacy codec、`src/Core/Save`、save-baseline | profile 明确、只读原件、隔离 round-trip |
+| 构建/Android | HowToRun（已于 2026-08-07 删除，内容见 git 历史） | csproj、export preset、ToolchainLock 候选 | export/APK hash、安装启动和设备报告 |
+| 文档/阶段状态 | AIDevelopmentWorkflow（已于 2026-08-07 删除，内容见 git 历史） | 对应权威文档和机器状态 | doc guard；不擅自提升 gate |
 
 ## 当前阶段与阻断项
 
@@ -229,4 +239,4 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\dialect-inventory\Test
 4. M0、M1 都有正式 gate decision 后，再按 M2.0 tee/capture -> M2.1 canary adapter 推进 Display DTO。
 5. M3-M7 现有合同只作为未来 work package 输入；对应前置 gate 未通过前，不接管生产行为。
 
-新任务若只修复局部 legacy 行为，应在原 owner 内做小范围 TDD；若触及 session、CompatibilityPlan、Display transaction、save、resource revision 或平台 port，则升级为 [M3M7EngineeringExecution](M3M7EngineeringExecution.md) 定义的 work package，并记录输入 identity、报告、未覆盖项和回退。
+新任务若只修复局部 legacy 行为，应在原 owner 内做小范围 TDD；若触及 session、CompatibilityPlan、Display transaction、save、resource revision 或平台 port，则升级为 M3M7EngineeringExecution（已于 2026-08-07 删除，内容见 git 历史）定义的 work package，并记录输入 identity、报告、未覆盖项和回退。

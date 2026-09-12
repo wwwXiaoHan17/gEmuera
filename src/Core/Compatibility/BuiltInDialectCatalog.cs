@@ -45,6 +45,10 @@ public static class BuiltInDialectCatalog
         catalog.Register(new DeclaredDialectModule(
             EraFlCompatibilityModule.CreateDefinition(),
             Array.Empty<IDialectContribution>()));
+        // megaten：eraMegaten 游戏适配方言（eraFL 镜像骨架），依赖 v24 基线，纯声明模块。
+        catalog.Register(new DeclaredDialectModule(
+            MegatenCompatibilityModule.CreateDefinition(),
+            Array.Empty<IDialectContribution>()));
         return catalog;
     }
 
@@ -63,6 +67,9 @@ public static class BuiltInDialectCatalog
             "snake",
             new[] { "game.snake" }));
         catalog.Register(EraFlCompatibilityModule.CreateProfile());
+        // megaten：注册 profile 定义后，compat\megaten\<game> 目录路由经由
+        // DirectoryRouteProfileCatalog（同一 catalog）自动获得支持。
+        catalog.Register(MegatenCompatibilityModule.CreateProfile());
         return catalog;
     }
 

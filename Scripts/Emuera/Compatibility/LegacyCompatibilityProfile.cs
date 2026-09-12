@@ -54,6 +54,19 @@ namespace MinorShift.Emuera.Compatibility
 	}
 
 	/// <summary>
+	/// eraMegaten 专用窄策略接口：三个门控行为（P1 函数标签查询大小写归一化
+	/// 跟随 ICVariable、P2 #DIM REF OUT 的 OUT 名字位、P3 私有 #DIM 遮蔽
+	/// SystemVariable 降为警告级 1）。仅决定既有解析路径是否放行，不引入新算法。
+	/// </summary>
+	internal interface IMegatenCompatibilityPolicy
+	{
+		bool IsEnabled { get; }
+		bool UsesVariableCaseForFunctionLabelLookup { get; }
+		bool AllowsOutAsVariableNameAfterRefKeyword { get; }
+		bool AllowsPrivateSystemVariableShadowing { get; }
+	}
+
+	/// <summary>
 	/// Legacy bridge DTO for eraFL GMAP node data. The VM sees this typed
 	/// contract instead of the Core module's implementation detail.
 	/// </summary>
@@ -92,6 +105,8 @@ namespace MinorShift.Emuera.Compatibility
 			bool scopedVariableInstructionsEnabled,
 			ISnakeCompatibilityPolicy snake,
 			IEraFlCompatibilityPolicy eraFl,
+			// megaten 会话策略（默认 Disabled，保证既有三 profile 零行为变化）
+			IMegatenCompatibilityPolicy megaten,
 			IEnumerable<string> hiddenInstructionNames,
 			IEnumerable<string> hiddenFunctionNames,
 			IEnumerable<string> scopedInstructionNames,
@@ -103,6 +118,7 @@ namespace MinorShift.Emuera.Compatibility
 			this.scopedVariableInstructionsEnabled = scopedVariableInstructionsEnabled;
 			Snake = snake;
 			EraFl = eraFl;
+			Megaten = megaten;
 			this.hiddenInstructionNames = new HashSet<string>(hiddenInstructionNames, StringComparer.Ordinal);
 			this.hiddenFunctionNames = new HashSet<string>(hiddenFunctionNames, StringComparer.Ordinal);
 			this.scopedInstructionNames = new HashSet<string>(scopedInstructionNames, StringComparer.Ordinal);
@@ -115,6 +131,8 @@ namespace MinorShift.Emuera.Compatibility
 		public CompatibilityPlan Plan { get; }
 		public ISnakeCompatibilityPolicy Snake { get; }
 		public IEraFlCompatibilityPolicy EraFl { get; }
+		// megaten 门控策略：v24pure/snake/erafl 会话下恒为 DisabledMegatenCompatibilityPolicy。
+		public IMegatenCompatibilityPolicy Megaten { get; }
 		/// <summary>
 		/// Frozen session input for the optional Snake <c>VARI</c>/<c>VARS</c>
 		/// instruction surface. This is intentionally not read from the mutable
