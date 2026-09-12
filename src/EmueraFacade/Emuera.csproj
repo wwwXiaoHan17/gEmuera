@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- 契约程序集：字面名必须是 Emuera（外部插件按 'Emuera, Version=1.824.0.0' 强引用编译，
+         .NET 绑定按简单名匹配，见 2026-09-04 Phase C 复现实验）。 -->
+    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework Condition=" '$(GodotTargetPlatform)' == 'android' ">net9.0</TargetFramework>
+    <AssemblyName>Emuera</AssemblyName>
+    <AssemblyVersion>1.824.0.0</AssemblyVersion>
+    <FileVersion>1.824.0.0</FileVersion>
+    <RootNamespace>MinorShift.Emuera.Runtime.Utils.PluginSystem</RootNamespace>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <DefaultItemExcludes>$(DefaultItemExcludes);.godot/**</DefaultItemExcludes>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="*.cs" />
+  </ItemGroup>
+</Project>

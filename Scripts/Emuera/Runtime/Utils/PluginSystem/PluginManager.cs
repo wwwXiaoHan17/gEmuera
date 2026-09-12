@@ -51,8 +51,8 @@ namespace MinorShift.Emuera.Runtime.Utils.PluginSystem
 			{
 				try
 				{
-					Assembly dll = AssemblyLoadContext.Default.LoadFromAssemblyPath(Path.GetFullPath(pluginPath));
-					Type manifestType = dll.GetTypes().FirstOrDefault(type => type.Name == "PluginManifest");
+					Assembly dll = new PluginLoadContext(pluginPath).LoadFromAssemblyPath(Path.GetFullPath(pluginPath));
+					Type manifestType = getLoadableTypes(dll).FirstOrDefault(type => type.Name == "PluginManifest");
 					if (manifestType == null)
 						continue;
 					object manifest = Activator.CreateInstance(manifestType);
@@ -196,6 +196,28 @@ namespace MinorShift.Emuera.Runtime.Utils.PluginSystem
 			methods.Clear();
 		}
 
+		/// <summary>
+		/// 容错式类型枚举：外部插件可能引用宿主没有的类型（如按更高版本框架或不同引擎分支编译），
+		/// ReflectionTypeLoadException 时取已加载子集继续——PluginManifest 能加载即满足注册。
+		/// </summary>
+		static Type[] getLoadableTypes(Assembly asm)
+		{
+			try
+			{
+				return asm.GetTypes();
+			}
+			catch (ReflectionTypeLoadException ex)
+			{
+				int failed = ex.Types.Count(type => type == null);
+				string detail = ex.LoaderExceptions != null && ex.LoaderExceptions.Length > 0
+					? ex.LoaderExceptions[0].Message
+					: "";
+				global::GenericUtils.Warn("Plugin: 插件 " + asm.GetName().Name + " 有 " + failed + "/" + ex.Types.Length
+					+ " 个类型不可用，继续用可用子集（首个原因: " + detail + "）");
+				return ex.Types.Where(type => type != null).ToArray();
+			}
+		}
+
 		void RegisterBuiltinMethods()
 		{
 			AddMethod(new BuiltinPluginMethod("LAUNCH_BROWSER", "Open a URL or local file with the platform shell.", LaunchBrowser));
@@ -324,7 +346,9 @@ namespace MinorShift.Emuera.Runtime.Utils.PluginSystem
 
 		Assembly resolveExternalEmueraAssembly(AssemblyName assemblyName)
 		{
-			if (assemblyName.Name == "Emuera" || assemblyName.Name == "emuera" || assemblyName.Name == "gemuera-c#")
+			if (assemblyName.Name == "Emuera" || assemblyName.Name == "emuera")
+				return typeof(PluginMethodParameter).Assembly;
+			if (assemblyName.Name == "gemuera-c#")
 				return Assembly.GetExecutingAssembly();
 			if (!string.IsNullOrEmpty(currentPluginDir))
 			{
