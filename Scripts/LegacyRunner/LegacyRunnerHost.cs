@@ -629,6 +629,8 @@ namespace gEmuera.LegacyRunner
                 }
                 _report?.WriteAll(console, success, reason, _stopwatch.ElapsedMilliseconds, _frameCount,
                     _replay?.SubmittedCount ?? 0, trace, displayObservation);
+                var queueStats = global::GenericUtils.GetUiQueueStats();
+                GD.Print($"[UIQUEUE] highWaterMark={queueStats.HighWaterMark} growCount={queueStats.GrowCount} capacity={queueStats.Capacity}");
             }
             catch (Exception ex)
             {

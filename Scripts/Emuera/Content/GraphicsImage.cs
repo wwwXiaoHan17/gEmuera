@@ -1,3 +1,4 @@
+using System.Numerics;
 using MinorShift._Library;
 using System;
 using System.Collections.Generic;
@@ -440,16 +441,35 @@ namespace MinorShift.Emuera.Content
 				return sub;
 			int w = sub.GetWidth();
 			int h = sub.GetHeight();
+			byte[] data = sub.GetData();
+			data = ApplyColorMatrixBytes(data, cm);
+			// Write the transformed buffer back once. Keeping the image mutation
+			// batched avoids repeated native interop calls and minimizes GC pressure.
+			sub.SetData(w, h, false, Godot.Image.Format.Rgba8, data);
+			return sub;
+		}
 
-			// Hoist matrix entries out of the pixel loop so each pixel only performs
-			// arithmetic and byte writes. This path is used when GPU submission is not
-			// available or times out.
+		// ApplyColorMatrix 的纯字节算术（无 Godot 依赖）：拆出供
+		// LegacyCompositionBitAlignTest 做替换路线的位级对齐实测。
+		// 语义逐位不变：byte/255f → 5×4 矩阵乘 → ToByte。
+		//
+		// 2026-09-12 两条替换路线经位对齐工具实测否决（证据见工具输出）：
+		//  1) Skia SKColorFilter：~1/3 采样像素不一致（alpha=0 输出强置全零 + 舍入
+		//     路径差异），零可观测差异约束下不可用；
+		//  2) System.Numerics gather/scatter SIMD：位级可对齐（150,752 采样零差异，
+		//     含 banker's 舍入显式构造），但 1Mpx×30 实测 0.94x 无净收益——通道
+		//     gather/scatter 的标量开销与未向量化的 byte/255 除法稀释了矩阵乘收益。
+		//     后续 SIMD 复试前提：byte→float 向量转换 + 通道 deinterleave 全向量化。
+		//
+		// ToByte 舍入语义确证：Godot Mathf.RoundToInt = Math.Round 默认 ToEven
+		//（banker's，x.5→偶数，如 165.5→166、90.5→90）——勿按 away-from-zero 理解。
+		internal static byte[] ApplyColorMatrixBytes(byte[] data, float[][] cm)
+		{
 			float m00 = cm[0][0], m10 = cm[1][0], m20 = cm[2][0], m30 = cm[3][0], m40 = cm[4][0];
 			float m01 = cm[0][1], m11 = cm[1][1], m21 = cm[2][1], m31 = cm[3][1], m41 = cm[4][1];
 			float m02 = cm[0][2], m12 = cm[1][2], m22 = cm[2][2], m32 = cm[3][2], m42 = cm[4][2];
 			float m03 = cm[0][3], m13 = cm[1][3], m23 = cm[2][3], m33 = cm[3][3], m43 = cm[4][3];
 
-			byte[] data = sub.GetData();
 			for (int i = 0; i + 3 < data.Length; i += 4)
 			{
 				float r = data[i] / 255.0f;
@@ -467,11 +487,61 @@ namespace MinorShift.Emuera.Content
 				data[i + 2] = ToByte(nb);
 				data[i + 3] = ToByte(na);
 			}
+			return data;
+		}
 
-			// Write the transformed buffer back once. Keeping the image mutation
-			// batched avoids repeated native interop calls and minimizes GC pressure.
-			sub.SetData(w, h, false, Godot.Image.Format.Rgba8, data);
-			return sub;
+		// GDrawGWithMask 的纯字节算术（无 Godot 依赖），拆出供位对齐工具与 bench 裁决。
+		// 语义：maskByte = mask.R（mask.A<255 时改用 mask.A）；==0 跳过保持 dst；
+		// ==255 直拷；其余 (src*ma + dst*ia)>>8（ma=mask+1——整数域，无浮点舍入）。
+		//
+		// 2026-09-12 替换路线裁决（详见 LegacyCompositionBitAlignTest 与进化记录）：
+		//  1) Skia blend：推演否决——maskByte 的 R/A 特殊规则、ma=mask+1 量化、>>8 截断
+		//     三重非标准语义在 SKBlendMode 中无对应（ColorMatrix 实测已证 Skia 混合的
+		//     alpha 预乘路径不可对齐）。
+		//  2) SIMD：混合和 src*ma+dst*ia ≤ 255*256+255*255=130,305 溢出 16 位向量域，
+		//     必须双 widen 到 uint 域 + mask 四通道广播 gather。基线实测 11.2 ms/Mpx
+		//     （ColorMatrix 标量基线 41.8 ms/Mpx 下 gather/scatter SIMD 尚且 0.94x 无收益；
+		//     本循环标量更便宜 3.7 倍而向量化复杂度更高）——推演否决，负优化不实现。
+		internal static bool BlendWithMaskBytes(
+			byte[] dstData, int dw, int dh,
+			byte[] srcData, int srcW,
+			byte[] maskData, int maskW,
+			int w, int h, int destX, int destY)
+		{
+			bool modified = false;
+			for (int y = 0; y < h; y++)
+			{
+				int dy = destY + y;
+				if (dy < 0 || dy >= dh) continue;
+				for (int x = 0; x < w; x++)
+				{
+					int dx = destX + x;
+					if (dx < 0 || dx >= dw) continue;
+					int mi = (y * maskW + x) * 4;
+					int maskByte = maskData[mi];
+					if (maskData[mi + 3] < 255)
+						maskByte = maskData[mi + 3];
+					if (maskByte == 0) continue;
+					int si = (y * srcW + x) * 4;
+					int di = (dy * dw + dx) * 4;
+					if (maskByte == 255)
+					{
+						dstData[di] = srcData[si]; dstData[di+1] = srcData[si+1];
+						dstData[di+2] = srcData[si+2]; dstData[di+3] = srcData[si+3];
+					}
+					else
+					{
+						int ma = maskByte + 1;
+						int ia = 256 - ma;
+						dstData[di]   = (byte)((srcData[si]   * ma + dstData[di]   * ia) >> 8);
+						dstData[di+1] = (byte)((srcData[si+1] * ma + dstData[di+1] * ia) >> 8);
+						dstData[di+2] = (byte)((srcData[si+2] * ma + dstData[di+2] * ia) >> 8);
+						dstData[di+3] = (byte)((srcData[si+3] * ma + dstData[di+3] * ia) >> 8);
+					}
+					modified = true;
+				}
+			}
+			return modified;
 		}
 
 		static byte ToByte(float value)
@@ -705,39 +775,7 @@ namespace MinorShift.Emuera.Content
 				byte[] dstData = godotImage.GetData();
 				byte[] srcData = srcGra.godotImage.GetData();
 				byte[] maskData = maskGra.godotImage.GetData();
-				bool modified = false;
-				for (int y = 0; y < h; y++)
-				{
-					int dy = destPoint.Y + y;
-					if (dy < 0 || dy >= dh) continue;
-					for (int x = 0; x < w; x++)
-					{
-						int dx = destPoint.X + x;
-						if (dx < 0 || dx >= dw) continue;
-						int mi = (y * maskW + x) * 4;
-						int maskByte = maskData[mi];
-						if (maskData[mi + 3] < 255)
-							maskByte = maskData[mi + 3];
-						if (maskByte == 0) continue;
-						int si = (y * srcW + x) * 4;
-						int di = (dy * dw + dx) * 4;
-						if (maskByte == 255)
-						{
-							dstData[di] = srcData[si]; dstData[di+1] = srcData[si+1];
-							dstData[di+2] = srcData[si+2]; dstData[di+3] = srcData[si+3];
-						}
-						else
-						{
-							int ma = maskByte + 1;
-							int ia = 256 - ma;
-							dstData[di]   = (byte)((srcData[si]   * ma + dstData[di]   * ia) >> 8);
-							dstData[di+1] = (byte)((srcData[si+1] * ma + dstData[di+1] * ia) >> 8);
-							dstData[di+2] = (byte)((srcData[si+2] * ma + dstData[di+2] * ia) >> 8);
-							dstData[di+3] = (byte)((srcData[si+3] * ma + dstData[di+3] * ia) >> 8);
-						}
-						modified = true;
-					}
-				}
+				bool modified = BlendWithMaskBytes(dstData, dw, dh, srcData, srcW, maskData, maskW, w, h, destPoint.X, destPoint.Y);
 				if (modified)
 				{
 					// Push mask-composited bytes only when a pixel actually changed. Some
@@ -1084,7 +1122,14 @@ namespace MinorShift.Emuera.Content
 					renderWidth = Math.Max(1, (int)uEmuera.Utils.GetDisplayLength(text, font));
 				int renderHeight = Math.Max(1, Fontsize + 6);
 				var item = EmueraMain.SubmitTextRender(text, Fontname, Fontsize, Fontstyle, brushColor, renderWidth, renderHeight);
-				if (item == null || !item.Completed.Wait(500) || item.ResultImage == null)
+				if (item == null || item.ResultImage == null)
+					return false;
+				// 原实现 Wait(500) 超时即 return false——主线程一次 >500ms 的抖动就会
+				// 静默丢弃本次 GDRAWSTRING 文本（可观测差异）。ERB 语义要求同步完成；
+				// 文本渲染组件随场景每帧消费队列，完成只受应用生命期约束（后台线程
+				// 随进程退出终止），因此无界等待才是忠实语义，超时兜底反而制造缺陷。
+				item.Completed.Wait(Timeout.Infinite);
+				if (item.ResultImage == null)
 					return false;
 				BlendRect(godotImage, item.ResultImage,
 					new Godot.Rect2I(0, 0, item.ResultImage.GetWidth(), item.ResultImage.GetHeight()),

@@ -1062,6 +1062,88 @@ public partial class EmueraContent
 					|| (c >= '\u2800' && c <= '\u28FF')
 					|| c == '\u3000';
 			}
+
+			/// <summary>
+			/// 网格 run 批绘：连续段内每个字符的字体 advance 与 emuera 格宽严格相等、
+			/// 格点累计为整数、且非实心块元素时，整段一次 DrawString。批绘的笔位推进
+			/// （起始 x + Σ格宽）与逐字绘制的 (int) 格点起点逐像素一致——零可观测差异
+			/// 由构造保证；整段总宽再用 GetStringSize（与 DrawString 同一布局引擎）
+			/// 复核一次，杜绝字体 fallback 导致的逐字 advance 漂移。
+			/// </summary>
+			public sealed class GridDrawRun
+			{
+				public int Start;
+				public int Count;
+				public float Advance;
+				public string Glyphs;
+			}
+
+			// run 划分缓存按 (font 实例, 字号, 行高) 键控；行高随缩放变化会使块元素
+			// 判定变化，需一并入键。计划按字符串身份失效，缓存随之重建。
+			Dictionary<(ulong, int, float), GridDrawRun[]> gridRunCache;
+
+			public GridDrawRun[] GetGridDrawRuns(
+				Font font,
+				int fontSize,
+				float lineHeight,
+				float fontHeight,
+				Func<Font, int, char, float> advanceOf,
+				Func<char, float, float, bool> isSolidBlock)
+			{
+				gridRunCache ??= new Dictionary<(ulong, int, float), GridDrawRun[]>();
+				var key = (font.GetInstanceId(), fontSize, lineHeight);
+				if (gridRunCache.TryGetValue(key, out var cached))
+					return cached;
+
+				var runs = new List<GridDrawRun>();
+				float exactX = 0.0f;
+				int runStart = -1;
+				float runAdvance = 0.0f;
+				for (int i = 0; i < Text.Length; i++)
+				{
+					char c = Text[i];
+					bool half = uEmuera.Utils.CheckHalfSize(c);
+					float cellW = half ? fontSize / 2.0f : fontSize;
+					// 起点必须整型（批绘笔位从 (int)exactX 出发推进浮点格宽）；
+					// 半格在奇数字号下非整，累计一旦带 .5 该位置不可起 run。
+					bool startIntegral = exactX == MathF.Floor(exactX);
+					bool cellIntegral = !half || (fontSize % 2 == 0);
+					bool canBatch = startIntegral
+						&& cellIntegral
+						&& !isSolidBlock(c, cellW, fontHeight)
+						&& advanceOf(font, fontSize, c) == cellW;
+					if (canBatch)
+					{
+						if (runStart < 0)
+						{
+							runStart = i;
+							runAdvance = 0.0f;
+						}
+						runAdvance += cellW;
+					}
+					else if (runStart >= 0)
+					{
+						runs.Add(BuildRun(runStart, i, runAdvance, font, fontSize));
+						runStart = -1;
+					}
+					exactX += cellW;
+				}
+				if (runStart >= 0)
+					runs.Add(BuildRun(runStart, Text.Length, runAdvance, font, fontSize));
+				var array = runs.Count > 0 ? runs.ToArray() : Array.Empty<GridDrawRun>();
+				gridRunCache[key] = array;
+				return array;
+
+				GridDrawRun BuildRun(int start, int end, float advance, Font runFont, int runSize)
+				{
+					string glyphs = Text.Substring(start, end - start);
+					// 双保险：整段布局总宽必须与 Σ格宽严格一致，否则放弃该 run（逐字回退）。
+					float laidOut = runFont.GetStringSize(glyphs, HorizontalAlignment.Left, -1, runSize).X;
+					if (laidOut != advance)
+						return new GridDrawRun { Start = start, Count = 0, Advance = 0, Glyphs = string.Empty };
+					return new GridDrawRun { Start = start, Count = end - start, Advance = advance, Glyphs = glyphs };
+				}
+			}
 		}
 
 		public ConsoleRenderSurface(EmueraContent owner)
@@ -1482,8 +1564,39 @@ public partial class EmueraContent
 
 			float exactX = 0.0f;
 			float drawX = x;
+			// run 批绘：仅当整段完全落在 part 宽度内才批量（越界段保持逐字，
+			// 复刻逐字路径在 part 右缘的逐字符裁剪语义）。
+			var runs = plan.GetGridDrawRuns(font, actualFontSize, owner.EffectiveLineHeight, fontHeight, GridAdvanceOf, ProbeSolidBlock);
+			int runIndex = 0;
+			while (runIndex < runs.Length && runs[runIndex].Count <= 0)
+				runIndex++;
 			for (int i = 0; i < text.Length; i++)
 			{
+				if (runIndex < runs.Length && runs[runIndex].Start == i)
+				{
+					var run = runs[runIndex];
+					runIndex++;
+					while (runIndex < runs.Length && runs[runIndex].Count <= 0)
+						runIndex++;
+					float runX = x + (int)exactX;
+					if (runX + run.Advance <= x + width)
+					{
+						float runWidth = Mathf.Max(run.Advance, x + width - runX);
+						DrawString(font, new Vector2(runX, lineY + baseline), run.Glyphs, HorizontalAlignment.Left,
+							Mathf.Max(1.0f, runWidth), actualFontSize, color);
+						if (bold)
+							DrawString(font, new Vector2(runX + 1.0f, lineY + baseline), run.Glyphs, HorizontalAlignment.Left,
+								Mathf.Max(1.0f, runWidth - 1.0f), actualFontSize, color);
+						for (int k = 0; k < run.Count; k++)
+						{
+							bool runHalf = uEmuera.Utils.CheckHalfSize(text[i + k]);
+							exactX += runHalf ? actualFontSize / 2.0f : actualFontSize;
+						}
+						drawX = x + (int)exactX;
+						i += run.Count - 1;
+						continue;
+					}
+				}
 				bool half = uEmuera.Utils.CheckHalfSize(text[i]);
 				float nextExactX = exactX + (half ? actualFontSize / 2.0f : actualFontSize);
 				float nextDrawX = x + (int)nextExactX;
@@ -1497,6 +1610,31 @@ public partial class EmueraContent
 				exactX = nextExactX;
 				drawX = nextDrawX;
 			}
+		}
+
+		// 网格 run 批绘的字体 advance 探测缓存：每 (font, 字号, 字符) 只查一次
+		// GetCharSize，避免每帧逐字符查字体度量。
+		readonly Dictionary<(ulong, int), Dictionary<char, float>> gridAdvanceCache = new Dictionary<(ulong, int), Dictionary<char, float>>();
+
+		float GridAdvanceOf(Font font, int fontSize, char value)
+		{
+			var key = (font.GetInstanceId(), fontSize);
+			if (!gridAdvanceCache.TryGetValue(key, out var perChar))
+			{
+				perChar = new Dictionary<char, float>();
+				gridAdvanceCache[key] = perChar;
+			}
+			if (!perChar.TryGetValue(value, out float advance))
+			{
+				advance = font.GetCharSize(value, fontSize).X;
+				perChar[value] = advance;
+			}
+			return advance;
+		}
+
+		bool ProbeSolidBlock(char value, float cellWidth, float fontHeight)
+		{
+			return TryGetSolidBlockElementRect(value, cellWidth, owner.EffectiveLineHeight, fontHeight, out _);
 		}
 
 		void DrawGridChar(Font font, char value, string glyph, float x, float lineTop, float baseline, float cellWidth, Color color, bool bold, float fontHeight, int fontSize)

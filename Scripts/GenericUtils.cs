@@ -55,6 +55,11 @@ internal static class GenericUtils
     // 为每个动作分配闭包和 ConcurrentQueue 内部节点（Android Mono GC 暂停的主要人为来源）。
     static readonly object uiQueueLock = new object();
     static UiEnvelope[] uiQueueRing = new UiEnvelope[256];
+    // 环形队列水位观测（零语义差异）：高水位/扩容次数/当前容量。
+    // 消费侧已有帧预算（Android 128 条/9ms、桌面 96 条/7ms），生产侧满槽倍增压容
+    // 不丢事件；本观测用于真实负载下验证 256 初容量是否充足、扩容是否触发。
+    static int uiQueueHighWaterMark;
+    static int uiQueueGrowCount;
     static readonly Stack<UiEnvelope> uiEnvelopePool = new Stack<UiEnvelope>();
     static int uiQueueHead = 0;
     static int uiQueueCount = 0;
@@ -573,7 +578,21 @@ internal static class GenericUtils
             if (Time.GetTicksUsec() - startUsec >= budgetUsec)
                 break;
         }
+        lock (uiQueueLock)
+        {
+            if (uiQueueCount > uiQueueHighWaterMark)
+                uiQueueHighWaterMark = uiQueueCount;
+        }
         Interlocked.Increment(ref uiFrameGeneration);
+    }
+
+    /// <summary>环形队列水位观测快照（诊断/legacy-runner 结束时输出）。</summary>
+    public static (int HighWaterMark, int GrowCount, int Capacity) GetUiQueueStats()
+    {
+        lock (uiQueueLock)
+        {
+            return (uiQueueHighWaterMark, uiQueueGrowCount, uiQueueRing.Length);
+        }
     }
 
     public static void WaitForUiFrameAfter(int generation, int timeoutMs)
@@ -622,7 +641,9 @@ internal static class GenericUtils
     // 环形缓冲已满时扩容（仅在超大突发时发生，不属于逐动作热路径）。
     static void GrowUiRingLocked()
     {
+        uiQueueGrowCount++;
         int oldCapacity = uiQueueRing.Length;
+        Warn(EmueraLogCategory.UI, () => $"[UI Queue] ring grew {oldCapacity} -> {oldCapacity * 2} (high watermark {uiQueueHighWaterMark}); consumption budget may be undersized for this game's burst.");
         var newRing = new UiEnvelope[oldCapacity * 2];
         for (int i = 0; i < uiQueueCount; i++)
             newRing[i] = uiQueueRing[(uiQueueHead + i) % oldCapacity];

@@ -324,8 +324,14 @@ Assert(
     && !legacyV24Profile.Snake.IsEnabled
     && !legacyV24Profile.EraFl.IsEnabled,
     "v24 legacy compatibility profile selected a game-specific policy.");
+// CALLSTR/TINPUTNF are Snake-only (absent from the checked-in v24 reference registry).
+// NOTE: PRINTN/PRINTVN/PRINTSN/PRINTFORMN/PRINTFORMSN/SKIPLOG are NOT Snake-only —
+// both references register them in BuiltInFunctionCode; their v24pure visibility is
+// correct despite the SNAKE_ handler prefix in the shared store.
 Assert(
-    !legacyV24Profile.IsInstructionVisible("PRINTN")
+    !legacyV24Profile.IsInstructionVisible("CALLSTR")
+    && !legacyV24Profile.IsInstructionVisible("TINPUTNF")
+    && legacyV24Profile.IsInstructionVisible("PRINTN")
     && !legacyV24Profile.IsFunctionVisible("陷落状态"),
     "v24 legacy compatibility profile leaked a Snake-only registry member.");
 
@@ -362,7 +368,9 @@ Assert(
     && legacyEraFlProfile.UsesLazyResourceIndex,
     "eraFL legacy compatibility profile did not select its module policy.");
 Assert(
-    !legacyEraFlProfile.IsInstructionVisible("PRINTN")
+    !legacyEraFlProfile.IsInstructionVisible("CALLSTR")
+    && !legacyEraFlProfile.IsInstructionVisible("TINPUTNF")
+    && legacyEraFlProfile.IsInstructionVisible("PRINTN")
     && !legacyEraFlProfile.IsFunctionVisible("陷落状态"),
     "eraFL legacy compatibility profile leaked a Snake-only registry member.");
 

@@ -275,11 +275,33 @@ const int AsyncTextureWorkerQuiescenceTimeoutMs = 2000;
 			{
 				return false;
 			}
+			// 近期被脚本合成访问过的图保持 CPU 常驻：合成需要 CPU 像素，释放→再访问
+			// 会按源文件重新解码（Android IO 税），图形密集 ERB 在此反复付税。
+			if (IsRecentCompositionSource())
+				return false;
 			// 过小的图释放后重解码开销反而更高，保留 CPU 副本避免 GetPixel 频繁重解码。
 			return (long)cachedWidth * cachedHeight >= 128L * 128L;
 		}
 
 		ulong placeholderRetryAfterMs = 0;
+		// 最近一次被脚本合成路径（GDrawG/GDRAWSPRITETOG 等）访问的时间戳。
+		// Android 上传后释放 CPU 副本的策略据此豁免近期合成源：G 系合成需要 CPU 像素，
+		// 释放后再访问会触发按源文件重新解码的 IO 税（图形密集 ERB 反复付税）。
+		ulong compositionAccessMs = 0;
+
+		internal void MarkCompositionSource()
+		{
+			compositionAccessMs = (ulong)System.Environment.TickCount64;
+		}
+
+		bool IsRecentCompositionSource()
+		{
+			if (compositionAccessMs == 0)
+				return false;
+			// 120 秒滚动窗：图形密集游戏的合成源保持 CPU 常驻，窗外的图恢复原释放策略。
+			return (ulong)System.Environment.TickCount64 - compositionAccessMs < 120_000UL;
+		}
+
 		private ImageTexture _texture = null;
 
 		// 非触发检查：渲染路径用它判断 GPU 纹理是否已就绪，绝不触发同步 decode/resize/上传。
@@ -490,6 +512,7 @@ const int AsyncTextureWorkerQuiescenceTimeoutMs = 2000;
 			if(ti != null && !ti.IsPlaceholder && ti.image != null && !ti.IsDisposed)
 			{
 				ti.Touch();
+				ti.MarkCompositionSource();
 				return ti;
 			}
 		}
