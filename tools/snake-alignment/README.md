@@ -1,4 +1,4 @@
-# Snake behaviorChecks 本地替身 harness（Test-SnakeBehaviorSurface）
+﻿# Snake behaviorChecks 本地替身 harness（Test-SnakeBehaviorSurface）
 
 `tools/snake-alignment/Test-SnakeBehaviorSurface.ps1`
 
@@ -7,8 +7,8 @@
 同目录的 `Test-SnakeReferenceSurface.ps1` 是 snake 对齐的**真门禁**，它有一个必填参数 `-ReferenceRoot`，
 必须指向上游参考检出 `E:\MyCode\Era\emuera_lazyloading_*`。
 
-**本机不存在该参考检出。** 真门禁在 `Required source file was not found` 处直接 `throw`，
-根本走不到后面的断言 —— 也就是说，那 32 条 `$behaviorChecks` 在本机**永远跑不到**。
+**不是每台机器都有该参考检出。** 真门禁在 `Required source file was not found` 处直接 `throw`，
+根本走不到后面的断言 —— 也就是说，那 32 条 `$behaviorChecks` 在无参考检出的机器上**永远跑不到**。
 而 `$behaviorChecks` 恰好是门禁里"按**精确路径** + 内容正则钉源码"的那一半：
 
 ```powershell
@@ -17,7 +17,7 @@
 
 这正是 `FILE_STANDARD.md` §3 纯移动拆分**最容易破坏**的表面：把成员搬到
 `Type.Feature.cs` 分片里去，钉扎指向的路径就变了，正则再也匹配不到，真门禁会在有参考检出的机器上失败，
-而在本机"看起来一切正常"。
+而在无参考检出的机器上"看起来一切正常"。
 
 本 harness 就是补这一段：**从真门禁脚本里解析出权威的 `$behaviorChecks` 字面量（解析，不复制，
 因此不可能与门禁漂移）**，然后逐条按其断言方式求值：文件存在 + 内容正则命中。
@@ -26,7 +26,7 @@
 
 - 改过 `Scripts/Emuera/` 解释器、或对其中任何文件做过 partial 拆分 / 成员搬移之后。
 - 提交纯移动拆分 PR 之前（配合 `tools/pure-move/Test-PureMove.ps1`：一个管"行没变"，一个管"路径钉扎还在"）。
-- 想在**本机**（无参考检出）确认 snake 行为钉扎没被拆散时。
+- 想在**没有参考检出的机器**上确认 snake 行为钉扎没被拆散时。
 
 ## 怎么用
 
@@ -62,7 +62,7 @@ RESULT: 32 passed / 0 failed
 
 ## 它证明了什么
 
-- 真门禁的 32 条 `$behaviorChecks`（精确路径 + 内容正则）在本机当前工作区**全部命中**。
+- 真门禁的 32 条 `$behaviorChecks`（精确路径 + 内容正则）在当前工作区**全部命中**。
 - 也就是说：这一半钉扎没有被纯移动拆分、改名、删除或搬走。
 
 ## 它**不**证明什么（务必如实理解）

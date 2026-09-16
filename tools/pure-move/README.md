@@ -1,4 +1,4 @@
-# 纯移动拆分校验器（Test-PureMove）
+﻿# 纯移动拆分校验器（Test-PureMove）
 
 `tools/pure-move/Test-PureMove.ps1`
 
@@ -24,7 +24,7 @@
 
 ## 怎么用
 
-在仓库根目录执行（本机是 Windows PowerShell 5.1，没有 `pwsh`）：
+在仓库根目录执行（Windows 环境常只有 Windows PowerShell 5.1、没有 `pwsh`）：
 
 ```powershell
 # 最常用：基线取自 reports\.base-commit（该文件是本地基线指针，reports/ 不入库）
