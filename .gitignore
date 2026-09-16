@@ -4,15 +4,12 @@
 # .godot/（含 imported/ 二进制缓存）是可再生目录，整体忽略。
 # 注意：*.import 侧车文件是导入设置（importer/uid/params），官方要求提交 VCS，勿加入忽略。
 .godot/
-/export/
 
 # ============================================================
-# 构建与导出产物（统一落在 Build/ 下管理，不入库）
+# 构建与导出产物（统一落在 export/ 工作区，不入库）
 # ============================================================
-# Godot Android 导出工程（导出时生成）
-/Build/android/
-# 预编译原生库（Android 导出前由 csproj 从 NuGet 包自愈恢复）
-/Build/NativeLibs/
+# export/ = APK 导出统一工作区：android/（gradle 工程）、NativeLibs/（csproj 自愈还原的 .so）、releases/（APK 产物）、keystore/（签名密钥）
+/export/
 *.apk
 *.aab
 *.idsig
