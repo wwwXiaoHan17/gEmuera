@@ -1,4 +1,4 @@
-﻿# 纯移动拆分校验器（Test-PureMove）
+# 纯移动拆分校验器（Test-PureMove）
 
 `tools/pure-move/Test-PureMove.ps1`
 

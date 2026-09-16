@@ -1,4 +1,4 @@
-﻿# Snake behaviorChecks 本地替身 harness（Test-SnakeBehaviorSurface）
+# Snake behaviorChecks 本地替身 harness（Test-SnakeBehaviorSurface）
 
 `tools/snake-alignment/Test-SnakeBehaviorSurface.ps1`
 

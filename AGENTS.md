@@ -50,7 +50,7 @@ Emuera 核心编译器以 C# 编写，为减少开发成本、方便 AI 对接�
 
 任务结束后，删除冗余的临时测试文件，避免造成垃圾文件。
 
-## 构建与验证（实测经验，2026-08；2026-09-13 补充本机实测）
+## 构建与验证（实测经验，2026-08；2026-09-13 补充）
 
 - **C# 编译/构建首选 Godot mono**：`Godot_v4.7-stable_mono_win64_console.exe --headless
   --path <项目根> --build-solutions --quit`。
@@ -146,7 +146,7 @@ project.godot -> first_window.tscn -> FirstWindow._Ready()
 - 仓库：`https://github.com/wwwXiaoHan17/gEmuera`，默认协作分支 `dev`。
 - 每个任务从最新 `dev` 新建分支：`ai/<任务简述>` 或 `fix/<问题简述>`。
 - 不直接向 `dev` 或主分支提交代码；完成任务后提 PR 指向 `dev`，PR 标题与说明用中文。
-- PR 标题与说明用中文。每个 PR 只解决一个明确问题，禁止混入无关重构、格式化和资源变更。
+- 每个 PR 只解决一个明确问题，禁止混入无关重构、格式化和资源变更。
 - 禁止擅自强制推送、硬重置、删除远端分支、回滚他人提交。
 
 ## 常用文件入口

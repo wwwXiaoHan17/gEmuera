@@ -8,17 +8,17 @@
     {
       "id": "FirstWindow",
       "path": "Scripts/FirstWindow.cs",
-      "sha256": "6359b1f470063d7c4a1dd72462db90ed99dec2ece4eb65cff933fe29ed6d0f26"
+      "sha256": "9741a77c8a0911f940fd9f1bb1e83f140d9a2b49729b7bdb4020896ab0b65aed"
     },
     {
       "id": "Program",
       "path": "Scripts/Emuera/Program.cs",
-      "sha256": "6cfd9883d3c3c20fd084ca191ed6d3235f48bfbaedd2215d5f6c186f175e038a"
+      "sha256": "c9a5a226f5b9ba4faa8972fe42188967d27d1dec35d9757b407e703adac19c02"
     },
     {
       "id": "LegacyRunnerConfig",
       "path": "Scripts/LegacyRunner/LegacyRunnerConfig.cs",
-      "sha256": "734b405dd009641da9d5d68a73d417ba8a0e2d0755788b6a8df5d47f8cc9642b"
+      "sha256": "82237dfb99ce92637a1c612b8213f493927c7ad42f20e328be231081ea3f7a0a"
     }
   ],
   "expected": {

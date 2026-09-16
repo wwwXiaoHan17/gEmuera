@@ -185,7 +185,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/dialect-inventory/Test
 > 或补一个聚合脚本（尚未有）。
 
 **存量损坏与修复结果（2026-09-13 实测量化 → 2026-09-15 全部修完）**：M0→LegacyRunner 改名时失联，**其中 6 个**（第 7 个 `Test-LegacyRunner.ps1` 本就无 M0 引用）在任何内容断言之前就 throw，
-（`In-process session-cycle contract file is missing: D:\gemuera\Scripts\M0\LegacyRunnerConfig.cs`，exit=1）。
+（`In-process session-cycle contract file is missing: <项目根>\Scripts\M0\LegacyRunnerConfig.cs`，exit=1）。
 实测：**before = 6/6 红、断言执行数 0**；2026-09-13 机械修复后 **5 个转绿**，
 只剩 `Test-InProcessSessionCycle.ps1` 红——但它现在**执行了 221 次断言求值**，4 条失败各指名契约与符号，不再是"文件缺失"。
 **2026-09-15 补：第 6 个也已转绿（exit 0）**，那 4 条经查全部是 rename-only，见下节更正块。
@@ -247,7 +247,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/dialect-inventory/Test
 
 ### 6.7 CodeGraph 索引
 
-`.codegraph/` 是本机可再生缓存（非钉扎），但大拆分后旧索引会系统性误导检索。多文件移动/拆分的 PR 合入后重建索引（或注明索引需按需重建）。
+`.codegraph/` 是本地可再生缓存（非钉扎），但大拆分后旧索引会系统性误导检索。多文件移动/拆分的 PR 合入后重建索引（或注明索引需按需重建）。
 
 ## 7. 验证与合规清单（按范围分流）
 
