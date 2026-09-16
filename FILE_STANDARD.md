@@ -305,6 +305,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/dialect-inventory/Test
 
 规则：
 
+- `.godot/`、`reports/`、`bin/`、`obj/` 等可再生忽略目录不列入上表，但禁止在其下放置需入库的内容。
 - `Build/` 已于 2026-09-16 退役（内容分流至 `export/` 与 `tools/fixture-manifest/`），禁止重建；csproj 保留 `Build\**` 编译排除仅作兜底。
 - `export_presets.cfg` 必须留在根（Godot 硬编码位置），其中的 `export_path`/`gradle_build_directory` 一律指向 `export/` 下。
 - 目录名大小写一律如上表拼法：Windows 文件系统不敏感而 Android 导出敏感；改名前先做全仓引用扫描（2026-09-16 实测全仓一~三级目录名无大小写冲突，后续新增目录不得引入）。
