@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string]$ProjectRoot = (Get-Location).Path
 )
@@ -68,6 +68,9 @@ namespace MinorShift.Emuera.GameView
     {
         internal bool IsWaitingInput { get; set; }
         internal bool IsWaitingInputSomething { get; set; }
+        // 值/按钮选择型等待（IntValue/StrValue/AnyValue/IntButton 等）——真实声明在
+        // uEmuera/partial/EmueraConsole.cs，ef3ba1d 起被 LegacyInputReplayDriver 判定引用。
+        internal bool IsWaitingValueSelection { get; set; }
         internal bool IsWaitingEnterKey { get; set; }
         internal bool IsWaitAnyKey { get; set; }
         internal bool IsInProcess { get; set; }
@@ -155,6 +158,9 @@ namespace gEmuera.LegacyRunner.Tests
             {
                 IsWaitingInput = true,
                 IsWaitingInputSomething = true,
+                // ef3ba1d 起值/按钮选择型等待由 IsWaitingValueSelection 判定
+                //（StrValue 等待在真实控制台两者皆真；探针按新语义建模）。
+                IsWaitingValueSelection = true,
                 IsInProcess = true,
                 InputType = MinorShift.Emuera.GameProc.InputType.StrValue,
                 NewButtonGeneration = 5
