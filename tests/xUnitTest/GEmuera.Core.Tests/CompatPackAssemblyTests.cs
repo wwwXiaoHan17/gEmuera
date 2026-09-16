@@ -142,4 +142,74 @@ public class CompatPackAssemblyTests
         Assert.Null(assembled);
         Assert.Contains(errors!, e => e.Contains("null 元素"));
     }
+
+    // —— 以下用手工句柄（internal 构造点，经 InternalsVisibleTo）直接钉哈希组成与
+    //    跨包变体对账，不依赖程序集加载路径 ——
+
+    static CompatPackHandle ManualHandle(string packId, string packSha256, IReadOnlyDictionary<string, string>? variantSelections = null)
+    {
+        // CompatPackManifest 的构造器在 Emuera 契约程序集内为 internal（测试程序集无
+        // InternalsVisibleTo），经 public TryParse 构造；变体选拼进 JSON。
+        string variantsJson = variantSelections is null || variantSelections.Count == 0
+            ? ""
+            : ",\"variantSelections\":{" + string.Join(",", variantSelections.Select(pair =>
+                  "\"" + pair.Key + "\":\"" + pair.Value + "\"")) + "}";
+        string json = "{\"packId\":\"" + packId + "\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1" + variantsJson + "}";
+        var manifest = CompatPackManifest.TryParse(json, out var parsed, out var parseErrors)
+            ? parsed! : throw new InvalidOperationException(string.Join("; ", parseErrors));
+        return new CompatPackHandle(
+            manifest, null!, "Z:/manual/" + packId + ".dll", packSha256, packSha256,
+            Array.Empty<ISurfaceContribution>(), Array.Empty<ICapabilityContribution>(),
+            Array.Empty<IInstructionVariantContribution>(), Array.Empty<IPolicyContribution>(),
+            new CompatPackLoadContext("Z:/manual/" + packId + ".dll"));
+    }
+
+    static string ShaOf(char fill) => new(fill, 64);
+
+    [Fact]
+    public void VariantSelection_ConflictingValuesAcrossPacks_Rejects()
+    {
+        var a = ManualHandle("test.pack-a", ShaOf('a'), new Dictionary<string, string> { ["SETBGIMAGE"] = "builtin:snake" });
+        var b = ManualHandle("test.pack-b", ShaOf('b'), new Dictionary<string, string> { ["SETBGIMAGE"] = "builtin:v24" });
+
+        Assert.False(CompatPackPlanAssembler.TryAssemble(Baseline(), new[] { a, b }, out var assembled, out var errors));
+        Assert.Null(assembled);
+        Assert.Contains(errors!, e => e.Contains("变体选择跨包冲突"));
+    }
+
+    [Fact]
+    public void VariantSelection_SameValue_AcceptsBothOrders_SameHash()
+    {
+        // 同键同值幂等；且两个包按不同顺序组装必须得到同一哈希（顺序无关不变量）。
+        var a = ManualHandle("test.pack-a", ShaOf('a'), new Dictionary<string, string> { ["SETBGIMAGE"] = "builtin:snake" });
+        var b = ManualHandle("test.pack-b", ShaOf('b'), new Dictionary<string, string> { ["SETBGIMAGE"] = "builtin:snake" });
+
+        Assert.True(CompatPackPlanAssembler.TryAssemble(Baseline(), new[] { a, b }, out var ab, out var errorsAb), string.Join("; ", errorsAb));
+        Assert.True(CompatPackPlanAssembler.TryAssemble(Baseline(), new[] { b, a }, out var ba, out var errorsBa), string.Join("; ", errorsBa));
+        Assert.Equal(ab!.CanonicalHash, ba!.CanonicalHash);
+    }
+
+    [Fact]
+    public void Hash_PackSha256_IsFirstClassInput()
+    {
+        // 同 packId 不同包字节哈希 → 组装哈希不同（PackSha256 入哈希链的哨兵）。
+        var x = ManualHandle("test.pack-a", ShaOf('a'));
+        var y = ManualHandle("test.pack-a", ShaOf('b'));
+
+        Assert.True(CompatPackPlanAssembler.TryAssemble(Baseline(), new[] { x }, out var planX, out _));
+        Assert.True(CompatPackPlanAssembler.TryAssemble(Baseline(), new[] { y }, out var planY, out _));
+        Assert.NotEqual(planX!.CanonicalHash, planY!.CanonicalHash);
+    }
+
+    [Fact]
+    public void Hash_VariantSelectionLine_IsInput()
+    {
+        // 变体选择行入哈希的哨兵：同包字节、有无变体选择 → 哈希不同。
+        var plain = ManualHandle("test.pack-a", ShaOf('a'));
+        var withSelection = ManualHandle("test.pack-a", ShaOf('a'), new Dictionary<string, string> { ["SETBGIMAGE"] = "builtin:snake" });
+
+        Assert.True(CompatPackPlanAssembler.TryAssemble(Baseline(), new[] { plain }, out var planPlain, out _));
+        Assert.True(CompatPackPlanAssembler.TryAssemble(Baseline(), new[] { withSelection }, out var planSelected, out _));
+        Assert.NotEqual(planPlain!.CanonicalHash, planSelected!.CanonicalHash);
+    }
 }

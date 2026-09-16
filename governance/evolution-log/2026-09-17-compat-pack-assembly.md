@@ -43,3 +43,18 @@ GEmuera.Core.Tests 52/52。
 GEmuera.Core.Tests 52/52（46 旧 + 6 新）、EmueraFacade.Tests 33/33；Core `-t:Rebuild`
 新增代码零警告（仅 KoujouPrefetchCache 存量）；Godot 无头构建 DLL 02:30:11 更新；
 方言三冒烟全过；新 .uid 2 枚入库。
+
+## result-review 返工记录（首轮 97 → 复评见后）
+
+首轮 97/100 未过，两项必修与处置：
+1. **变体选择跨包静默 last-wins**（评审变异实证：同启用集不同顺序 → 不同哈希，证伪
+   类注释的顺序无关承诺与设计 §9 哈希稳定性）→ CollectVariantSelections 改为同键同值
+   幂等、同键异值收集错误整体拒载。
+2. **哈希组成无测试哨兵**（变异实测：去掉 PackSha256 或变体行，6/6 仍绿）→ Core 开
+   `InternalsVisibleTo("GEmuera.Core.Tests")`，测试用手工句柄（manifest 经 public
+   TryParse 构造——Emuera 程序集的 internal ctor 对测试不可见，这个跨程序集可见性
+   边界值得记住）直接钉住：PackSha256 入哈希、变体行入哈希、双包 [A,B]vs[B,A] 同哈希。
+另按评审建议在方法注释记明：包 saveProfileId v1 不参与组装，留宿主接线裁定。
+
+复验：GEmuera.Core.Tests 56/56（含 4 条手工句柄哨兵）、EmueraFacade.Tests 33/33、
+三冒烟全过、Core `-t:Rebuild` 新增代码零警告。

@@ -15,7 +15,9 @@ namespace GEmuera.Core.Compatibility.Packs;
 /// </summary>
 public static class CompatPackPlanAssembler
 {
-    /// <summary>折叠包集合进基线计划。任一跨包冲突即整体失败（fail-closed，与加载器同纪律）。</summary>
+    /// <summary>折叠包集合进基线计划。任一跨包冲突（同名注册、变体选择同键异值）即整体失败
+    /// （fail-closed，与加载器同纪律）。包清单的 saveProfileId v1 不参与组装——存档 profile
+    /// 由基线会话决定，包级覆盖留宿主接线增量裁定。</summary>
     public static bool TryAssemble(
         CompatibilityPlan baseline,
         IReadOnlyList<CompatPackHandle> packs,
@@ -133,7 +135,13 @@ public static class CompatPackPlanAssembler
         var modules = baseline.Dialect.Modules.ToList();
         modules.AddRange(packModules);
 
-        var variantSelections = CollectVariantSelections(packs);
+        var variantSelections = CollectVariantSelections(packs, collected);
+        if (collected.Count > 0)
+        {
+            errors = collected;
+            return false;
+        }
+
         string dialectHash = ComputeDialectDeltaHash(baseline, packHashLines, addedInstructions, addedFunctions, removedInstructions, removedFunctions, variantSelections);
         var dialect = new DialectPlan(modules, baseline.Dialect.Ports, instructions, functions, dialectHash);
         string canonicalHash = ComputePlanEnvelopeHash(baseline, dialectHash, capabilities);
@@ -142,13 +150,23 @@ public static class CompatPackPlanAssembler
         return true;
     }
 
-    static IReadOnlyDictionary<string, string> CollectVariantSelections(IReadOnlyList<CompatPackHandle> packs)
+    static IReadOnlyDictionary<string, string> CollectVariantSelections(IReadOnlyList<CompatPackHandle> packs, List<string> errors)
     {
+        // 同键同值幂等放行；同键不同值是跨包冲突，收集错误整体拒载——不做静默仲裁
+        // （fail-closed；否则包排列顺序会影响组装哈希，破坏「同启用集同哈希」）。
         var selections = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (CompatPackHandle pack in packs)
         {
             foreach (KeyValuePair<string, string> selection in pack.Manifest.VariantSelections)
+            {
+                if (selections.TryGetValue(selection.Key, out string? existing))
+                {
+                    if (!string.Equals(existing, selection.Value, StringComparison.Ordinal))
+                        errors.Add("指令 " + selection.Key + " 的变体选择跨包冲突：" + existing + " 与 " + selection.Value + "。");
+                    continue;
+                }
                 selections[selection.Key] = selection.Value;
+            }
         }
         return selections;
     }
