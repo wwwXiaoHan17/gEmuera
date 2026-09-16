@@ -11,7 +11,7 @@
 | 包格式 | **程序集即包** | 包 = 一个 C# 程序集 + 内嵌清单；声明式数据（名单/capability）是程序集内的实现细节，不再是独立格式层 |
 | 本轮范围 | 只出接口 | 五方言第一方包化**不定排期**，仅给阶段划分（§8） |
 | examples 处置 | 复活为设计输入 | `docs/designs/agent-profiles/profile.schema.json` 的字段经验注入清单设计（§3.3） |
-| 布局 | 已先行落地 | PR #10（export/ 工作区、tests 归一、根目录白名单 FILE_STANDARD §9） |
+| 布局 | 先行提交待合并 | PR #10（export/ 工作区、tests 归一、根目录白名单 FILE_STANDARD §9）**已提交、尚未合并**；本文引用其引入的路径处已注明现路径 |
 
 ## 1. 术语：三类"扩展"严格区分
 
@@ -58,7 +58,7 @@ gEmuera App（本体）
 }
 ```
 
-### 3.3 agent-profiles schema 注入的经验（`docs/designs/agent-profiles/profile.schema.json`）
+### 3.3 agent-profiles schema 注入的经验（现路径 `examples/agent-profiles/profile.schema.json`；PR #10 合并后为 `docs/designs/agent-profiles/profile.schema.json`）
 
 - **身份比对拒绝加载**：`gameIdentity` 声明后与 GameBase.csv 比对，不匹配拒绝加载并回退纯 v24（对应 schema 的 game 身份字段语义：加载时比对、不匹配拒绝并走原版降级）。
 - **降级不变量**：包加载失败（任何原因）→ 回退纯 v24 + 明确日志，绝不"半加载"静默继续（对应 ProfileLoader outcome.Errors 全量报告模式）。
@@ -66,7 +66,7 @@ gEmuera App（本体）
 
 ## 4. 程序集契约（C# 接口草案）
 
-落点：**`src/EmueraFacade`（契约程序集，AssemblyName=Emuera，net8.0/net9.0 双目标）新增 `Compatibility.Packs` 命名空间**。理由：包作者编译面最小（只引契约程序集，不引宿主全集）；与现有插件契约（IPluginMethod 等）同一落点先例；避免 src/Core 引擎宿主类型。*备选：接口进 src/Core + 变体工厂弱类型桥（`Func<object>`）——不推荐，损失类型安全。*（此为设计决定点，标注待用户确认。）
+落点：**`src/EmueraFacade`（契约程序集，AssemblyName=Emuera，net8.0 桌面 / net9.0 android 条件目标）新增 `Compatibility.Packs` 命名空间**。理由：包作者编译面最小（只引契约程序集，不引宿主全集）；与现有插件契约（IPluginMethod 等）同一落点先例；避免 src/Core 引擎宿主类型。*备选：接口进 src/Core + 变体工厂弱类型桥（`Func<object>`）——不推荐，损失类型安全。*（此为设计决定点，标注待用户确认。）
 
 ```csharp
 namespace Emuera.Compatibility.Packs;
@@ -150,7 +150,9 @@ per-game 启用配置（launcher 侧：游戏 → 包列表）给出**包文件�
 - 程序集在 ALC 内运行，可见面 = EmueraFacade 契约 + 框架库；不向包暴露引擎内部可变静态。
 - 分发不在本契约范围：不做市场/自动更新/签名校验（本地文件 only）。若未来需要签名，挂接点是 5.3 校验段。
 
-## 7. 与现有机制对账（迁移时消灭的债，引用 2026-09-16 方言设计审查编号）
+## 7. 与现有机制对账（迁移时消灭的债）
+
+> 下表编号 H1/H2/M4 出自 2026-09-16 的方言设计会话人工评审（未作为独立文档归档入库）；编号含义以本表「现状」列的描述为准。
 
 | 债 | 现状 | 包化后的终态 |
 | --- | --- | --- |
@@ -165,7 +167,7 @@ per-game 启用配置（launcher 侧：游戏 → 包列表）给出**包文件�
 - **P-A 试点**：erafl（算法型，验证策略贡献）+ megaten（纯声明型，验证 manifest-only 壳）双试点跑通加载→门禁全绿；
 - **P-B**：snake（变体重度，验证开放注册）+ erablue；
 - **P-C**：v18（纯数据壳，验证全量名单清单）；
-- **P-D 引擎瘦身**：`BuiltInDialectCatalog` 六模块注册退役为包文件，Core 只剩 v24 + 能力实现库。
+- **P-D 引擎瘦身**：五方言模块（snake/erafl/erablue/megaten/v18）注册退役为包文件；v24 模块内化为引擎原生基线，Core 保留 v24 表面 + 能力实现库。
 
 每阶段验收：六游戏启动矩阵全绿、方言快照名录零差异、三冒烟 + legacy-runner 门禁、result-review ≥98。
 
