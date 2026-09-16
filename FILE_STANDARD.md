@@ -115,7 +115,7 @@ rg "<Compile Include" tools -g "*.csproj"
 # 3) 契约测试/清单是否按路径或内容钉扎该文件
 rg "\.cs" tools -g "*.ps1" -g "*.json"
 # 4) 场景是否无 uid 硬引用该脚本路径
-rg "res://Scripts" assets/scenes -g "*.tscn"; rg "preload" test -g "*.gd"
+rg "res://Scripts" assets/scenes -g "*.tscn"; rg "preload" tests -g "*.gd"
 ```
 
 ### 6.1 方言证据链（dialect-inventory）
@@ -241,7 +241,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/dialect-inventory/Test
 
 ### 6.6 场景与测试的脚本路径引用
 
-部分 `.tscn` 以 `res://Scripts/...` 硬路径引用脚本且**无 uid**（路径是唯一引用）：`Scalepad.tscn`、`RuntimeDiagnosticsPanel.tscn`、`QuickButtons.tscn`、`OptionWindow.tscn`、`Inputpad.tscn`、`tools/legacy-runner/legacy_runner.tscn`；`test/GodotHost/PrototypeHostRegressionTest.gd` preload 6 个路径。**规则**：凡被 `.tscn`/`.gd` 引用的脚本主文件禁止改名/移动/把类声明迁出原文件——只允许模式 A partial 拆分（主文件保留类型声明），且拆分 PR 列出引用方清单。面板类场景（Scalepad/QuickButtons 等）可能躲过桌面启动冒烟，不能以"游戏能进"代替检查。
+部分 `.tscn` 以 `res://Scripts/...` 硬路径引用脚本且**无 uid**（路径是唯一引用）：`Scalepad.tscn`、`RuntimeDiagnosticsPanel.tscn`、`QuickButtons.tscn`、`OptionWindow.tscn`、`Inputpad.tscn`、`tools/legacy-runner/legacy_runner.tscn`；`tests/GDUnit4Test/GodotHost/PrototypeHostRegressionTest.gd` preload 6 个路径。**规则**：凡被 `.tscn`/`.gd` 引用的脚本主文件禁止改名/移动/把类声明迁出原文件——只允许模式 A partial 拆分（主文件保留类型声明），且拆分 PR 列出引用方清单。面板类场景（Scalepad/QuickButtons 等）可能躲过桌面启动冒烟，不能以"游戏能进"代替检查。
 
 另：`tools/session-state-inventory` 钉扎 `GlobalStatic.cs`（`Reset` 方法必须留在原路径）与 `Program.cs`；`tools/core-contracts/Test-CoreArchitecture.ps1` 钉扎 `ErbLoader.cs`、`Process.State.cs`、`Creator.cs`、`FunctionIdentifier.cs`。
 
@@ -268,7 +268,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/dialect-inventory/Test
 - [ ] 相应家族有 xUnit/core-contracts 测试时运行之；受影响的契约门禁（§6.1–6.4）按"存量红纪律"重跑。
 
 `src/Core/**`：
-- [ ] Godot headless 构建 + `dotnet test tests/GEmuera.Core.Tests`（xUnit）通过；
+- [ ] Godot headless 构建 + `dotnet test tests/xUnitTest/GEmuera.Core.Tests`（xUnit）通过；
 - [ ] `tools/core-contracts` 自检脚本可运行（拆分被其链接的文件时必跑）。
 
 `tests/**`：

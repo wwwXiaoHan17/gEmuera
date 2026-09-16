@@ -5,7 +5,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "gemuera-c#", "gemuera-c#.cs
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GEmuera.Core.Tests", "tests\GEmuera.Core.Tests\GEmuera.Core.Tests.csproj", "{6B675B00-F677-4281-851E-6187E21580E0}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GEmuera.Core.Tests", "tests\xUnitTest\GEmuera.Core.Tests\GEmuera.Core.Tests.csproj", "{6B675B00-F677-4281-851E-6187E21580E0}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
 EndProject

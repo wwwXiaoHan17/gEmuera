@@ -72,7 +72,7 @@ gdUnit4 提供测试套件基类 `GdUnitTestSuite`、生命周期钩子（`befor
 | **集成测试** | 测试多个组件协作的流程 | 脚本加载 → label 索引 → 状态机推进 |
 | **场景/UI 测试** | 用 SceneRunner 加载 `.tscn`，模拟输入验证 UI 行为 | 控制台按钮点击、输入面板交互、快速按钮触屏 |
 | **回归测试** | 修复 Bug 后补测试，防止复发 | 修复某表达式解析 Bug 后写一条断言锁定行为 |
-| **CI 流水线** | 提交/PR 前自动跑全部测试，用退出码卡门禁 | GitHub Actions 中调用 `runtest.sh -a test/` |
+| **CI 流水线** | 提交/PR 前自动跑全部测试，用退出码卡门禁 | GitHub Actions 中调用 `runtest.sh -a tests/GDUnit4Test/` |
 | **重构保护** | 重构前先补测试，确保行为不变 | 重构 `Process.cs` 前先覆盖关键脚本路径 |
 
 ### 不适合 / 需注意的场景
@@ -133,11 +133,11 @@ gdUnit4 提供测试套件基类 `GdUnitTestSuite`、生命周期钩子（`befor
 
 ### 编写第一个测试套件
 
-测试套件是一个继承 `GdUnitTestSuite` 的 GDScript，文件名通常以 `Test.gd` 结尾（如 `MyClassTest.gd`），放在 `test/` 目录下。每个 `func test_xxx()` 是一个独立测试用例。
+测试套件是一个继承 `GdUnitTestSuite` 的 GDScript，文件名通常以 `Test.gd` 结尾（如 `MyClassTest.gd`），放在 `tests/GDUnit4Test/` 目录下（本项目测试唯一根为 tests/）。每个 `func test_xxx()` 是一个独立测试用例。
 
 ```gdscript
 extends GdUnitTestSuite
-# 文件: test/game_data/expression_test.gd
+# 文件: tests/GDUnit4Test/game_data/expression_test.gd
 
 # 整个套件开始前执行一次（准备数据）
 func before() -> void:
@@ -344,17 +344,17 @@ $env:GODOT_BIN = "C:\path\to\godot.exe"
 
 ```bash
 # 运行整个 test 目录
-runtest.cmd -a test/
+runtest.cmd -a tests/GDUnit4Test/
 
 # 运行单个套件
-runtest.cmd -a test/game_data/expression_test.gd
+runtest.cmd -a tests/GDUnit4Test/game_data/expression_test.gd
 
 # 运行目录但忽略某个套件/用例
-runtest.cmd -a test/ -i test/slow/slow_test.gd
-runtest.cmd -a test/ -i ExpressionTest:test_add   # 忽略套件中的指定用例
+runtest.cmd -a tests/GDUnit4Test/ -i tests/GDUnit4Test/slow/slow_test.gd
+runtest.cmd -a tests/GDUnit4Test/ -i ExpressionTest:test_add   # 忽略套件中的指定用例
 
 # 不在首个失败时停止（跑完全部）
-runtest.cmd -a test/ -c
+runtest.cmd -a tests/GDUnit4Test/ -c
 
 # 使用测试配置文件
 runtest.cmd -conf my_test_config.cfg
