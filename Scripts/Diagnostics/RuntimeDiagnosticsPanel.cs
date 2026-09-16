@@ -1903,6 +1903,15 @@ namespace gEmuera.Diagnostics
             Hide();
             RequestCloseEvent?.Invoke();
         }
+
+        /// <summary>
+        /// 嵌入子窗口首次 Show 合成缺失唤醒（转发共享实现；内容为本窗 _content）。
+        /// gl_compatibility 桌面端子 Window 同样被强制嵌入，2026-09-13 实证。
+        /// </summary>
+        internal void KickEmbeddedComposite()
+        {
+            global::gEmuera.GodotHost.EmueraDebugDialogPanel.KickEmbeddedComposite(this, _content);
+        }
     }
 
     /// <summary>
@@ -2027,6 +2036,9 @@ namespace gEmuera.Diagnostics
                 {
                     panelWindow.Show();
                     ClampPanelToViewport();
+                    // 嵌入子窗口首次 Show 合成缺失唤醒（同 EmueraDebugDialogPanel，
+                    // gl_compatibility 桌面亦强制嵌入，2026-09-13 实证）。
+                    panelWindow.KickEmbeddedComposite();
                 }
                 else
                 {
