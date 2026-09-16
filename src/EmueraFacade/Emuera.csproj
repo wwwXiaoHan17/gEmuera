@@ -13,5 +13,9 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="*.cs" />
+    <!-- 兼容包契约层（docs/designs/compat-pack-interface.md §4）。 -->
+    <Compile Include="Compatibility\**\*.cs" />
+    <!-- 清单 schema 仅供包作者编辑器校验与文档对照，随包分发不参与编译。 -->
+    <None Include="Compatibility\**\*.json" Pack="false" />
   </ItemGroup>
 </Project>

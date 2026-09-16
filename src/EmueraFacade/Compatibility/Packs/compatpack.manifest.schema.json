@@ -1,0 +1,64 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gemuera:compatpack:manifest:schema:v1",
+  "title": "gEmuera 兼容包清单 v1",
+  "description": "兼容包程序集必须内嵌的资源 compatpack.manifest.json 的结构约束。运行期由 Emuera.Compatibility.Packs.CompatPackManifest 解析（fail-closed，未知字段整体拒绝）；本 schema 供包作者编辑器校验与文档对照。语义校验（capability id 词汇表命中、变体名与贡献对账、表面名单与引擎注册表对账）在加载器侧执行。",
+  "type": "object",
+  "required": ["packId", "packVersion", "targetEngineApi"],
+  "additionalProperties": false,
+  "properties": {
+    "packId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9.\\-]*$",
+      "description": "包唯一 id，沿用仓库方言模块 id 风格（如 game.erafl）。全局唯一，冲突拒载。"
+    },
+    "packVersion": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "description": "语义化版本（x.y.z）。"
+    },
+    "targetEngineApi": {
+      "description": "目标引擎 ModuleApiVersion，正整数（接受 JSON 数字或字符串形式）。主版本不匹配拒载。",
+      "oneOf": [
+        { "type": "integer", "minimum": 1 },
+        { "type": "string", "pattern": "^[0-9]+$" }
+      ]
+    },
+    "baseSurfaceHash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8,64}$",
+      "description": "可选。声明基于哪个 v24 表面快照（生成清单哈希）；不匹配记警告不拒载，仅作对齐提示。"
+    },
+    "capabilities": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.\\-]*$" },
+      "description": "capability id 清单（复用引擎词汇表；未知 id 拒载）。"
+    },
+    "saveProfileId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9.\\-]*$",
+      "description": "可选。存档 profile id。"
+    },
+    "variantSelections": {
+      "type": "object",
+      "description": "指令名 → 变体名。builtin:* 为引擎内置变体；其余必须对应包内 IInstructionVariantContribution 的绑定。",
+      "additionalProperties": { "type": "string", "minLength": 1 }
+    },
+    "gameIdentity": {
+      "type": "object",
+      "required": ["gameCode", "version"],
+      "additionalProperties": false,
+      "description": "可选。绑定特定游戏：加载时与 GameBase.csv 比对，不匹配拒绝加载并回退纯 v24。",
+      "properties": {
+        "gameCode": { "type": "string", "minLength": 1, "description": "GameBase.csv コード 行（如 20250628）。" },
+        "version": { "type": "string", "minLength": 1, "description": "GameBase.csv バージョン 行（如 305）。" },
+        "versionAccept": {
+          "type": "string",
+          "enum": ["exact", "minor"],
+          "description": "版本容忍：exact（默认，精确匹配）或 minor（次级差异可接受）。"
+        }
+      }
+    }
+  }
+}

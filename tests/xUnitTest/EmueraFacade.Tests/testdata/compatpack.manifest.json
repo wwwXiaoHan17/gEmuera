@@ -1,0 +1,10 @@
+{
+  "packId": "test.hello-pack",
+  "packVersion": "1.0.0",
+  "targetEngineApi": 1,
+  "baseSurfaceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "capabilities": ["input.pointer-button.v1", "startup.continue-after-fault.v1"],
+  "saveProfileId": "gemuera.hello",
+  "variantSelections": { "SETBGIMAGE": "builtin:snake" },
+  "gameIdentity": { "gameCode": "20250628", "version": "305", "versionAccept": "minor" }
+}
