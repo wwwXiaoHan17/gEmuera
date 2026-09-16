@@ -54,6 +54,9 @@
          都会以「重复定义 / CS0579 重复特性」的形式炸掉构建，而且报错指向的文件看起来毫不相干。
          2026-09-13 实测踩过——把过期的 obj/AssemblyInfo.cs 挪进 Build/ 后产生了 35 个 CS0579。 -->
     <Compile Remove="Build\**" />
+    <Compile Remove="export\**" />
+    <EmbeddedResource Remove="export\**" />
+    <None Remove="export\**" />
     <Compile Remove="reports\**" />
   </ItemGroup>
   <ItemGroup>

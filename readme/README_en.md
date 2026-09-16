@@ -165,12 +165,12 @@ gemuera-c#/
 │   └── theme/                 # Global Theme (gemuera_theme.tres)
 ├── src/Core/                  # Pure C# core contracts (GEmuera.Core, built separately)
 ├── tools/                     # PowerShell tooling (governance/core-contracts, etc.)
-├── Build/                     # Build/package artifacts (android/NativeLibs are gitignored)
+├── tests/                     # Single test root (xUnitTest/ projects, GDUnit4Test/ suites)
+├── export/                    # APK export workspace (fully gitignored)
 │   ├── android/               # Godot Android export project (gradle build, not committed)
 │   ├── NativeLibs/            # Prebuilt native libs (self-healed for Android builds)
-│   ├── Fixtures/              # Test fixtures (manifest.json)
-│   └── *.apk / *.idsig        # Exported APK artifacts (not committed)
-├── test/                      # Tests
+│   ├── releases/              # Exported APK artifacts (not committed)
+│   └── keystore/              # Signing keys (not committed)
 └── addons/                    # Godot editor plugins
 ```
 
@@ -186,7 +186,7 @@ Godot_v4.7-stable_mono_win64_console.exe --headless --path <project root> --buil
 
 Success check: verify that the timestamp of `.godot/mono/temp/bin/Debug/gemuera-c#.dll` has been updated — do not wait for the process to exit; in headless/restricted environments Godot may hang during finalization, but compilation has already finished.
 
-Android build artifacts are managed under `Build/`; Android-related conclusions must be verified with an actual APK — desktop is for debugging only.
+APK export inputs and artifacts are managed under the `export/` workspace (gradle project / NativeLibs / releases / keystore); Android-related conclusions must be verified with an actual APK — desktop is for debugging only.
 
 ## Acknowledgments
 

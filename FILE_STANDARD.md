@@ -286,6 +286,29 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/dialect-inventory/Test
 - 拆了文件但跨域调用反而增多（分片应沿依赖方向切，不是把纠缠切成两半）；
 - 跳过 §6 检查直接拆分（六类钉扎机制任何一类都可能被命中）。
 
+## 9. 目录树与根目录白名单（2026-09-16 定稿）
+
+根目录只允许以下条目（目录拼法锁定，新建/移动文件必须落入其中之一；根目录新增任何条目需先修订本节）：
+
+| 目录 | 用途 |
+| --- | --- |
+| `assets/` | Godot 运行时资源唯一根（fonts/icons/lang/scenes/text/theme，禁 Resources/Text/Fonts 散落与拼写变体） |
+| `Scripts/` | Godot 层与 Emuera 引擎源码 |
+| `src/` | 纯 C# 核心（GEmuera.Core、EmueraFacade，独立编译） |
+| `tests/` | **测试唯一根**：`xUnitTest/`（xUnit 工程）与 `GDUnit4Test/`（gdUnit 套件）两组，拼法锁定；禁止再建 `test/` 单数或其它测试目录 |
+| `tools/` | 仓库工具与需版本化的导出/固件配置（如 `fixture-manifest/manifest.json`） |
+| `addons/` | Godot 插件（gdUnit4） |
+| `docs/` | 全部文档（designs/、plans/、NewFrameworkDesign/ 历史快照等） |
+| `governance/` | 进化记录与提示词模式库 |
+| `readme/` | 三语 README |
+| `export/` | APK 导出统一工作区（gitignore 整目录）：`android/`（gradle 工程）、`NativeLibs/`（csproj 自愈还原）、`releases/`（APK 产物）、`keystore/`（签名密钥，勿入库） |
+
+规则：
+
+- `Build/` 已于 2026-09-16 退役（内容分流至 `export/` 与 `tools/fixture-manifest/`），禁止重建；csproj 保留 `Build\**` 编译排除仅作兜底。
+- `export_presets.cfg` 必须留在根（Godot 硬编码位置），其中的 `export_path`/`gradle_build_directory` 一律指向 `export/` 下。
+- 目录名大小写一律如上表拼法：Windows 文件系统不敏感而 Android 导出敏感；改名前先做全仓引用扫描（2026-09-16 实测全仓一~三级目录名无大小写冲突，后续新增目录不得引入）。
+
 ## 附录 A：>2000 行文件快照（2026-09-15，字节 LF 口径）
 
 > 本清单是**行数 >2000 的"在册监控项"**，不是"尚待清理的欠债"——判定归属见 §2（既有 >2000 行文件"只减不增"，
