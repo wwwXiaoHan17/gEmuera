@@ -148,6 +148,8 @@ public static class CompatPackLoader
             if (!packIds.Add(handle!.Manifest.PackId))
             {
                 collected.Add("[" + path + "] packId 重复：" + handle.Manifest.PackId);
+                // 重复包已成功加载（ALC 存活），确定回收而非等 GC。
+                handle.Unload();
                 continue;
             }
             handles.Add(handle);
