@@ -77,7 +77,8 @@ namespace Emuera.Compatibility.Packs
 		public string? BaseSurfaceHash { get; }
 		public IReadOnlyList<string> Capabilities { get; }
 		public string? SaveProfileId { get; }
-		/// <summary>指令名 → 变体名（"builtin:*" 为引擎内置变体，其余须对应包内 IInstructionVariantContribution）。</summary>
+		/// <summary>指令名 → 变体名。v1 仅接受 "builtin:*"（引擎内置变体；未知内置名拒载）；
+		/// 包自带变体不经此字段——由 IInstructionVariantContribution 按指令名绑定隐式生效。</summary>
 		public IReadOnlyDictionary<string, string> VariantSelections { get; }
 		public CompatPackGameIdentity? GameIdentity { get; }
 
