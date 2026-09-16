@@ -133,7 +133,8 @@ public static class CompatPackPlanAssembler
         }
 
         var modules = baseline.Dialect.Modules.ToList();
-        modules.AddRange(packModules);
+        // 模块快照按 packId 固化排序：组装产出的计划数据与包传入顺序无关（与哈希同纪律）。
+        modules.AddRange(packModules.OrderBy(module => module.ModuleId, StringComparer.Ordinal));
 
         var variantSelections = CollectVariantSelections(packs, collected);
         if (collected.Count > 0)
