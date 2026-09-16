@@ -49,4 +49,11 @@ dotnet test EmueraFacade.Tests 30/30、GEmuera.Core.Tests 20/20；Godot 无头�
    targetEngineApi 字符串分支禁 0/前导零）；补 Ordinal 大小写负向测试（错误大小写
    资源 + 非法内容内嵌，证明资源发现精确匹配）；RequireGameIdentity 局部错误作用域修正。
 
-复验：EmueraFacade.Tests 33/33；契约程序集 `dotnet build` 0 警告 0 错误。
+复验：EmueraFacade.Tests 33/33。
+
+## 复评二轮补充（97→终评）
+
+残留 1 个 CS8600（`GetManifestResourceStream` 返回 `Stream?` 赋给不可空 `Stream`，
+192 行）→ 改 `using Stream? stream`。**教训：增量构建不重编译会掩盖警告**——首轮
+复验"0 警告"是假象，验证警告必须 `dotnet build -t:Rebuild`（复评人以全量重编译实测
+揭穿）。终验口径：`-t:Rebuild` 输出"0 个警告"。

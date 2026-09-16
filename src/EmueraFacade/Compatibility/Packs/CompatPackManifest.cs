@@ -189,7 +189,7 @@ namespace Emuera.Compatibility.Packs
 				{
 					if (!string.Equals(name, ManifestResourceName, StringComparison.Ordinal))
 						continue;
-					using Stream stream = assembly.GetManifestResourceStream(name);
+					using Stream? stream = assembly.GetManifestResourceStream(name);
 					if (stream is null)
 					{
 						collected.Add("内嵌清单资源无法打开：" + name + "。");
