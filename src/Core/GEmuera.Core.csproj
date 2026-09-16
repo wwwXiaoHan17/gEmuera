@@ -9,4 +9,9 @@
     <LangVersion>latest</LangVersion>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
+  <ItemGroup>
+    <!-- 兼容包契约程序集（docs/designs/compat-pack-interface.md §4）：加载器消费
+         ICompatPack/CompatPackManifest，且 ALC 契约重定向需要该程序集本体。 -->
+    <ProjectReference Include="..\EmueraFacade\Emuera.csproj" />
+  </ItemGroup>
 </Project>

@@ -1,0 +1,8 @@
+{
+  "packId": "test.hello-pack",
+  "packVersion": "1.0.0",
+  "targetEngineApi": 1,
+  "capabilities": ["input.pointer-button.v1", "startup.continue-after-fault.v1"],
+  "saveProfileId": "gemuera.hello",
+  "variantSelections": { "SETBGIMAGE": "builtin:snake" }
+}

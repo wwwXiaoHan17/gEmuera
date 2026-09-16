@@ -18,4 +18,9 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\Core\GEmuera.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- 本测试程序集兼任加载器测试的"真实包样本"：以规范资源名内嵌合法清单，
+         HelloCompatPack 实现契约入口，加载器经独立 ALC 加载本程序集文件验证全链路。 -->
+    <EmbeddedResource Include="testdata\compatpack.manifest.json" LogicalName="compatpack.manifest.json" />
+  </ItemGroup>
 </Project>
