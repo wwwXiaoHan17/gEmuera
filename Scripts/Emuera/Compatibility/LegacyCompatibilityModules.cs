@@ -29,12 +29,16 @@ namespace MinorShift.Emuera.Compatibility
 		private const string V24ModuleId = "gemuera.v24";
 		private const string SnakeModuleId = "game.snake";
 		private const string EraFlModuleId = "game.erafl";
+		// megaten 模块 id（常量在 Core 侧 MegatenCompatibilityModule 中定义）。
+		private const string MegatenModuleId = "game.megaten";
 
 		private static readonly ILegacyCompatibilityModule[] modules =
 		{
 			new LegacyV24CompatibilityModule(),
 			new LegacySnakeCompatibilityModule(),
 			new LegacyEraFlCompatibilityModule(),
+			// megaten：纯策略模块，不声明/解除任何名字的可见性。
+			new LegacyMegatenCompatibilityModule(),
 		};
 
 		private static readonly IReadOnlyDictionary<string, ILegacyCompatibilityModule> modulesById =
@@ -48,6 +52,8 @@ namespace MinorShift.Emuera.Compatibility
 					["v24pure"] = new HashSet<string>(StringComparer.Ordinal) { V24ModuleId },
 					["snake"] = new HashSet<string>(StringComparer.Ordinal) { V24ModuleId, SnakeModuleId },
 					["erafl"] = new HashSet<string>(StringComparer.Ordinal) { V24ModuleId, EraFlModuleId },
+					// megaten 闭包 = v24 基线 + game.megaten（与 erafl 同构）。
+					["megaten"] = new HashSet<string>(StringComparer.Ordinal) { V24ModuleId, MegatenModuleId },
 				});
 
 		public static LegacyCompatibilityProfile Compose(
@@ -72,7 +78,11 @@ namespace MinorShift.Emuera.Compatibility
 
 			var builder = new LegacyCompatibilityProfileBuilder(plan, scopedVariableInstructionsEnabled);
 			foreach (ILegacyCompatibilityModule module in modules)
+			{
+				// 记录每个 Declare 名字的归属模块，供"未选中模块"诊断提示使用。
+				builder.SetDeclaringModule(module.ModuleId);
 				module.Declare(builder);
+			}
 			foreach (DialectModuleSnapshot selectedModule in plan.Dialect.Modules)
 			{
 				if (!modulesById.ContainsKey(selectedModule.ModuleId))
@@ -81,6 +91,7 @@ namespace MinorShift.Emuera.Compatibility
 						$"Legacy profile '{plan.ProfileId}' selected unsupported module '{selectedModule.ModuleId}'.");
 				}
 				ILegacyCompatibilityModule module = modulesById[selectedModule.ModuleId];
+				builder.SetDeclaringModule(module.ModuleId);
 				module.Apply(builder);
 			}
 			return builder.Build();
@@ -94,8 +105,14 @@ namespace MinorShift.Emuera.Compatibility
 		private readonly HashSet<string> hiddenFunctionNames = new HashSet<string>(StringComparer.Ordinal);
 		private readonly HashSet<string> scopedInstructionNames = new HashSet<string>(StringComparer.Ordinal);
 		private readonly HashSet<string> methodProjectedFunctionNames = new HashSet<string>(StringComparer.Ordinal);
+		// 隐藏名 → 声明它的方言模块 id（Declare/Hide 阶段记录，Expose 移除）。
+		// 用于"该标识符属于未选中模块"的诊断提示（如 v24pure 下提示改用 snake）。
+		private readonly Dictionary<string, string> hiddenNameOwners = new Dictionary<string, string>(StringComparer.Ordinal);
+		private string declaringModuleId = "";
 		private ISnakeCompatibilityPolicy snake = DisabledSnakeCompatibilityPolicy.Instance;
 		private IEraFlCompatibilityPolicy eraFl = DisabledEraFlCompatibilityPolicy.Instance;
+		// megaten 策略默认 Disabled：未选中模块不 Apply 时保持基线行为。
+		private IMegatenCompatibilityPolicy megaten = DisabledMegatenCompatibilityPolicy.Instance;
 
 		private readonly bool scopedVariableInstructionsEnabled;
 
@@ -107,16 +124,41 @@ namespace MinorShift.Emuera.Compatibility
 			this.scopedVariableInstructionsEnabled = scopedVariableInstructionsEnabled;
 		}
 
+		/// <summary>
+		/// Compose 在每个模块的 Declare/Apply 前设置当前模块 id，使隐藏归属可溯源。
+		/// </summary>
+		public void SetDeclaringModule(string moduleId)
+		{
+			declaringModuleId = moduleId ?? "";
+		}
+
+		private void RecordHiddenOwner(string name)
+		{
+			if (!string.IsNullOrEmpty(declaringModuleId) && !hiddenNameOwners.ContainsKey(name))
+				hiddenNameOwners[name] = declaringModuleId;
+		}
+
+		private void ForgetHiddenOwner(string name)
+		{
+			hiddenNameOwners.Remove(name);
+		}
+
 		public void DeclareInstructionNames(IEnumerable<string> names)
 		{
 			foreach (string name in names)
+			{
 				hiddenInstructionNames.Add(name);
+				RecordHiddenOwner(name);
+			}
 		}
 
 		public void DeclareFunctionNames(IEnumerable<string> names)
 		{
 			foreach (string name in names)
+			{
 				hiddenFunctionNames.Add(name);
+				RecordHiddenOwner(name);
+			}
 		}
 
 		public void DeclareScopedInstructionNames(IEnumerable<string> names)
@@ -134,13 +176,19 @@ namespace MinorShift.Emuera.Compatibility
 		public void ExposeInstructionNames(IEnumerable<string> names)
 		{
 			foreach (string name in names)
+			{
 				hiddenInstructionNames.Remove(name);
+				ForgetHiddenOwner(name);
+			}
 		}
 
 		public void ExposeFunctionNames(IEnumerable<string> names)
 		{
 			foreach (string name in names)
+			{
 				hiddenFunctionNames.Remove(name);
+				ForgetHiddenOwner(name);
+			}
 		}
 
 		/// <summary>
@@ -151,7 +199,10 @@ namespace MinorShift.Emuera.Compatibility
 		public void HideFunctionNames(IEnumerable<string> names)
 		{
 			foreach (string name in names)
+			{
 				hiddenFunctionNames.Add(name);
+				RecordHiddenOwner(name);
+			}
 		}
 
 		public void SetSnakePolicy(ISnakeCompatibilityPolicy policy)
@@ -164,6 +215,12 @@ namespace MinorShift.Emuera.Compatibility
 			eraFl = policy ?? throw new ArgumentNullException(nameof(policy));
 		}
 
+		// megaten：Apply 阶段由 LegacyMegatenCompatibilityModule 注入启用策略。
+		public void SetMegatenPolicy(IMegatenCompatibilityPolicy policy)
+		{
+			megaten = policy ?? throw new ArgumentNullException(nameof(policy));
+		}
+
 		public LegacyCompatibilityProfile Build()
 		{
 			return new LegacyCompatibilityProfile(
@@ -172,10 +229,13 @@ namespace MinorShift.Emuera.Compatibility
 				scopedVariableInstructionsEnabled,
 				snake,
 				eraFl,
+				// megaten 策略随 Build 传入 LegacyCompatibilityProfile。
+				megaten,
 				hiddenInstructionNames,
 				hiddenFunctionNames,
 				scopedInstructionNames,
-				methodProjectedFunctionNames);
+				methodProjectedFunctionNames,
+				hiddenNameOwners);
 		}
 	}
 
@@ -288,12 +348,38 @@ namespace MinorShift.Emuera.Compatibility
 		}
 	}
 
-	internal sealed class LegacyEraFlCompatibilityModule : ILegacyCompatibilityModule
+	// megaten：纯策略模块。注册表表面与 v24 完全一致（不隐藏/暴露任何名字），
+	// 仅在会话选中 game.megaten 时注入启用策略；三个门控行为全部由引擎侧
+	// 读取 Program.Compatibility.Megaten 的 flag 决定。
+	internal sealed class LegacyMegatenCompatibilityModule : ILegacyCompatibilityModule
 	{
-		public string ModuleId => EraFlCompatibilityModule.ModuleId;
+		public string ModuleId => MegatenCompatibilityModule.ModuleId;
+		// Declare 无需隐藏任何名字：megaten 不改变指令/函数可见性，零声明即与 v24 一致。
 		public void Declare(LegacyCompatibilityProfileBuilder builder) { }
 		public void Apply(LegacyCompatibilityProfileBuilder builder)
 		{
+			builder.SetMegatenPolicy(LegacyMegatenCompatibilityPolicy.Instance);
+		}
+	}
+
+	internal sealed class LegacyEraFlCompatibilityModule : ILegacyCompatibilityModule
+	{
+		// eraFL 实测依赖的 snake 系指令（handler 由共享仓 snake 侧注册，erafl 只声明
+		// 可见性需求）。证据：erafl-master グラフィック生成.ERB:356 "SETANIMETIMER 1000 / フレームレート"。
+		// 三接口职责：v24pure = v24 参考；snake = v24 + snake 方言；erafl = v24 + eraFL 实测能力清单 + eraFL 策略。
+		private static readonly IReadOnlyCollection<string> InstructionNames =
+			Array.AsReadOnly(new[] { "SETANIMETIMER" });
+
+		public string ModuleId => EraFlCompatibilityModule.ModuleId;
+		public void Declare(LegacyCompatibilityProfileBuilder builder)
+		{
+			// Declare 对所有会话执行：erafl 声明加入隐藏集（v24pure/snake 下该指令本就隐藏，
+			// 零影响）；仅 erafl 会话的 Apply 才解除隐藏。
+			builder.DeclareInstructionNames(InstructionNames);
+		}
+		public void Apply(LegacyCompatibilityProfileBuilder builder)
+		{
+			builder.ExposeInstructionNames(InstructionNames);
 			builder.SetEraFlPolicy(LegacyEraFlCompatibilityPolicy.Instance);
 		}
 	}
@@ -326,6 +412,27 @@ namespace MinorShift.Emuera.Compatibility
 		public bool UsesLazyResourceIndex => true;
 	}
 
+	// megaten 默认策略：三个 flag 全 false，保证 v24pure/snake/erafl 会话下
+	// 13 处引擎门控点的布尔表达式与回退前基线完全等价。
+	internal sealed class DisabledMegatenCompatibilityPolicy : IMegatenCompatibilityPolicy
+	{
+		public static readonly DisabledMegatenCompatibilityPolicy Instance = new DisabledMegatenCompatibilityPolicy();
+		public bool IsEnabled => false;
+		public bool UsesVariableCaseForFunctionLabelLookup => false;
+		public bool AllowsOutAsVariableNameAfterRefKeyword => false;
+		public bool AllowsPrivateSystemVariableShadowing => false;
+	}
+
+	// megaten 启用策略：三个 flag 全 true，仅在 megaten 会话的 Apply 阶段注入。
+	internal sealed class LegacyMegatenCompatibilityPolicy : IMegatenCompatibilityPolicy
+	{
+		public static readonly LegacyMegatenCompatibilityPolicy Instance = new LegacyMegatenCompatibilityPolicy();
+		public bool IsEnabled => true;
+		public bool UsesVariableCaseForFunctionLabelLookup => true;
+		public bool AllowsOutAsVariableNameAfterRefKeyword => true;
+		public bool AllowsPrivateSystemVariableShadowing => true;
+	}
+
 	internal sealed class DisabledEraFlCompatibilityPolicy : IEraFlCompatibilityPolicy
 	{
 		public static readonly DisabledEraFlCompatibilityPolicy Instance = new DisabledEraFlCompatibilityPolicy();
@@ -335,7 +442,11 @@ namespace MinorShift.Emuera.Compatibility
 		public string GMapQuestType => string.Empty;
 		public bool IsOmittedDefaultArgument(char currentToken) => false;
 		public bool IsPointerInputMetadataOption(string optionText) => false;
-		public int NormalizePointerButtonResult(int mouseButton) => mouseButton;
+		// Why（对照源码 MainWindow.MouseDown / EmueraConsole.InputMouseKey）：RESULT:1 的鼠标
+		// 按钮协议在所有 Emuera 实现中都是 1=左、2=右、3=中（文档约定），与是否为 eraFL 无关。
+		// 非 eraFL 策略之前原样返回宿主 VK（中键 0x04 → RESULT:1=4），依赖 RESULT:1==3 分支的
+		// snake/v24 游戏会读到错误值。What/How：与 eraFL 共用同一 0x04→3 归一化，其它值不改写。
+		public int NormalizePointerButtonResult(int mouseButton) => EraFlCompatibilityModule.NormalizePointerButtonResult(mouseButton);
 		public string NormalizePointerIntegerSubmission(string input, int mouseButton, bool waitingForInteger) => input ?? string.Empty;
 		public bool ShouldSubmitBlankPointerStringInput(int mouseButton, bool waitingForString) => false;
 		public bool TryRecoverQuestStartRoomIndex(string functionName, long returnedRoomIndex, string requestedRoomTag, long mapId, string questType, string[,] mapData, out long recoveredRoomIndex)

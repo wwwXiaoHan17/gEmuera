@@ -38,7 +38,13 @@ namespace MinorShift.Emuera.GameProc
 		static string LazyLoadingConfigFilePath { get { return Path.Combine(Program.ExeDir, "lazyloading.cfg"); } }
 
 		const uint LazyMagicNumber = 0x4C415A59;
-		const uint LazyVersion = 3;
+		//v4: lazyloadingfiles.bin 追加记录文件长度。部分压缩包解压/资源管理器复制会保留
+		//归档内 mtime，导致"内容已更新但时间戳未变"，旧索引被误信后 #FUNCTION 文件既不进
+		//索引也不在启动加载（eraTW 华扇口上 K43_K56_TSMIKO_WORKCHECK 解釈できない識別子 实证）。
+		//长度是最廉价的第二信号：新增函数几乎必然改变文件大小。
+		const uint LazyVersion = 4;
+		//仍可读取的最低版本：snake 参考实现写 v3（无长度字段），双向共存时按 v3 语义降级。
+		const uint LazyMinReadableVersion = 3;
 		const int LazyRuntimeSlowLoadThresholdMs = 50;
 
 		public enum LazyStatus
@@ -308,26 +314,35 @@ namespace MinorShift.Emuera.GameProc
 				byte[] metaBytes = ReadWholeFile(LazyLoadingFilesFilePath);
 				string[] names;
 				long[] lastWrites;
+				long[] lengths;
+				bool hasLengths;
 				using (var metaStream = new MemoryStream(metaBytes, false))
 				using (var metaReader = new BinaryReader(metaStream, Encoding.UTF8))
 				{
-					if (metaReader.ReadUInt32() != LazyMagicNumber || metaReader.ReadUInt32() != LazyVersion)
+					uint magic = metaReader.ReadUInt32();
+					uint version = metaReader.ReadUInt32();
+					//v4 起带长度字段；v3（snake 参考实现写入）无长度字段，按时间戳语义降级读取。
+					if (magic != LazyMagicNumber || version < LazyMinReadableVersion || version > LazyVersion)
 					{
 						RebuildLazyLoadingIndex(erbFiles);
 						return;
 					}
+					hasLengths = version >= 4;
 
 					int fileCount = metaReader.ReadInt32();
 					names = new string[fileCount];
 					lastWrites = new long[fileCount];
+					lengths = hasLengths ? new long[fileCount] : null;
 					for (int i = 0; i < fileCount; i++)
 					{
 						names[i] = NormalizeRelativePath(metaReader.ReadString());
 						lastWrites[i] = metaReader.ReadInt64();
+						if (hasLengths)
+							lengths[i] = metaReader.ReadInt64();
 					}
 				}
 
-				//0=文件缺失, 1=时间戳已变(Changed), 2=未变
+				//0=文件缺失, 1=时间戳或长度已变(Changed), 2=未变
 				byte[] statResults = new byte[names.Length];
 				Exception firstError = null;
 				Parallel.For(0, names.Length, GetLazyIndexParallelOptions(), i =>
@@ -340,7 +355,23 @@ namespace MinorShift.Emuera.GameProc
 							statResults[i] = 0;
 							return;
 						}
-						statResults[i] = GetLazyFileTimestamp(path) == lastWrites[i] ? (byte)2 : (byte)1;
+						if (GetLazyFileTimestamp(path) != lastWrites[i])
+						{
+							statResults[i] = 1;
+							return;
+						}
+						//v4：mtime 相同再比对长度。压缩包解压保留归档 mtime 时，
+						//内容更新仍会体现为长度变化，防止旧索引被误信。
+						if (hasLengths)
+						{
+							var info = new FileInfo(path);
+							if (info.Length != lengths[i])
+							{
+								statResults[i] = 1;
+								return;
+							}
+						}
+						statResults[i] = 2;
 					}
 					catch (Exception e)
 					{
@@ -375,11 +406,20 @@ namespace MinorShift.Emuera.GameProc
 				using (var dataStream = new MemoryStream(dataBytes, false))
 				using (var dataReader = new BinaryReader(dataStream, Encoding.UTF8))
 				{
-					if (dataReader.ReadUInt32() != LazyMagicNumber || dataReader.ReadUInt32() != LazyVersion)
+					uint dataMagic = dataReader.ReadUInt32();
+					uint dataVersion = dataReader.ReadUInt32();
+					if (dataMagic != LazyMagicNumber || dataVersion < LazyMinReadableVersion || dataVersion > LazyVersion)
 					{
 						RebuildLazyLoadingIndex(erbFiles);
 						return;
 					}
+					//旧版本索引（v3，无长度字段）完整性验证：仅凭 mtime 无法发现"内容已更新
+					//但时间戳被归档解压保留"的文件（20260821 华扇口上 WORKCHECK 实证——
+					//手机索引含 自用函数.ERB 旧条目，启动跳过、函数不可解析）。
+					//v4 索引有长度第二信号，跳过验证；v3 索引对时间戳匹配的文件做标签扫描，
+					//发现含 #FUNCTION/事件标签（本应被排除）的文件 → 从索引剔除并正常加载。
+					if (!hasLengths)
+						ValidateLazyIndexFilesForLegacyVersion();
 
 					int funcCount = dataReader.ReadInt32();
 					for (int i = 0; i < funcCount; i++)
@@ -400,6 +440,7 @@ namespace MinorShift.Emuera.GameProc
 				return;
 			}
 
+			//与原实现一致：无条件回填状态。
 			LazyCurrentLazyStatus =
 				ChangedFiles.Count != 0 || DeletedFiles.Count != 0 ? LazyStatus.UpdateTable : LazyStatus.Loaded;
 		}
@@ -427,6 +468,83 @@ namespace MinorShift.Emuera.GameProc
 					Array.Resize(ref buffer, offset);
 				return buffer;
 			}
+		}
+
+		/// <summary>
+		/// v3 旧索引完整性验证：对时间戳匹配（将被跳过加载）的文件做标签扫描，
+		/// 剔除含 #FUNCTION(S/F) 或事件标签的文件——这些文件本应被索引排除并在启动时
+		/// 正常加载（eraTW 华扇口上 K43_K56_TSMIKO_WORKCHECK 解釈できない識別子 实证：
+		/// 归档解压保留 mtime，旧索引把已更新为 #FUNCTION 的文件误留在跳过集）。
+		/// 剔除仅作用于内存索引，不写盘：下次由任何引擎重建索引时自然按当前内容排除，
+		/// 避免与 snake 双引擎互相重建形成每次切换全量加载的震荡。
+		/// </summary>
+		private void ValidateLazyIndexFilesForLegacyVersion()
+		{
+			if (lazyLoadingFilesTable.Count == 0)
+				return;
+			string[] relativeNames = lazyLoadingFilesTable.Keys.ToArray();
+			bool[] needsFullLoad = new bool[relativeNames.Length];
+			Exception firstError = null;
+			Parallel.For(0, relativeNames.Length, GetLazyIndexParallelOptions(), i =>
+			{
+				try
+				{
+					needsFullLoad[i] = LazyIndexFileNeedsFullLoad(ErbPath(relativeNames[i]), relativeNames[i]);
+				}
+				catch (Exception e)
+				{
+					System.Threading.Interlocked.CompareExchange(ref firstError, e, null);
+				}
+			});
+			if (firstError != null)
+				System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(firstError).Throw();
+
+			for (int i = 0; i < relativeNames.Length; i++)
+			{
+				if (!needsFullLoad[i])
+					continue;
+				//剔除：不在跳过集、不在不变表，标记为已变更 → 启动正常加载，
+				//后续 SavePartialLazyLoadingList 会按 IsEvent||IsMethod 语义将其排除出新索引。
+				LazyLoadingFiles.Remove(NormalizeFullPath(ErbPath(relativeNames[i])));
+				lazyLoadingFilesTable.Remove(relativeNames[i]);
+				ChangedFiles.Add(relativeNames[i]);
+			}
+			if (needsFullLoad.Any(v => v))
+				console.PrintSystemLine("LazyLoading: legacy index validation dropped " + needsFullLoad.Count(v => v) + " files with #FUNCTION/event labels");
+		}
+
+		/// <summary>
+		/// 与 TryScanLazyFileLabels 同源的完整性检查：文件内含 #FUNCTION(S/F) 或事件标签时
+		/// 返回 true（该文件必须启动全量加载，不能跳过）。
+		/// </summary>
+		private static bool LazyIndexFileNeedsFullLoad(string path, string relativePath)
+		{
+			using (var reader = new EraStreamReader(Config.UseRenameFile && ParserMediator.RenameDic != null))
+			{
+				if (!reader.Open(path, relativePath))
+					return false;
+				bool hasCurrentLabel = false;
+				StringStream line;
+				while ((line = reader.ReadEnabledLine()) != null)
+				{
+					if (line.Current == '@')
+					{
+						hasCurrentLabel = false;
+						string labelName = ReadLazyScanLabelName(line);
+						if (string.IsNullOrEmpty(labelName))
+							continue;
+						if (IdentifierDictionary.IsEventLabelName(labelName))
+							return true;
+						hasCurrentLabel = true;
+					}
+					else if (line.Current == '#' && hasCurrentLabel)
+					{
+						if (IsLazyScanMethodToken(ReadLazyScanSharpToken(line)))
+							return true;
+					}
+				}
+			}
+			return false;
 		}
 
 		private void RebuildLazyLoadingIndex(List<KeyValuePair<string, string>> erbFiles)
@@ -742,20 +860,44 @@ namespace MinorShift.Emuera.GameProc
 
 		private static void WriteLazyFileMeta(IEnumerable<string> files)
 		{
+			var list = files.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+			//v4 起每条目附带文件长度，写前需逐文件 stat（时间戳 + 长度）。
+			//与读取侧相同地并行化 stat，结果按原顺序串行回填，写出内容与串行一致；
+			//stat 异常先于建文件抛出，不再留下半写的索引。
+			long[] timestamps = new long[list.Count];
+			long[] lengths = new long[list.Count];
+			Exception firstError = null;
+			Parallel.For(0, list.Count, GetLazyIndexParallelOptions(), i =>
+			{
+				try
+				{
+					string fullPath = ErbPath(list[i]);
+					timestamps[i] = GetLazyFileTimestamp(fullPath);
+					lengths[i] = new FileInfo(fullPath).Length;
+				}
+				catch (Exception e)
+				{
+					System.Threading.Interlocked.CompareExchange(ref firstError, e, null);
+				}
+			});
+			if (firstError != null)
+				System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(firstError).Throw();
+
 			using (var metaStream = new FileStream(LazyLoadingFilesFilePath, FileMode.Create, FileAccess.Write, FileShare.None, 65536))
 			using (var metaWriter = new BinaryWriter(metaStream, Encoding.UTF8))
 			{
-				var list = files.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-					metaWriter.Write(LazyMagicNumber);
-					metaWriter.Write(LazyVersion);
-					metaWriter.Write(list.Count);
-					foreach (string name in list)
-					{
-						metaWriter.Write(NormalizeRelativePath(name));
-						metaWriter.Write(GetLazyFileTimestamp(ErbPath(name)));
-					}
+				metaWriter.Write(LazyMagicNumber);
+				metaWriter.Write(LazyVersion);
+				metaWriter.Write(list.Count);
+				for (int i = 0; i < list.Count; i++)
+				{
+					metaWriter.Write(NormalizeRelativePath(list[i]));
+					metaWriter.Write(timestamps[i]);
+					//v4：长度字段。mtime 被归档解压保留时，长度是检测内容变更的第二信号。
+					metaWriter.Write(lengths[i]);
 				}
 			}
+		}
 
 		private static string ErbPath(string relativePath)
 		{

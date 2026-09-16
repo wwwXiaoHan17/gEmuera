@@ -4,7 +4,7 @@ param(
     [string]$ProjectRoot = (Get-Location).Path,
     [string]$ConfigPath,
     [Parameter(Mandatory = $true)][string]$GameRoot,
-    [ValidateSet('v24pure', 'snake')][string]$Profile = 'v24pure',
+    [ValidateSet('v24pure', 'snake', 'erafl')][string]$Profile = 'v24pure',
     [Parameter(Mandatory = $true)][string]$OutputDirectory,
     [ValidateRange(1, 10)][int]$RepeatCount = 3,
     [ValidateRange(5, 900)][int]$TimeoutSeconds = 360,

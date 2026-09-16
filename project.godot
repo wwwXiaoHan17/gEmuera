@@ -12,6 +12,7 @@ config_version=5
 
 config/name="gemuera-c#"
 run/main_scene="res://first_window.tscn"
+config/quit_on_go_back=false
 config/features=PackedStringArray("4.7", "C#", "Mobile")
 prototype_runtime=true
 typed_ports=true
@@ -33,7 +34,7 @@ project/assembly_name="gemuera-c#"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/gdUnit4/plugin.cfg", "res://addons/godot_mcp/plugin.cfg")
+enabled=PackedStringArray("res://addons/gdUnit4/plugin.cfg", "res://addons/markdownlabel/plugin.cfg")
 
 [launcher]
 

@@ -20,7 +20,7 @@ $ErrorActionPreference = 'Stop'
 try {
     $projectResolved = (Resolve-Path -LiteralPath $ProjectRoot).Path
     if (-not $CatalogPath) {
-        $CatalogPath = Join-Path $projectResolved 'Fixtures\manifest.json'
+        $CatalogPath = Join-Path $projectResolved 'Build\Fixtures\manifest.json'
     }
     if (-not $LegacyRoot) {
         $LegacyRoot = $projectResolved

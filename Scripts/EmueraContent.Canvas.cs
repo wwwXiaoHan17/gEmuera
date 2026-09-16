@@ -21,6 +21,8 @@ public partial class EmueraContent
 		public string Input;
 		public long Generation;
 		public Vector2 ContentCenter;
+		// 按钮 tooltip（<button title=...>/CBG tooltip）：hover 时由虚拟指针命中测试读取。
+		public string Title;
 	}
 
 	struct CanvasImageRenderInfo
@@ -1264,6 +1266,7 @@ public partial class EmueraContent
 						Input = button.Inputs,
 						Generation = button.Generation,
 						ContentCenter = hitRect.Position + hitRect.Size * 0.5f,
+						Title = button.Title,
 					});
 					stats.RebuiltHitRects++;
 				}

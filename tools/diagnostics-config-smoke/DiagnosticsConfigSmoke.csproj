@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- 链接的宿主源文件与本地文件混排，关闭默认 Compile 通配避免重复项。 -->
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Diagnostics config round-trip contract: Writer(完整格式) → Parser → Loader(字面读取)
+         必须无损往返，且保存不得清空非诊断 section（如 [agent.llm]）。
+         这些源文件在 Godot 宿主内使用 Godot.FileAccess/GD；本工程只测纯文本/配置逻辑，
+         用 GodotStubs.cs 提供同名最小 API（见下）。 -->
+    <Compile Include="..\..\Scripts\Diagnostics\RuntimeDiagnosticsConfig.cs"
+             Link="Diagnostics\RuntimeDiagnosticsConfig.cs" />
+    <Compile Include="..\..\Scripts\Diagnostics\RuntimeTomlParser.cs"
+             Link="Diagnostics\RuntimeTomlParser.cs" />
+    <Compile Include="..\..\Scripts\Diagnostics\RuntimeDiagnosticsConfigLoader.cs"
+             Link="Diagnostics\RuntimeDiagnosticsConfigLoader.cs" />
+    <Compile Include="..\..\Scripts\Diagnostics\RuntimeDiagnosticsConfigWriter.cs"
+             Link="Diagnostics\RuntimeDiagnosticsConfigWriter.cs" />
+    <Compile Include="Program.cs" />
+    <Compile Include="GodotStubs.cs" />
+  </ItemGroup>
+</Project>

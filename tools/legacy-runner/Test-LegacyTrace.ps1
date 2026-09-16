@@ -12,8 +12,8 @@ function Assert-TraceContract {
 }
 
 try {
-    $eventPath = Join-Path $ProjectRoot 'Scripts\M0\LegacyTraceEvent.cs'
-    $recorderPath = Join-Path $ProjectRoot 'Scripts\M0\LegacyTraceRecorder.cs'
+    $eventPath = Join-Path $ProjectRoot 'Scripts\LegacyRunner\LegacyTraceEvent.cs'
+    $recorderPath = Join-Path $ProjectRoot 'Scripts\LegacyRunner\LegacyTraceRecorder.cs'
     $schemaPath = Join-Path $ProjectRoot 'tools\legacy-runner\legacy-trace.schema.json'
     foreach ($path in @($eventPath, $recorderPath, $schemaPath)) {
         if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
@@ -25,7 +25,7 @@ try {
     $source = "using System.Diagnostics;`nusing System.Globalization;`nusing System.Threading;`n" +
         [IO.File]::ReadAllText($eventPath) + "`n" + $recorderSource + @'
 
-namespace gEmuera.M0.Tests
+namespace gEmuera.LegacyRunner.Tests
 {
     public static class LegacyTraceConcurrencyProbe
     {
@@ -49,7 +49,7 @@ namespace gEmuera.M0.Tests
 '@
     Add-Type -TypeDefinition $source -Language CSharp
 
-    $snapshot = [gEmuera.M0.Tests.LegacyTraceConcurrencyProbe]::Record(512)
+    $snapshot = [gEmuera.LegacyRunner.Tests.LegacyTraceConcurrencyProbe]::Record(512)
     Assert-TraceContract ($snapshot.RecordedCount -eq 512) 'Concurrent recorder lost events.'
     for ($index = 0; $index -lt $snapshot.Events.Length; $index++) {
         Assert-TraceContract ($snapshot.Events[$index].Sequence -eq ($index + 1)) 'Trace sequence is not strictly increasing in stored order.'
@@ -67,42 +67,42 @@ namespace gEmuera.M0.Tests
         Assert-TraceContract ($normalized.ObserverUtc -eq '<NORMALIZED_UTC>') 'Canonical observer UTC timestamp was not normalized.'
     }
 
-    $bounded = New-Object gEmuera.M0.LegacyTraceRecorder 2
-    $payload = New-Object gEmuera.M0.LegacyTraceRunnerPayload
+    $bounded = New-Object gEmuera.LegacyRunner.LegacyTraceRecorder 2
+    $payload = New-Object gEmuera.LegacyRunner.LegacyTraceRunnerPayload
     $payload.Data = 'bounded'
     for ($index = 0; $index -lt 2; $index++) {
         Assert-TraceContract ($bounded.TryRecord(
-            [gEmuera.M0.LegacyTraceCategory]::Runner,
+            [gEmuera.LegacyRunner.LegacyTraceCategory]::Runner,
             'bounded_probe',
-            [gEmuera.M0.LegacyTraceThreadOwner]::ExternalHarness,
-            [gEmuera.M0.LegacyTraceOrderingPoint]::RunnerLifecycle,
-            [gEmuera.M0.LegacyTraceCompletionMode]::ObserveOnly,
+            [gEmuera.LegacyRunner.LegacyTraceThreadOwner]::ExternalHarness,
+            [gEmuera.LegacyRunner.LegacyTraceOrderingPoint]::RunnerLifecycle,
+            [gEmuera.LegacyRunner.LegacyTraceCompletionMode]::ObserveOnly,
             $payload)) 'Recorder rejected an event before reaching capacity.'
     }
     Assert-TraceContract (-not $bounded.TryRecord(
-        [gEmuera.M0.LegacyTraceCategory]::Runner,
+        [gEmuera.LegacyRunner.LegacyTraceCategory]::Runner,
         'overflow_probe',
-        [gEmuera.M0.LegacyTraceThreadOwner]::ExternalHarness,
-        [gEmuera.M0.LegacyTraceOrderingPoint]::RunnerLifecycle,
-        [gEmuera.M0.LegacyTraceCompletionMode]::ObserveOnly,
+        [gEmuera.LegacyRunner.LegacyTraceThreadOwner]::ExternalHarness,
+        [gEmuera.LegacyRunner.LegacyTraceOrderingPoint]::RunnerLifecycle,
+        [gEmuera.LegacyRunner.LegacyTraceCompletionMode]::ObserveOnly,
         $payload)) 'Recorder did not reject an event after reaching capacity.'
     $overflow = $bounded.Snapshot()
     Assert-TraceContract $overflow.Overflowed 'Recorder overflow was not explicit.'
     Assert-TraceContract ($overflow.DroppedEventCount -eq 1) 'Recorder overflow count is incorrect.'
 
-    [void][gEmuera.M0.LegacyTrace]::Enable(32)
-    [void][gEmuera.M0.LegacyTrace]::TryRecordClock('sampled', 'test_clock', 'observer', '1', [gEmuera.M0.LegacyTraceThreadOwner]::ExternalHarness)
-    $streamId = [gEmuera.M0.LegacyTrace]::RegisterRng('test_rng', 'explicit', '7')
-    [void][gEmuera.M0.LegacyTrace]::TryRecordRngCall('test_rng', $streamId, 1, 'next', '3')
-    [void][gEmuera.M0.LegacyTrace]::TryRecordWait('pending', 1, 'IntValue', $true, $false, $false, -1, 4)
-    [void][gEmuera.M0.LegacyTrace]::TryRecordInput('submitted', [gEmuera.M0.LegacyTraceThreadOwner]::ExternalHarness,
-        [gEmuera.M0.LegacyTraceOrderingPoint]::InputSubmission, '1', $true, $false, 0, $true, 'IntValue', 4)
-    [void][gEmuera.M0.LegacyTrace]::TryRecordDisplayCommit('commit', 0, 1, $false, 4, 'FollowBottom', 0)
-    [void][gEmuera.M0.LegacyTrace]::TryRecordDisplayProjection('projection', 0, 2, $false, 4, 'FollowBottom', 0)
-    [void][gEmuera.M0.LegacyTrace]::TryRecordEffect('enqueued', 'audio', 'test.ogg', 'play', 0, 1)
-    [void][gEmuera.M0.LegacyTrace]::TryRecordError('faulted', 'TestError', 'TEST', 'message', 'probe')
-    [void][gEmuera.M0.LegacyTrace]::TryRecordRunner('finished', '')
-    $typedSnapshot = [gEmuera.M0.LegacyTrace]::Disable().Snapshot()
+    [void][gEmuera.LegacyRunner.LegacyTrace]::Enable(32)
+    [void][gEmuera.LegacyRunner.LegacyTrace]::TryRecordClock('sampled', 'test_clock', 'observer', '1', [gEmuera.LegacyRunner.LegacyTraceThreadOwner]::ExternalHarness)
+    $streamId = [gEmuera.LegacyRunner.LegacyTrace]::RegisterRng('test_rng', 'explicit', '7')
+    [void][gEmuera.LegacyRunner.LegacyTrace]::TryRecordRngCall('test_rng', $streamId, 1, 'next', '3')
+    [void][gEmuera.LegacyRunner.LegacyTrace]::TryRecordWait('pending', 1, 'IntValue', $true, $false, $false, -1, 4)
+    [void][gEmuera.LegacyRunner.LegacyTrace]::TryRecordInput('submitted', [gEmuera.LegacyRunner.LegacyTraceThreadOwner]::ExternalHarness,
+        [gEmuera.LegacyRunner.LegacyTraceOrderingPoint]::InputSubmission, '1', $true, $false, 0, $true, 'IntValue', 4)
+    [void][gEmuera.LegacyRunner.LegacyTrace]::TryRecordDisplayCommit('commit', 0, 1, $false, 4, 'FollowBottom', 0)
+    [void][gEmuera.LegacyRunner.LegacyTrace]::TryRecordDisplayProjection('projection', 0, 2, $false, 4, 'FollowBottom', 0)
+    [void][gEmuera.LegacyRunner.LegacyTrace]::TryRecordEffect('enqueued', 'audio', 'test.ogg', 'play', 0, 1)
+    [void][gEmuera.LegacyRunner.LegacyTrace]::TryRecordError('faulted', 'TestError', 'TEST', 'message', 'probe')
+    [void][gEmuera.LegacyRunner.LegacyTrace]::TryRecordRunner('finished', '')
+    $typedSnapshot = [gEmuera.LegacyRunner.LegacyTrace]::Disable().Snapshot()
     foreach ($category in @('clock', 'rng', 'wait', 'input', 'display', 'effect', 'error', 'runner')) {
         Assert-TraceContract (@($typedSnapshot.Events | Where-Object Category -eq $category).Count -gt 0) "Typed recorder facade did not emit category: $category"
     }
@@ -114,9 +114,9 @@ namespace gEmuera.M0.Tests
         Assert-TraceContract ($semanticSnapshot.Events[$index].Sequence -eq ($index + 1)) 'Semantic trace sequence is not contiguous after transport filtering.'
     }
 
-    [gEmuera.M0.LegacyTrace]::Disable()
-    Assert-TraceContract (-not [gEmuera.M0.LegacyTrace]::IsEnabled) 'Static trace facade was not disabled by default.'
-    Assert-TraceContract (-not [gEmuera.M0.LegacyTrace]::TryRecordRunner('disabled_probe', '')) 'Disabled trace facade accepted an event.'
+    [gEmuera.LegacyRunner.LegacyTrace]::Disable()
+    Assert-TraceContract (-not [gEmuera.LegacyRunner.LegacyTrace]::IsEnabled) 'Static trace facade was not disabled by default.'
+    Assert-TraceContract (-not [gEmuera.LegacyRunner.LegacyTrace]::TryRecordRunner('disabled_probe', '')) 'Disabled trace facade accepted an event.'
 
     $schema = Get-Content -LiteralPath $schemaPath -Raw | ConvertFrom-Json
     Assert-TraceContract ($schema.properties.events.items.required -contains 'sequence') 'Trace schema does not require sequence.'

@@ -14,7 +14,13 @@ public partial class OptionWindow : Control
 	Label buttonDragSensitivityLabel;
 	Slider virtualCursorSensitivitySlider;
 	Label virtualCursorSensitivityValue;
+	Slider virtualMouseScaleSlider;
+	Label virtualMouseScaleValue;
+	Slider virtualMouseOpacitySlider;
+	Label virtualMouseOpacityValue;
 	CheckButton pinchZoomToggle;
+	CheckButton quickFlipToggle;
+	CheckButton quickFloatingToggle;
 	Slider maxVisibleLinesSlider;
 	Label maxVisibleLinesLabel;
 	OptionButton resolutionOption;
@@ -28,7 +34,11 @@ public partial class OptionWindow : Control
 	Label quickFontLabel;
 	Label sensitivityLabel;
 	Label virtualCursorSensitivityLabel;
+	Label virtualMouseScaleLabel;
+	Label virtualMouseOpacityLabel;
 	Label pinchZoomLabel;
+	Label quickFlipLabel;
+	Label quickFloatingLabel;
 	Label maxLinesTextLabel;
 	Label resLabel;
 	Label fpsLabel;
@@ -180,6 +190,28 @@ public partial class OptionWindow : Control
 		quickFontSizeLabel.Text = quickFontSizeSlider.Value.ToString();
 		quickFontRow.AddChild(quickFontSizeLabel);
 
+		// 面板翻转：默认靠右，翻转后靠左（宽度调节条同步翻到内侧）。即时生效。
+		var quickFlipRow = CreateRow(quickGroup, out quickFlipLabel);
+		quickFlipToggle = new CheckButton();
+		quickFlipToggle.ButtonPressed = QuickButtons.FlipEnabled;
+		quickFlipToggle.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		quickFlipToggle.CustomMinimumSize = new Vector2(120, 44);
+		quickFlipToggle.TooltipText = MultiLanguage.Get("OptionWindow.QuickFlipHint", "Move the quick button panel from the right edge to the left edge; the width resize strip flips too.");
+		quickFlipToggle.Toggled += OnQuickFlipToggled;
+		quickFlipRow.AddChild(quickFlipToggle);
+
+		// 面板悬浮：桌面端用 Godot Window 组件承载（原生标题栏拖动/关闭）；
+		// Android 上嵌入 Window 在 gl_compatibility 下不渲染，故禁用。
+		var quickFloatingRow = CreateRow(quickGroup, out quickFloatingLabel);
+		quickFloatingToggle = new CheckButton();
+		quickFloatingToggle.ButtonPressed = QuickButtons.FloatingEnabled;
+		quickFloatingToggle.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		quickFloatingToggle.CustomMinimumSize = new Vector2(120, 44);
+		quickFloatingToggle.TooltipText = MultiLanguage.Get("OptionWindow.QuickFloatingHint", "Show the quick button panel as a floating window (desktop only; Android does not render embedded windows).");
+		quickFloatingToggle.Toggled += OnQuickFloatingToggled;
+		quickFloatingToggle.Disabled = OS.HasFeature("mobile");
+		quickFloatingRow.AddChild(quickFloatingToggle);
+
 		// ---- Input: 滚动灵敏度 / 双指缩放 ----
 		var inputGroup = CreateGroup(content, out inputGroupTitle);
 
@@ -199,17 +231,48 @@ public partial class OptionWindow : Control
 
 		var vcSensitivityRow = CreateRow(inputGroup, out virtualCursorSensitivityLabel);
 		virtualCursorSensitivitySlider = new HSlider();
-		virtualCursorSensitivitySlider.MinValue = VirtualCursor.MinCursorSensitivity;
-		virtualCursorSensitivitySlider.MaxValue = VirtualCursor.MaxCursorSensitivity;
+		virtualCursorSensitivitySlider.MinValue = VirtualMouse.MinCursorSensitivity;
+		virtualCursorSensitivitySlider.MaxValue = VirtualMouse.MaxCursorSensitivity;
 		virtualCursorSensitivitySlider.Step = 0.05;
-		virtualCursorSensitivitySlider.Value = VirtualCursor.ConfiguredSensitivity;
+		virtualCursorSensitivitySlider.Value = VirtualMouse.ConfiguredSensitivity;
 		virtualCursorSensitivitySlider.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 		virtualCursorSensitivitySlider.CustomMinimumSize = new Vector2(120, 44);
 		virtualCursorSensitivitySlider.ValueChanged += OnVirtualCursorSensitivityChanged;
 		vcSensitivityRow.AddChild(virtualCursorSensitivitySlider);
 		virtualCursorSensitivityValue = CreateValueLabel();
-		virtualCursorSensitivityValue.Text = VirtualCursor.ConfiguredSensitivity.ToString("0.00") + "x";
+		virtualCursorSensitivityValue.Text = VirtualMouse.ConfiguredSensitivity.ToString("0.00") + "x";
 		vcSensitivityRow.AddChild(virtualCursorSensitivityValue);
+
+		// 虚拟鼠标缩放大小（需求：默认 0.167，范围 0.1~0.2）。应用于 main.tscn 的
+		// VirtualMouse（Node2D 根缩放会连带缩放子 Sprite 与子 Area2D 碰撞区域，区域局部变换不变）。
+		var vmScaleRow = CreateRow(inputGroup, out virtualMouseScaleLabel);
+		virtualMouseScaleSlider = new HSlider();
+		virtualMouseScaleSlider.MinValue = VirtualMouse.MinScale;
+		virtualMouseScaleSlider.MaxValue = VirtualMouse.MaxScale;
+		virtualMouseScaleSlider.Step = 0.001;
+		virtualMouseScaleSlider.Value = VirtualMouse.ConfiguredScale;
+		virtualMouseScaleSlider.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		virtualMouseScaleSlider.CustomMinimumSize = new Vector2(120, 44);
+		virtualMouseScaleSlider.ValueChanged += OnVirtualMouseScaleChanged;
+		vmScaleRow.AddChild(virtualMouseScaleSlider);
+		virtualMouseScaleValue = CreateValueLabel();
+		virtualMouseScaleValue.Text = VirtualMouse.ConfiguredScale.ToString("0.000");
+		vmScaleRow.AddChild(virtualMouseScaleValue);
+
+		// 虚拟鼠标机身透明度（需求：0.4~1.0，默认 1.0）。只改 Sprite Modulate.A，命中区域不变。
+		var vmOpacityRow = CreateRow(inputGroup, out virtualMouseOpacityLabel);
+		virtualMouseOpacitySlider = new HSlider();
+		virtualMouseOpacitySlider.MinValue = VirtualMouse.MinOpacity;
+		virtualMouseOpacitySlider.MaxValue = VirtualMouse.MaxOpacity;
+		virtualMouseOpacitySlider.Step = 0.01;
+		virtualMouseOpacitySlider.Value = VirtualMouse.ConfiguredOpacity;
+		virtualMouseOpacitySlider.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		virtualMouseOpacitySlider.CustomMinimumSize = new Vector2(120, 44);
+		virtualMouseOpacitySlider.ValueChanged += OnVirtualMouseOpacityChanged;
+		vmOpacityRow.AddChild(virtualMouseOpacitySlider);
+		virtualMouseOpacityValue = CreateValueLabel();
+		virtualMouseOpacityValue.Text = VirtualMouse.ConfiguredOpacity.ToString("0.00");
+		vmOpacityRow.AddChild(virtualMouseOpacityValue);
 
 		var pinchZoomRow = CreateRow(inputGroup, out pinchZoomLabel);
 		pinchZoomToggle = new CheckButton();
@@ -320,8 +383,16 @@ public partial class OptionWindow : Control
 			sensitivityLabel.Text = MultiLanguage.Get("OptionWindow.ButtonDragSensitivity", "Scroll Sensitivity");
 		if (virtualCursorSensitivityLabel != null)
 			virtualCursorSensitivityLabel.Text = MultiLanguage.Get("OptionWindow.VirtualCursorSensitivity", "Cursor Sensitivity");
+		if (virtualMouseScaleLabel != null)
+			virtualMouseScaleLabel.Text = MultiLanguage.Get("OptionWindow.VirtualMouseScale", "Virtual Mouse Scale");
+		if (virtualMouseOpacityLabel != null)
+			virtualMouseOpacityLabel.Text = MultiLanguage.Get("OptionWindow.VirtualMouseOpacity", "Mouse Opacity");
 		if (pinchZoomLabel != null)
 			pinchZoomLabel.Text = MultiLanguage.Get("OptionWindow.PinchZoom", "Pinch Zoom");
+		if (quickFlipLabel != null)
+			quickFlipLabel.Text = MultiLanguage.Get("OptionWindow.QuickFlip", "Quick Panel Flip");
+		if (quickFloatingLabel != null)
+			quickFloatingLabel.Text = MultiLanguage.Get("OptionWindow.QuickFloating", "Quick Floating Window");
 		if (maxLinesTextLabel != null)
 			maxLinesTextLabel.Text = MultiLanguage.Get("OptionWindow.MaxVisibleLines", "Max Lines");
 		if (resLabel != null)
@@ -405,6 +476,18 @@ public partial class OptionWindow : Control
 		EmueraContent.instance?.RefreshQuickButtonSettings();
 	}
 
+	void OnQuickFlipToggled(bool enabled)
+	{
+		QuickButtons.FlipEnabled = enabled;
+		EmueraContent.instance?.RefreshQuickButtonSettings();
+	}
+
+	void OnQuickFloatingToggled(bool enabled)
+	{
+		QuickButtons.FloatingEnabled = enabled;
+		EmueraContent.instance?.RefreshQuickHost();
+	}
+
 	void OnButtonDragSensitivityChanged(double value)
 	{
 		float sensitivity = (float)value;
@@ -417,7 +500,27 @@ public partial class OptionWindow : Control
 		float sensitivity = (float)value;
 		if (virtualCursorSensitivityValue != null)
 			virtualCursorSensitivityValue.Text = sensitivity.ToString("0.00") + "x";
-		VirtualCursor.ConfiguredSensitivity = sensitivity;
+		VirtualMouse.ConfiguredSensitivity = sensitivity;
+	}
+
+	void OnVirtualMouseScaleChanged(double value)
+	{
+		float scale = (float)value;
+		if (virtualMouseScaleValue != null)
+			virtualMouseScaleValue.Text = scale.ToString("0.000");
+		VirtualMouse.ConfiguredScale = scale;
+		// 用 Instance 而非 Active：鼠标禁用时 Active 为空，改缩放也要能立即应用/记住；
+		// 重新 Enable 时会再 ApplyConfiguredScale 补一次（见 VirtualMouse.Enable）。
+		VirtualMouse.Instance?.RefreshScale();
+	}
+
+	void OnVirtualMouseOpacityChanged(double value)
+	{
+		float opacity = (float)value;
+		if (virtualMouseOpacityValue != null)
+			virtualMouseOpacityValue.Text = opacity.ToString("0.00");
+		VirtualMouse.ConfiguredOpacity = opacity;
+		VirtualMouse.Instance?.RefreshOpacity();
 	}
 
 	void OnPinchZoomToggled(bool enabled)

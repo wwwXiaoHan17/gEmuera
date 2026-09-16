@@ -15,9 +15,9 @@ try {
     $configSchemaPath = Join-Path $ProjectRoot 'tools\legacy-runner\legacy-runner-config.schema.json'
     $displaySchemaPath = Join-Path $ProjectRoot 'tools\legacy-runner\legacy-display.schema.json'
     $hitSchemaPath = Join-Path $ProjectRoot 'tools\legacy-runner\legacy-hit-test.schema.json'
-    $hostPath = Join-Path $ProjectRoot 'Scripts\M0\LegacyRunnerHost.cs'
-    $writerPath = Join-Path $ProjectRoot 'Scripts\M0\LegacyRunnerReportWriter.cs'
-    $observationPath = Join-Path $ProjectRoot 'Scripts\M0\LegacyDisplayObservation.cs'
+    $hostPath = Join-Path $ProjectRoot 'Scripts\LegacyRunner\LegacyRunnerHost.cs'
+    $writerPath = Join-Path $ProjectRoot 'Scripts\LegacyRunner\LegacyRunnerReportWriter.cs'
+    $observationPath = Join-Path $ProjectRoot 'Scripts\LegacyRunner\LegacyDisplayObservation.cs'
     $contentPath = Join-Path $ProjectRoot 'Scripts\EmueraContent.cs'
     $displayHarnessPath = Join-Path $ProjectRoot 'tools\legacy-runner\Invoke-LegacyDisplayBaseline.ps1'
 
@@ -52,12 +52,12 @@ try {
 
     $hostSource = [IO.File]::ReadAllText($hostPath)
     Assert-DisplayContract ($hostSource.Contains('RenderingServer.SignalName.FramePostDraw')) 'Screenshot is not synchronized after RenderingServer frame submission.'
-    Assert-DisplayContract ($hostSource.Contains('CaptureM0Screenshot')) 'Runner host does not capture the M0 screenshot.'
-    Assert-DisplayContract ($hostSource.Contains('EnsureM0ViewportSize')) 'Runner host does not keep the configured viewport fixed after legacy resolution setup.'
+    Assert-DisplayContract ($hostSource.Contains('CaptureScreenshot')) 'Runner host does not capture the M0 screenshot.'
+    Assert-DisplayContract ($hostSource.Contains('EnsureLegacyViewportSize')) 'Runner host does not keep the configured viewport fixed after legacy resolution setup.'
 
     $contentSource = [IO.File]::ReadAllText($contentPath)
-    Assert-DisplayContract ($contentSource.Contains('ConfigureM0RunnerDisplayBackend')) 'The explicit runner-only backend override is missing.'
-    Assert-DisplayContract ($contentSource.Contains('CaptureM0LegacyDisplayObservation')) 'The read-only legacy display observation entry point is missing.'
+    Assert-DisplayContract ($contentSource.Contains('ConfigureLegacyRunnerDisplayBackend')) 'The explicit runner-only backend override is missing.'
+    Assert-DisplayContract ($contentSource.Contains('CaptureLegacyDisplayObservation')) 'The read-only legacy display observation entry point is missing.'
 
     $writerSource = [IO.File]::ReadAllText($writerPath)
     Assert-DisplayContract ($writerSource.Contains('screenshots.json')) 'Runner does not write screenshots.json.'

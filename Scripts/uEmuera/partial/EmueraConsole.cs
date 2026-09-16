@@ -97,8 +97,23 @@ namespace MinorShift.Emuera.GameView
 		{
 			get {
 				return IsWaitInputState &&
-						  (inputReq.InputType == GameProc.InputType.IntValue || 
+						  (inputReq.InputType == GameProc.InputType.IntValue ||
 						  inputReq.InputType == GameProc.InputType.StrValue);
+			}
+		}
+		// 当前等待是否为"值/按钮选择"等待（INPUT/INPUTS/TINPUT 等带值输入）。
+		// quick 面板据此判定核心是否重新进入按钮选择点：EnterKey/AnyKey 等
+		// 纯推进等待不应重新弹出快捷按钮面板。
+		internal bool IsWaitingValueSelection
+		{
+			get
+			{
+				return IsWaitInputState && inputReq != null &&
+					(inputReq.InputType == GameProc.InputType.IntValue ||
+					inputReq.InputType == GameProc.InputType.StrValue ||
+					inputReq.InputType == GameProc.InputType.AnyValue ||
+					inputReq.InputType == GameProc.InputType.IntButton ||
+					inputReq.InputType == GameProc.InputType.StrButton);
 			}
 		}
 		internal GameProc.InputType InputType

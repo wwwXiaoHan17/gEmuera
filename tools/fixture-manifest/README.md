@@ -2,7 +2,7 @@
 
 `M0-FIX-01` 把 upstream、legacy 和 game 三层 fixture 的来源、profile、授权证据、逐文件 hash 与期望报告固定成机器可读清单。工具只读外部目录；不会复制游戏、修改 fixture 或把本地绝对路径写入版本化 catalog。
 
-版本化声明位于 `Fixtures/manifest.json`。其中 `authorization.status=Verified` 只有在声明的许可证文件实际存在并被 hash 后才有效；`Unverified/MissingEvidence` 强制 `redistributionAllowed=false`。字节存在不代表授权可再分发。
+版本化声明位于 `Build/Fixtures/manifest.json`。其中 `authorization.status=Verified` 只有在声明的许可证文件实际存在并被 hash 后才有效；`Unverified/MissingEvidence` 强制 `redistributionAllowed=false`。字节存在不代表授权可再分发。
 
 ## 本地生成
 

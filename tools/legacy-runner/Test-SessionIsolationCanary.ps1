@@ -12,8 +12,8 @@ function Assert-CanaryContract {
 }
 
 try {
-    $configPath = Join-Path $ProjectRoot 'Scripts\M0\LegacyRunnerConfig.cs'
-    $hostPath = Join-Path $ProjectRoot 'Scripts\M0\LegacyRunnerHost.cs'
+    $configPath = Join-Path $ProjectRoot 'Scripts\LegacyRunner\LegacyRunnerConfig.cs'
+    $hostPath = Join-Path $ProjectRoot 'Scripts\LegacyRunner\LegacyRunnerHost.cs'
     $runnerPath = Join-Path $ProjectRoot 'tools\legacy-runner\Invoke-LegacyRunner.ps1'
     $schemaPath = Join-Path $ProjectRoot 'tools\legacy-runner\legacy-runner-config.schema.json'
     $fixturePath = Join-Path $ProjectRoot 'tools\legacy-runner\fixtures\session-isolation-canary.json'

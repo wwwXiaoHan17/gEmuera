@@ -1,6 +1,6 @@
 {
   "schemaVersion": "1.0.0",
-  "workPackage": "LEGACY-DIA-01",
+  "workPackage": "M0-DIA-01",
   "classifications": [
     {
       "id": "program-core-profile-state",

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 //using System.Drawing;
@@ -915,7 +915,8 @@ namespace MinorShift.Emuera.GameProc
 
 							cfa = (SpCallArgment)iLine.Argument;
 							funcName = cfa.FuncnameTerm.GetStrValue(exm);
-							if (Config.ICFunction)
+							// megaten 门控（P1）：TRYCALLLIST 查询大小写跟随 ICVariable；Disabled 下与仅 ICFunction 等价。
+							if (Config.ICFunction || (Config.ICVariable && Program.Compatibility.Megaten.UsesVariableCaseForFunctionLabelLookup))
 								funcName = funcName.ToUpper();
 							callto = CalledFunction.CallFunction(this, funcName, func.JumpTo);
 							if (callto == null)

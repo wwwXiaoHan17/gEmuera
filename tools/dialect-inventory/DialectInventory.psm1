@@ -1,4 +1,4 @@
-Set-StrictMode -Version Latest
+﻿Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $script:Utf8NoBom = New-Object Text.UTF8Encoding($false)
@@ -487,10 +487,12 @@ function New-DialectRegistrySnapshot {
 }
 
 function Get-LegacyProfileSurfaceNames {
-    [CmdletBinding()]
+    # 注意：必须是普通函数（不能加 [CmdletBinding()]）。高级函数在
+    # Import-Module + & $mod { } 嵌套调用时，函数体内变量赋值后引用会
+    # 被误判"未定义"（PowerShell 作用域隔离问题，erafl 清单修复时踩坑实证）。
     param(
-        [Parameter(Mandatory = $true)][string]$ProjectRoot,
-        [Parameter(Mandatory = $true)][string]$FieldName,
+        [string]$ProjectRoot,
+        [string]$FieldName,
         [string]$ClassName = 'LegacySnakeCompatibilityModule'
     )
 
@@ -508,19 +510,29 @@ function Get-LegacyProfileSurfaceNames {
         -DeclarationRegex ('^\s*private\s+static\s+readonly\s+IReadOnlyCollection<string>\s+' + [regex]::Escape($FieldName) + '\s*=') `
         -Label "$ClassName.$FieldName"
     $text = $fieldBlock.lines -join "`n"
-    $matches = [regex]::Matches($text, '"(?<name>(?:\\.|[^"\\])*)"', [Text.RegularExpressions.RegexOptions]::CultureInvariant)
-    if ($matches.Count -eq 0) {
+    # 注意：不能用 $matches 承接正则结果——它是 PowerShell 只读自动变量，
+    # 赋值静默失败导致函数误报空字段（erafl 清单修复时踩坑实证）。
+    # 另：在 [CmdletBinding()] 函数 + Set-StrictMode 下，[regex]::Matches 返回
+    # MatchCollection 赋给局部变量后，后续引用会被误判"未定义"（PowerShell 7 行为），
+    # 因此改用 [System.Text.RegularExpressions.Regex] 完全限定名并立即转数组取值。
+    $regex = [System.Text.RegularExpressions.Regex]::new('"(?<name>(?:\\.|[^"\\])*)"', [System.Text.RegularExpressions.RegexOptions]::CultureInvariant)
+    $nameMatchList = @($regex.Matches($text))
+    if ($nameMatchList.Count -eq 0) {
         throw "Legacy profile field has no public keys: $FieldName"
     }
 
     $names = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
-    foreach ($match in $matches) {
-        $name = [regex]::Unescape($match.Groups['name'].Value)
+    foreach ($match in $nameMatchList) {
+        $name = $match.Groups['name'].Value
         if (-not $names.Add($name)) {
             throw "Duplicate public key in ${ClassName}.${FieldName}: $name"
         }
     }
-    return @($names | Sort-Object)
+    # 强制扁平数组返回：单元素集合会被 PowerShell unroll 成标量，而 ,@() 会引入
+    # 嵌套数组——两者都会破坏调用方的 -notin/-contains 语义。正确做法是返回扁平
+    # 数组，由调用方用 @(...) 包一层确保数组身份。
+    $sorted = @($names | Sort-Object)
+    return $sorted
 }
 
 function New-LegacyRuntimeSurfaceSnapshot {
@@ -615,15 +627,21 @@ function New-DialectRegistrySnapshotReport {
         throw 'Dialect inventory does not carry its project root for legacy profile surface verification.'
     }
     $projectRoot = [string]$Inventory.projectRoot
-    $portOnlyInstructionNames = Get-LegacyProfileSurfaceNames -ProjectRoot $projectRoot -ClassName 'LegacyV24CompatibilityModule' -FieldName 'PortOnlyInstructionNames'
-    $snakeInstructionNames = Get-LegacyProfileSurfaceNames -ProjectRoot $projectRoot -FieldName 'InstructionNames'
-    $v24ExcludedFunctionNames = Get-LegacyProfileSurfaceNames -ProjectRoot $projectRoot -FieldName 'FunctionNames'
-    $snakeExcludedFunctionNames = Get-LegacyProfileSurfaceNames -ProjectRoot $projectRoot -FieldName 'SnakeExcludedFunctionNames'
-    $v24ExcludedInstructionNames = @(@($portOnlyInstructionNames) + @($snakeInstructionNames))
+    $portOnlyInstructionNames = @(Get-LegacyProfileSurfaceNames -ProjectRoot $projectRoot -ClassName 'LegacyV24CompatibilityModule' -FieldName 'PortOnlyInstructionNames')
+    $snakeInstructionNames = @(Get-LegacyProfileSurfaceNames -ProjectRoot $projectRoot -FieldName 'InstructionNames')
+    $v24ExcludedFunctionNames = @(Get-LegacyProfileSurfaceNames -ProjectRoot $projectRoot -FieldName 'FunctionNames')
+    $snakeExcludedFunctionNames = @(Get-LegacyProfileSurfaceNames -ProjectRoot $projectRoot -FieldName 'SnakeExcludedFunctionNames')
+    # eraFL 自持能力清单：erafl 会话在 v24 排除集基础上，仅解除自己声明的指令（SETANIMETIMER）。
+    $eraflRaw = Get-LegacyProfileSurfaceNames -ProjectRoot $projectRoot -ClassName 'LegacyEraFlCompatibilityModule' -FieldName 'InstructionNames'
+    $eraflInstructionNames = @($eraflRaw)
+    $v24ExcludedInstructionNames = @($portOnlyInstructionNames + $snakeInstructionNames)
     $v24 = New-LegacyRuntimeSurfaceSnapshot -Inventory $Inventory -ProfileId 'v24pure' `
         -ExcludedInstructionNames $v24ExcludedInstructionNames -ExcludedFunctionNames $v24ExcludedFunctionNames
     $snake = New-LegacyRuntimeSurfaceSnapshot -Inventory $Inventory -ProfileId 'snake' `
         -ExcludedInstructionNames $portOnlyInstructionNames -ExcludedFunctionNames $snakeExcludedFunctionNames
+    $eraflExcludedInstructionNames = @($v24ExcludedInstructionNames | Where-Object { $eraflInstructionNames -notcontains $_ })
+    $erafl = New-LegacyRuntimeSurfaceSnapshot -Inventory $Inventory -ProfileId 'erafl' `
+        -ExcludedInstructionNames $eraflExcludedInstructionNames -ExcludedFunctionNames $v24ExcludedFunctionNames
 
     $v24InstructionKeys = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
     foreach ($entry in $v24.instructions) { [void]$v24InstructionKeys.Add($entry.publicKey) }
@@ -644,6 +662,7 @@ function New-DialectRegistrySnapshotReport {
         sourceInventoryHash = [string]$Inventory.canonicalHash
         v24Hash = $v24.canonicalHash
         snakeHash = $snake.canonicalHash
+        eraflHash = $erafl.canonicalHash
         snakeOnlyInstructionKeys = @($snakeOnlyInstructions.publicKey)
         snakeOnlyExpressionFunctionKeys = @($snakeOnlyFunctions.publicKey)
         testProjectionInvariantStatus = $projectionStatus
@@ -678,6 +697,7 @@ function New-DialectRegistrySnapshotReport {
         profiles = [ordered]@{
             v24 = $v24
             snake = $snake
+            erafl = $erafl
         }
         diff = [ordered]@{
             snakeOnlyInstructionCount = @($snakeOnlyInstructions).Count

@@ -27,8 +27,11 @@ internal static class Program
 
             Console.WriteLine($"v24MergedInstructions={v24Instructions.Count}; snakeMergedInstructions={snakeInstructions.Count}; v24Functions={v24Functions.Count}; snakeFunctions={snakeFunctions.Count}");
 
+            // 注册表面快照：365 个总注册中，v24pure 隐藏 99 个 snake 扩展 → 266 可见；
+            // snake 会话再隐藏 16 个（SnakeExcludedFunctionNames）→ 349 可见。
+            // 计数随 Creator.cs 注册表变化需同步更新（reflection 快照，非语义断言）。
             Assert(v24Functions.Count == 266, $"Unexpected v24 expression function count: {v24Functions.Count}.");
-            Assert(snakeFunctions.Count == 347, $"Unexpected Snake expression function count: {snakeFunctions.Count}.");
+            Assert(snakeFunctions.Count == 349, $"Unexpected Snake expression function count: {snakeFunctions.Count}.");
 
             Assert(v24Instructions.Contains("CALLSHARP"), "v24 lost a baseline instruction.");
             Assert(!v24Instructions.Contains("CALLSTR"), "Snake instruction CALLSTR leaked into v24.");

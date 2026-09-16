@@ -26,7 +26,7 @@ try {
     }
     Import-Module $modulePath -Force
 
-    $versionedCatalogPath = Join-Path $ProjectRoot 'Fixtures\manifest.json'
+    $versionedCatalogPath = Join-Path $ProjectRoot 'Build\Fixtures\manifest.json'
     Assert-FixtureContract (Test-Path -LiteralPath $versionedCatalogPath -PathType Leaf) 'Versioned fixture catalog is missing.'
     $versionedCatalog = Get-Content -LiteralPath $versionedCatalogPath -Raw | ConvertFrom-Json
     foreach ($layer in @('upstream', 'legacy', 'game')) {

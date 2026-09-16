@@ -12,8 +12,8 @@ function Assert-InProcessCycleContract {
 }
 
 try {
-    $configPath = Join-Path $ProjectRoot 'Scripts\M0\LegacyRunnerConfig.cs'
-    $hostPath = Join-Path $ProjectRoot 'Scripts\M0\LegacyRunnerHost.cs'
+    $configPath = Join-Path $ProjectRoot 'Scripts\LegacyRunner\LegacyRunnerConfig.cs'
+    $hostPath = Join-Path $ProjectRoot 'Scripts\LegacyRunner\LegacyRunnerHost.cs'
     $mainPath = Join-Path $ProjectRoot 'Scripts\EmueraMain.cs'
     $gpuComponentPath = Join-Path $ProjectRoot 'Scripts\GodotHost\EmueraGpuRenderComponent.cs'
     $textComponentPath = Join-Path $ProjectRoot 'Scripts\GodotHost\EmueraTextRenderComponent.cs'
@@ -73,12 +73,12 @@ try {
     Assert-InProcessCycleContract ($configSource.Contains('in_process_cross_aba_switch_count_must_be_even')) 'Cross-ABA does not reject an odd switch count.'
     Assert-InProcessCycleContract ($configSource.Contains('in_process_session_switch_count_requires_cycle')) 'Runner config allows a stress switch count without a runner cycle.'
     Assert-InProcessCycleContract ($configSource.Contains('in_process_cross_aba_requires_alternate_session')) 'Cross-ABA does not require an alternate session.'
-    Assert-InProcessCycleContract ($configSource.Contains('CreateM0RunnerSessionLaunchRegistry')) 'Runner config does not build an immutable launch registry.'
+    Assert-InProcessCycleContract ($configSource.Contains('CreateLegacyRunnerSessionLaunchRegistry')) 'Runner config does not build an immutable launch registry.'
 
     $hostSource = [IO.File]::ReadAllText($hostPath)
     Assert-InProcessCycleContract ($hostSource.Contains('TickInProcessSessionCycle')) 'Runner host does not implement the in-process session-cycle state machine.'
     Assert-InProcessCycleContract ($hostSource.Contains('CreateInProcessSessionCycleTargets')) 'Runner host does not precompute the runner-only session cycle targets.'
-    Assert-InProcessCycleContract ($hostSource.Contains('SwitchLegacySessionForM0RunnerAsync')) 'Runner host does not call the cross-configuration session boundary.'
+    Assert-InProcessCycleContract ($hostSource.Contains('SwitchLegacySessionForLegacyRunnerAsync')) 'Runner host does not call the cross-configuration session boundary.'
     Assert-InProcessCycleContract ($hostSource.Contains('in_process_session_wait_fingerprint')) 'Runner host does not record per-cycle semantic fingerprints.'
     Assert-InProcessCycleContract ($hostSource.Contains('in_process_session_cycle_targets_must_match_switch_count')) 'Runner host does not validate the generated stress cycle length.'
     Assert-InProcessCycleContract ($hostSource.Contains('AreInProcessCycleFingerprintsStable')) 'Runner host does not validate all repeated session fingerprints.'
@@ -87,36 +87,36 @@ try {
     Assert-InProcessCycleContract ($hostSource.Contains('in_process_cross_aba_cycle_completed')) 'Runner host does not expose a completed cross-configuration A-to-B-to-A result.'
 
     $mainSource = [IO.File]::ReadAllText($mainPath)
-    Assert-InProcessCycleContract ($mainSource.Contains('RestartLegacySessionForM0RunnerAsync')) 'EmueraMain does not expose the runner-only restart boundary.'
-    Assert-InProcessCycleContract ($mainSource.Contains('ConfigureM0RunnerSessionLaunchRegistry')) 'EmueraMain does not receive runner routes before startup.'
-    Assert-InProcessCycleContract ($mainSource.Contains('SwitchLegacySessionForM0RunnerAsync')) 'EmueraMain does not expose the cross-configuration switch boundary.'
+    Assert-InProcessCycleContract ($mainSource.Contains('RestartLegacySessionForLegacyRunnerAsync')) 'EmueraMain does not expose the runner-only restart boundary.'
+    Assert-InProcessCycleContract ($mainSource.Contains('ConfigureLegacyRunnerSessionLaunchRegistry')) 'EmueraMain does not receive runner routes before startup.'
+    Assert-InProcessCycleContract ($mainSource.Contains('SwitchLegacySessionForLegacyRunnerAsync')) 'EmueraMain does not expose the cross-configuration switch boundary.'
     Assert-InProcessCycleContract ($mainSource.Contains('legacySessionFacade.SwitchAsync')) 'Runner-only restart does not use LegacySessionFacade.'
     Assert-InProcessCycleContract ($mainSource.Contains('if (!facade.IsBackendRunning)')) 'Runner-only restart does not use the facade-owned backend state.'
     Assert-InProcessCycleContract ($mainSource.Contains('Console.IsInProcess, which is false while')) 'Runner-only restart does not document the input-wait lifecycle distinction.'
     Assert-InProcessCycleContract ($mainSource.Contains('ResetCanarySessionState')) 'EmueraMain has no canary render-queue reset boundary.'
-    Assert-InProcessCycleContract ($mainSource.Contains('gpuQueue.TryDequeue')) 'EmueraMain reset does not drain stale GPU work.'
-    Assert-InProcessCycleContract ($mainSource.Contains('textRenderQueue.TryDequeue')) 'EmueraMain reset does not drain stale text work.'
-    Assert-InProcessCycleContract ($mainSource.Contains('ResetPendingRenderState')) 'EmueraMain reset does not complete an in-flight render request.'
     $gpuComponentSource = [IO.File]::ReadAllText($gpuComponentPath)
+    Assert-InProcessCycleContract ($gpuComponentSource.Contains('while (workQueue.TryDequeue(out var item))')) 'GPU component canary reset does not drain the stale GPU work queue.'
     Assert-InProcessCycleContract ($gpuComponentSource.Contains('ResetCanarySessionState')) 'GPU component has no canary queue reset boundary.'
     Assert-InProcessCycleContract ($gpuComponentSource.Contains('workQueue.TryDequeue')) 'GPU component reset does not drain stale work.'
     Assert-InProcessCycleContract ($gpuComponentSource.Contains('ResetPendingRenderState')) 'GPU component reset does not complete in-flight work.'
     $textComponentSource = [IO.File]::ReadAllText($textComponentPath)
+    Assert-InProcessCycleContract ($textComponentSource.Contains('while (renderQueue.TryDequeue(out var item))')) 'Text component canary reset does not drain the stale text work queue.'
+    Assert-InProcessCycleContract ($textComponentSource.Contains('slot.Item.Completed.Set();')) 'Text component canary reset does not release the in-flight render-slot waiters.'
     Assert-InProcessCycleContract ($textComponentSource.Contains('ResetCanarySessionState')) 'Text component has no canary queue reset boundary.'
     Assert-InProcessCycleContract ($textComponentSource.Contains('renderQueue.TryDequeue')) 'Text component reset does not drain stale work.'
     Assert-InProcessCycleContract ($textComponentSource.Contains('ResetPendingRenderState')) 'Text component reset does not complete in-flight work.'
 
     $programSource = [IO.File]::ReadAllText($programPath)
-    Assert-InProcessCycleContract ($programSource.Contains('ConfigureM0RunnerStartupErrorLogPath')) 'Legacy Program does not expose a runner-only startup-error-log redirect.'
+    Assert-InProcessCycleContract ($programSource.Contains('ConfigureLegacyRunnerStartupErrorLogPath')) 'Legacy Program does not expose a runner-only startup-error-log redirect.'
     Assert-InProcessCycleContract ($programSource.Contains('GetSnakeStartupErrorLogPath')) 'Snake startup diagnostics do not resolve the runner-owned log path.'
-    Assert-InProcessCycleContract ($programSource.Contains('ConfigureM0RunnerDefaultOutputLogPath')) 'Legacy Program does not expose a runner-only default-output-log redirect.'
-    Assert-InProcessCycleContract ($programSource.Contains('TryResolveM0RunnerDefaultOutputLogPath')) 'Legacy Program does not constrain the default-output-log redirect to the runner-owned path.'
+    Assert-InProcessCycleContract ($programSource.Contains('ConfigureLegacyRunnerDefaultOutputLogPath')) 'Legacy Program does not expose a runner-only default-output-log redirect.'
+    Assert-InProcessCycleContract ($programSource.Contains('TryResolveLegacyRunnerDefaultOutputLogPath')) 'Legacy Program does not constrain the default-output-log redirect to the runner-owned path.'
     $consolePrintSource = [IO.File]::ReadAllText($consolePrintPath)
-    Assert-InProcessCycleContract ($consolePrintSource.Contains('TryResolveM0RunnerDefaultOutputLogPath')) 'Console output logging does not consume the runner-owned default log redirect.'
+    Assert-InProcessCycleContract ($consolePrintSource.Contains('TryResolveLegacyRunnerDefaultOutputLogPath')) 'Console output logging does not consume the runner-owned default log redirect.'
 
-    Assert-InProcessCycleContract ($hostSource.Contains('ConfigureM0RunnerStartupErrorLogPath')) 'Runner host does not configure the startup-error-log redirect before main.tscn is attached.'
+    Assert-InProcessCycleContract ($hostSource.Contains('ConfigureLegacyRunnerStartupErrorLogPath')) 'Runner host does not configure the startup-error-log redirect before main.tscn is attached.'
     Assert-InProcessCycleContract ($hostSource.Contains('emuera_startup_errors.log')) 'Runner host does not preserve the startup-error-log artifact name.'
-    Assert-InProcessCycleContract ($hostSource.Contains('ConfigureM0RunnerDefaultOutputLogPath')) 'Runner host does not configure the default-output-log redirect before main.tscn is attached.'
+    Assert-InProcessCycleContract ($hostSource.Contains('ConfigureLegacyRunnerDefaultOutputLogPath')) 'Runner host does not configure the default-output-log redirect before main.tscn is attached.'
     Assert-InProcessCycleContract ($hostSource.Contains('"emuera.log"')) 'Runner host does not preserve the default-output-log artifact name.'
 
     $runnerSource = [IO.File]::ReadAllText($runnerPath)
@@ -180,7 +180,8 @@ try {
     $programSource = [IO.File]::ReadAllText($programPath)
     Assert-InProcessCycleContract ($programSource.Contains('ResetSessionState')) 'Program does not expose an explicit canary session-state reset boundary.'
     $programResetStart = $programSource.IndexOf('internal static void ResetSessionState()')
-    $programResetEnd = $programSource.IndexOf('/// <summary>', $programResetStart)
+    $programResetEnd = $programSource.IndexOf('internal static bool TryResolveLegacyRunnerDefaultOutputLogPath(', $programResetStart + 1)
+    Assert-InProcessCycleContract ($programResetStart -ge 0 -and $programResetEnd -gt $programResetStart) 'Program session-state reset boundary could not be isolated for the runner-owned sink checks.'
     $programResetSource = $programSource.Substring($programResetStart, $programResetEnd - $programResetStart)
     Assert-InProcessCycleContract (-not $programResetSource.Contains('m0RunnerStartupErrorLogPath')) 'Program session reset must preserve the runner-owned startup-error sink.'
     Assert-InProcessCycleContract (-not $programResetSource.Contains('m0RunnerDefaultOutputLogPath')) 'Program session reset must preserve the runner-owned default-output sink.'
@@ -205,7 +206,7 @@ try {
     $genericUtilsSource = [IO.File]::ReadAllText($genericUtilsPath)
     Assert-InProcessCycleContract ($genericUtilsSource.Contains('ResetCanarySessionState')) 'GenericUtils does not expose the bridge session reset boundary.'
     Assert-InProcessCycleContract ($genericUtilsSource.Contains('soundFallbackResolveCache.Clear()')) 'GenericUtils reset does not clear sound fallback paths.'
-    Assert-InProcessCycleContract ($genericUtilsSource.Contains('while (uiQueue.TryDequeue(out _))')) 'GenericUtils reset does not discard stale queued view work.'
+    Assert-InProcessCycleContract ($genericUtilsSource.Contains('while (uiQueueCount > 0)')) 'GenericUtils reset does not drain the stale UI ring buffer.'
     Assert-InProcessCycleContract ($genericUtilsSource.Contains('WinInput.ResetCanarySessionState()')) 'GenericUtils reset does not clear compatibility input state.'
     Assert-InProcessCycleContract ($genericUtilsSource.Contains('_saveLogOperationTrail.Clear()')) 'GenericUtils reset does not clear the session save-operation trail.'
 
@@ -262,7 +263,7 @@ try {
 
     $spriteManagerSource = [IO.File]::ReadAllText($spriteManagerPath)
     $forceClearStart = $spriteManagerSource.IndexOf('internal static void ForceClear()')
-    $forceClearEnd = $spriteManagerSource.IndexOf('static bool CanEvict', $forceClearStart)
+    $forceClearEnd = $spriteManagerSource.IndexOf('static bool CanEvict', [System.Math]::Max($forceClearStart, 0))
     Assert-InProcessCycleContract ($forceClearStart -ge 0 -and $forceClearEnd -gt $forceClearStart) 'SpriteManager full lifecycle cleanup boundary is missing.'
     $forceClearSource = $spriteManagerSource.Substring($forceClearStart, $forceClearEnd - $forceClearStart)
     Assert-InProcessCycleContract (-not $forceClearSource.Contains('GC.Collect()')) 'SpriteManager full cleanup must not rely on a forced garbage collection to hide retained ownership.'

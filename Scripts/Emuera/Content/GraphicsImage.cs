@@ -166,6 +166,27 @@ namespace MinorShift.Emuera.Content
 		}
 
 		/// <summary>
+		/// GCLEAR(int ID, int cARGB, int x, int y, int w, int h) —— EM_私家版_GCLEAR拡張
+		/// 对照 v24 GraphicsImage.GClear(Color, x, y, w, h)：SetClip + Clear + ResetClip。
+		/// Godot 端用 FillRect 限定矩形区域填充，语义等价。
+		/// </summary>
+		public void GClear(uEmuera.Drawing.Color c, int x, int y, int w, int h)
+		{
+			lock (imageSync)
+			{
+				if (godotImage == null) return;
+				int x1 = Math.Max(0, x);
+				int y1 = Math.Max(0, y);
+				int x2 = Math.Min(width, x + w);
+				int y2 = Math.Min(height, y + h);
+				if (x2 <= x1 || y2 <= y1)
+					return;
+				godotImage.FillRect(new Godot.Rect2I(x1, y1, x2 - x1, y2 - y1), c.ToGodotColor());
+				MarkImageMutated();
+			}
+		}
+
+		/// <summary>
 		/// GFILLRECTANGLE(int ID, int x, int y, int width, int height)
 		/// エラーチェックは呼び出し元でのみ行う
 		/// </summary>

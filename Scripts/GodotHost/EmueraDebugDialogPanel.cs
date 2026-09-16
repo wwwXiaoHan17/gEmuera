@@ -40,31 +40,35 @@ namespace gEmuera.GodotHost
 	}
 
 	/// <summary>
-	/// Emuera DEBUG 模式调试窗口（Godot 原生 Window，代码构建，不依赖 .tscn）。
-	/// 引擎运行在 worker 线程，本窗口运行在 Godot 主线程：
+	/// Emuera DEBUG 模式调试面板内容（纯 Control 构建，代码构建，不依赖 .tscn）。
+	/// 引擎运行在 worker 线程，本内容运行在 Godot 主线程：
 	/// - 打开/关闭/聚焦由 worker 的 DebugDialog 通过静态入口调度（uiActions 队列，
 	///   由 _Process 在主线程消费，不使用 CallDeferred，避免 C# 方法表注册问题）；
 	/// - 展示数据（日志/调用栈/watch 求值）由 worker 定时快照推送到 snapshotQueue。
 	/// 三个 Tab：变量监视 / 调用栈 / 调试控制台，深色主题走 GEmueraTheme token。
 	///
-	/// 为什么用 Window 而不是画布内嵌 PanelContainer：古早版本是覆盖在游戏画布上的
-	/// 面板，会挡住游戏内容（DEBUG 模式看不到画面）。Window 节点在桌面端是独立 OS
-	/// 窗口，在 Android 是带标题栏、可拖动/缩放的浮动子窗口，不再遮挡游戏主画面。
+	/// 本类为共享内容（PanelContainer），被两种宿主复用：
+	/// 桌面端由 EmueraDebugDialogPanel（Window）包一层原生 Window（标题栏/拖动/缩放），
+	/// Android 端由 EmueraDebugDialogPanel.AttachTo 直接作为全屏覆盖层挂载（嵌入 Window
+	/// 在 gl_compatibility 下内容不渲染，见 EmueraDebugDialogPanel 类注释）。
 	/// </summary>
-	public partial class EmueraDebugDialogPanel : Window
+	public partial class EmueraDebugDialogContent : PanelContainer
 	{
-		const int MinWindowWidth = 320;
-		const int MinWindowHeight = 240;
-
-		static EmueraDebugDialogPanel currentInstance; // 跨线程读写统一走 Volatile.Read/Write
-		static readonly ConcurrentQueue<EmueraDebugSnapshot> snapshotQueue =
+		internal static readonly ConcurrentQueue<EmueraDebugSnapshot> snapshotQueue =
 			new ConcurrentQueue<EmueraDebugSnapshot>();
 
-		readonly ConcurrentQueue<Action> uiActions = new ConcurrentQueue<Action>();
+		internal readonly ConcurrentQueue<Action> uiActions = new ConcurrentQueue<Action>();
 
 		// 绑定（仅主线程在 DoShow/DoHide 内读写）
 		EmueraConsole boundConsole;
 		DebugDialog debugLink;
+
+		/// <summary>桌面端宿主 Window（AttachTo 注入）；Android 覆盖层为 null。</summary>
+		internal EmueraDebugDialogPanel hostWindow;
+		/// <summary>桌面端宿主在 Show 前应用的窗口几何；Android 覆盖层为 null。</summary>
+		public Action BeforeShow;
+		/// <summary>Android 覆盖层标记：头部追加关闭按钮（覆盖层没有原生标题栏 ✕）。</summary>
+		public bool IsOverlay { get; set; }
 
 		// UI 组件
 		TabContainer tabs;
@@ -85,70 +89,12 @@ namespace gEmuera.GodotHost
 			public Label Value;
 		}
 
-		#region 静态入口（worker 线程可调用）
-
-		/// <summary>EmueraMain._Ready 挂载窗口宿主（主线程）。</summary>
-		public static void AttachTo(Node parent)
-		{
-			if (parent == null)
-				return;
-			var panel = new EmueraDebugDialogPanel();
-			panel.Name = "EmueraDebugDialogPanel";
-			panel.Visible = false;
-			// Window 子节点：桌面端按项目设置可成独立 OS 窗口，Android 为嵌入浮动子窗口。
-			parent.AddChild(panel);
-			panel.TreeExiting += () =>
-			{
-				if (System.Threading.Volatile.Read(ref currentInstance) == panel)
-					System.Threading.Volatile.Write(ref currentInstance, null);
-			};
-			System.Threading.Volatile.Write(ref currentInstance, panel);
-		}
-
-		// 参数含 internal 类型（EmueraConsole / DebugDialog），保持 internal 可见性。
-		internal static void ShowPanel(EmueraConsole console, DebugDialog link)
-		{
-			var panel = System.Threading.Volatile.Read(ref currentInstance);
-			if (panel == null || !GodotObject.IsInstanceValid(panel))
-				return;
-			panel.uiActions.Enqueue(() => panel.DoShow(console, link));
-		}
-
-		internal static void FocusPanel()
-		{
-			var panel = System.Threading.Volatile.Read(ref currentInstance);
-			if (panel == null || !GodotObject.IsInstanceValid(panel))
-				return;
-			panel.uiActions.Enqueue(() => panel.DoFocus());
-		}
-
-		internal static void HidePanel()
-		{
-			var panel = System.Threading.Volatile.Read(ref currentInstance);
-			if (panel == null || !GodotObject.IsInstanceValid(panel))
-				return;
-			panel.uiActions.Enqueue(() => panel.DoHide());
-		}
-
-		internal static void PushSnapshot(EmueraDebugSnapshot snapshot)
-		{
-			if (snapshot == null)
-				return;
-			snapshotQueue.Enqueue(snapshot);
-		}
-
-		#endregion
-
 		#region Godot 生命周期（主线程）
 
 		public override void _Ready()
 		{
-			// Window 配置：标题栏。桌面端按 embed_subwindows 设置决定
-			// 是否原生 OS 窗口；Android 恒为嵌入浮动子窗口（Window 默认可缩放）。
-			// 不用 WrapControls：窗口尺寸由 ApplyWindowGeometry 显式控制，内容靠根节点 FullRect 填充。
-			Title = "调试窗口 (Debug)";
-			MinSize = new Vector2I(MinWindowWidth, MinWindowHeight);
-			CloseRequested += OnWindowCloseRequested;
+			// 标题栏/最小尺寸/原生 ✕ 由桌面端 EmueraDebugDialogPanel（Window）负责；
+			// 本类只构建纯 Control 内容（Window 版与 Android 覆盖层共用）。
 			BuildPanel();
 		}
 
@@ -187,20 +133,26 @@ namespace gEmuera.GodotHost
 
 		#region 显示/隐藏/聚焦
 
-		void DoShow(EmueraConsole console, DebugDialog link)
+		internal void DoShow(EmueraConsole console, DebugDialog link)
 		{
 			boundConsole = console;
 			debugLink = link;
-			ApplyWindowGeometry();
+			BeforeShow?.Invoke(); // 桌面端宿主在此应用窗口几何；Android 覆盖层为 null
+			Visible = true;
+			if (hostWindow != null)
+				hostWindow.Show();
 			while (snapshotQueue.TryDequeue(out _)) { } // 丢弃旧会话残留快照
-			Show();
 		}
 
-		void DoFocus()
+		internal void DoFocus()
 		{
 			if (!Visible)
-				Show();
-			// Window 不是 Control：聚焦输入框而非窗口自身。
+			{
+				Visible = true;
+				if (hostWindow != null)
+					hostWindow.Show();
+			}
+			// 聚焦输入框而非窗口自身。
 			if (addExpressionInput != null)
 			{
 				addExpressionInput.GrabFocus();
@@ -208,44 +160,14 @@ namespace gEmuera.GodotHost
 			}
 		}
 
-		void DoHide()
+		internal void DoHide()
 		{
-			Hide();
+			Visible = false;
+			if (hostWindow != null)
+				hostWindow.Hide();
 			boundConsole = null;
 			debugLink = null;
 			while (snapshotQueue.TryDequeue(out _)) { }
-		}
-
-		void ApplyWindowGeometry()
-		{
-			int width = Math.Max(MinWindowWidth, Config.DebugWindowWidth);
-			int height = Math.Max(MinWindowHeight, Config.DebugWindowHeight);
-			MinSize = new Vector2I(MinWindowWidth, MinWindowHeight);
-			Size = new Vector2I(width, height);
-			// 嵌入 Window 的 Position 相对父窗口内容区，单位是物理像素。
-			// 必须用主窗口实际物理尺寸（GetTree().Root.Size），不能用 ProjectSettings 的
-			// 逻辑分辨率——否则在拉伸/高分屏上居中坐标严重偏上、标题栏贴顶无法拖动。
-			var parentSize = GetParentWindowPixelSize();
-			const int topMargin = 12; // 标题栏离开顶部，保证可抓取拖动
-			if (Config.DebugSetWindowPos)
-				Position = new Vector2I((int)Config.DebugWindowPosX, (int)Config.DebugWindowPosY);
-			else
-				Position = new Vector2I((parentSize.X - width) / 2, (parentSize.Y - height) / 2);
-			Position = new Vector2I(
-				Mathf.Clamp(Position.X, 0, Math.Max(0, parentSize.X - width)),
-				Mathf.Clamp(Position.Y, topMargin, Math.Max(topMargin, parentSize.Y - height)));
-		}
-
-		/// <summary>父窗口（主窗口）内容区的物理像素尺寸；嵌入 Window 定位/钳制的基准。</summary>
-		Vector2I GetParentWindowPixelSize()
-		{
-			var root = GetTree()?.Root;
-			if (root != null && GodotObject.IsInstanceValid(root))
-				return root.Size;
-			// 兜底：退化为 ProjectSettings 逻辑分辨率（尽量接近）。
-			return new Vector2I(
-				(int)ProjectSettings.GetSetting("display/window/size/viewport_width", 1280),
-				(int)ProjectSettings.GetSetting("display/window/size/viewport_height", 720));
 		}
 
 		#endregion
@@ -254,20 +176,18 @@ namespace gEmuera.GodotHost
 
 		void BuildPanel()
 		{
-			// Window 不是 Control：主题与 panel 样式落在根 PanelContainer 上。
-			// FullRect 锚点让根面板填满整个 Window（否则内容只占左上角）。
-			var rootPanel = new PanelContainer();
-			rootPanel.Theme = GEmueraTheme.LoadTheme();
-			rootPanel.AddThemeStyleboxOverride(
+			// 本类即根面板（PanelContainer）：桌面端由 Window 外壳包一层原生标题栏，
+			// Android 端直接 FullRect 填满视口；两种宿主共用同一份内容构建。
+			Theme = GEmueraTheme.LoadTheme();
+			AddThemeStyleboxOverride(
 				"panel",
 				GEmueraTheme.SurfaceStyle(
 					GEmueraTheme.SurfaceRaised, GEmueraTheme.Border, GEmueraTheme.CardRadius,
 					1, 14, new Vector2(0, 6)));
-			rootPanel.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-			rootPanel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-			rootPanel.SizeFlagsVertical = SizeFlags.ExpandFill;
-			rootPanel.MouseFilter = MouseFilterEnum.Stop;
-			AddChild(rootPanel);
+			SetAnchorsPreset(Control.LayoutPreset.FullRect);
+			SizeFlagsHorizontal = SizeFlags.ExpandFill;
+			SizeFlagsVertical = SizeFlags.ExpandFill;
+			MouseFilter = MouseFilterEnum.Stop;
 
 			var margin = new MarginContainer();
 			margin.MouseFilter = MouseFilterEnum.Pass;
@@ -275,7 +195,7 @@ namespace gEmuera.GodotHost
 			margin.AddThemeConstantOverride("margin_right", 12);
 			margin.AddThemeConstantOverride("margin_top", 10);
 			margin.AddThemeConstantOverride("margin_bottom", 10);
-			rootPanel.AddChild(margin);
+			AddChild(margin);
 
 			var root = new VBoxContainer();
 			root.SizeFlagsHorizontal = SizeFlags.ExpandFill;
@@ -382,7 +302,15 @@ namespace gEmuera.GodotHost
 			title.AddThemeColorOverride("font_color", GEmueraTheme.TextPrimary);
 			header.AddChild(title);
 
-			// 关闭走 Window 标题栏原生 ✕（CloseRequested 信号），这里不再放第二个 ✕。
+			// 桌面端关闭走 Window 标题栏原生 ✕（CloseRequested 信号）；
+			// Android 覆盖层没有原生标题栏，必须补一个 ✕ 按钮。
+			if (IsOverlay)
+			{
+				var close = new Button { Text = "✕", CustomMinimumSize = new Vector2(36, 0) };
+				GEmueraTheme.ApplyButton(close, GEmueraTheme.Surface, GEmueraTheme.Danger);
+				close.Pressed += RequestClose;
+				header.AddChild(close);
+			}
 			return header;
 		}
 
@@ -601,11 +529,16 @@ namespace gEmuera.GodotHost
 			CommitExpressions(list);
 		}
 
-		void RequestClose()
+		internal void RequestClose()
 		{
 			// 面板关闭等价于 DebugDialog.Dispose（worker 侧保存 console.log + watchlist.csv）。
 			// Dispose 只能由 worker 线程执行（它操作 uEmuera.Forms.Timer 与引擎缓冲），
 			// 因此主线程只投递关闭请求，由 worker 定时器在空闲边界消费。
+			// Why：先立即视觉隐藏——Android 端面板是全屏 Control 覆盖层（MouseFilter=Stop），
+			// 若等到 worker 空闲才隐藏，用户点 ✕ 后整个游戏会一直无法触摸。
+			// worker 到达空闲边界后的 DoHide 再隐藏一次是幂等的。
+			Visible = false;
+			hostWindow?.Hide();
 			var link = debugLink;
 			if (link != null)
 				link.EnqueueCloseRequest();
@@ -613,12 +546,154 @@ namespace gEmuera.GodotHost
 				DoHide();
 		}
 
-		// Window 标题栏 ✕：与 header 内 ✕ 按钮同一关闭路径。
-		void OnWindowCloseRequested()
+		#endregion
+	}
+
+	/// <summary>
+	/// Emuera DEBUG 模式调试窗口（Godot 原生 Window）。桌面端以独立 OS 窗口显示
+	/// （标题栏/拖动/缩放），内容由共享的 EmueraDebugDialogContent 提供。
+	/// Android 不使用本类：AttachTo 直接挂全屏 Control 覆盖层（嵌入 Window 在
+	/// gl_compatibility 下内容不渲染，见 EmueraDebugDialogContent 类注释）。
+	///
+	/// Why（错误 1）：gEmuera 与 DEBUG 窗口保持为 Window 类，不退回画布内嵌面板——
+	/// Window 在桌面端是独立 OS 窗口，不遮挡游戏主画面，且带原生标题栏/关闭。
+	/// </summary>
+	public partial class EmueraDebugDialogPanel : Window
+	{
+		const int MinWindowWidth = 320;
+		const int MinWindowHeight = 240;
+
+		// 当前挂载的内容实例（桌面端 = 本 Window 的内容；Android = 全屏覆盖层内容）。
+		// 跨线程读写统一走 Volatile.Read/Write。
+		static EmueraDebugDialogContent currentContent;
+
+		internal EmueraDebugDialogContent _content;
+
+		public override void _Ready()
 		{
-			RequestClose();
+			Title = "调试窗口 (Debug)";
+			MinSize = new Vector2I(MinWindowWidth, MinWindowHeight);
+			// 标题栏 ✕ → 与覆盖层 ✕ 同一关闭路径（worker 侧 DebugDialog.Dispose）。
+			CloseRequested += OnNativeWindowCloseRequested;
+
+			_content = new EmueraDebugDialogContent { Visible = true };
+			_content.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+			_content.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+			_content.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+			_content.hostWindow = this;
+			_content.BeforeShow = ApplyWindowGeometry;
+			AddChild(_content);
+		}
+
+		void OnNativeWindowCloseRequested()
+		{
+			_content.RequestClose();
+		}
+
+		#region 静态入口（worker 线程可调用）
+
+		/// <summary>EmueraMain._Ready 挂载调试面板宿主（主线程）。桌面端为原生 Window，Android 为全屏覆盖层。</summary>
+		public static void AttachTo(Node parent)
+		{
+			if (parent == null)
+				return;
+
+			EmueraDebugDialogContent content;
+			if (OS.GetName() == "Android")
+			{
+				// Android：嵌入 Window 在 gl_compatibility 下内容不渲染 → 全屏 Control 覆盖层。
+				// 独立高 CanvasLayer（高于菜单 100 / tooltip 150）保证盖在游戏内容之上。
+				var layer = new CanvasLayer { Layer = 200, Name = "EmueraDebugDialogLayer" };
+				parent.AddChild(layer);
+				content = new EmueraDebugDialogContent
+				{
+					Name = "EmueraDebugDialogPanel",
+					Visible = false,
+					IsOverlay = true,
+				};
+				content.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+				content.MouseFilter = MouseFilterEnum.Stop;
+				layer.AddChild(content);
+			}
+			else
+			{
+				// 桌面端：原生 Window 外壳（标题栏/拖动/缩放），内容 FullRect 填充。
+				var win = new EmueraDebugDialogPanel { Name = "EmueraDebugDialogPanel", Visible = false };
+				parent.AddChild(win);
+				content = win._content;
+			}
+			content.TreeExiting += () =>
+			{
+				if (System.Threading.Volatile.Read(ref currentContent) == content)
+					System.Threading.Volatile.Write(ref currentContent, null);
+			};
+			System.Threading.Volatile.Write(ref currentContent, content);
+		}
+
+		// 参数含 internal 类型（EmueraConsole / DebugDialog），保持 internal 可见性。
+		internal static void ShowPanel(EmueraConsole console, DebugDialog link)
+		{
+			var content = System.Threading.Volatile.Read(ref currentContent);
+			if (content == null || !GodotObject.IsInstanceValid(content))
+				return;
+			content.uiActions.Enqueue(() => content.DoShow(console, link));
+		}
+
+		internal static void FocusPanel()
+		{
+			var content = System.Threading.Volatile.Read(ref currentContent);
+			if (content == null || !GodotObject.IsInstanceValid(content))
+				return;
+			content.uiActions.Enqueue(() => content.DoFocus());
+		}
+
+		internal static void HidePanel()
+		{
+			var content = System.Threading.Volatile.Read(ref currentContent);
+			if (content == null || !GodotObject.IsInstanceValid(content))
+				return;
+			content.uiActions.Enqueue(() => content.DoHide());
+		}
+
+		internal static void PushSnapshot(EmueraDebugSnapshot snapshot)
+		{
+			if (snapshot == null)
+				return;
+			EmueraDebugDialogContent.snapshotQueue.Enqueue(snapshot);
 		}
 
 		#endregion
+
+		/// <summary>Show 前由内容 BeforeShow 回调；嵌入 Window 的 Position/Size 用主窗口物理像素。</summary>
+		public void ApplyWindowGeometry()
+		{
+			int width = Math.Max(MinWindowWidth, Config.DebugWindowWidth);
+			int height = Math.Max(MinWindowHeight, Config.DebugWindowHeight);
+			MinSize = new Vector2I(MinWindowWidth, MinWindowHeight);
+			Size = new Vector2I(width, height);
+			// 必须用主窗口实际物理尺寸（GetTree().Root.Size），不能用 ProjectSettings 的
+			// 逻辑分辨率——否则在拉伸/高分屏上居中坐标严重偏上、标题栏贴顶无法拖动。
+			var parentSize = GetParentWindowPixelSize();
+			const int topMargin = 12; // 标题栏离开顶部，保证可抓取拖动
+			if (Config.DebugSetWindowPos)
+				Position = new Vector2I((int)Config.DebugWindowPosX, (int)Config.DebugWindowPosY);
+			else
+				Position = new Vector2I((parentSize.X - width) / 2, (parentSize.Y - height) / 2);
+			Position = new Vector2I(
+				Mathf.Clamp(Position.X, 0, Math.Max(0, parentSize.X - width)),
+				Mathf.Clamp(Position.Y, topMargin, Math.Max(topMargin, parentSize.Y - height)));
+		}
+
+		/// <summary>父窗口（主窗口）内容区的物理像素尺寸；嵌入 Window 定位/钳制的基准。</summary>
+		Vector2I GetParentWindowPixelSize()
+		{
+			var root = GetTree()?.Root;
+			if (root != null && GodotObject.IsInstanceValid(root))
+				return root.Size;
+			// 兜底：退化为 ProjectSettings 逻辑分辨率（尽量接近）。
+			return new Vector2I(
+				(int)ProjectSettings.GetSetting("display/window/size/viewport_width", 1280),
+				(int)ProjectSettings.GetSetting("display/window/size/viewport_height", 720));
+		}
 	}
 }

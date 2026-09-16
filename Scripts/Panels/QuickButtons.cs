@@ -24,6 +24,9 @@ public partial class QuickButtons : CanvasLayer
 	bool resizingWidth;
 	bool scrollingByDrag;
 	bool dragMoved;
+	bool floatingHosted;
+	bool windowDragEnabled;
+	bool draggingWindow;
 	bool quickInputEnabled = true;
 	bool scrollToBottomAfterLayout = true;
 	bool quickInertiaActive;
@@ -46,6 +49,8 @@ public partial class QuickButtons : CanvasLayer
 	const string SettingsSection = "Display";
 	const string QuickButtonWidthKey = "QuickButtonWidth";
 	const string QuickButtonFontSizeKey = "QuickButtonFontSize";
+	const string QuickFlipKey = "QuickFlip";
+	const string QuickFloatingKey = "QuickFloating";
 	const int DefaultQuickButtonFontSize = 12;
 	const int DefaultQuickButtonWidth = 90;
 	public const int MinQuickButtonFontSize = 8;
@@ -69,6 +74,8 @@ public partial class QuickButtons : CanvasLayer
 	const int MaxPooledRows = 64;
 	static int configuredButtonWidth = -1;
 	static int configuredFontSize = -1;
+	static bool configuredFlip;
+	static bool configuredFloating;
 
 	// Component interface: the panel advertises its own show/hide state changes
 	// so host scenes can react without polling. Emitted purely additively;
@@ -109,11 +116,74 @@ public partial class QuickButtons : CanvasLayer
 		}
 	}
 
+	// 面板水平翻转：默认靠右，翻转后靠左（宽度调节条同步翻到内侧）。默认关闭。
+	public static bool FlipEnabled
+	{
+		get
+		{
+			EnsureSettingsLoaded();
+			return configuredFlip;
+		}
+		set
+		{
+			configuredFlip = value;
+			SaveSetting(QuickFlipKey, value);
+		}
+	}
+
+	// 面板悬浮：由 QuickFloatingWindow（Godot Window 组件）承载，实现悬浮窗效果。
+	// 默认关闭；Android 上嵌入 Window 不渲染，由 EmueraContent 门控忽略该设置。
+	public static bool FloatingEnabled
+	{
+		get
+		{
+			EnsureSettingsLoaded();
+			return configuredFloating;
+		}
+		set
+		{
+			configuredFloating = value;
+			SaveSetting(QuickFloatingKey, value);
+		}
+	}
+
+	// 面板是否真的被悬浮宿主（QuickFloatingWindow）承载。悬浮设置只在真正承载时
+	// 影响布局锚点；移动端/内嵌模式忽略悬浮设置，面板保持常规位置（右下角），
+	// 避免桌面同步来的悬浮设置让 Android 面板意外贴左贴顶甚至“消失”。
+	public bool FloatingHosted
+	{
+		get => floatingHosted;
+		set => floatingHosted = value;
+	}
+
+	// 宿主允许把面板拖动解释为窗口移动（仅桌面悬浮模式开启；移动端为 false）。
+	public bool WindowDragEnabled
+	{
+		get => windowDragEnabled;
+		set => windowDragEnabled = value;
+	}
+
+	/// <summary>面板拖动位移（逻辑像素；1:1 内容下即物理像素），由悬浮宿主订阅以移动窗口。</summary>
+	public event Action<Vector2> WindowDragRequested;
+
+	// 布局锚点派生：翻转 → 面板靠左；悬浮且真正被 Window 承载 → 贴左贴顶。
+	bool AnchoredLeft => configuredFlip || (configuredFloating && floatingHosted);
+	bool AnchoredTop => configuredFloating && floatingHosted;
+
+	/// <summary>悬浮宿主（QuickFloatingWindow）读取面板尺寸以同步窗口大小。</summary>
+	public Vector2 GetPanelSize()
+	{
+		return IsControlAlive(panel) ? panel.Size : Vector2.Zero;
+	}
+
 	public override void _Ready()
 	{
 		EnsureSettingsLoaded();
 		Visible = false;
 		Layer = 90;
+		// _Process 只服务惯性滚动；空闲时关闭，避免 Android 上每帧一次
+		// native→managed 调用（面板隐藏是常态，StartQuickInertia 会按需重开）。
+		SetProcess(false);
 
 		layerRoot = new Control();
 		layerRoot.SetAnchorsPreset(Control.LayoutPreset.FullRect);
@@ -121,14 +191,14 @@ public partial class QuickButtons : CanvasLayer
 		AddChild(layerRoot);
 
 		panel = new PanelContainer();
-		panel.AnchorLeft = 1;
-		panel.AnchorTop = 1;
-		panel.AnchorRight = 1;
-		panel.AnchorBottom = 1;
+		panel.AnchorLeft = AnchoredLeft ? 0 : 1;
+		panel.AnchorTop = AnchoredTop ? 0 : 1;
+		panel.AnchorRight = AnchoredLeft ? 0 : 1;
+		panel.AnchorBottom = AnchoredTop ? 0 : 1;
 		panel.GrowHorizontal = Control.GrowDirection.Begin;
 		panel.GrowVertical = Control.GrowDirection.Begin;
-		panel.OffsetRight = -20;
-		panel.OffsetBottom = -20;
+		panel.OffsetRight = AnchoredLeft ? 20 : -20;
+		panel.OffsetBottom = AnchoredTop ? 20 : -20;
 		panel.MouseFilter = Control.MouseFilterEnum.Stop;
 		panel.ClipContents = true;
 		layerRoot.AddChild(panel);
@@ -143,10 +213,10 @@ public partial class QuickButtons : CanvasLayer
 		panel.AddThemeStyleboxOverride("panel", panelStyle);
 
 		resizeHandle = new Control();
-		resizeHandle.AnchorLeft = 1;
-		resizeHandle.AnchorTop = 1;
-		resizeHandle.AnchorRight = 1;
-		resizeHandle.AnchorBottom = 1;
+		resizeHandle.AnchorLeft = AnchoredLeft ? 0 : 1;
+		resizeHandle.AnchorTop = AnchoredTop ? 0 : 1;
+		resizeHandle.AnchorRight = AnchoredLeft ? 0 : 1;
+		resizeHandle.AnchorBottom = AnchoredTop ? 0 : 1;
 		resizeHandle.GrowHorizontal = Control.GrowDirection.Begin;
 		resizeHandle.GrowVertical = Control.GrowDirection.Begin;
 		resizeHandle.MouseDefaultCursorShape = Control.CursorShape.Hsize;
@@ -248,7 +318,11 @@ public partial class QuickButtons : CanvasLayer
 			var safeWidth = GetSafeRect().Size.X;
 			var minWidth = EffectiveButtonWidth + ResizeHandleWidth;
 			var maxWidth = Mathf.Max(minWidth, safeWidth - 40);
-			userWidth = Mathf.Clamp(resizeStartWidth + resizeStartMouseX - mouseMotion.GlobalPosition.X, minWidth, maxWidth);
+			// 拉条在面板右侧（贴左布局）→ 向右拖变宽；拉条在左侧（贴右布局）→ 向左拖变宽。
+			if (AnchoredLeft)
+				userWidth = Mathf.Clamp(resizeStartWidth + (mouseMotion.GlobalPosition.X - resizeStartMouseX), minWidth, maxWidth);
+			else
+				userWidth = Mathf.Clamp(resizeStartWidth + resizeStartMouseX - mouseMotion.GlobalPosition.X, minWidth, maxWidth);
 			ApplyPanelSize();
 			GetViewport().SetInputAsHandled();
 		}
@@ -282,18 +356,20 @@ public partial class QuickButtons : CanvasLayer
 		StopQuickInertia();
 		scrollingByDrag = false;
 		dragMoved = false;
+		draggingWindow = false;
 		dragButton = null;
 		dragPointerIsTouch = false;
 		dragPointerIndex = -1;
 		buttons.Clear();
 		quickButtonStyleCache.Clear();
-		var children = rowsContainer.GetChildren();
-		for (int i = 0; i < children.Count; i++)
+		// 倒序 + GetChild(i)：ReleaseRow 会即时 RemoveChild，倒序遍历不受索引移动
+		// 影响，同时避免 GetChildren() 每次重建都分配一个数组包装。
+		for (int i = rowsContainer.GetChildCount() - 1; i >= 0; i--)
 		{
-			if (children[i] is HBoxContainer row)
+			if (rowsContainer.GetChild(i) is HBoxContainer row)
 				ReleaseRow(row);
 			else
-				children[i].QueueFree();
+				rowsContainer.GetChild(i).QueueFree();
 		}
 		currentRow = AcquireRow();
 		rowsContainer.AddChild(currentRow);
@@ -425,13 +501,13 @@ public partial class QuickButtons : CanvasLayer
 		if (!IsControlAlive(row))
 			return;
 
-		var children = row.GetChildren();
-		for (int i = 0; i < children.Count; i++)
+		// 倒序遍历：ReleaseButton 会即时 RemoveChild，倒序不受索引移动影响。
+		for (int i = row.GetChildCount() - 1; i >= 0; i--)
 		{
-			if (children[i] is Panel button)
+			if (row.GetChild(i) is Panel button)
 				ReleaseButton(button);
 			else
-				children[i].QueueFree();
+				row.GetChild(i).QueueFree();
 		}
 
 		if (row.GetParent() != null)
@@ -517,6 +593,8 @@ public partial class QuickButtons : CanvasLayer
 				dragStartPosition = position;
 				dragLastPosition = position;
 				quickLastDragTick = Time.GetTicksMsec();
+				// 悬浮宿主：内容无滚动余量时拖动 = 移动窗口；有滚动余量时拖动 = 滚动面板。
+				draggingWindow = windowDragEnabled && !CanScrollQuickPanel();
 				if (button != null)
 				{
 					AcceptQuickInput(acceptEvent, eventSource);
@@ -536,6 +614,13 @@ public partial class QuickButtons : CanvasLayer
 				{
 					dragMoved = true;
 					quickScrollInteractionSerial++;
+				}
+				if (dragMoved && draggingWindow)
+				{
+					WindowDragRequested?.Invoke(position - dragLastPosition);
+					dragLastPosition = position;
+					AcceptQuickInput(acceptEvent, eventSource);
+					return true;
 				}
 				if (dragMoved && scroll != null)
 				{
@@ -588,17 +673,26 @@ public partial class QuickButtons : CanvasLayer
 		}
 		else if (dragMoved)
 		{
-			StartQuickInertia();
+			// 窗口拖动手势不产生滚动惯性（内容本就无滚动余量）。
+			if (!draggingWindow)
+				StartQuickInertia();
 			handled = true;
 		}
 		if (activeButton != null)
 			AnimateQuickPress(activeButton, 1.0f);
 		scrollingByDrag = false;
 		dragMoved = false;
+		draggingWindow = false;
 		dragButton = null;
 		dragPointerIsTouch = false;
 		dragPointerIndex = -1;
 		return handled;
+	}
+
+	// 面板内容是否还有可滚动余量（决定拖动手势用于滚动还是移动窗口）。
+	bool CanScrollQuickPanel()
+	{
+		return GetMaxVerticalScroll() > 0 || GetMaxHorizontalScroll() > 0;
 	}
 
 	bool IsActivePointer(bool isTouch, int pointerIndex)
@@ -869,15 +963,10 @@ public partial class QuickButtons : CanvasLayer
 
 	Label GetButtonLabel(Control btn)
 	{
-		if (btn == null)
+		if (btn == null || btn.GetChildCount() == 0)
 			return null;
-		var children = btn.GetChildren();
-		for (int i = 0; i < children.Count; i++)
-		{
-			if (children[i] is Label label)
-				return label;
-		}
-		return null;
+		// 按钮结构固定为唯一 Label 子节点，直接取第 0 个避免 GetChildren() 分配。
+		return btn.GetChild(0) as Label;
 	}
 
 	void ApplyButtonMetrics(Control btn)
@@ -965,14 +1054,57 @@ public partial class QuickButtons : CanvasLayer
 		var safeRect = GetSafeRect();
 		float rightMargin = 20 + GetSafeRightInset(safeRect);
 		float bottomMargin = 20 + GetSafeBottomInset(safeRect);
-		panel.OffsetLeft = -rightMargin - width;
-		panel.OffsetRight = -rightMargin;
-		panel.OffsetTop = -bottomMargin - height;
-		panel.OffsetBottom = -bottomMargin;
-		resizeHandle.OffsetLeft = -rightMargin - width - ResizeHandleWidth;
-		resizeHandle.OffsetRight = -rightMargin - width;
-		resizeHandle.OffsetTop = -bottomMargin - height;
-		resizeHandle.OffsetBottom = -bottomMargin;
+		float leftMargin = 20;
+		float topMargin = 20;
+
+		// 水平锚点：默认贴右（面板在右下角），翻转/悬浮 → 贴左。
+		// 宽度调节条始终在面板内侧（贴右 → 拉条在左；贴左 → 拉条在右），
+		// 翻转后用户仍能从屏幕内侧拖宽面板。
+		if (AnchoredLeft)
+		{
+			panel.AnchorLeft = 0;
+			panel.AnchorRight = 0;
+			panel.OffsetLeft = leftMargin;
+			panel.OffsetRight = leftMargin + width;
+			resizeHandle.AnchorLeft = 0;
+			resizeHandle.AnchorRight = 0;
+			resizeHandle.OffsetLeft = leftMargin + width;
+			resizeHandle.OffsetRight = leftMargin + width + ResizeHandleWidth;
+		}
+		else
+		{
+			panel.AnchorLeft = 1;
+			panel.AnchorRight = 1;
+			panel.OffsetLeft = -rightMargin - width;
+			panel.OffsetRight = -rightMargin;
+			resizeHandle.AnchorLeft = 1;
+			resizeHandle.AnchorRight = 1;
+			resizeHandle.OffsetLeft = -rightMargin - width - ResizeHandleWidth;
+			resizeHandle.OffsetRight = -rightMargin - width;
+		}
+
+		if (AnchoredTop)
+		{
+			panel.AnchorTop = 0;
+			panel.AnchorBottom = 0;
+			panel.OffsetTop = topMargin;
+			panel.OffsetBottom = topMargin + height;
+			resizeHandle.AnchorTop = 0;
+			resizeHandle.AnchorBottom = 0;
+			resizeHandle.OffsetTop = topMargin;
+			resizeHandle.OffsetBottom = topMargin + height;
+		}
+		else
+		{
+			panel.AnchorTop = 1;
+			panel.AnchorBottom = 1;
+			panel.OffsetTop = -bottomMargin - height;
+			panel.OffsetBottom = -bottomMargin;
+			resizeHandle.AnchorTop = 1;
+			resizeHandle.AnchorBottom = 1;
+			resizeHandle.OffsetTop = -bottomMargin - height;
+			resizeHandle.OffsetBottom = -bottomMargin;
+		}
 	}
 
 	Vector2 ScrollQuickBy(Vector2 delta)
@@ -1051,7 +1183,10 @@ public partial class QuickButtons : CanvasLayer
 		if (quickScrollVelocity.Length() > QuickInertiaMaxVelocity)
 			quickScrollVelocity = quickScrollVelocity.Normalized() * QuickInertiaMaxVelocity;
 		if (quickScrollVelocity.Length() >= QuickInertiaMinVelocity)
+		{
 			quickInertiaActive = true;
+			SetProcess(true);
+		}
 		else
 			StopQuickInertia();
 	}
@@ -1062,6 +1197,8 @@ public partial class QuickButtons : CanvasLayer
 		quickScrollVelocity = Vector2.Zero;
 		quickInertiaRemainder = Vector2.Zero;
 		quickLastDragTick = 0;
+		if (IsInsideTree())
+			SetProcess(false);
 	}
 
 	void ProcessQuickInertia(float delta)
@@ -1139,9 +1276,19 @@ public partial class QuickButtons : CanvasLayer
 			Mathf.RoundToInt((float)(double)cfg.GetValue(SettingsSection, QuickButtonFontSizeKey, DefaultQuickButtonFontSize)),
 			MinQuickButtonFontSize,
 			MaxQuickButtonFontSize);
+		configuredFlip = cfg.GetValue(SettingsSection, QuickFlipKey, false).AsBool();
+		configuredFloating = cfg.GetValue(SettingsSection, QuickFloatingKey, false).AsBool();
 	}
 
 	static void SaveSetting(string key, int value)
+	{
+		var cfg = new ConfigFile();
+		cfg.Load(SettingsPath);
+		cfg.SetValue(SettingsSection, key, value);
+		cfg.Save(SettingsPath);
+	}
+
+	static void SaveSetting(string key, bool value)
 	{
 		var cfg = new ConfigFile();
 		cfg.Load(SettingsPath);

@@ -23,6 +23,26 @@ namespace Properties
             { "SyntaxErrMesMethodDefaultArgumentNum2","{0}関数:引数の数が多すぎます"},
             { "SyntaxErrMesMethodDefaultArgumentType0","{0}関数:第{1}引数の型が間違っています"},
             { "SyntaxErrMesMethodGraphicsColorMatrix0","{0}関数:ColorMatrixに5x5以上の二次元数値型配列変数でない引数が指定されました"},
+            //多签名参数机制（argumentTypeArrayEx）错误消息——文案对照 v24/snake Lang.cs 的 trerror 键。
+            { "SyntaxErrMesMethodArgsNotFitExpr0","{0}関数: 引数の数({1})が{2}+{3}nではありません"},
+            { "SyntaxErrMesMethodArgIsNotCharacterVar0","{0}関数: 第{1}引数の変数がキャラクタ変数ではありません"},
+            { "SyntaxErrMesMethodArgIsNotStr0","{0}関数: 第{1}引数は文字列ではありません"},
+            { "SyntaxErrMesMethodArgIsNotInt0","{0}関数: 第{1}引数は整数ではありません"},
+            { "SyntaxErrMesMethodArgIsNotVar0","{0}関数: 第{1}引数は変数ではありません"},
+            { "SyntaxErrMesMethodArgIsNotStrVar0","{0}関数: 第{1}引数は文字列型変数ではありません"},
+            { "SyntaxErrMesMethodArgIsNotIntVar0","{0}関数: 第{1}引数は整数型変数ではありません"},
+            { "SyntaxErrMesMethodArgIsNotArray0","{0}関数: 第{1}引数は配列変数ではありません"},
+            { "SyntaxErrMesMethodArgIsNotStrArray0","{0}関数: 第{1}引数は文字列型配列変数ではありません"},
+            { "SyntaxErrMesMethodArgIsNotIntArray0","{0}関数: 第{1}引数は整数型配列変数ではありません"},
+            { "SyntaxErrMesMethodArgIsNotNDArray0","{0}関数: 第{1}引数は{2}次元配列変数ではありません"},
+            { "SyntaxErrMesMethodArgIsNotNDStrArray0","{0}関数: 第{1}引数は文字列型{2}次元配列変数ではありません"},
+            { "SyntaxErrMesMethodArgIsNotNDIntArray0","{0}関数: 第{1}引数は整数型{2}次元配列変数ではありません"},
+            { "SyntaxErrMesMethodTooManyFuncArgs0","{0}関数: 引数が多すぎます"},
+            { "SyntaxErrMesMethodNotEnoughArgs0","{0}関数: 少なくとも{1}つの引数が必要です"},
+            { "SyntaxErrMesMethodArgsCountNotMatches0","{0}関数: {1}つの引数が必要ですが，{2}つが与えられています"},
+            { "SyntaxErrMesMethodArgsNotNeeded0","{0}関数: 引数の必要がありません"},
+            { "SyntaxErrMesMethodNotValidArgs0","{0}関数: 引数がどの書式にも合わせていません | {1}"},
+            { "SyntaxErrMesMethodNotValidArgsReason0","書式{0}: {1}"},
         };
 
         public static string GetString(string key)
@@ -220,6 +240,215 @@ namespace Properties
             get
             {
                 return ResourceManager.GetString("SyntaxErrMesMethodGraphicsColorMatrix0");
+            }
+        }
+
+        /// <summary>
+        ///   {0}関数: 引数の数({1})が{2}+{3}nではありません に類似しているローカライズされた文字列を検索します。
+        /// </summary>
+        public static string SyntaxErrMesMethodArgsNotFitExpr0
+        {
+            get
+            {
+                return ResourceManager.GetString("SyntaxErrMesMethodArgsNotFitExpr0");
+            }
+        }
+
+        /// <summary>
+        ///   {0}関数: 第{1}引数の変数がキャラクタ変数ではありません に類似しているローカライズされた文字列を検索します。
+        /// </summary>
+        public static string SyntaxErrMesMethodArgIsNotCharacterVar0
+        {
+            get
+            {
+                return ResourceManager.GetString("SyntaxErrMesMethodArgIsNotCharacterVar0");
+            }
+        }
+
+        /// <summary>
+        ///   {0}関数: 第{1}引数は文字列ではありません に類似しているローカライズされた文字列を検索します。
+        /// </summary>
+        public static string SyntaxErrMesMethodArgIsNotStr0
+        {
+            get
+            {
+                return ResourceManager.GetString("SyntaxErrMesMethodArgIsNotStr0");
+            }
+        }
+
+        /// <summary>
+        ///   {0}関数: 第{1}引数は整数ではありません に類似しているローカライズされた文字列を検索します。
+        /// </summary>
+        public static string SyntaxErrMesMethodArgIsNotInt0
+        {
+            get
+            {
+                return ResourceManager.GetString("SyntaxErrMesMethodArgIsNotInt0");
+            }
+        }
+
+        /// <summary>
+        ///   {0}関数: 第{1}引数は変数ではありません に類似しているローカライズされた文字列を検索します。
+        /// </summary>
+        public static string SyntaxErrMesMethodArgIsNotVar0
+        {
+            get
+            {
+                return ResourceManager.GetString("SyntaxErrMesMethodArgIsNotVar0");
+            }
+        }
+
+        /// <summary>
+        ///   {0}関数: 第{1}引数は文字列型変数ではありません に類似しているローカライズされた文字列を検索します。
+        /// </summary>
+        public static string SyntaxErrMesMethodArgIsNotStrVar0
+        {
+            get
+            {
+                return ResourceManager.GetString("SyntaxErrMesMethodArgIsNotStrVar0");
+            }
+        }
+
+        /// <summary>
+        ///   {0}関数: 第{1}引数は整数型変数ではありません に類似しているローカライズされた文字列を検索します。
+        /// </summary>
+        public static string SyntaxErrMesMethodArgIsNotIntVar0
+        {
+            get
+            {
+                return ResourceManager.GetString("SyntaxErrMesMethodArgIsNotIntVar0");
+            }
+        }
+
+        /// <summary>
+        ///   {0}関数: 第{1}引数は配列変数ではありません に類似しているローカライズされた文字列を検索します。
+        /// </summary>
+        public static string SyntaxErrMesMethodArgIsNotArray0
+        {
+            get
+            {
+                return ResourceManager.GetString("SyntaxErrMesMethodArgIsNotArray0");
+            }
+        }
+
+        /// <summary>
+        ///   {0}関数: 第{1}引数は文字列型配列変数ではありません に類似しているローカライズされた文字列を検索します。
+        /// </summary>
+        public static string SyntaxErrMesMethodArgIsNotStrArray0
+        {
+            get
+            {
+                return ResourceManager.GetString("SyntaxErrMesMethodArgIsNotStrArray0");
+            }
+        }
+
+        /// <summary>
+        ///   {0}関数: 第{1}引数は整数型配列変数ではありません に類似しているローカライズされた文字列を検索します。
+        /// </summary>
+        public static string SyntaxErrMesMethodArgIsNotIntArray0
+        {
+            get
+            {
+                return ResourceManager.GetString("SyntaxErrMesMethodArgIsNotIntArray0");
+            }
+        }
+
+        /// <summary>
+        ///   {0}関数: 第{1}引数は{2}次元配列変数ではありません に類似しているローカライズされた文字列を検索します。
+        /// </summary>
+        public static string SyntaxErrMesMethodArgIsNotNDArray0
+        {
+            get
+            {
+                return ResourceManager.GetString("SyntaxErrMesMethodArgIsNotNDArray0");
+            }
+        }
+
+        /// <summary>
+        ///   {0}関数: 第{1}引数は文字列型{2}次元配列変数ではありません に類似しているローカライズされた文字列を検索します。
+        /// </summary>
+        public static string SyntaxErrMesMethodArgIsNotNDStrArray0
+        {
+            get
+            {
+                return ResourceManager.GetString("SyntaxErrMesMethodArgIsNotNDStrArray0");
+            }
+        }
+
+        /// <summary>
+        ///   {0}関数: 第{1}引数は整数型{2}次元配列変数ではありません に類似しているローカライズされた文字列を検索します。
+        /// </summary>
+        public static string SyntaxErrMesMethodArgIsNotNDIntArray0
+        {
+            get
+            {
+                return ResourceManager.GetString("SyntaxErrMesMethodArgIsNotNDIntArray0");
+            }
+        }
+
+        /// <summary>
+        ///   {0}関数: 引数が多すぎます に類似しているローカライズされた文字列を検索します。
+        /// </summary>
+        public static string SyntaxErrMesMethodTooManyFuncArgs0
+        {
+            get
+            {
+                return ResourceManager.GetString("SyntaxErrMesMethodTooManyFuncArgs0");
+            }
+        }
+
+        /// <summary>
+        ///   {0}関数: 少なくとも{1}つの引数が必要です に類似しているローカライズされた文字列を検索します。
+        /// </summary>
+        public static string SyntaxErrMesMethodNotEnoughArgs0
+        {
+            get
+            {
+                return ResourceManager.GetString("SyntaxErrMesMethodNotEnoughArgs0");
+            }
+        }
+
+        /// <summary>
+        ///   {0}関数: {1}つの引数が必要ですが，{2}つが与えられています に類似しているローカライズされた文字列を検索します。
+        /// </summary>
+        public static string SyntaxErrMesMethodArgsCountNotMatches0
+        {
+            get
+            {
+                return ResourceManager.GetString("SyntaxErrMesMethodArgsCountNotMatches0");
+            }
+        }
+
+        /// <summary>
+        ///   {0}関数: 引数の必要がありません に類似しているローカライズされた文字列を検索します。
+        /// </summary>
+        public static string SyntaxErrMesMethodArgsNotNeeded0
+        {
+            get
+            {
+                return ResourceManager.GetString("SyntaxErrMesMethodArgsNotNeeded0");
+            }
+        }
+
+        /// <summary>
+        ///   {0}関数: 引数がどの書式にも合わせていません | {1} に類似しているローカライズされた文字列を検索します。
+        /// </summary>
+        public static string SyntaxErrMesMethodNotValidArgs0
+        {
+            get
+            {
+                return ResourceManager.GetString("SyntaxErrMesMethodNotValidArgs0");
+            }
+        }
+
+        /// <summary>
+        ///   書式{0}: {1} に類似しているローカライズされた文字列を検索します。
+        /// </summary>
+        public static string SyntaxErrMesMethodNotValidArgsReason0
+        {
+            get
+            {
+                return ResourceManager.GetString("SyntaxErrMesMethodNotValidArgsReason0");
             }
         }
     }

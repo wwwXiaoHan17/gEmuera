@@ -386,6 +386,24 @@ namespace gEmuera.Diagnostics
 
         static void ApplyMinimalLoggingSwitches(System.Collections.Generic.Dictionary<string, System.Collections.Generic.Dictionary<string, string>> sections, RuntimeDiagnosticsConfig cfg)
         {
+            // Why（错误 3 修复）：minimal 展开曾无条件 DisableAllDiagnostics 后按固定组合重建，
+            // 会把完整格式配置（诊断面板/启动器保存，含专家 section）里已读取的专家细项全部吞掉。
+            // 完整格式文件中 [logging] 的精简键只是同一状态的冗余投影（写入器同时写出两份），
+            // 专家键已在 BuildConfig 全量读取，这里直接跳过破坏性展开。
+            // 旧版精简格式（只有 [logging]，如仓库 res://config.toml）保持原语义：
+            // DisableAllDiagnostics 后按精简键重建，缺省模块关闭，避免误开 APK 热路径诊断。
+            if (HasExpertDiagnosticsSections(sections))
+            {
+                // 完整格式：专家键已全量读取，但 [logging] panel_visible / runtime_panel
+                // 等价键只在本方法应用（BuildConfig 不读它们），跳过展开前必须补上，
+                // 否则面板保存的 panel_visible 重启后丢失。
+                if (TryGetBool(sections, "logging", "panel_visible", out bool panelVisibleFull))
+                    cfg.RuntimePanelEnabled = panelVisibleFull;
+                else if (TryGetBool(sections, "logging", "runtime_panel", out bool runtimePanelFull))
+                    cfg.RuntimePanelEnabled = runtimePanelFull;
+                return;
+            }
+
             // 精简配置只认一个总开关和少量模块开关；缺省即关闭，避免旧 user://config.toml 误把 APK 热路径诊断打开。
             bool enabled = GetMinimalBool(sections, "enabled", false);
             bool mirrorToGodot = GetMinimalBool(sections, "mirror_to_godot",
@@ -421,6 +439,22 @@ namespace gEmuera.Diagnostics
             RestoreExplicitCategories(sections, cfg);
         }
 
+        /// <summary>
+        /// 是否存在专家诊断 section（完整格式配置的标志）。Why：诊断面板/启动器保存的是
+        /// 全量键值（RuntimeDiagnosticsConfigWriter），这类文件必须按字面读取，不能被
+        /// minimal 展开重置；旧精简格式（仓库 res://config.toml）没有这些 section。
+        /// </summary>
+        static bool HasExpertDiagnosticsSections(System.Collections.Generic.Dictionary<string, System.Collections.Generic.Dictionary<string, string>> sections)
+        {
+            return sections.ContainsKey("quick_debug")
+                || sections.ContainsKey("debug_model_zh_cn")
+                || sections.ContainsKey("debug_model_jp")
+                || sections.ContainsKey("debug_model_en")
+                || sections.ContainsKey("logging.rate_limit")
+                || sections.ContainsKey("debug.touch")
+                || sections.ContainsKey("debug.image");
+        }
+
         static void RestoreExplicitCategories(System.Collections.Generic.Dictionary<string, System.Collections.Generic.Dictionary<string, string>> sections, RuntimeDiagnosticsConfig cfg)
         {
             if (!sections.TryGetValue("logging.categories", out _))
@@ -435,6 +469,11 @@ namespace gEmuera.Diagnostics
             if (TryGetBool(sections, "logging.categories", "load", out b)) cfg.Categories.Load = b;
             if (TryGetBool(sections, "logging.categories", "save", out b)) cfg.Categories.Save = b;
             if (TryGetBool(sections, "logging.categories", "config", out b)) cfg.Categories.Config = b;
+            // Why：minimal 展开曾漏恢复这两类，导致文件里显式开启的 touch/statement_recognition
+            // 分类在热重载/重启后被静默清空（文件 sink 只剩 error 记录的误判来源之一）。
+            if (TryGetBool(sections, "logging.categories", "performance", out b)) cfg.Categories.Performance = b;
+            if (TryGetBool(sections, "logging.categories", "touch", out b)) cfg.Categories.Touch = b;
+            if (TryGetBool(sections, "logging.categories", "statement_recognition", out b)) cfg.Categories.StatementRecognition = b;
         }
 
         static bool GetMinimalBool(System.Collections.Generic.Dictionary<string, System.Collections.Generic.Dictionary<string, string>> sections, string key, bool fallback)

@@ -34,7 +34,8 @@ file_sink_level = "info"
 # Equivalent to debug.runtime_panel.enabled (shared RuntimePanelEnabled field): true = mount the
 # floating ball at startup; false = never mount. GenericUtils.SetDiagnosticsPanelVisible(bool)
 # toggles it at runtime (hot reload applies too).
-panel_visible = true
+# 默认 false：不开启 gEmuera 日志调试就不显示调试悬浮窗（fix 2026-08-09）。
+panel_visible = false
 
 touch = false
 input = false

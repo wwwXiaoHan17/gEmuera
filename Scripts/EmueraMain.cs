@@ -203,6 +203,18 @@ public partial class EmueraMain : Node
 		content.Name = "EmueraContent";
 		AddChild(content);
 
+		// 虚拟鼠标独立场景：在内容就绪后实例化，作为 Main 的最后一个子节点。
+		// Why（场景化而非内联）：main.tscn 保持干净、鼠标可单独 F6 测试；层级不靠树序——
+		// VirtualMouse._Ready 的 MoveIntoOwnLayer 会把它移入专用 CanvasLayer(Layer=90)，
+		// 恒盖在内容(HTML div z 基准 1024)之上、光标/菜单/弹窗之下。
+		// 移动端自动启用；桌面端用系统菜单的鼠标按钮手动开启。
+		var mouseScene = GD.Load<PackedScene>("res://鼠标.tscn");
+		if (mouseScene != null)
+		{
+			var mouse = mouseScene.Instantiate();
+			AddChild(mouse);
+		}
+
 		await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
 		if (!IsInsideTree())
 			return;

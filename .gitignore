@@ -2,10 +2,12 @@
 # 注意：.import 侧车文件（如 main.jpg.import、*.ttf.import）是导入设置，官方要求提交 VCS，
 # 不要把它们加入 ignore。真正应忽略的是 .godot/（其下 imported/ 才是可再生的二进制缓存）。
 .godot/
-/android/
+
+# Android 导出工程（Godot 导出时生成在 Build/android/，编译产物不入库）
+/Build/android/
 
 # 预编译原生库（Android 导出前由 csproj 从 NuGet 包自愈恢复，不入库）
-/NativeLibs/
+/Build/NativeLibs/
 
 # Build output
 .mono/

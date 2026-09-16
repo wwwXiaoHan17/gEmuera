@@ -1,0 +1,43 @@
+[gd_scene format=3 uid="uid://ckgohvuub8ylk"]
+
+[ext_resource type="Script" uid="uid://dal4s6aip2blm" path="res://Scripts/Panels/VirtualMouse.cs" id="1_haci1"]
+[ext_resource type="Texture2D" uid="uid://c87cnnj2bwusx" path="res://assets/icons/鼠标.png" id="2_dhnq4"]
+
+[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_ud1wd"]
+radius = 95.80859
+height = 431.1377
+
+[node name="鼠标" type="Node2D" unique_id=457248068]
+z_index = 999
+position = Vector2(961, 370.00003)
+scale = Vector2(0.167, 0.167)
+script = ExtResource("1_haci1")
+
+[node name="Sprite" type="Sprite2D" parent="." unique_id=940837937]
+texture = ExtResource("2_dhnq4")
+
+[node name="滚轮区域" type="Area2D" parent="Sprite" unique_id=752565978]
+unique_name_in_owner = true
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Sprite/滚轮区域" unique_id=840190228]
+position = Vector2(0.00048828125, -395.20972)
+shape = SubResource("CapsuleShape2D_ud1wd")
+
+[node name="左键区域" type="Area2D" parent="Sprite" unique_id=624208819]
+unique_name_in_owner = true
+
+[node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="Sprite/左键区域" unique_id=2047333075]
+position = Vector2(-11.976101, 0)
+polygon = PackedVector2Array(-53.89209, -844.3115, -251.49658, -754.4912, -335.3291, -676.64685, -395.20947, -586.82654, -437.1255, -473.05408, -449.10205, -377.2456, -461.07764, -113.77246, -305.38916, -239.52112, -155.68848, -335.32947, -149.70068, -520.95825, -101.79639, -604.7905, -23.95166, -664.6708)
+
+[node name="右键区域" type="Area2D" parent="Sprite" unique_id=1741257733]
+unique_name_in_owner = true
+
+[node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="Sprite/右键区域" unique_id=116801502]
+polygon = PackedVector2Array(23.952148, -826.3474, 23.952148, -682.6349, 95.80859, -634.7307, 143.71289, -550.8983, 149.70068, -329.34143, 293.41357, -263.47314, 467.06592, -119.7605, 461.07813, -395.20972, 443.11426, -491.01807, 407.18604, -604.7905, 317.36572, -700.599, 209.58105, -778.44324, 113.77246, -814.37146)
+
+[node name="移动区域" type="Area2D" parent="Sprite" unique_id=166183171]
+unique_name_in_owner = true
+
+[node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="Sprite/移动区域" unique_id=682735387]
+polygon = PackedVector2Array(-155.68848, -263.47314, -251.49707, -215.56897, -347.30518, -155.68872, -407.18555, -101.79663, -467.06592, -29.940186, -467.06592, 353.2932, -461.07764, 413.17358, -455.08984, 461.07764, -425.1494, 544.91016, -389.22168, 610.7783, -347.30518, 670.6587, -281.437, 730.5388, -245.50879, 754.49097, -203.59277, 778.4431, -167.66455, 796.407, -113.77246, 814.3711, -59.88037, 826.34717, -17.963867, 826.34717, 35.928223, 826.34717, 89.82031, 820.35913, 149.70068, 802.395, 185.6289, 784.43115, 227.54492, 766.46704, 263.47314, 742.5149, 335.3296, 688.62256, 389.22168, 610.7783, 431.1377, 532.9341, 455.08984, 449.1018, 467.06592, 353.2932, 467.06592, -23.952148, 401.19775, -101.79663, 329.3413, -173.65283, 245.50928, -227.54504, 155.68848, -263.47314, 101.79639, -155.68872, 0, -113.772705, -113.77246, -155.68872, -161.67676, -269.46118)

@@ -8,6 +8,9 @@ namespace MinorShift._Library
 	{
 		static readonly Dictionary<int, short> keyStateCache = new Dictionary<int, short>();
 		static readonly Dictionary<int, long> virtualPressedUntilMs = new Dictionary<int, long>();
+		// 虚拟鼠标长按按住键集合：SetVirtualKeyPressed 置位，SetVirtualKeyReleased 清位。
+		// GetKeyState 在轮询缓存之外优先读取它，因此不受 UpdateKeyState 真实键轮询覆盖。
+		static readonly HashSet<int> virtualHeldKeys = new HashSet<int>();
 		static readonly Dictionary<int, bool> pressedStates = new Dictionary<int, bool>();
 		static readonly Dictionary<int, short> toggleStates = new Dictionary<int, short>();
 		static readonly Dictionary<int, int> keyLatch = new Dictionary<int, int>();
@@ -129,6 +132,32 @@ namespace MinorShift._Library
 			}
 		}
 
+		/// <summary>
+		/// 虚拟鼠标长按：把虚拟键置为按下态并记录一次 latch，直到 SetVirtualKeyReleased 才松开。
+		/// 对照源码 WinInput.SetKeyPressed：GETKEY 读到按下、GETKEYTRIGGERED 读到一次触发。
+		/// </summary>
+		public static void SetVirtualKeyPressed(int nVirtKey)
+		{
+			if (nVirtKey < 0 || nVirtKey > 255)
+				return;
+			lock (syncRoot)
+			{
+				virtualHeldKeys.Add(nVirtKey);
+				keyLatch[nVirtKey] = 1;
+			}
+		}
+
+		/// <summary>虚拟鼠标长按结束：清除虚拟按住态（对照源码 WinInput.SetKeyReleased）。</summary>
+		public static void SetVirtualKeyReleased(int nVirtKey)
+		{
+			if (nVirtKey < 0 || nVirtKey > 255)
+				return;
+			lock (syncRoot)
+			{
+				virtualHeldKeys.Remove(nVirtKey);
+			}
+		}
+
 		public static int ConsumeKeyLatch(int nVirtKey)
 		{
 			// 读取前请求主线程补一次轮询（按需轮询）。
@@ -161,6 +190,7 @@ namespace MinorShift._Library
 			{
 				keyStateCache.Clear();
 				virtualPressedUntilMs.Clear();
+				virtualHeldKeys.Clear();
 				pressedStates.Clear();
 				toggleStates.Clear();
 				keyLatch.Clear();
@@ -175,6 +205,9 @@ namespace MinorShift._Library
 			RequestKeyRefresh();
 			lock (syncRoot)
 			{
+				// 虚拟长按按住优先于轮询缓存，避免真实键轮询覆盖按住态。
+				if (virtualHeldKeys.Contains(nVirtKey))
+					return unchecked((short)0x8000);
 				if (virtualPressedUntilMs.TryGetValue(nVirtKey, out long until) && until >= Environment.TickCount64)
 					return keyStateCache.TryGetValue(nVirtKey, out short virtualValue)
 						? virtualValue

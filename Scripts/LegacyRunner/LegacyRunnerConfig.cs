@@ -153,7 +153,8 @@ namespace gEmuera.LegacyRunner
 				throw new InvalidDataException("game_root_must_be_existing_absolute_directory");
 			if (string.IsNullOrWhiteSpace(OutputDirectory) || !Path.IsPathRooted(OutputDirectory))
 				throw new InvalidDataException("output_directory_must_be_absolute");
-			ValidateSupportedProfile(Profile, "profile_must_be_v24pure_or_snake_or_erafl");
+			// megaten：runner 亦接受 megaten profile（错误码文案同步扩展）。
+		ValidateSupportedProfile(Profile, "profile_must_be_v24pure_or_snake_or_erafl_or_megaten");
 			if (!string.Equals(SessionIsolationMode, SessionIsolationModeBaseline, StringComparison.OrdinalIgnoreCase)
 				&& !string.Equals(SessionIsolationMode, SessionIsolationModeCanary, StringComparison.OrdinalIgnoreCase))
 				throw new InvalidDataException("session_isolation_mode_must_be_baseline_or_canary");
@@ -216,7 +217,7 @@ namespace gEmuera.LegacyRunner
 					throw new InvalidDataException("in_process_alternate_game_root_must_be_existing_absolute_directory");
 				ValidateSupportedProfile(
 					InProcessAlternateSession.Profile,
-					"in_process_alternate_profile_must_be_v24pure_or_snake_or_erafl");
+					"in_process_alternate_profile_must_be_v24pure_or_snake_or_erafl_or_megaten");
 
 				string alternateGame = Path.GetFullPath(InProcessAlternateSession.GameRoot)
 					.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
@@ -308,7 +309,9 @@ namespace gEmuera.LegacyRunner
 		{
 			if (!string.Equals(value, global::FirstWindow.CoreProfileV24Pure, StringComparison.OrdinalIgnoreCase)
 				&& !string.Equals(value, global::FirstWindow.CoreProfileSnake, StringComparison.OrdinalIgnoreCase)
-				&& !string.Equals(value, global::FirstWindow.CoreProfileEraFl, StringComparison.OrdinalIgnoreCase))
+				&& !string.Equals(value, global::FirstWindow.CoreProfileEraFl, StringComparison.OrdinalIgnoreCase)
+				// megaten：新增合法 profile 值（不改变既有三项的判定）。
+				&& !string.Equals(value, global::FirstWindow.CoreProfileMegaten, StringComparison.OrdinalIgnoreCase))
 				throw new InvalidDataException(error);
 		}
 
@@ -318,6 +321,9 @@ namespace gEmuera.LegacyRunner
 				return global::FirstWindow.CoreProfileSnake;
 			if (string.Equals(value, global::FirstWindow.CoreProfileEraFl, StringComparison.OrdinalIgnoreCase))
 				return global::FirstWindow.CoreProfileEraFl;
+			// megaten：归一化为规范小写 id，其余未知值仍回落 v24 基线。
+			if (string.Equals(value, global::FirstWindow.CoreProfileMegaten, StringComparison.OrdinalIgnoreCase))
+				return global::FirstWindow.CoreProfileMegaten;
 			return global::FirstWindow.CoreProfileV24Pure;
 		}
 	}

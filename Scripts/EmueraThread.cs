@@ -275,8 +275,9 @@ public class EmueraThread
 				try
 				{
 					int resultMouseButton = originalMouseButton;
-					// Godot/Win32 的中键 VK 是 0x04，但 eraFL 的 RESULT:1 鼠标协议是
-					// 1=左、2=右、3=中。策略在非 eraFL session 中保持原值。
+					// Godot/Win32 的中键 VK 是 0x04，但 RESULT:1 的鼠标协议在所有实现中都是
+					// 1=左、2=右、3=中（对照源码 MainWindow.MouseDown / EmueraConsole.InputMouseKey）。
+					// 归一化对全部 profile 生效（eraFL 与 snake/v24 一致），避免 RESULT:1==3 分支读错。
 					resultMouseButton = MinorShift.Emuera.Program.Compatibility.EraFl
 						.NormalizePointerButtonResult(originalMouseButton);
 					if(resultMouseButton != 0)

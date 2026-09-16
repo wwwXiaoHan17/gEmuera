@@ -34,11 +34,13 @@ static class Program
         "UNCHECKED_ADD", "UNCHECKED_MUL", "UNCHECKED_NEG", "UNCHECKED_SUB", "陥落状態", "陷落状态",
     };
 
+    // 注意：陥落状態/陷落状态 是 gEmuera 为 eraTW 口上定制的兜底函数（SnakeFallenStateMethod，
+    // 模块注释明确 "must NOT be hidden"）——它在 snake 会话中必须可见，不在排除清单内。
     private static readonly string[] SnakeExcludedFunctions =
     {
         "BITMAP_CACHE_ENABLE", "CBGSETCIMG", "DT_CELL_SETF", "GCLEARLOWALPHA",
         "GDRAWPOLYGON", "GDRAWPOLYGONADDPOINT", "GDRAWPOLYGONCLEARPOINT", "GDRAWSTRING", "GROTATE",
-        "GETARGCOUNT", "GFILLPOLYGON", "MOUSEBUTTON", "SETANIMETIMER", "陥落状態", "陷落状态",
+        "GETARGCOUNT", "GFILLPOLYGON", "MOUSEBUTTON", "SETANIMETIMER",
     };
 
     private static int Main()
@@ -51,7 +53,11 @@ static class Program
 
             Assert(v24.IsInstructionVisible("PRINT"), "v24 lost a baseline instruction.");
             Assert(v24.IsInstructionVisible("CALLSHARP"), "v24 lost a baseline v24 instruction.");
-            Assert(v24.IsInstructionVisible("BITMAP_CACHE_ENABLE") && snake.IsInstructionVisible("BITMAP_CACHE_ENABLE"), "BITMAP_CACHE_ENABLE must be available in both upstream dialects.");
+            // BITMAP_CACHE_ENABLE：v24 参考无该指令（仅函数，经 METHOD 投影重新引入）；
+            // snake 参考有指令。v24 会话中指令形态隐藏、函数经 ShouldProject… 投影可用。
+            Assert(!v24.IsInstructionVisible("BITMAP_CACHE_ENABLE") && v24.ShouldProjectExpressionFunctionAsInstruction("BITMAP_CACHE_ENABLE"),
+                "v24 must expose BITMAP_CACHE_ENABLE via METHOD projection, not the shared Snake instruction.");
+            Assert(snake.IsInstructionVisible("BITMAP_CACHE_ENABLE"), "BITMAP_CACHE_ENABLE instruction must be visible in Snake.");
             Assert(v24.IsInstructionVisible("VARI") && v24.IsInstructionVisible("VARS"), "v24 lost enabled scoped-variable instructions.");
             Assert(!v24.IsInstructionVisible("OUTPUTLOG") && !snake.IsInstructionVisible("OUTPUTLOG"), "Godot-port-only instruction leaked into an upstream dialect.");
             Assert(!v24WithoutScopedVariables.IsInstructionVisible("VARI") && !v24WithoutScopedVariables.IsInstructionVisible("VARS"), "disabled scoped-variable instructions leaked into v24.");
@@ -69,6 +75,34 @@ static class Program
             Assert(snake.IsFunctionVisible("ACOS"), "Snake lost a Snake expression function.");
             foreach (string key in SnakeExcludedFunctions)
                 Assert(!snake.IsFunctionVisible(key), $"Snake exposed a key absent from its reference registry: {key}.");
+
+            // eraFL 接口（闭包 {v24, erafl}）必须提供其目标游戏实测依赖的能力：
+            // eraFL 游戏（erafl-master グラフィック生成.ERB:356）用指令语法
+            // "SETANIMETIMER 1000 / フレームレート"，该指令在 v24 参考中不存在、
+            // 由 snake 系共享仓注册——erafl 模块需显式声明才能解除 v24 基线的隐藏。
+            LegacyCompatibilityProfile erafl = LegacyCompatibilityProfile.CreateForProfile("erafl", true);
+            Assert(erafl.IsInstructionVisible("SETANIMETIMER"),
+                "eraFL 接口必须提供 SETANIMETIMER 指令（eraFL 游戏启动依赖，グラフィック生成.ERB:356）。");
+            // 隔离护栏：erafl 不得获得其他 snake 专属能力（函数层与指令层抽查）。
+            Assert(!erafl.IsFunctionVisible("SQL_CONNECT"), "eraFL 接口泄漏了 snake 专属函数 SQL_CONNECT。");
+            Assert(!erafl.IsInstructionVisible("CALLSTR"), "eraFL 接口泄漏了 snake 专属指令 CALLSTR。");
+            // v24pure 保持对 v24 参考的忠实：SETANIMETIMER 函数可见（v24 参考 Creator.cs:211）、指令不可见。
+            Assert(v24.IsFunctionVisible("SETANIMETIMER"), "v24pure 丢失了 v24 参考的 SETANIMETIMER 表达式函数。");
+            Assert(!v24.IsInstructionVisible("SETANIMETIMER"), "v24pure 泄漏了 snake 系 SETANIMETIMER 指令。");
+            // snake 会话：指令可见、函数形态隐藏（snake 参考无函数版，Creator.cs 只有 GETANIMETIMER）。
+            Assert(snake.IsInstructionVisible("SETANIMETIMER"), "snake 会话丢失了 SETANIMETIMER 指令。");
+            Assert(!snake.IsFunctionVisible("SETANIMETIMER"), "snake 会话泄漏了参考源码不存在的 SETANIMETIMER 函数形态。");
+
+            // 诊断提示（TryGetUnselectedModuleHint）：v24pure 下查询 snake 专属名字 → 归属 game.snake；
+            // snake 会话查询其自身隐藏的函数形态 → 不提示。
+            Assert(v24.TryGetUnselectedModuleHint("SETANIMETIMER", out string hintModule1) && hintModule1 == "game.snake",
+                "v24pure 查询 SETANIMETIMER 应提示归属 game.snake。");
+            Assert(v24.TryGetUnselectedModuleHint("SQL_CONNECT", out _),
+                "v24pure 查询 SQL_CONNECT 应提示归属 snake 模块。");
+            Assert(!snake.TryGetUnselectedModuleHint("SETANIMETIMER", out _),
+                "snake 会话查询 SETANIMETIMER 不应提示（snake 已选中）。");
+            Assert(!v24.TryGetUnselectedModuleHint("PRINT", out _),
+                "v24pure 查询基线指令 PRINT 不应提示。");
 
             Console.WriteLine("Legacy dialect surface smoke passed.");
             return 0;

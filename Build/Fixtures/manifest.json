@@ -1,0 +1,149 @@
+{
+  "schemaVersion": "1.0.0",
+  "workPackage": "M0-FIX-01",
+  "fixtures": [
+    {
+      "id": "UP-XEMUERA-SOURCE-001",
+      "layer": "upstream",
+      "category": "baseline-runner",
+      "profile": "Upstream1808",
+      "rootBinding": "upstream",
+      "source": {
+        "name": "XEmuera-R reference snapshot",
+        "origin": "https://github.com/Future-R/XEmuera",
+        "revision": "content-hash"
+      },
+      "authorization": {
+        "status": "Verified",
+        "origin": "Repository LICENSE",
+        "license": "MIT",
+        "evidence": "root://LICENSE",
+        "redistributionAllowed": true
+      },
+      "expectedReports": [
+        { "kind": "identity", "path": "identity.json", "required": true },
+        { "kind": "state", "path": "state.json", "required": true },
+        { "kind": "display", "path": "display.json", "required": true },
+        { "kind": "effects", "path": "effects.json", "required": true },
+        { "kind": "errors", "path": "errors.json", "required": true },
+        { "kind": "timeline", "path": "timeline.json", "required": true },
+        { "kind": "trace", "path": "trace.json", "required": true },
+        { "kind": "metrics", "path": "metrics.json", "required": true },
+        { "kind": "artifacts", "path": "artifacts.json", "required": true }
+      ],
+      "expectedCoverage": [
+        "Upstream1808 startup and first wait",
+        "original parser/VM/save/error semantics"
+      ],
+      "notes": "Local root is a reference snapshot; exact bytes are identified by the generated canonical hash."
+    },
+    {
+      "id": "GE-GEMUERA-SNAKE-001",
+      "layer": "legacy",
+      "category": "baseline-runner",
+      "profile": "GEmueraSnake",
+      "rootBinding": "legacy",
+      "source": {
+        "name": "gEmuera-future runnable Godot project",
+        "origin": "https://github.com/wwwXiaoHan17/gEmuera",
+        "revision": "content-hash"
+      },
+      "authorization": {
+        "status": "Unverified",
+        "origin": "Repository URL declared by AGENT.md; no root license file found",
+        "license": "Unresolved",
+        "evidence": "",
+        "redistributionAllowed": false
+      },
+      "expectedReports": [
+        { "kind": "identity", "path": "identity.json", "required": true },
+        { "kind": "state", "path": "state.json", "required": true },
+        { "kind": "display", "path": "display.json", "required": true },
+        { "kind": "effects", "path": "effects.json", "required": true },
+        { "kind": "errors", "path": "errors.json", "required": true },
+        { "kind": "timeline", "path": "timeline.json", "required": true },
+        { "kind": "trace", "path": "trace.json", "required": true },
+        { "kind": "metrics", "path": "metrics.json", "required": true },
+        { "kind": "artifacts", "path": "artifacts.json", "required": true }
+      ],
+      "expectedCoverage": [
+        "Godot 4.7 Mono legacy startup",
+        "Snake profile typed trace and canonical reports"
+      ],
+      "notes": "Manifest records local evidence only until repository licensing is reviewed."
+    },
+    {
+      "id": "SN-ERATW-FIRST-WAIT-001",
+      "layer": "game",
+      "category": "representative-game",
+      "profile": "Snake",
+      "rootBinding": "game",
+      "source": {
+        "name": "EraTW Magic DLC update base local fixture",
+        "origin": "https://gitgud.io/era-games-zh/touhou/eratw-sub-modding",
+        "revision": "content-hash"
+      },
+      "authorization": {
+        "status": "Unverified",
+        "origin": "README.zh.md identifies a public repository but does not grant redistribution rights",
+        "license": "Unresolved",
+        "evidence": "root://README.zh.md",
+        "redistributionAllowed": false
+      },
+      "expectedReports": [
+        { "kind": "identity", "path": "identity.json", "required": true },
+        { "kind": "state", "path": "state.json", "required": true },
+        { "kind": "display", "path": "display.json", "required": true },
+        { "kind": "effects", "path": "effects.json", "required": true },
+        { "kind": "errors", "path": "errors.json", "required": true },
+        { "kind": "timeline", "path": "timeline.json", "required": true },
+        { "kind": "trace", "path": "trace.json", "required": true },
+        { "kind": "metrics", "path": "metrics.json", "required": true },
+        { "kind": "artifacts", "path": "artifacts.json", "required": true }
+      ],
+      "expectedCoverage": [
+        "EraTW cold startup to first input wait",
+        "Snake lazy ERB, display commits, RNG, audio stop effects and SAVEGLOBAL error baseline"
+      ],
+      "notes": "Game bytes remain external and local-only; only manifest/hash/report metadata may be versioned."
+    },
+    {
+      "id": "FL-ERAFL-DISPLAY-001",
+      "layer": "game",
+      "category": "representative-game",
+      "profile": "EraFL",
+      "rootBinding": "erafl",
+      "source": {
+        "name": "eraFL display/input regression fixture",
+        "origin": "Local archive erafl-master-c4ca29c73286dea63f1eebb8d36fe5d8ed553752",
+        "revision": "c4ca29c73286dea63f1eebb8d36fe5d8ed553752"
+      },
+      "authorization": {
+        "status": "Verified",
+        "origin": "Bundled eraFL licence; use is restricted to credited non-profit era/eraFL-related creative activity",
+        "license": "eraFL custom restricted non-profit license",
+        "evidence": "root://licence_eraFL.txt",
+        "redistributionAllowed": false
+      },
+      "expectedReports": [
+        { "kind": "identity", "path": "controls/run-001/identity.json", "required": true },
+        { "kind": "display-controls", "path": "controls/run-001/display.json", "required": true },
+        { "kind": "display-canvas", "path": "canvas/run-001/display.json", "required": true },
+        { "kind": "timeline-controls", "path": "controls/run-001/timeline.json", "required": true },
+        { "kind": "timeline-canvas", "path": "canvas/run-001/timeline.json", "required": true },
+        { "kind": "trace-controls", "path": "controls/run-001/trace.json", "required": true },
+        { "kind": "trace-canvas", "path": "canvas/run-001/trace.json", "required": true },
+        { "kind": "screenshots-controls", "path": "controls/run-001/screenshots.json", "required": true },
+        { "kind": "screenshots-canvas", "path": "canvas/run-001/screenshots.json", "required": true },
+        { "kind": "hit-test-controls", "path": "controls/run-001/hit-test.json", "required": true },
+        { "kind": "hit-test-canvas", "path": "canvas/run-001/hit-test.json", "required": true }
+      ],
+      "expectedCoverage": [
+        "nested div/srcb",
+        "dynamic map and data-only transactions",
+        "scroll intent and MOUSEBUTTON input"
+      ],
+      "notes": "Game bytes remain external and local-only. Authorization evidence may be hashed, but the restricted license does not permit repository redistribution; missing display paths/reports remain Uncovered."
+    }
+  ]
+}

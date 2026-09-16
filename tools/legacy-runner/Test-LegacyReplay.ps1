@@ -12,9 +12,9 @@ function Assert-ReplayContract {
 }
 
 try {
-    $driverPath = Join-Path $ProjectRoot 'Scripts\M0\LegacyInputReplayDriver.cs'
-    $configPath = Join-Path $ProjectRoot 'Scripts\M0\LegacyRunnerConfig.cs'
-    $hostPath = Join-Path $ProjectRoot 'Scripts\M0\LegacyRunnerHost.cs'
+    $driverPath = Join-Path $ProjectRoot 'Scripts\LegacyRunner\LegacyInputReplayDriver.cs'
+    $configPath = Join-Path $ProjectRoot 'Scripts\LegacyRunner\LegacyRunnerConfig.cs'
+    $hostPath = Join-Path $ProjectRoot 'Scripts\LegacyRunner\LegacyRunnerHost.cs'
     $schemaPath = Join-Path $ProjectRoot 'tools\legacy-runner\legacy-runner-config.schema.json'
     foreach ($path in @($driverPath, $configPath, $hostPath, $schemaPath)) {
         Assert-ReplayContract (Test-Path -LiteralPath $path -PathType Leaf) "M0 replay contract file is missing: $path"
@@ -76,7 +76,7 @@ namespace MinorShift.Emuera.GameView
     }
 }
 
-namespace gEmuera.M0
+namespace gEmuera.LegacyRunner
 {
     public sealed class LegacyRunnerInput
     {
@@ -105,7 +105,7 @@ namespace gEmuera.M0
 }
 '@ + "`n" + $driverSource + @'
 
-namespace gEmuera.M0.Tests
+namespace gEmuera.LegacyRunner.Tests
 {
     public static class LegacyReplayContractProbe
     {
@@ -182,7 +182,7 @@ namespace gEmuera.M0.Tests
 }
 '@
     Add-Type -TypeDefinition $source -Language CSharp
-    Write-Output ([gEmuera.M0.Tests.LegacyReplayContractProbe]::Run())
+    Write-Output ([gEmuera.LegacyRunner.Tests.LegacyReplayContractProbe]::Run())
 
     $hostSource = [IO.File]::ReadAllText($hostPath)
     Assert-ReplayContract ($hostSource.Contains('LegacyInputReplayDriver.IsReplayWait(console)')) 'Runner host does not reuse the safe replay wait predicate.'

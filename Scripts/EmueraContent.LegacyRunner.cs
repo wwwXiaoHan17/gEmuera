@@ -207,7 +207,7 @@ public partial class EmueraContent
 		string expectedValue, long expectedGeneration)
 	{
 		bool found = TryFindConsoleButtonAtGlobalPosition(point, out _, out string actualValue, out long actualGeneration,
-			out _, out _);
+			out _, out _, out _);
 		observation.Hits.Add(new LegacyDisplayHitEvidence
 		{
 			Backend = UseCanvasRenderBackend ? "canvas" : "controls",
