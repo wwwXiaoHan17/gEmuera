@@ -8,7 +8,7 @@ Emuera は日本の eramaker 系テキストゲームの実行エンジンで、
 
 ## 開発者の引き継ぎ
 
-AI/開発者の引き継ぎは、リポジトリルートの [AGENTS.md](../AGENTS.md) が権威あるエントリポイントです（プロジェクト概要、必読ドキュメント、ビルドと検証、アーキテクチャ概要、協力ルール）。ERB インタプリタの拡張については [ERBAPI.md](../ERBAPI.md) を参照してください。[DeveloperHandoff.md](../NewFrameworkDesign/DeveloperHandoff.md) は 2026-07-17 時点の古いスナップショットであり、歴史的アーカイブとしての参考資料です。その中の長期設計目標を実装済みと見なさないでください。
+AI/開発者の引き継ぎは、リポジトリルートの [AGENTS.md](../AGENTS.md) が権威あるエントリポイントです（プロジェクト概要、必読ドキュメント、ビルドと検証、アーキテクチャ概要、協力ルール）。ERB インタプリタの拡張については [ERBAPI.md](../ERBAPI.md) を参照してください。[DeveloperHandoff.md](../docs/NewFrameworkDesign/DeveloperHandoff.md) は 2026-07-17 時点の古いスナップショットであり、歴史的アーカイブとしての参考資料です。その中の長期設計目標を実装済みと見なさないでください。
 
 ## 特徴
 

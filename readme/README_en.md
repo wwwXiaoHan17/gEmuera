@@ -8,7 +8,7 @@ Emuera is the execution engine for Japanese eramaker-series text games, parsing 
 
 ## Developer Handoff
 
-For AI/developer onboarding, [AGENTS.md](../AGENTS.md) at the repository root is the authoritative entry point (project overview, required documents, build & verification, architecture overview, collaboration rules); when extending the ERB interpreter interface, see [ERBAPI.md](../ERBAPI.md). [DeveloperHandoff.md](../NewFrameworkDesign/DeveloperHandoff.md) is an outdated snapshot dated 2026-07-17, kept only as a historical archive; do not treat its long-term design goals as already implemented.
+For AI/developer onboarding, [AGENTS.md](../AGENTS.md) at the repository root is the authoritative entry point (project overview, required documents, build & verification, architecture overview, collaboration rules); when extending the ERB interpreter interface, see [ERBAPI.md](../ERBAPI.md). [DeveloperHandoff.md](../docs/NewFrameworkDesign/DeveloperHandoff.md) is an outdated snapshot dated 2026-07-17, kept only as a historical archive; do not treat its long-term design goals as already implemented.
 
 ## Features
 

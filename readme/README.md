@@ -8,7 +8,7 @@ Emuera 是日本 eramaker 系列文字游戏的执行引擎，通过解析 `.ERB
 
 ## 开发者接手
 
-AI/开发者接手以仓库根目录 [AGENTS.md](../AGENTS.md) 为权威入口（项目简介、必读与配套文档、构建与验证、架构速览、协作规则）；需要扩展 ERB 解释器接口时参见 [ERBAPI.md](../ERBAPI.md)。[DeveloperHandoff.md](../NewFrameworkDesign/DeveloperHandoff.md) 是 2026-07-17 的历史存档快照，仅作参考；不要把其中的长期目标设计直接视为已完成实现。
+AI/开发者接手以仓库根目录 [AGENTS.md](../AGENTS.md) 为权威入口（项目简介、必读与配套文档、构建与验证、架构速览、协作规则）；需要扩展 ERB 解释器接口时参见 [ERBAPI.md](../ERBAPI.md)。[DeveloperHandoff.md](../docs/NewFrameworkDesign/DeveloperHandoff.md) 是 2026-07-17 的历史存档快照，仅作参考；不要把其中的长期目标设计直接视为已完成实现。
 
 ## 特性
 
