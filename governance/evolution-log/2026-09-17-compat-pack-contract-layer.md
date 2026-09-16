@@ -37,3 +37,16 @@
 dotnet test EmueraFacade.Tests 30/30、GEmuera.Core.Tests 20/20；Godot 无头构建 DLL
 01:00:43 更新（唯一 error 行为已知 EditorSettings 收尾噪声）；三冒烟全过；sln 经
 `dotnet build` 隐式校验（测试工程构建走 sln 内路径解析）。
+
+## result-review 返工记录（首轮 96 → 复评见后）
+
+首轮 96/100 未过，必修项与处置：
+1. **variantSelections 重复键静默 last-wins**（JSON 原生重复键与 Trim+Upper 规范化冲突
+   均被覆盖）→ 改 TryAdd 判重报错，补 2 条测试（精确重复/规范化冲突）。
+2. **Nullable 注解惰性**（EmueraFacade 未启用 nullable，string? 注解产生 15 个 CS8632）
+   → CompatPackManifest.cs 头部 `#nullable enable`，`dotnet build` 零警告实证。
+3. 建议项同步收口：schema 与解析器双向分歧（可选字段接受 null、变体名禁空格、
+   targetEngineApi 字符串分支禁 0/前导零）；补 Ordinal 大小写负向测试（错误大小写
+   资源 + 非法内容内嵌，证明资源发现精确匹配）；RequireGameIdentity 局部错误作用域修正。
+
+复验：EmueraFacade.Tests 33/33；契约程序集 `dotnet build` 0 警告 0 错误。

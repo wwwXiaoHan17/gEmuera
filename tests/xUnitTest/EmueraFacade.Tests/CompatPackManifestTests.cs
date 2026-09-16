@@ -149,6 +149,26 @@ public class CompatPackManifestTests
     }
 
     [Fact]
+    public void Parse_VariantSelectionsExactDuplicateKey_Fails()
+    {
+        // JSON 对象原生重复键（System.Text.Json 允许出现两次）也必须整体拒绝，不做 last-wins。
+        string json = "{\"packId\":\"test.pack\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1,"
+            + "\"variantSelections\":{\"PRINT\":\"builtin:a\",\"PRINT\":\"builtin:b\"}}";
+        Assert.False(CompatPackManifest.TryParse(json, out _, out var errors));
+        Assert.Contains(errors, e => e.Contains("重复"));
+    }
+
+    [Fact]
+    public void Parse_VariantSelectionsNormalizedKeyConflict_Fails()
+    {
+        // Trim+Upper 规范化后冲突（" print " 与 "PRINT"）同样拒绝。
+        string json = "{\"packId\":\"test.pack\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1,"
+            + "\"variantSelections\":{\"PRINT\":\"builtin:a\",\" print \":\"builtin:b\"}}";
+        Assert.False(CompatPackManifest.TryParse(json, out _, out var errors));
+        Assert.Contains(errors, e => e.Contains("重复"));
+    }
+
+    [Fact]
     public void Parse_GameIdentityProblems_Fail()
     {
         string missingCode = WithField("\"gameIdentity\"", "{\"version\":\"305\"}");

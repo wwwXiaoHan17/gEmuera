@@ -31,6 +31,21 @@ public class CompatPackAssemblyDiscoveryTests
     }
 
     [Fact]
+    public void LoadFromAssembly_IgnoresWrongCaseResource()
+    {
+        // 测试工程同时内嵌了错误大小写的资源（CompatPack.Manifest.json，内容非法）：
+        // 资源发现必须 Ordinal 精确匹配——若大小写不敏感地命中错误资源，解析会因内容非法而失败。
+        var assembly = typeof(CompatPackManifestTests).Assembly;
+        string[] names = assembly.GetManifestResourceNames();
+        Assert.Contains("compatpack.manifest.json", names);
+        Assert.Contains("CompatPack.Manifest.json", names);
+
+        Assert.True(CompatPackManifest.TryLoadFromAssembly(assembly, out var manifest, out var errors),
+            string.Join("; ", errors));
+        Assert.Equal("test.hello-pack", manifest!.PackId);
+    }
+
+    [Fact]
     public void LoadFromNullAssembly_Fails()
     {
         Assert.False(CompatPackManifest.TryLoadFromAssembly(null!, out _, out var errors));

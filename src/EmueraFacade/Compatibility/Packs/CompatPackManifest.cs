@@ -1,3 +1,4 @@
+#nullable enable
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -362,7 +363,12 @@ namespace Emuera.Compatibility.Packs
 					errors.Add("字段 'variantSelections' 的 '" + property.Name + "' 变体名不合法（非空且不含空格）：" + variant);
 					continue;
 				}
-				result[instruction] = variant;
+				// 同一指令（含 JSON 原生重复键、Trim+Upper 规范化后冲突）出现两条绑定即整体拒绝，
+				// 不做 last-wins 静默覆盖（fail-closed）。
+				if (!result.TryAdd(instruction, variant))
+				{
+					errors.Add("字段 'variantSelections' 存在重复指令名键（规范化后冲突）：" + property.Name);
+				}
 			}
 			return new ReadOnlyDictionary<string, string>(result);
 		}
@@ -377,6 +383,7 @@ namespace Emuera.Compatibility.Packs
 				return null;
 			}
 
+			int errorsBefore = errors.Count;
 			string gameCode = "";
 			string version = "";
 			string versionAccept = "exact";
@@ -407,7 +414,8 @@ namespace Emuera.Compatibility.Packs
 				errors.Add("字段 'gameIdentity.gameCode' 缺失或为空。");
 			if (version.Length == 0)
 				errors.Add("字段 'gameIdentity.version' 缺失或为空。");
-			if (errors.Count > 0)
+			// 只看本字段的局部错误（全局列表可能已含其它字段的问题）。
+			if (errors.Count > errorsBefore)
 				return null;
 			return new CompatPackGameIdentity(gameCode, version, versionAccept);
 		}

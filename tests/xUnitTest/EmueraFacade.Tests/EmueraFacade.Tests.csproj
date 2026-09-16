@@ -21,5 +21,7 @@
   <ItemGroup>
     <!-- 以规范资源名内嵌合法样例清单：验证 TryLoadFromAssembly 的资源发现路径。 -->
     <EmbeddedResource Include="testdata\compatpack.manifest.json" LogicalName="compatpack.manifest.json" />
+    <!-- 大小写不同的资源名 + 非法内容：证明资源发现是 Ordinal 精确匹配（命中错误大小写即会因内容非法而失败）。 -->
+    <EmbeddedResource Include="testdata\wrong-case-manifest.json" LogicalName="CompatPack.Manifest.json" />
   </ItemGroup>
 </Project>
