@@ -25,7 +25,7 @@ public class CompatPackRulesTests
         1,
         new HashSet<string>(StringComparer.Ordinal) { "parse.diagnostics.v1", "markup.div-v2.v1" },
         new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
-        new HashSet<string>(StringComparer.Ordinal) { "CALLSHARP" },
+        new HashSet<string>(StringComparer.Ordinal) { "CALLSHARP", "SETBGIMAGE", "PRINT" },
         new HashSet<string>(StringComparer.Ordinal) { "EXISTVAR" });
 
     sealed class StubSurface : ISurfaceContribution
@@ -33,6 +33,13 @@ public class CompatPackRulesTests
         public string ContributionId => "stub.surface";
         public void Apply(IInstructionSurfaceRegistry instructions, IFunctionSurfaceRegistry functions)
             => throw new InvalidOperationException("boom");
+    }
+
+    sealed class StubSurfaceDo : ISurfaceContribution
+    {
+        public string ContributionId => "stub.surface.do";
+        public Action<IInstructionSurfaceRegistry, IFunctionSurfaceRegistry> Do { get; init; } = (_, _) => { };
+        public void Apply(IInstructionSurfaceRegistry instructions, IFunctionSurfaceRegistry functions) => Do(instructions, functions);
     }
 
     sealed class StubVariant : IInstructionVariantContribution
@@ -44,7 +51,68 @@ public class CompatPackRulesTests
     sealed class StubCapability : ICapabilityContribution
     {
         public string ContributionId { get; init; } = "stub.capability";
-        public IReadOnlyList<string> CapabilityIds { get; init; } = Array.Empty<string>();
+        public IReadOnlyList<string>? CapabilityIds { get; init; } = Array.Empty<string>();
+    }
+
+    [Fact]
+    public void Validate_NullContributionElement_Rejects()
+    {
+        Assert.False(CompatPackRules.Validate(Manifest(), new ICompatPackContribution[] { null! }, Context(), out var errors));
+        Assert.Contains(errors, e => e.Contains("null 元素"));
+    }
+
+    [Fact]
+    public void Validate_NullCapabilityIds_Rejects()
+    {
+        var stub = new StubCapability { CapabilityIds = null };
+        Assert.False(CompatPackRules.Validate(Manifest(), new ICompatPackContribution[] { stub! }, Context(), out var errors));
+        Assert.Contains(errors, e => e.Contains("CapabilityIds 为 null"));
+    }
+
+    [Fact]
+    public void Validate_HidePlusVariantBinding_Rejects()
+    {
+        var surface = new StubSurfaceDo { Do = (instructions, _) => instructions.HideInstruction("CALLSHARP") };
+        var variant = new StubVariant
+        {
+            ContributionId = "variant.a",
+            Bindings = new[] { new InstructionVariantBinding("CALLSHARP", new HelloVariantFactory()) },
+        };
+        Assert.False(CompatPackRules.Validate(Manifest(), new ICompatPackContribution[] { surface, variant }, Context(), out var errors));
+        Assert.Contains(errors, e => e.Contains("同时被隐藏与变体绑定"));
+    }
+
+    [Fact]
+    public void Validate_RegisterPlusVariantBinding_Rejects()
+    {
+        // NEWTHING 不在基线（注册本身合法），但同指令又绑变体 → handler 来源歧义拒载。
+        var surface = new StubSurfaceDo { Do = (instructions, _) => instructions.RegisterInstruction("NEWTHING") };
+        var variant = new StubVariant
+        {
+            ContributionId = "variant.a",
+            Bindings = new[] { new InstructionVariantBinding("NEWTHING", new HelloVariantFactory()) },
+        };
+        Assert.False(CompatPackRules.Validate(Manifest(), new ICompatPackContribution[] { surface, variant }, Context(), out var errors));
+        Assert.Contains(errors, e => e.Contains("同时被表面注册与变体绑定"));
+    }
+
+    [Fact]
+    public void Validate_SelectionKeyOutsideBaseline_Rejects()
+    {
+        string json = "{\"packId\":\"test.rules\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1,"
+            + "\"variantSelections\":{\"NOSUCH\":\"builtin:snake\"}}";
+        var manifest = CompatPackManifest.TryParse(json, out var m, out _)
+            ? m! : throw new InvalidOperationException();
+        Assert.False(CompatPackRules.Validate(manifest, Array.Empty<ICompatPackContribution>(), Context(), out var errors));
+        Assert.Contains(errors, e => e.Contains("不在 v24 基线内"));
+    }
+
+    [Fact]
+    public void Validate_HidePlusSelection_Rejects()
+    {
+        var surface = new StubSurfaceDo { Do = (instructions, _) => instructions.HideInstruction("SETBGIMAGE") };
+        Assert.False(CompatPackRules.Validate(Manifest(), new ICompatPackContribution[] { surface }, Context(), out var errors));
+        Assert.Contains(errors, e => e.Contains("同时被隐藏与清单变体选择"));
     }
 
     [Fact]

@@ -64,6 +64,7 @@ public static class CompatPackLoader
         catch (Exception exception)
         {
             collected.Add(prefix + "包程序集加载失败：" + exception.Message);
+            loadContext.Unload();
             errors = collected;
             return false;
         }
@@ -73,6 +74,7 @@ public static class CompatPackLoader
         {
             collected.Add(prefix + "内嵌清单缺失或非法：");
             collected.AddRange(manifestErrors.Select(error => prefix + "  " + error));
+            loadContext.Unload();
             errors = collected;
             return false;
         }
@@ -88,28 +90,21 @@ public static class CompatPackLoader
         catch (Exception exception)
         {
             collected.Add(prefix + "包入口实例化失败：" + exception.Message);
+            loadContext.Unload();
             errors = collected;
             return false;
         }
         if (pack is null || collected.Count > 0)
         {
+            loadContext.Unload();
             errors = collected;
             return false;
         }
 
-        // 入口类自报的清单必须与内嵌清单同源（id+版本一致），防止两处漂移。
-        if (!string.Equals(pack.Manifest?.PackId, manifest.PackId, StringComparison.Ordinal)
-            || !string.Equals(pack.Manifest?.PackVersion, manifest.PackVersion, StringComparison.Ordinal))
+        if (!ValidatePackEntry(pack, manifest, context, out IReadOnlyList<ICompatPackContribution> contributions, out var entryErrors))
         {
-            collected.Add(prefix + "入口类 Manifest 与内嵌清单不一致（packId/packVersion 必须相同）。");
-            errors = collected;
-            return false;
-        }
-
-        IReadOnlyList<ICompatPackContribution> contributions = pack.Contributions ?? Array.Empty<ICompatPackContribution>();
-        if (!CompatPackRules.Validate(manifest, contributions, context, out var ruleErrors))
-        {
-            collected.AddRange(ruleErrors.Select(error => prefix + error));
+            collected.AddRange(entryErrors.Select(error => prefix + error));
+            loadContext.Unload();
             errors = collected;
             return false;
         }
@@ -169,6 +164,51 @@ public static class CompatPackLoader
 
         set = new CompatPackSet(handles);
         return true;
+    }
+
+    /// <summary>
+    /// 包入口校验（公开以便直测）。包作者可控的 Manifest/Contributions getter 抛异常、
+    /// 返回 null 或与内嵌清单不一致，一律转为拒载错误——加载器的任何输入都不允许异常逃逸
+    /// （设计 §3.3 降级不变量：任何原因失败 → 回退纯 v24，不静默半加载）。
+    /// </summary>
+    public static bool ValidatePackEntry(
+        ICompatPack pack,
+        CompatPackManifest manifest,
+        CompatPackValidationContext context,
+        out IReadOnlyList<ICompatPackContribution> contributions,
+        out IReadOnlyList<string> errors)
+    {
+        var collected = new List<string>();
+        contributions = Array.Empty<ICompatPackContribution>();
+        try
+        {
+            // 入口类自报的清单必须与内嵌清单同源（id+版本一致），防止两处漂移。
+            if (!string.Equals(pack.Manifest?.PackId, manifest.PackId, StringComparison.Ordinal)
+                || !string.Equals(pack.Manifest?.PackVersion, manifest.PackVersion, StringComparison.Ordinal))
+            {
+                collected.Add("入口类 Manifest 与内嵌清单不一致（packId/packVersion 必须相同）。");
+                errors = collected;
+                return false;
+            }
+
+            contributions = pack.Contributions ?? Array.Empty<ICompatPackContribution>();
+            if (!CompatPackRules.Validate(manifest, contributions, context, out var ruleErrors))
+            {
+                collected.AddRange(ruleErrors);
+                errors = collected;
+                return false;
+            }
+
+            errors = collected;
+            return true;
+        }
+        catch (Exception exception)
+        {
+            contributions = Array.Empty<ICompatPackContribution>();
+            collected.Add("包入口访问失败（Manifest/Contributions 抛出异常）：" + exception.Message);
+            errors = collected;
+            return false;
+        }
     }
 
     static ICompatPack? FindSinglePackEntry(Assembly assembly, List<string> errors)

@@ -37,10 +37,16 @@ public static class CompatPackRules
                 collected.Add("清单声明未知 capability id：" + capability);
         }
 
-        // 贡献 id 包内唯一。
+        // 贡献 id 包内唯一。贡献列表与各成员集合都来自包作者代码，null 一律收集错误而非抛出
+        // （fail-closed：加载器的任何输入都不允许异常逃逸）。
         var contributionIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (ICompatPackContribution contribution in contributions)
         {
+            if (contribution is null)
+            {
+                collected.Add("贡献列表含 null 元素。");
+                continue;
+            }
             string id = contribution.ContributionId ?? "";
             if (id.Trim().Length == 0)
             {
@@ -54,9 +60,16 @@ public static class CompatPackRules
         var variantBindings = new Dictionary<string, string>(StringComparer.Ordinal); // 规范化指令 → 贡献 id（定位用）
         foreach (ICompatPackContribution contribution in contributions)
         {
+            if (contribution is null)
+                continue;
             switch (contribution)
             {
                 case ICapabilityContribution capability:
+                    if (capability.CapabilityIds is null)
+                    {
+                        collected.Add("贡献 '" + contribution.ContributionId + "' 的 CapabilityIds 为 null。");
+                        break;
+                    }
                     foreach (string id in capability.CapabilityIds)
                     {
                         if (!context.KnownCapabilityIds.Contains(id))
@@ -64,15 +77,35 @@ public static class CompatPackRules
                     }
                     break;
                 case IPolicyContribution policy:
+                    if (policy.Policies is null)
+                    {
+                        collected.Add("策略贡献 '" + contribution.ContributionId + "' 的 Policies 为 null。");
+                        break;
+                    }
                     foreach (EnginePolicyBinding binding in policy.Policies)
                     {
+                        if (binding is null)
+                        {
+                            collected.Add("策略贡献 '" + contribution.ContributionId + "' 含 null 绑定。");
+                            continue;
+                        }
                         if (!context.KnownCapabilityIds.Contains(binding.CapabilityId))
                             collected.Add("策略贡献 '" + contribution.ContributionId + "' 绑定未知 capability id：" + binding.CapabilityId);
                     }
                     break;
                 case IInstructionVariantContribution variant:
+                    if (variant.Bindings is null)
+                    {
+                        collected.Add("变体贡献 '" + contribution.ContributionId + "' 的 Bindings 为 null。");
+                        break;
+                    }
                     foreach (InstructionVariantBinding binding in variant.Bindings)
                     {
+                        if (binding is null)
+                        {
+                            collected.Add("变体贡献 '" + contribution.ContributionId + "' 含 null 绑定。");
+                            continue;
+                        }
                         string instruction = (binding.InstructionName ?? "").Trim().ToUpperInvariant();
                         if (instruction.Length == 0)
                         {
@@ -147,6 +180,24 @@ public static class CompatPackRules
         {
             if (context.BaselineFunctions.Contains(registered))
                 collected.Add("注册函数与 v24 基线同名：" + registered);
+        }
+
+        // 交叉对账：表面动作 × 变体声明。同一指令的 handler 来源必须无歧义——
+        // 变体绑定的指令不能同时被隐藏（隐藏后无从触发变体）或被表面注册（注册即自带 handler 来源）；
+        // 清单变体选择的指令必须在 v24 基线内（内置变体只存在于基线名）且不能同时被隐藏。
+        foreach (KeyValuePair<string, string> binding in variantBindings)
+        {
+            if (recorder.HiddenInstructions.Contains(binding.Key))
+                collected.Add("指令 " + binding.Key + " 同时被隐藏与变体绑定。");
+            if (recorder.RegisteredInstructions.Contains(binding.Key))
+                collected.Add("指令 " + binding.Key + " 同时被表面注册与变体绑定（handler 来源歧义）。");
+        }
+        foreach (KeyValuePair<string, string> selection in manifest.VariantSelections)
+        {
+            if (!context.BaselineInstructions.Contains(selection.Key))
+                collected.Add("变体选择的指令不在 v24 基线内：" + selection.Key);
+            if (recorder.HiddenInstructions.Contains(selection.Key))
+                collected.Add("指令 " + selection.Key + " 同时被隐藏与清单变体选择。");
         }
 
         errors = collected;

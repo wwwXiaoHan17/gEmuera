@@ -45,9 +45,11 @@ public sealed class HelloVariantContribution : IInstructionVariantContribution
 {
     public string ContributionId => "test.hello-pack.variants";
 
+    // 绑定基线内指令 PRINT（自带变体）：不得与表面注册/隐藏同名——SETANIMETIMER 由表面
+    // 贡献注册（handler 来源唯一），变体绑定须选另一个名字，避免 handler 来源歧义。
     public IReadOnlyList<InstructionVariantBinding> Bindings { get; } = new[]
     {
-        new InstructionVariantBinding("SETANIMETIMER", new HelloVariantFactory()),
+        new InstructionVariantBinding("PRINT", new HelloVariantFactory()),
     };
 }
 

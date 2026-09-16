@@ -23,7 +23,7 @@
    不依赖程序集加载——两种测试形态互补，负路径不用污染夹具。
 4. **对账范围如实分层**：本增量做 Core 数据可支撑的对账（hide ⊆ v24 基线、register ∉
    基线、builtin 变体 ∈ 名录、非 builtin 选择 v1 拒绝）；引擎注册表级对账（add 名单须有
-   真实 handler）与 gameIdentity 比对留 DOD-3 宿主接线（§5.3 原文如此分层）。
+   真实 handler）与 gameIdentity 比对留 DOD-3 宿主接线（设计 §3.3/§5.3 的分层）。
 5. **TryLoadSet 全有或全无**：任一包失败整体回退纯 v24（降级不变量），失败时立即回收
    已加载包的 ALC，不留半套集合。
 
@@ -45,4 +45,24 @@
 
 dotnet test：GEmuera.Core.Tests 39/39、EmueraFacade.Tests 33/33；Core `-t:Rebuild`
 （net8+net9）新增代码零警告（仅剩上述存量 1 条×2 TFM）；Godot 无头构建 DLL 01:34:26
-更新、0 编译错误；方言三冒烟全过；新 .cs 的 .uid 侧车 9 枚随提交入库。
+更新、0 编译错误；方言三冒烟全过；新 .cs 的 .uid 侧车 8 枚随提交入库。
+
+## result-review 返工记录（首轮 96 → 复评见后）
+
+首轮 96/100 未过，四项必修与处置：
+1. **TryLoad 失败路径 ALC 回收**：全部失败 return 前补 `loadContext.Unload()`（Windows
+   内存映射下失败包 .dll 不再锁定到 GC 不确定回收）。
+2. **fail-closed 硬化（恶意/低质包输入）**：ValidatePackEntry 抽出（public 便直测），
+   Manifest/Contributions getter 抛异常转拒载错误；CompatPackRules 对贡献列表 null 元素、
+   CapabilityIds/Bindings/Policies null 集合、null 绑定全收集错误不抛。恶意 getter 用
+   **DispatchProxy 运行时代理**测试——不能在本测试程序集里写第二个 ICompatPack 实现
+   （会撞"恰好一个入口"规则把全部夹具测试炸红，返工中实测踩过）。
+3. **交叉对账矩阵补全**：变体绑定 ×（隐藏|表面注册）冲突、清单变体选择键 ⊆ v24 基线、
+   隐藏 × 清单选择冲突；夹具 HelloCompatPack 的变体绑定从 SETANIMETIMER（与表面注册
+   同名，自相矛盾组合曾被 happy path 固化）改为 PRINT（基线内、无表面动作交叉）。
+4. **契约注释同步**：variantSelections 释义（代码 + schema）改为"v1 仅接受 builtin:*，
+   自带变体经贡献绑定隐式生效"，消除 DOD-1 注释与本增量实际语义的矛盾。
+另修正本记录两处口径：.uid 计数 9→8；gameIdentity 引文 §5.3→§3.3。
+
+复验：GEmuera.Core.Tests 46/46（20 旧 + 26 方言包线）、EmueraFacade.Tests 33/33；
+Core/EmueraFacade `-t:Rebuild` 新增代码零警告；Godot 无头构建 DLL 02:15:49 更新 0 错误；三冒烟全过。

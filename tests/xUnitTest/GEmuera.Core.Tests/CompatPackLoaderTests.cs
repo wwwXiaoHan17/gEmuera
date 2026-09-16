@@ -36,6 +36,9 @@ public class CompatPackLoaderTests
         Assert.DoesNotContain("SETANIMETIMER", LegacyDialectInventories.V24InstructionNames);
         Assert.Contains("EXISTVAR", LegacyDialectInventories.V24Functions.Select(entry => entry.Name));
         Assert.DoesNotContain("SQL_CONNECT", LegacyDialectInventories.V24Functions.Select(entry => entry.Name));
+        // 变体绑定/清单选择的目标指令必须在基线内（交叉对账前置事实）。
+        Assert.Contains("PRINT", LegacyDialectInventories.V24InstructionNames);
+        Assert.Contains("SETBGIMAGE", LegacyDialectInventories.V24InstructionNames);
     }
 
     [Fact]
@@ -185,5 +188,29 @@ public class CompatPackLoaderTests
         Assert.False(CompatPackLoader.TryLoadSet(new[] { PackPath, PackPath }, RealContext(), out var set, out var errors));
         Assert.Null(set);
         Assert.Contains(errors, e => e.Contains("packId 重复"));
+    }
+
+    [Fact]
+    public void ValidatePackEntry_ThrowingManifestGetter_RejectsWithoutException()
+    {
+        string json = "{\"packId\":\"test.hello-pack\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1}";
+        var manifest = CompatPackManifest.TryParse(json, out var parsed, out var parseErrors)
+            ? parsed! : throw new InvalidOperationException(string.Join("; ", parseErrors));
+        // DispatchProxy 运行时生成代理类型（不进本程序集元数据，不干扰"恰好一个入口"扫描），
+        // 任意成员访问即抛——验证包作者可控 getter 的异常不逃逸。
+        var evil = System.Reflection.DispatchProxy.Create<ICompatPack, ThrowingPackProxy>();
+
+        var exception = Record.Exception(() =>
+        {
+            Assert.False(CompatPackLoader.ValidatePackEntry(evil, manifest, RealContext(), out _, out var errors));
+            Assert.Contains(errors!, e => e.Contains("抛出异常"));
+        });
+        Assert.Null(exception);
+    }
+
+    class ThrowingPackProxy : System.Reflection.DispatchProxy
+    {
+        protected override object? Invoke(System.Reflection.MethodInfo? targetMethod, object?[]? args)
+            => throw new InvalidOperationException("boom");
     }
 }
