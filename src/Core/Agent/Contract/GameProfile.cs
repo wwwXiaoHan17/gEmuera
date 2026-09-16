@@ -130,7 +130,7 @@ public sealed class GameProfileBudget
     public int PrefetchMaxVariants { get; set; } = 8;
 }
 
-/// <summary>声明式游戏适配档案（对齐 examples/agent-profiles/profile.schema.json）。</summary>
+/// <summary>声明式游戏适配档案（对齐 docs/designs/agent-profiles/profile.schema.json）。</summary>
 public sealed class GameProfile
 {
     public string ProfileVersion { get; set; } = "";
