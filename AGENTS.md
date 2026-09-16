@@ -50,11 +50,10 @@ Emuera 核心编译器以 C# 编写，为减少开发成本、方便 AI 对接�
 
 任务结束后，删除冗余的临时测试文件，避免造成垃圾文件。
 
-## 构建与验证（实测经验，2026-08）
+## 构建与验证（实测经验，2026-08；2026-09-13 补充本机实测）
 
-- **C# 编译/构建用 Godot mono**：`Godot_v4.7-stable_mono_win64_console.exe --headless
-  --path <项目根> --build-solutions --quit`。不要直接 `dotnet build`
-  （Godot.NET.Sdk 依赖 Godot 环境解析，命令行下常因 SDK resolver/证书问题失败）。
+- **C# 编译/构建首选 Godot mono**：`Godot_v4.7-stable_mono_win64_console.exe --headless
+  --path <项目根> --build-solutions --quit`。
 - **构建成功的判定**：检查 `.godot/mono/temp/bin/Debug/gemuera-c#.dll` 时间戳已更新，
   不要等进程退出——无头/受限环境下 Godot 可能卡在收尾阶段，但编译早已完成。
 - **方言/兼容层改动的门禁集**（2026-09）：改动 `Scripts/Emuera/Compatibility/`、指令/函数
@@ -65,6 +64,18 @@ Emuera 核心编译器以 C# 编写，为减少开发成本、方便 AI 对接�
   引擎注册表/方言清单变化后先 `dotnet run --project tools/dialect-inventory/LegacyDialectInventoryGenerator -- <项目根>`
   再生清单（`LegacyDialectInventories.Generated.cs` + `tools/legacy-runner/profiles.generated.json`），
   最后用 legacy-runner 做 v24pure/snake/erafl 三 profile 无头执行级冒烟。
+- **Godot 构建回调不可用时的逃生通道**（个别安装缺 MSBuild 程序集时）：
+  `dotnet build <项目根>/gemuera-c#.csproj -nodeReuse:false -m:1`，判定口径同为
+  `error CS/MSB` 计 0 且输出 DLL 时间戳更新。两个通用陷阱：必须带 `-nodeReuse:false -m:1`
+  （陈旧工作节点会静默失败：报"生成失败"却 0 错误、不产 DLL）；不要用 `--no-incremental`
+  （先清空输出，后续步骤失败连 DLL 一起丢）。遇 `MSB3491 Access denied` 多为其他 Agent
+  沙箱身份在 `obj|bin` 的历史残留，把目录改名移出到 csproj 已排除的目录即可。
+- **csproj 已排除 `Build\**` 与 `reports\**` 的编译收录**：这两个产物目录里若混入杂散 `.cs`
+  会以 CS0579 重复特性炸构建且报错文件毫不相干（csproj 已加 `<Compile Remove>` 兜底，
+  新建其它临时目录时仍需确认是否被默认 glob 收录）。
+- **PowerShell 函数/别名命名避开内置别名**：别名解析优先于函数，`function Rd {...}` 会静默
+  变成 `Remove-Item`。危险名至少包括 `rd`/`del`/`rm`/`mv`/`cp`/`ls`/`cd`/`cat`/`sc`/`gc`；
+  脚本内联 `[IO.File]::ReadAllText(...)`，不要包成短名函数。
 - Android 相关结论必须以 APK 实测为准；桌面端仅用于调试。
 
 ## 架构速览
@@ -123,6 +134,11 @@ project.godot -> first_window.tscn -> FirstWindow._Ready()
 定位文件：优先用 CodeGraph（`codegraph explore "符号名"`）或 `src/Core`/`Scripts` 目录结构判断；
 不要靠猜测。
 
+> **CodeGraph 不可用时的降级检索**（是否安装因机器而异，先试再定）：改用
+> `grep`（按正则找内容）→ `glob`（按路径找文件）→ `read`（按行号读区间），
+> 配合 `Scripts/`、`src/Core/` 的目录结构判断。另见 `FILE_STANDARD.md` §6.7：
+> `.codegraph/` 是可再生缓存，即便装了也需在大型拆分后重建，否则旧索引会系统性误导检索。
+
 ## 协作规则
 
 ### GitHub
@@ -130,7 +146,7 @@ project.godot -> first_window.tscn -> FirstWindow._Ready()
 - 仓库：`https://github.com/wwwXiaoHan17/gEmuera`，默认协作分支 `dev`。
 - 每个任务从最新 `dev` 新建分支：`ai/<任务简述>` 或 `fix/<问题简述>`。
 - 不直接向 `dev` 或主分支提交代码；完成任务后提 PR 指向 `dev`，PR 标题与说明用中文。
-- 每个 PR 只解决一个明确问题，禁止混入无关重构、格式化和资源变更。
+- PR 标题与说明用中文。每个 PR 只解决一个明确问题，禁止混入无关重构、格式化和资源变更。
 - 禁止擅自强制推送、硬重置、删除远端分支、回滚他人提交。
 
 ## 常用文件入口

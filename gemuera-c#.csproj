@@ -49,6 +49,12 @@
     <Compile Remove=".godot\**" />
     <EmbeddedResource Remove=".godot\**" />
     <None Remove=".godot\**" />
+    <!-- Build/ 与 reports/ 都是「产物/临时区」（.gitignore 已排除），里面不该有任何要编译的 C#。
+         但默认 glob 会把它们当源码收进来：任何落在其中的杂散 .cs（Agent 的临时备份、重构脚本）
+         都会以「重复定义 / CS0579 重复特性」的形式炸掉构建，而且报错指向的文件看起来毫不相干。
+         2026-09-13 实测踩过——把过期的 obj/AssemblyInfo.cs 挪进 Build/ 后产生了 35 个 CS0579。 -->
+    <Compile Remove="Build\**" />
+    <Compile Remove="reports\**" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.0" />

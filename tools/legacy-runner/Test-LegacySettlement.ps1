@@ -12,9 +12,9 @@ function Assert-SettlementContract {
 }
 
 try {
-    $trackerPath = Join-Path $ProjectRoot 'Scripts\M0\LegacySettlementTracker.cs'
-    $hostPath = Join-Path $ProjectRoot 'Scripts\M0\LegacyRunnerHost.cs'
-    $surfacePath = Join-Path $ProjectRoot 'Scripts\EmueraContent.M0.cs'
+    $trackerPath = Join-Path $ProjectRoot 'Scripts\LegacyRunner\LegacySettlementTracker.cs'
+    $hostPath = Join-Path $ProjectRoot 'Scripts\LegacyRunner\LegacyRunnerHost.cs'
+    $surfacePath = Join-Path $ProjectRoot 'Scripts\EmueraContent.LegacyRunner.cs'
     foreach ($path in @($trackerPath, $hostPath, $surfacePath)) {
         if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
             throw "M0 settlement contract file is missing: $path"
@@ -23,7 +23,7 @@ try {
 
     $source = [IO.File]::ReadAllText($trackerPath) + @'
 
-namespace gEmuera.M0.Tests
+namespace gEmuera.LegacyRunner.Tests
 {
     public static class LegacySettlementProbe
     {
@@ -45,14 +45,14 @@ namespace gEmuera.M0.Tests
 }
 '@
     Add-Type -TypeDefinition $source -Language CSharp
-    Assert-SettlementContract ([gEmuera.M0.Tests.LegacySettlementProbe]::RequiresConsecutiveUnchangedSnapshots()) 'Settlement tracker did not require consecutive identical snapshots.'
+    Assert-SettlementContract ([gEmuera.LegacyRunner.Tests.LegacySettlementProbe]::RequiresConsecutiveUnchangedSnapshots()) 'Settlement tracker did not require consecutive identical snapshots.'
 
     $hostSource = [IO.File]::ReadAllText($hostPath)
     Assert-SettlementContract ($hostSource.Contains('CaptureSettlementFingerprint')) 'Runner host does not capture a settlement fingerprint.'
     Assert-SettlementContract ($hostSource.Contains('LegacyTrace.RecordedCount')) 'Runner settlement fingerprint does not include trace progress.'
-    Assert-SettlementContract ($hostSource.Contains('CaptureM0SettlementFingerprint')) 'Runner settlement fingerprint does not include presentation progress.'
+    Assert-SettlementContract ($hostSource.Contains('CaptureLegacySettlementFingerprint')) 'Runner settlement fingerprint does not include presentation progress.'
     Assert-SettlementContract (-not $hostSource.Contains('_settleFramesRemaining')) 'Runner still uses a blind fixed-frame settlement countdown.'
-    Assert-SettlementContract ([IO.File]::ReadAllText($surfacePath).Contains('CaptureM0SettlementFingerprint')) 'Presentation layer does not expose its read-only M0 settlement fingerprint.'
+    Assert-SettlementContract ([IO.File]::ReadAllText($surfacePath).Contains('CaptureLegacySettlementFingerprint')) 'Presentation layer does not expose its read-only M0 settlement fingerprint.'
 
     Write-Output 'M0 legacy settlement contract tests passed.'
     exit 0

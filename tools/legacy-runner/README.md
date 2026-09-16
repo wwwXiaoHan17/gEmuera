@@ -85,7 +85,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/legacy-runner/Invoke-S
 
 ### 同一游戏的 runner-only 同进程 ABA restart
 
-`inProcessSessionCycle=aba` 只能与 `sessionIsolationMode=canary` 且空 `inputs` 一起用于显式 runner。它在三次稳定首等待之间调用两次 internal `EmueraMain.RestartLegacySessionForM0RunnerAsync()`，由 `LegacySessionFacade` 完成 stop/start/commit，随后要求三次逻辑 fingerprint 完全相同。普通启动和 UI 不会调用这个入口。
+`inProcessSessionCycle=aba` 只能与 `sessionIsolationMode=canary` 且空 `inputs` 一起用于显式 runner。它在三次稳定首等待之间调用两次 internal `EmueraMain.RestartLegacySessionForLegacyRunnerAsync()`，由 `LegacySessionFacade` 完成 stop/start/commit，随后要求三次逻辑 fingerprint 完全相同。普通启动和 UI 不会调用这个入口。
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File tools/legacy-runner/Invoke-SessionIsolationInProcessAba.ps1 `
