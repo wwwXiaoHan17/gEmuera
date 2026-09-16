@@ -70,9 +70,9 @@ Emuera 核心编译器以 C# 编写，为减少开发成本、方便 AI 对接�
   （陈旧工作节点会静默失败：报"生成失败"却 0 错误、不产 DLL）；不要用 `--no-incremental`
   （先清空输出，后续步骤失败连 DLL 一起丢）。遇 `MSB3491 Access denied` 多为其他 Agent
   沙箱身份在 `obj|bin` 的历史残留，把目录改名移出到 csproj 已排除的目录即可。
-- **csproj 已排除 `Build\**` 与 `reports\**` 的编译收录**：这两个产物目录里若混入杂散 `.cs`
-  会以 CS0579 重复特性炸构建且报错文件毫不相干（csproj 已加 `<Compile Remove>` 兜底，
-  新建其它临时目录时仍需确认是否被默认 glob 收录）。
+- **csproj 已排除 `Build\**`（已退役）、`export\**` 与 `reports\**` 的编译收录**：产物/工作区
+  目录里若混入杂散 `.cs` 会以 CS0579 重复特性炸构建且报错文件毫不相干（csproj 已加
+  `<Compile Remove>` 兜底，新建其它临时目录时仍需确认是否被默认 glob 收录）。
 - **PowerShell 函数/别名命名避开内置别名**：别名解析优先于函数，`function Rd {...}` 会静默
   变成 `Remove-Item`。危险名至少包括 `rd`/`del`/`rm`/`mv`/`cp`/`ls`/`cd`/`cat`/`sc`/`gc`；
   脚本内联 `[IO.File]::ReadAllText(...)`，不要包成短名函数。
@@ -117,9 +117,12 @@ project.godot -> first_window.tscn -> FirstWindow._Ready()
    用描述用途的名字（如 `LegacyRunner`、`governance`）。
 4. **Godot `.import` 侧车文件必须入库**：`*.import` 是导入设置（importer/uid/params），
    官方要求提交 VCS；`.godot/`（含 `imported/` 二进制缓存）才是应忽略的可再生目录。
-5. **编译产物不入库**：`.gitignore` 已排除 `.godot/`、`bin/`、`obj/`、`Build/NativeLibs/`、
-   `Build/android/`、`*.apk/aab/exe/pck/idsig`、`reports/`、`artifacts/`。不要把新的编译/导出物加进 git。
-   构建/打包相关文件夹（android 导出工程、NativeLibs、Fixtures、APK 产物）统一放在根目录 `Build/` 下管理。
+5. **编译产物不入库**：`.gitignore` 已排除 `.godot/`、`bin/`、`obj/`、`/export/`、
+   `*.apk/aab/exe/pck/idsig`、`reports/`、`artifacts/`。APK 导出所需文件统一放根目录 `export/`
+   工作区（`android/` gradle 导出工程、`NativeLibs/` csproj 自愈还原的原生库、`releases/` APK
+   产物、`keystore/` 签名密钥——均不入库；需要版本化的导出配置放 `tools/`，测试固件声明位于
+   `tools/fixture-manifest/manifest.json`）。`Build/` 已于 2026-09-16 退役，禁止重建。
+   不要把新的编译/导出物加进 git。
 6. **C# 文件规模与细分**：新建文件硬上限 1500 行；既有 >2000 行文件"只减不增"，触碰时按功能域
    顺手拆分（`Type.Feature.cs` partial 模式，纯移动不混逻辑改动）。拆分前必须核对仓库六类路径
    钉扎/链接机制（方言证据链、契约测试、tools 工程源链接、场景脚本引用等），详见

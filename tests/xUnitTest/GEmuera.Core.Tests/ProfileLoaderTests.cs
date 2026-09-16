@@ -6,14 +6,14 @@ namespace GEmuera.Core.Tests;
 
 public class ProfileLoaderTests
 {
-    /// <summary>测试程序集 → 仓库根 → examples/agent-profiles/akuma-maid/profile.json。</summary>
+    /// <summary>测试程序集 → 仓库根 → docs/designs/agent-profiles/akuma-maid/profile.json。</summary>
     public static string RepoRoot
     {
         get
         {
-            // bin/Debug/net8.0 → 上跳 5 级到仓库根
+            // bin/Debug/net8.0 → 上跳 6 级到仓库根（tests/xUnitTest/GEmuera.Core.Tests/bin/Debug/net8.0）
             var dir = new DirectoryInfo(AppContext.BaseDirectory);
-            for (int i = 0; i < 5 && dir.Parent != null; i++)
+            for (int i = 0; i < 6 && dir.Parent != null; i++)
                 dir = dir.Parent!;
             return dir.FullName;
         }
@@ -22,7 +22,7 @@ public class ProfileLoaderTests
     [Fact]
     public void LoadAkumaMaidProfile_ParsesAllSections()
     {
-        string path = Path.Combine(RepoRoot, "examples", "agent-profiles", "akuma-maid", "profile.json");
+        string path = Path.Combine(RepoRoot, "docs", "designs", "agent-profiles", "akuma-maid", "profile.json");
         Assert.True(File.Exists(path), "profile.json not found at " + path);
 
         var outcome = ProfileLoader.LoadFromJson(File.ReadAllText(path));

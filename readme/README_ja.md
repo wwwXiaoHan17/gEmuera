@@ -8,7 +8,7 @@ Emuera は日本の eramaker 系テキストゲームの実行エンジンで、
 
 ## 開発者の引き継ぎ
 
-AI/開発者の引き継ぎは、リポジトリルートの [AGENTS.md](../AGENTS.md) が権威あるエントリポイントです（プロジェクト概要、必読ドキュメント、ビルドと検証、アーキテクチャ概要、協力ルール）。ERB インタプリタの拡張については [ERBAPI.md](../ERBAPI.md) を参照してください。[DeveloperHandoff.md](../NewFrameworkDesign/DeveloperHandoff.md) は 2026-07-17 時点の古いスナップショットであり、歴史的アーカイブとしての参考資料です。その中の長期設計目標を実装済みと見なさないでください。
+AI/開発者の引き継ぎは、リポジトリルートの [AGENTS.md](../AGENTS.md) が権威あるエントリポイントです（プロジェクト概要、必読ドキュメント、ビルドと検証、アーキテクチャ概要、協力ルール）。ERB インタプリタの拡張については [ERBAPI.md](../ERBAPI.md) を参照してください。[DeveloperHandoff.md](../docs/NewFrameworkDesign/DeveloperHandoff.md) は 2026-07-17 時点の古いスナップショットであり、歴史的アーカイブとしての参考資料です。その中の長期設計目標を実装済みと見なさないでください。
 
 ## 特徴
 
@@ -158,12 +158,12 @@ gemuera-c#/
 │   └── theme/                 # グローバルテーマ（gemuera_theme.tres）
 ├── src/Core/                  # 純 C# コア契約（GEmuera.Core、独立ビルド）
 ├── tools/                     # PowerShell ツール（governance/core-contracts 等）
-├── Build/                     # ビルド/パッケージ成果物（android/NativeLibs は gitignore）
+├── tests/                     # テストの唯一ルート（xUnitTest/ と GDUnit4Test/ の2グループ）
+├── export/                    # APK エクスポート統合ワークスペース（全体 gitignore）
 │   ├── android/               # Godot Android エクスポート工程（gradle ビルド、非コミット）
 │   ├── NativeLibs/            # プリコンパイル済みネイティブライブラリ（自動復元）
-│   ├── Fixtures/              # テストフィクスチャ（manifest.json）
-│   └── *.apk / *.idsig        # エクスポート済み APK 成果物（非コミット）
-├── test/                      # テスト
+│   ├── releases/              # エクスポート済み APK 成果物（非コミット）
+│   └── keystore/              # 署名キー（非コミット）
 └── addons/                    # Godot エディタプラグイン
 ```
 
@@ -179,7 +179,7 @@ Godot_v4.7-stable_mono_win64_console.exe --headless --path <プロジェクト�
 
 ビルド成功の判定：`.godot/mono/temp/bin/Debug/gemuera-c#.dll` のタイムスタンプが更新されていることを確認してください。プロセスの終了を待つ必要はありません。ヘッドレス/制限環境では Godot が終了処理で止まることがありますが、コンパイル自体はすでに完了しています。
 
-Android のビルド成果物は `Build/` 配下で管理します。Android に関する結論は APK 実機テストを基準とし、デスクトップはデバッグ専用です。
+APK エクスポートに必要なファイルと成果物は `export/` ワークスペースで一元管理します（gradle 工程 / NativeLibs / releases / keystore）。Android に関する結論は APK 実機テストを基準とし、デスクトップはデバッグ専用です。
 
 ## 謝辞
 

@@ -8,7 +8,7 @@ Emuera 是日本 eramaker 系列文字游戏的执行引擎，通过解析 `.ERB
 
 ## 开发者接手
 
-AI/开发者接手以仓库根目录 [AGENTS.md](../AGENTS.md) 为权威入口（项目简介、必读与配套文档、构建与验证、架构速览、协作规则）；需要扩展 ERB 解释器接口时参见 [ERBAPI.md](../ERBAPI.md)。[DeveloperHandoff.md](../NewFrameworkDesign/DeveloperHandoff.md) 是 2026-07-17 的历史存档快照，仅作参考；不要把其中的长期目标设计直接视为已完成实现。
+AI/开发者接手以仓库根目录 [AGENTS.md](../AGENTS.md) 为权威入口（项目简介、必读与配套文档、构建与验证、架构速览、协作规则）；需要扩展 ERB 解释器接口时参见 [ERBAPI.md](../ERBAPI.md)。[DeveloperHandoff.md](../docs/NewFrameworkDesign/DeveloperHandoff.md) 是 2026-07-17 的历史存档快照，仅作参考；不要把其中的长期目标设计直接视为已完成实现。
 
 ## 特性
 
@@ -165,12 +165,12 @@ gemuera-c#/
 │   └── uEmuera/               # System.Drawing/Forms 兼容层
 ├── src/Core/                  # 纯 C# 核心契约（GEmuera.Core，独立编译）
 ├── tools/                     # PowerShell 工具（governance/core-contracts 等）
-├── Build/                     # 构建/打包产物统一管理（gitignore：android/NativeLibs）
+├── tests/                     # 测试唯一根（xUnitTest/ xUnit 工程、GDUnit4Test/ gdUnit 套件）
+├── export/                    # APK 导出统一工作区（整体 gitignore）
 │   ├── android/               # Godot Android 导出工程（gradle 构建，不入库）
 │   ├── NativeLibs/            # 预编译原生库（Android 构建自愈恢复，不入库）
-│   ├── Fixtures/              # 测试固件（manifest.json）
-│   └── *.apk / *.idsig        # 导出的 APK 产物（不入库）
-├── test/                      # 测试
+│   ├── releases/              # 导出的 APK 产物（不入库）
+│   └── keystore/              # 签名密钥（不入库）
 └── addons/                    # Godot 编辑器插件
 ```
 
@@ -186,7 +186,7 @@ Godot_v4.7-stable_mono_win64_console.exe --headless --path <项目根> --build-s
 
 构建成功的判定：检查 `.godot/mono/temp/bin/Debug/gemuera-c#.dll` 时间戳已更新，不要等进程退出——无头/受限环境下 Godot 可能卡在收尾阶段，但编译早已完成。
 
-Android 构建产物统一放在 `Build/` 下管理；Android 相关结论必须以 APK 实测为准，桌面端仅用于调试。
+APK 导出所需文件与产物统一放在 `export/` 工作区管理（gradle 工程/NativeLibs/releases/keystore）；Android 相关结论必须以 APK 实测为准，桌面端仅用于调试。
 
 ## 致谢
 

@@ -115,7 +115,7 @@ rg "<Compile Include" tools -g "*.csproj"
 # 3) 契约测试/清单是否按路径或内容钉扎该文件
 rg "\.cs" tools -g "*.ps1" -g "*.json"
 # 4) 场景是否无 uid 硬引用该脚本路径
-rg "res://Scripts" assets/scenes -g "*.tscn"; rg "preload" test -g "*.gd"
+rg "res://Scripts" assets/scenes -g "*.tscn"; rg "preload" tests -g "*.gd"
 ```
 
 ### 6.1 方言证据链（dialect-inventory）
@@ -241,7 +241,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/dialect-inventory/Test
 
 ### 6.6 场景与测试的脚本路径引用
 
-部分 `.tscn` 以 `res://Scripts/...` 硬路径引用脚本且**无 uid**（路径是唯一引用）：`Scalepad.tscn`、`RuntimeDiagnosticsPanel.tscn`、`QuickButtons.tscn`、`OptionWindow.tscn`、`Inputpad.tscn`、`tools/legacy-runner/legacy_runner.tscn`；`test/GodotHost/PrototypeHostRegressionTest.gd` preload 6 个路径。**规则**：凡被 `.tscn`/`.gd` 引用的脚本主文件禁止改名/移动/把类声明迁出原文件——只允许模式 A partial 拆分（主文件保留类型声明），且拆分 PR 列出引用方清单。面板类场景（Scalepad/QuickButtons 等）可能躲过桌面启动冒烟，不能以"游戏能进"代替检查。
+部分 `.tscn` 以 `res://Scripts/...` 硬路径引用脚本且**无 uid**（路径是唯一引用）：`Scalepad.tscn`、`RuntimeDiagnosticsPanel.tscn`、`QuickButtons.tscn`、`OptionWindow.tscn`、`Inputpad.tscn`、`tools/legacy-runner/legacy_runner.tscn`；`tests/GDUnit4Test/GodotHost/PrototypeHostRegressionTest.gd` preload 6 个路径。**规则**：凡被 `.tscn`/`.gd` 引用的脚本主文件禁止改名/移动/把类声明迁出原文件——只允许模式 A partial 拆分（主文件保留类型声明），且拆分 PR 列出引用方清单。面板类场景（Scalepad/QuickButtons 等）可能躲过桌面启动冒烟，不能以"游戏能进"代替检查。
 
 另：`tools/session-state-inventory` 钉扎 `GlobalStatic.cs`（`Reset` 方法必须留在原路径）与 `Program.cs`；`tools/core-contracts/Test-CoreArchitecture.ps1` 钉扎 `ErbLoader.cs`、`Process.State.cs`、`Creator.cs`、`FunctionIdentifier.cs`。
 
@@ -268,7 +268,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/dialect-inventory/Test
 - [ ] 相应家族有 xUnit/core-contracts 测试时运行之；受影响的契约门禁（§6.1–6.4）按"存量红纪律"重跑。
 
 `src/Core/**`：
-- [ ] Godot headless 构建 + `dotnet test tests/GEmuera.Core.Tests`（xUnit）通过；
+- [ ] Godot headless 构建 + `dotnet test tests/xUnitTest/GEmuera.Core.Tests`（xUnit）通过；
 - [ ] `tools/core-contracts` 自检脚本可运行（拆分被其链接的文件时必跑）。
 
 `tests/**`：
@@ -285,6 +285,30 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/dialect-inventory/Test
 - 新建 `Misc`/`Utils`/`Other` 式垃圾抽屉分片；
 - 拆了文件但跨域调用反而增多（分片应沿依赖方向切，不是把纠缠切成两半）；
 - 跳过 §6 检查直接拆分（六类钉扎机制任何一类都可能被命中）。
+
+## 9. 目录树与根目录白名单（2026-09-16 定稿）
+
+根目录只允许以下条目（目录拼法锁定，新建/移动文件必须落入其中之一；根目录新增任何条目需先修订本节）：
+
+| 目录 | 用途 |
+| --- | --- |
+| `assets/` | Godot 运行时资源唯一根（fonts/icons/lang/scenes/text/theme，禁 Resources/Text/Fonts 散落与拼写变体） |
+| `Scripts/` | Godot 层与 Emuera 引擎源码 |
+| `src/` | 纯 C# 核心（GEmuera.Core、EmueraFacade，独立编译） |
+| `tests/` | **测试唯一根**：`xUnitTest/`（xUnit 工程）与 `GDUnit4Test/`（gdUnit 套件）两组，拼法锁定；禁止再建 `test/` 单数或其它测试目录 |
+| `tools/` | 仓库工具与需版本化的导出/固件配置（如 `fixture-manifest/manifest.json`） |
+| `addons/` | Godot 插件（gdUnit4） |
+| `docs/` | 全部文档（designs/、plans/、NewFrameworkDesign/ 历史快照等） |
+| `governance/` | 进化记录与提示词模式库 |
+| `readme/` | 三语 README |
+| `export/` | APK 导出统一工作区（gitignore 整目录）：`android/`（gradle 工程）、`NativeLibs/`（csproj 自愈还原）、`releases/`（APK 产物）、`keystore/`（签名密钥，勿入库） |
+
+规则：
+
+- `.godot/`、`reports/`、`bin/`、`obj/` 等可再生忽略目录不列入上表，但禁止在其下放置需入库的内容；`.claude/`、`.codegraph/` 等工具点目录由各自机制管理（.codegraph/ 为可再生缓存），同样不属于白名单管辖。
+- `Build/` 已于 2026-09-16 退役（内容分流至 `export/` 与 `tools/fixture-manifest/`），禁止重建；csproj 保留 `Build\**` 编译排除仅作兜底。
+- `export_presets.cfg` 必须留在根（Godot 硬编码位置），其中的 `export_path`/`gradle_build_directory` 一律指向 `export/` 下。
+- 目录名大小写一律如上表拼法：Windows 文件系统不敏感而 Android 导出敏感；改名前先做全仓引用扫描（2026-09-16 实测全仓一~三级目录名无大小写冲突，后续新增目录不得引入）。
 
 ## 附录 A：>2000 行文件快照（2026-09-15，字节 LF 口径）
 

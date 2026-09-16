@@ -16,6 +16,6 @@
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Core\GEmuera.Core.csproj" />
+    <ProjectReference Include="..\..\..\src\Core\GEmuera.Core.csproj" />
   </ItemGroup>
 </Project>
