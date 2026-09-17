@@ -14,4 +14,9 @@
          ICompatPack/CompatPackManifest，且 ALC 契约重定向需要该程序集本体。 -->
     <ProjectReference Include="..\EmueraFacade\Emuera.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- 组装器/句柄的 internal 构造点需要直测（手工句柄构造哈希与冲突分支），
+         不为此新建夹具程序集。 -->
+    <InternalsVisibleTo Include="GEmuera.Core.Tests" />
+  </ItemGroup>
 </Project>
