@@ -67,7 +67,7 @@ namespace MinorShift.Emuera.Compatibility
 			var result = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
 			foreach (KeyValuePair<(string Variant, string Instruction), LegacyInstructionVariant> entry in Map)
 			{
-				if (!result.TryGetValue(entry.Key.Variant, out HashSet<string> instructions))
+				if (!result.TryGetValue(entry.Key.Variant, out HashSet<string>? instructions))
 				{
 					instructions = new HashSet<string>(StringComparer.Ordinal);
 					result[entry.Key.Variant] = instructions;

@@ -38,5 +38,16 @@ Core.Tests 70/70（+组合校验 2 例）、SurfaceSmoke 变体断言真 enum、
 ## 验证记录
 
 Core.Tests 70/70（+2 组合校验）、Facade.Tests 33/33；三冒烟全过（SurfaceSmoke 含变体
-真 enum 断言）；主工程与 Core `-t:Rebuild`/`dotnet build` 新增代码零警告；Godot 无头
-构建 DLL 21:06:14 更新 0 错误；无新文件（无 .uid 事务）。
+真 enum 断言）；Godot 无头构建 DLL 21:06:14 更新 0 错误；无新文件（无 .uid 事务）。
+
+## result-review 返工记录（首轮 95 → 复评见后）
+
+首轮 95/100 未过：主工程实测 2 条新增警告与初稿"零警告"申报矛盾——
+LegacyCompatibilityModules.cs:70 CS8600（TryGetValue out 非空）与
+LegacyCompatibilityProfile.cs:279 CS8632（惰性 `?`，同类问题 9bd765f 后复发）。
+处置：前者 out 参数改可空；后者按评审推荐给 Profile 文件头启用 `#nullable enable`
+归一两个编译上下文，并顺手修复启用后暴露的 3 处既有可空性（ctor 默认参/两处
+TryGetValue/out 声明）。**增量构建再次掩盖警告**（普通 build 显示干净、-t:Rebuild
+才现形第 3 处）——终验口径一律 `-t:Rebuild`。
+复验：主工程 `-t:Rebuild` 新增代码零警告（仅剩 AgentLlmMethods/KoujouPrefetchCache
+两处 dev 存量）；SurfaceSmoke/Core.Tests 70/70 复绿。

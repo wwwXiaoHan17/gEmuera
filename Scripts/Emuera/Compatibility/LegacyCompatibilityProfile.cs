@@ -1,3 +1,4 @@
+#nullable enable
 using System;
 using System.Collections.Generic;
 using GEmuera.Core.Compatibility;
@@ -115,7 +116,7 @@ namespace MinorShift.Emuera.Compatibility
 			IEnumerable<string> methodProjectedFunctionNames,
 			IReadOnlyDictionary<string, LegacyInstructionVariant> instructionVariants,
 			IEnumerable<string> dialectFunctionContractNames,
-			IReadOnlyDictionary<string, string> hiddenNameOwners = null)
+			IReadOnlyDictionary<string, string>? hiddenNameOwners = null)
 		{
 			ProfileId = profileId;
 			Plan = plan;
@@ -235,7 +236,7 @@ namespace MinorShift.Emuera.Compatibility
 		/// 提示"该标识符属于 snake 系扩展，建议改用 snake 接口"。snake 会话中查询
 		/// SETANIMETIMER 函数形态（snake 自身隐藏）返回 false——snake 已选中，无需提示。
 		/// </summary>
-		public bool TryGetUnselectedModuleHint(string name, out string moduleId)
+		public bool TryGetUnselectedModuleHint(string name, out string? moduleId)
 		{
 			moduleId = null;
 			if (string.IsNullOrWhiteSpace(name))
@@ -245,7 +246,7 @@ namespace MinorShift.Emuera.Compatibility
 			// 指令名按 IsInstructionVisible 语义转大写，函数名保持原样（与 IsFunctionVisible 一致）。
 			if (!hiddenNameOwners.ContainsKey(normalized))
 				normalized = normalized.ToUpperInvariant();
-			if (!hiddenNameOwners.TryGetValue(normalized, out string owner))
+			if (!hiddenNameOwners.TryGetValue(normalized, out string? owner))
 				return false;
 
 			foreach (DialectModuleSnapshot selected in Plan.Dialect.Modules)
