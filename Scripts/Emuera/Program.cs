@@ -336,7 +336,8 @@ namespace MinorShift.Emuera
 			LegacyCompatibilityProfile profile = LegacyCompatibilityProfile.Create(
 				plan,
 				scopedVariableInstructionsEnabled,
-				MinorShift.Emuera.Compatibility.CompatPackHost.ActivePackModuleIds);
+				MinorShift.Emuera.Compatibility.CompatPackHost.ActivePackModuleIds,
+				MinorShift.Emuera.Compatibility.CompatPackHost.ActiveVariantSelections);
 			var existing = System.Threading.Volatile.Read(ref m1CompatibilityPlan);
 			if (existing != null && !string.Equals(existing.CanonicalHash, plan.CanonicalHash, StringComparison.Ordinal))
 				throw new InvalidOperationException("A different compatibility plan is already bound to the active legacy session.");

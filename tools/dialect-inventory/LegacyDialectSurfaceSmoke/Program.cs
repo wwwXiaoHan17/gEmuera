@@ -259,7 +259,7 @@ static class Program
 
             // 诊断提示（TryGetUnselectedModuleHint）：v24pure 下查询 snake 专属名字 → 归属 game.snake；
             // snake 会话查询其自身隐藏的函数形态 → 不提示。
-            Assert(v24.TryGetUnselectedModuleHint("SETANIMETIMER", out string hintModule1) && hintModule1 == "game.snake",
+            Assert(v24.TryGetUnselectedModuleHint("SETANIMETIMER", out string? hintModule1) && hintModule1 == "game.snake",
                 "v24pure 查询 SETANIMETIMER 应提示归属 game.snake。");
             Assert(v24.TryGetUnselectedModuleHint("SQL_CONNECT", out _),
                 "v24pure 查询 SQL_CONNECT 应提示归属 snake 模块。");
@@ -300,9 +300,10 @@ static class Program
 
     private static void AssertPackProjection()
     {
-        var manifest = CompatPackManifest.TryParse(
-            "{\"packId\":\"smoke.pack\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1,\"capabilities\":[\"startup.continue-after-fault.v1\"]}",
-            out var parsed, out var manifestErrors)
+        string smokeJson = "{\"packId\":\"smoke.pack\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1,"
+            + "\"capabilities\":[\"startup.continue-after-fault.v1\"],"
+            + "\"variantSelections\":{\"SETBGIMAGE\":\"builtin:snake\"}}";
+        var manifest = CompatPackManifest.TryParse(smokeJson, out var parsed, out var manifestErrors)
             ? parsed! : throw new InvalidOperationException(string.Join("; ", manifestErrors));
         var handle = new CompatPackHandle(
             manifest, null!, "Z:/smoke-pack.dll", new string('a', 64), new string('a', 64),
@@ -316,7 +317,9 @@ static class Program
         if (!CompatPackPlanAssembler.TryAssemble(baseline, new[] { handle }, out CompatibilityPlan assembled, out var assemblyErrors))
             throw new InvalidOperationException("pack assembly failed: " + string.Join("; ", assemblyErrors));
 
-        LegacyCompatibilityProfile packed = LegacyCompatibilityProfile.Create(assembled, true, new[] { "smoke.pack" });
+        LegacyCompatibilityProfile packed = LegacyCompatibilityProfile.Create(
+            assembled, true, new[] { "smoke.pack" },
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["SETBGIMAGE"] = "builtin:snake" });
 
         Assert(packed.IsInstructionVisible("SETANIMETIMER"), "包注册指令 SETANIMETIMER 在 v24 会话不可见。");
         Assert(packed.IsFunctionVisible("SQL_CONNECT"), "包注册函数 SQL_CONNECT 在 v24 会话不可见。");
@@ -338,6 +341,12 @@ static class Program
         try { LegacyCompatibilityProfile.Create(assembled, true, new[] { "game.snake" }); }
         catch (InvalidOperationException) { builtinWhitelistRejected = true; }
         Assert(builtinWhitelistRejected, "白名单含内置方言模块未被拒绝。");
+
+        // 变体投影：包声明 builtin:snake 选 SETBGIMAGE → 投影注入后 TryGetInstructionVariant
+        // 返回真 enum（FunctionIdentifier 将据此构造 SNAKE_SETBGIMAGE handler）。
+        Assert(packed.TryGetInstructionVariant("SETBGIMAGE", out LegacyInstructionVariant packVariant)
+            && packVariant == LegacyInstructionVariant.SetBgImageSnake,
+            "包声明的 builtin:snake 变体未注入 SETBGIMAGE 投影。");
     }
 
     private static void Assert(bool condition, string message)

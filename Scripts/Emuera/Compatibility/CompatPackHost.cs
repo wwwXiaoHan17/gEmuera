@@ -29,9 +29,13 @@ namespace MinorShift.Emuera.Compatibility
 			"gemuera.v24", "game.snake", "game.erafl", "gemuera.v18", "game.erablue", "game.megaten",
 		};
 
-		// v1 内置变体名录（与引擎 LegacyInstructionVariant 的内置映射对应；投影接线
-		// 增量落地 handler 替换，当前仅账本/哈希语义）。
-		static readonly string[] BuiltinVariantNames = { "builtin:v24", "builtin:snake" };
+		// v1 内置变体组合表与名录：由引擎 BuiltinCompatPackVariants 注册表导出（唯一事实源），
+		// 包声明的 builtin:* 变体经注册表解析后真实替换引擎 handler。
+		static readonly IReadOnlyDictionary<string, IReadOnlySet<string>> BuiltinVariantInstructions =
+			BuiltinCompatPackVariants.SupportedSelections();
+
+		static readonly IReadOnlySet<string> BuiltinVariantNames = new HashSet<string>(
+			BuiltinVariantInstructions.Keys, StringComparer.Ordinal);
 
 		/// <summary>读取启用包路径清单；未设置/全空 = 未启用任何包。</summary>
 		internal static IReadOnlyList<string> ReadEnabledPackPaths()
@@ -59,7 +63,8 @@ namespace MinorShift.Emuera.Compatibility
 				new HashSet<string>(BuiltinVariantNames, StringComparer.Ordinal),
 				new HashSet<string>(LegacyDialectInventories.V24InstructionNames, StringComparer.Ordinal),
 				new HashSet<string>(LegacyDialectInventories.V24Functions.Select(entry => entry.Name), StringComparer.Ordinal),
-				new HashSet<string>(ReservedModuleIds, StringComparer.Ordinal));
+				new HashSet<string>(ReservedModuleIds, StringComparer.Ordinal),
+				BuiltinVariantInstructions);
 		}
 
 		/// <summary>引擎包 API 版本（v1 = 1；破坏性变更时递增并拒载旧包）。</summary>
@@ -71,6 +76,12 @@ namespace MinorShift.Emuera.Compatibility
 		/// 拒绝——信任边界）。legacy 会话单计划语义下与 plan 绑定同生命周期。
 		/// </summary>
 		internal static IReadOnlyCollection<string>? ActivePackModuleIds { get; private set; }
+
+		/// <summary>
+		/// 最近一次成功组装的包 builtin:* 变体选择（指令 → 变体名，跨包合并、同键异值已在校验段
+		/// 拒载）。与 ActivePackModuleIds 同生命周期，供投影注入（Compose → SubstituteInstruction）。
+		/// </summary>
+		internal static IReadOnlyDictionary<string, string>? ActiveVariantSelections { get; private set; }
 
 		/// <summary>
 		/// 启动期配置：无包原样返回基线；有包则加载→身份比对→组装。任何失败回退基线
@@ -87,6 +98,7 @@ namespace MinorShift.Emuera.Compatibility
 			if (!CompatPackLoader.TryLoadSet(paths, context, out CompatPackSet? set, out IReadOnlyList<string> loadErrors))
 			{
 				ActivePackModuleIds = null;
+				ActiveVariantSelections = null;
 				global::GenericUtils.Error("[LOAD] CompatPack disabled (load rejected): " + string.Join("; ", loadErrors));
 				return baselinePlan;
 			}
@@ -94,6 +106,7 @@ namespace MinorShift.Emuera.Compatibility
 			if (!VerifyGameIdentity(set!, gameRoot, out List<string> identityErrors))
 			{
 				ActivePackModuleIds = null;
+				ActiveVariantSelections = null;
 				set!.UnloadAll();
 				global::GenericUtils.Error("[LOAD] CompatPack disabled (game identity mismatch): " + string.Join("; ", identityErrors));
 				return baselinePlan;
@@ -102,6 +115,7 @@ namespace MinorShift.Emuera.Compatibility
 			if (!CompatPackPlanAssembler.TryAssemble(baselinePlan, set!.Handles, out CompatibilityPlan assembled, out IReadOnlyList<string> assemblyErrors))
 			{
 				ActivePackModuleIds = null;
+				ActiveVariantSelections = null;
 				set!.UnloadAll();
 				global::GenericUtils.Error("[LOAD] CompatPack disabled (assembly rejected): " + string.Join("; ", assemblyErrors));
 				return baselinePlan;
@@ -114,6 +128,14 @@ namespace MinorShift.Emuera.Compatibility
 					+ $"engineApi={handle.Manifest.TargetEngineApi} sha256={handle.PackSha256}");
 			}
 			ActivePackModuleIds = set!.Handles.Select(handle => handle.Manifest.PackId).ToArray();
+			// 跨包变体选择合并（同键同值幂等、同键异值校验段已拒；组装器哈希同源）。
+			var selections = new Dictionary<string, string>(StringComparer.Ordinal);
+			foreach (CompatPackHandle handle in set!.Handles)
+			{
+				foreach (KeyValuePair<string, string> selection in handle.Manifest.VariantSelections)
+					selections[selection.Key] = selection.Value;
+			}
+			ActiveVariantSelections = selections.Count > 0 ? selections : null;
 			return assembled;
 		}
 

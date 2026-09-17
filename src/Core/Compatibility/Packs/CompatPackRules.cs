@@ -143,7 +143,17 @@ public static class CompatPackRules
                 continue;
             }
             if (!context.KnownBuiltinVariantNames.Contains(selection.Value))
+            {
                 collected.Add("变体选择 " + selection.Key + " 引用未知内置变体：" + selection.Value);
+                continue;
+            }
+            // 组合级校验（宿主传入组合表时）：内置变体只对注册过 handler 变体的指令有效。
+            if (context.KnownBuiltinVariantInstructions.Count > 0
+                && (!context.KnownBuiltinVariantInstructions.TryGetValue(selection.Value, out var supported)
+                    || !supported.Contains(selection.Key)))
+            {
+                collected.Add("内置变体 " + selection.Value + " 未注册指令 " + selection.Key + " 的 handler 变体。");
+            }
             if (variantBindings.ContainsKey(selection.Key))
                 collected.Add("指令 " + selection.Key + " 同时出现在清单变体选择与变体贡献绑定中。");
         }
