@@ -82,6 +82,17 @@ namespace MinorShift.Emuera.Compatibility
 		public static LegacyCompatibilityProfile Compose(
 			CompatibilityPlan plan,
 			bool scopedVariableInstructionsEnabled)
+			=> Compose(plan, scopedVariableInstructionsEnabled, null);
+
+		/// <summary>
+		/// packModuleIds 是宿主（CompatPackHost）显式放行的兼容包合成模块白名单：闭包 =
+		/// 期望闭包 ∪ 白名单。白名单外的任何额外模块仍按未分类抛异常（信任边界：
+		/// 未知模块不会因为"看起来像包"而被放行）。null/空 = 无包，行为与历史严格校验逐字节一致。
+		/// </summary>
+		public static LegacyCompatibilityProfile Compose(
+			CompatibilityPlan plan,
+			bool scopedVariableInstructionsEnabled,
+			System.Collections.Generic.IReadOnlyCollection<string>? packModuleIds)
 		{
 			if (!expectedModuleClosures.ContainsKey(plan.ProfileId))
 			{
@@ -93,11 +104,29 @@ namespace MinorShift.Emuera.Compatibility
 			var selectedModules = new HashSet<string>(
 				plan.Dialect.Modules.Select(module => module.ModuleId),
 				StringComparer.Ordinal);
-			if (!selectedModules.SetEquals(expectedModules))
+			var packModules = new HashSet<string>(packModuleIds ?? Array.Empty<string>(), StringComparer.Ordinal);
+			if (packModules.Overlaps(modulesById.Keys))
 			{
+				throw new InvalidOperationException(
+					"Pack module whitelist must not contain built-in dialect modules.");
+			}
+			foreach (string moduleId in selectedModules)
+			{
+				if (expectedModules.Contains(moduleId) || packModules.Contains(moduleId))
+					continue;
 				throw new InvalidOperationException(
 					$"Legacy profile '{plan.ProfileId}' does not match its exact dialect module closure.");
 			}
+			foreach (string expected in expectedModules)
+			{
+				if (!selectedModules.Contains(expected))
+				{
+					throw new InvalidOperationException(
+						$"Legacy profile '{plan.ProfileId}' does not match its exact dialect module closure.");
+				}
+			}
+			var packModuleIdsInClosure = new HashSet<string>(
+				selectedModules.Where(id => packModules.Contains(id)), StringComparer.Ordinal);
 
 			var builder = new LegacyCompatibilityProfileBuilder(plan, scopedVariableInstructionsEnabled);
 			foreach (ILegacyCompatibilityModule module in modules)
@@ -108,6 +137,8 @@ namespace MinorShift.Emuera.Compatibility
 			}
 			foreach (DialectModuleSnapshot selectedModule in plan.Dialect.Modules)
 			{
+				if (packModuleIdsInClosure.Contains(selectedModule.ModuleId))
+					continue; // 包合成模块没有 ILegacyCompatibilityModule；其表面贡献在下方统一回放。
 				if (!modulesById.ContainsKey(selectedModule.ModuleId))
 				{
 					throw new InvalidOperationException(
@@ -117,7 +148,55 @@ namespace MinorShift.Emuera.Compatibility
 				builder.SetDeclaringModule(module.ModuleId);
 				module.Apply(builder);
 			}
+
+			if (packModuleIdsInClosure.Count > 0)
+				ApplyPackSurface(plan, packModuleIdsInClosure, builder);
+
 			return builder.Build();
+		}
+
+		/// <summary>
+		/// 包表面差量回放：从「组装 plan - 同 profile 无包基线 plan」反推包的 register/hide，
+		/// 在模块 Apply 之后生效（Expose 包注册名、Hide 包隐藏名，归属记录到包模块 id）。
+		/// 纯靠 plan 数据重建，不需要包句柄——Create/Compose 签名不变，无包路径零开销。
+		/// </summary>
+		static void ApplyPackSurface(CompatibilityPlan plan, HashSet<string> packModuleIds, LegacyCompatibilityProfileBuilder builder)
+		{
+			CompatibilityPlan baseline = GEmuera.Core.Compatibility.BuiltInDialectCatalog.CreateLegacySessionPlan(plan.ProfileId);
+
+			var addedInstructions = plan.Dialect.Instructions.Values
+				.Where(descriptor => packModuleIds.Contains(descriptor.ModuleId))
+				.Select(descriptor => descriptor.Name)
+				.ToList();
+			var addedFunctions = plan.Dialect.Functions.Values
+				.Where(descriptor => packModuleIds.Contains(descriptor.ModuleId))
+				.Select(descriptor => descriptor.Name)
+				.ToList();
+			var hiddenInstructions = baseline.Dialect.Instructions.Keys
+				.Where(name => !plan.Dialect.Instructions.ContainsKey(name))
+				.ToList();
+			var hiddenFunctions = baseline.Dialect.Functions.Keys
+				.Where(name => !plan.Dialect.Functions.ContainsKey(name))
+				.ToList();
+
+			// 防御：包注册名的归属必须恰为包模块（反推口径自证）。
+			foreach (var group in plan.Dialect.Instructions.Values
+				.Where(descriptor => addedInstructions.Contains(descriptor.Name))
+				.GroupBy(descriptor => descriptor.ModuleId))
+			{
+				if (!packModuleIds.Contains(group.Key))
+					throw new InvalidOperationException(
+						$"Pack surface replay found instruction ownership outside pack modules: '{group.Key}'.");
+			}
+
+			foreach (string packId in packModuleIds)
+			{
+				builder.SetDeclaringModule(packId);
+				builder.ExposeInstructionNames(addedInstructions);
+				builder.ExposeFunctionNames(addedFunctions);
+				builder.HideInstructionNames(hiddenInstructions);
+				builder.HideFunctionNames(hiddenFunctions);
+			}
 		}
 	}
 

@@ -1,5 +1,8 @@
 using System;
 using System.Linq;
+using Emuera.Compatibility.Packs;
+using GEmuera.Core.Compatibility;
+using GEmuera.Core.Compatibility.Packs;
 using MinorShift.Emuera.Compatibility;
 
 static class Program
@@ -265,6 +268,8 @@ static class Program
             Assert(!v24.TryGetUnselectedModuleHint("PRINT", out _),
                 "v24pure 查询基线指令 PRINT 不应提示。");
 
+            AssertPackProjection();
+
             Console.WriteLine("Legacy dialect surface smoke passed.");
             return 0;
         }
@@ -273,6 +278,59 @@ static class Program
             Console.Error.WriteLine(exception.Message);
             return 1;
         }
+    }
+
+
+    // —— 兼容包投影用例（宿主接线增量）：手工句柄（surface 贡献：注册 SETANIMETIMER/
+    // SQL_CONNECT、隐藏 CALLSHARP/EXISTVAR）组装进 v24pure 计划，Compose 的包差量回放
+    // 应使包注册名在 v24 会话可见、包隐藏名从基线表面移除；无包路径不触发（上方全部
+    // 既有用例即证明）。——
+    private sealed class SmokeSurfaceContribution : ISurfaceContribution
+    {
+        public string ContributionId => "smoke.pack.surface";
+
+        public void Apply(IInstructionSurfaceRegistry instructions, IFunctionSurfaceRegistry functions)
+        {
+            instructions.RegisterInstruction("SETANIMETIMER");
+            functions.RegisterFunction("SQL_CONNECT", "Int64");
+            instructions.HideInstruction("CALLSHARP");
+            functions.HideFunction("EXISTVAR");
+        }
+    }
+
+    private static void AssertPackProjection()
+    {
+        var manifest = CompatPackManifest.TryParse(
+            "{\"packId\":\"smoke.pack\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1,\"capabilities\":[\"startup.continue-after-fault.v1\"]}",
+            out var parsed, out var manifestErrors)
+            ? parsed! : throw new InvalidOperationException(string.Join("; ", manifestErrors));
+        var handle = new CompatPackHandle(
+            manifest, null!, "Z:/smoke-pack.dll", new string('a', 64), new string('a', 64),
+            new ISurfaceContribution[] { new SmokeSurfaceContribution() },
+            Array.Empty<ICapabilityContribution>(),
+            Array.Empty<IInstructionVariantContribution>(),
+            Array.Empty<IPolicyContribution>(),
+            new CompatPackLoadContext("Z:/smoke-pack.dll"));
+
+        CompatibilityPlan baseline = BuiltInDialectCatalog.CreateLegacySessionPlan("v24pure");
+        if (!CompatPackPlanAssembler.TryAssemble(baseline, new[] { handle }, out CompatibilityPlan assembled, out var assemblyErrors))
+            throw new InvalidOperationException("pack assembly failed: " + string.Join("; ", assemblyErrors));
+
+        LegacyCompatibilityProfile packed = LegacyCompatibilityProfile.Create(assembled, true, new[] { "smoke.pack" });
+
+        Assert(packed.IsInstructionVisible("SETANIMETIMER"), "包注册指令 SETANIMETIMER 在 v24 会话不可见。");
+        Assert(packed.IsFunctionVisible("SQL_CONNECT"), "包注册函数 SQL_CONNECT 在 v24 会话不可见。");
+        Assert(!packed.IsInstructionVisible("CALLSHARP"), "包隐藏指令 CALLSHARP 仍泄漏在 v24 会话。");
+        Assert(!packed.IsFunctionVisible("EXISTVAR"), "包隐藏函数 EXISTVAR 仍泄漏在 v24 会话。");
+        Assert(packed.Plan.CapabilityIds.Contains("startup.continue-after-fault.v1"), "包 capability 未进入会话账本。");
+        Assert(packed.ContinuesAfterStartupFault, "包声明的启动容错 quirk 未在会话生效。");
+
+        // 信任边界：同一组装 plan 在无白名单入口（历史严格校验）下必须拒绝——
+        // 未知模块不会因为"看起来像包"而被放行。
+        bool strictRejected = false;
+        try { LegacyCompatibilityProfile.Create(assembled, true); }
+        catch (InvalidOperationException) { strictRejected = true; }
+        Assert(strictRejected, "无白名单入口接受了未分类包模块（信任边界泄漏）。");
     }
 
     private static void Assert(bool condition, string message)
