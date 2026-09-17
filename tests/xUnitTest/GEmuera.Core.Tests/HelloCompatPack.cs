@@ -4,9 +4,12 @@ namespace GEmuera.Core.Tests;
 
 /// <summary>
 /// 测试用兼容包入口：本测试程序集内嵌 compatpack.manifest.json（见 csproj），由加载器
-/// 经独立 ALC 加载本程序集文件充当"真实包样本"。贡献集合刻意覆盖四类贡献各一条，
-/// 且表面动作同时含"基线外注册"（SETANIMETIMER/SQL_CONNECT）与"基线内隐藏"
-/// （CALLSHARP/EXISTVAR）两向，供校验矩阵用真实 v24 基线做正反向断言。
+/// 经独立 ALC 加载本程序集文件充当"真实包样本"。贡献集合只保留 v1 宿主真实消费的两类
+/// （表面 + 能力声明），且表面动作同时含"基线外注册"（SETANIMETIMER/SQL_CONNECT）与
+/// "基线内隐藏"（CALLSHARP/EXISTVAR）两向，供校验矩阵用真实 v24 基线做正反向断言。
+/// IInstructionVariantContribution/IPolicyContribution 为 v1 死契约（宿主零消费、加载即拒载，
+/// v2 预留），正向夹具不得携带——本文件保留 HelloVariantFactory/HelloPolicyContribution
+/// 仅供拒载向测试直接构造使用。
 /// </summary>
 public sealed class HelloCompatPack : ICompatPack
 {
@@ -22,9 +25,7 @@ public sealed class HelloCompatPack : ICompatPack
     public IReadOnlyList<ICompatPackContribution> Contributions { get; } = new ICompatPackContribution[]
     {
         new HelloSurfaceContribution(),
-        new HelloVariantContribution(),
         new HelloCapabilityContribution(),
-        new HelloPolicyContribution(),
     };
 }
 
@@ -41,18 +42,6 @@ public sealed class HelloSurfaceContribution : ISurfaceContribution
     }
 }
 
-public sealed class HelloVariantContribution : IInstructionVariantContribution
-{
-    public string ContributionId => "test.hello-pack.variants";
-
-    // 绑定基线内指令 PRINT（自带变体）：不得与表面注册/隐藏同名——SETANIMETIMER 由表面
-    // 贡献注册（handler 来源唯一），变体绑定须选另一个名字，避免 handler 来源歧义。
-    public IReadOnlyList<InstructionVariantBinding> Bindings { get; } = new[]
-    {
-        new InstructionVariantBinding("PRINT", new HelloVariantFactory()),
-    };
-}
-
 public sealed class HelloVariantFactory : ICompatInstructionFactory
 {
     public object CreateInstruction() => new object();
@@ -65,6 +54,7 @@ public sealed class HelloCapabilityContribution : ICapabilityContribution
     public IReadOnlyList<string> CapabilityIds { get; } = new[] { "markup.div-v2.v1" };
 }
 
+// v1 死契约样本：仅供拒载向测试（CompatPackRulesTests）直接构造，不得进正向夹具贡献集。
 public sealed class HelloPolicyContribution : IPolicyContribution
 {
     public string ContributionId => "test.hello-pack.policy";

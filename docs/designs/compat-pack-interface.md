@@ -173,20 +173,33 @@ per-game 启用配置（launcher 侧：游戏 → 包列表）给出**包文件�
 
 ## 9. 兼容性承诺
 
-- `targetEngineApi` 语义化：次版本 = 只增不改（旧包兼容）；主版本 = 破坏性（包须重编译）。引擎内置变体名 `"builtin:*"` 属公共词汇表，改名视同主版本。
+- `targetEngineApi` **v1 为单整数、精确匹配**（引擎 1 ↔ 包 1；引擎递增即拒载旧包并给升级指引）。原"次版本 = 只增不改"承诺推迟到 v2（需 schema 升级为 major.minor 双段后再兑现），见 §12 勘误 5。引擎内置变体名 `"builtin:*"` 属公共词汇表，改名视同主版本。
 - plan 哈希稳定性：包内容不变 → 会话计划哈希不变（回归可比对）。
 - 铁律表述更新：AGENTS.md 游戏适配铁律在 P-D 落地时改写为"差异必须以兼容包方式实现，禁止直接修改 v24 基线共享路径"。
 
 ## 10. 开放问题（需裁定，不阻塞本文评审）
 
-1. 契约落点：EmueraFacade（推荐）vs src/Core 弱类型桥。
-2. 包安装位置约定：候选 `compat/packs/<packId>/`（桌面）与 `/storage/emulated/0/emuera/packs/`（Android）；**不得**放 export/（那是导出工作区）。
-3. launcher UI 的按游戏包选择交互与默认推荐映射（六游戏矩阵的 profile→包对应关系迁移）。
+1. ~~契约落点：EmueraFacade（推荐）vs src/Core 弱类型桥~~ **已裁定并落地：EmueraFacade**（§4 推荐项，PR #12 起实施）。
+2. 包安装位置约定：候选 `compat/packs/<packId>/`（桌面）与 `/storage/emulated/0/emuera/packs/`（Android）；**不得**放 export/（那是导出工作区）。**v1 启动器实现取 exe 同级 `compat_packs/`（桌面，另加编辑器 `res://compat_packs` 调试根）与 `/storage/emulated/0/emuera/packs/`（Android）为扫描根**，仅顶层 `*.dll`；与本条原候选的差异（compat_packs vs compat/packs）在第一方包分发定稿时统一。
+3. ~~launcher UI 的按游戏包选择交互~~ **已落地**：扫描候选 + 勾选（CheckButton 48px 触控行）+ 手动路径合并 + 桌面 FileDialog；默认推荐映射（六游戏矩阵 profile→包）仍待第一方包迁移（P-A 起）。
 4. v18 壳包是否携带全量清单于 manifest（417 指令/160 函数的单文件体积可接受性）。
 
 ## 11. 接口定稿任务的 Definition of Done（后续任务的验收，非本文）
 
-- [ ] EmueraFacade 落地 §4 接口 + manifest schema（JSON Schema 入库）+ 单元测试；
-- [ ] 加载器最小实现（发现/隔离/校验/组装）+ fail-closed 三原则各有测试；
-- [ ] tests/ 内一个 hello-world 测试包端到端：显式启用 → 表面变化 → plan 哈希变化 → 禁用后回纯 v24 逐字节等价；
-- [ ] 信任边界人工评审（用户）。
+- [x] EmueraFacade 落地 §4 接口 + manifest schema（JSON Schema 入库）+ 单元测试（PR #12）；
+- [x] 加载器最小实现（发现/隔离/校验/组装）+ fail-closed 三原则各有测试（PR #13/#14）；
+- [x] tests/ 内一个 hello-world 测试包端到端：显式启用 → 表面变化 → plan 哈希变化 → 禁用后回纯 v24 逐字节等价（PR #14/#15）；
+- [ ] 信任边界人工评审（用户）——v1 已按 §12 勘误 3/4 加固（对账/兜底/编码链），评审项保留。
+
+## 12. v1 落地勘误（2026-09-18，随 ai/compat-pack-review-hardening；三评审员交叉评审 + 集成修复）
+
+> 以下为 §1-§11 定稿与 v1 实现之间经评审确认的偏差与加固，全部已随修复分支落地或如实标注：
+
+1. **App 路径包加载修复（P0）**：EmueraMain 为 EmueraContent 显示默认值先行绑定基线计划（早于 legacy 工作线程），而 Program.Main 原只在"无绑定"分支调用 ConfigureForLaunch——普通 App 路径（桌面/Android）包从未真正加载，env 注入为死消费。修复：Program.Main 早绑定分支补做包加载，顺序为"清绑定（连带清投影静态）→ ConfigureForLaunch（重设投影）→ 绑定组装/回退计划"；无包（HasEnabledPacks 为假）整段跳过，与旧路径逐字节等价。已知角落：M1 canary 诊断路径下 facade 会话账本记录的哈希与实际绑定可能不一致（仅日志口径）；"canary + 包 + 启动失败后立即重试"会触发哈希防御大声报错（fail-loud，非静默污染）。
+2. **死契约 v1 显式拒载**：`IInstructionVariantContribution` / `IPolicyContribution` 已发布为公共编译面但宿主零消费，v1 携带即拒载（文案指明 v2 预留），schema/注释同步改写；v2 接线时删除规则层两条拒载即可恢复（组装器侧 capability 折叠循环保留为现成挂接点）。
+3. **对账与降级加固**：§5.3(2) 的引擎 handler 对账已落地，基准 = Core 生成清单的六 profile 并集（不可用 funcDic 静态构造器：其比较器初始化读 Config.ICVariable，校验期早于配置装载，提前触发会把比较器钉在默认值）；组装段回放全程 try/catch（异常→组装错误→拒载，不再依赖宿主顶层兜底）；Compose 投影注入点异常降级为"当前 profile 纯基线 + 无包白名单"而非炸启动；ConfigureForLaunch 顶层兜底 + 零包/失败/清理路径全量复位跨会话静态投影（计划解绑联动复位）。
+4. **GameBase.csv 编码**：身份比对读取链 = BOM → 严格 UTF-8 → Shift-JIS 932（与 GodotHost GameContentProbe 同源；EraStreamReader 在本移植被钉为 UTF-8 故不可复用），SJIS 日文游戏的 gameIdentity 绑定不再必然失配。
+5. **`targetEngineApi` v1 语义**：单整数精确匹配（见 §9 改写）；原"次版本只增不改"承诺推迟 v2。
+6. **ALC 生命周期 v1 现状**：成功路径包 ALC 保持到进程结束（§5.4"停机后 Unload"推迟到宿主接线深化；同进程重启会话会为新会话重载新 ALC，旧实例按 v1 策略滞留）。ALC 解析面：未匹配名落回默认解析，包技术上可绑定宿主已加载程序集——信任边界 §6 的"可见面"是约定而非机制强制，v1 接受并在本条明示。
+7. **capability 消费面分裂（v1 已知限制）**：capability 词汇表 = 六 profile 并集；消费面有两类——策略类 capability（ContinuesAfterStartupFault 等）由 Plan.CapabilityIds 直读即生效，方言策略类只在对应模块 Apply 时激活。同一 id 可能"部分生效"；包作者以 §3.3 capability id 清单为准，分裂在 v2 统一。
+8. **启动器包选择（§10.3 落地）**：扫描候选 + 勾选 + 手动路径合并（存储格式不变）；恢复选中即回填编辑框（程序化 Select 不触发信号曾导致"启动即清空已存选择"）；相对路径在启动器侧按启动器根绝对化后才入存储/env。
