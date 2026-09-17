@@ -270,16 +270,18 @@ namespace MinorShift.Emuera.Compatibility
 		/// <summary>
 		/// 带兼容包模块白名单的组装入口（宿主 CompatPackHost 专用）：白名单内的合成模块
 		/// 走包表面差量回放；白名单外行为与无包严格校验一致（信任边界）。
+		/// packVariantSelections 为包清单的 builtin:* 变体选择，注入投影真实替换 handler。
 		/// </summary>
 		public static LegacyCompatibilityProfile Create(
 			CompatibilityPlan plan,
 			bool scopedVariableInstructionsEnabled,
-			System.Collections.Generic.IReadOnlyCollection<string> packModuleIds)
+			System.Collections.Generic.IReadOnlyCollection<string> packModuleIds,
+			System.Collections.Generic.IReadOnlyDictionary<string, string>? packVariantSelections = null)
 		{
 			if (plan == null)
 				throw new ArgumentNullException(nameof(plan));
 
-			return LegacyCompatibilityModuleCatalog.Compose(plan, scopedVariableInstructionsEnabled, packModuleIds);
+			return LegacyCompatibilityModuleCatalog.Compose(plan, scopedVariableInstructionsEnabled, packModuleIds, packVariantSelections);
 		}
 
 		public static LegacyCompatibilityProfile CreateForProfile(

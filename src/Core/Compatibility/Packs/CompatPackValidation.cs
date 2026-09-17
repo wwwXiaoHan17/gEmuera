@@ -9,6 +9,8 @@ namespace GEmuera.Core.Compatibility.Packs;
 public sealed class CompatPackValidationContext
 {
     static readonly IReadOnlySet<string> NoReservedModules = new HashSet<string>(StringComparer.Ordinal);
+    static readonly IReadOnlyDictionary<string, IReadOnlySet<string>> NoBuiltinVariantInstructions =
+        new Dictionary<string, IReadOnlySet<string>>(StringComparer.Ordinal);
 
     public CompatPackValidationContext(
         int engineModuleApiVersion,
@@ -16,7 +18,8 @@ public sealed class CompatPackValidationContext
         IReadOnlySet<string> knownBuiltinVariantNames,
         IReadOnlySet<string> baselineInstructions,
         IReadOnlySet<string> baselineFunctions,
-        IReadOnlySet<string>? reservedModuleIds = null)
+        IReadOnlySet<string>? reservedModuleIds = null,
+        IReadOnlyDictionary<string, IReadOnlySet<string>>? knownBuiltinVariantInstructions = null)
     {
         if (engineModuleApiVersion <= 0)
             throw new ArgumentOutOfRangeException(nameof(engineModuleApiVersion));
@@ -26,6 +29,7 @@ public sealed class CompatPackValidationContext
         BaselineInstructions = baselineInstructions ?? throw new ArgumentNullException(nameof(baselineInstructions));
         BaselineFunctions = baselineFunctions ?? throw new ArgumentNullException(nameof(baselineFunctions));
         ReservedModuleIds = reservedModuleIds ?? NoReservedModules;
+        KnownBuiltinVariantInstructions = knownBuiltinVariantInstructions ?? NoBuiltinVariantInstructions;
     }
 
     /// <summary>引擎当前 ModuleApiVersion（与 DialectModuleDefinition.ModuleApiVersion 同源）。</summary>
@@ -49,4 +53,11 @@ public sealed class CompatPackValidationContext
     /// 缺省为空集（测试场景）；宿主必须传入真实保留名全集。
     /// </summary>
     public IReadOnlySet<string> ReservedModuleIds { get; }
+
+    /// <summary>
+    /// 内置变体的组合级名录（变体名 → 该变体可作用的指令集）。缺省空表 = 只做名字级校验
+    /// （<see cref="KnownBuiltinVariantNames"/>）；宿主必须传入真实组合表——
+    /// builtin:snake 只对 SETBGIMAGE/FOR 等注册过 handler 变体，选其它指令必须在校验段拒载。
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlySet<string>> KnownBuiltinVariantInstructions { get; }
 }

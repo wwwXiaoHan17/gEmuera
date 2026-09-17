@@ -38,6 +38,50 @@ namespace MinorShift.Emuera.Compatibility
 	}
 
 	/// <summary>
+	/// 内置兼容包变体注册表：builtin 名 × 指令 → LegacyInstructionVariant。
+	/// 这是包声明 builtin:* 变体选择与引擎 handler 构造知识（FunctionIdentifier.
+	/// CreateProfileInstruction）之间的唯一映射层——注册表只列真实存在 handler 变体的
+	/// 组合，未注册组合在加载校验段拒载（CompatPackRules 组合级校验吃本表导出的组合集）。
+	/// </summary>
+	internal static class BuiltinCompatPackVariants
+	{
+		// 元组键用默认比较器（元素 string 默认 Ordinal，与规范化后的大小写语义一致）。
+		static readonly Dictionary<(string Variant, string Instruction), LegacyInstructionVariant> Map =
+			new()
+			{
+				[("builtin:v24", "FOR")] = LegacyInstructionVariant.ForCountV24,
+				[("builtin:v24", "SETBGIMAGE")] = LegacyInstructionVariant.SetBgImageV24,
+				[("builtin:snake", "FOR")] = LegacyInstructionVariant.SharedTable,
+				[("builtin:snake", "SETBGIMAGE")] = LegacyInstructionVariant.SetBgImageSnake,
+			};
+
+		public static bool TryResolve(string variantName, string instructionName, out LegacyInstructionVariant variant)
+		{
+			variant = LegacyInstructionVariant.SharedTable;
+			return Map.TryGetValue((variantName, instructionName), out variant);
+		}
+
+		/// <summary>组合表导出（加载校验段消费）：变体名 → 可作用指令集（规范化大写）。</summary>
+		public static IReadOnlyDictionary<string, IReadOnlySet<string>> SupportedSelections()
+		{
+			var result = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+			foreach (KeyValuePair<(string Variant, string Instruction), LegacyInstructionVariant> entry in Map)
+			{
+				if (!result.TryGetValue(entry.Key.Variant, out HashSet<string> instructions))
+				{
+					instructions = new HashSet<string>(StringComparer.Ordinal);
+					result[entry.Key.Variant] = instructions;
+				}
+				instructions.Add(entry.Key.Instruction);
+			}
+			return result.ToDictionary(
+				pair => pair.Key,
+				pair => (IReadOnlySet<string>)pair.Value,
+				StringComparer.Ordinal);
+		}
+	}
+
+	/// <summary>
 	/// Composes the legacy bridge from the exact frozen Core module closure.
 	/// The complete legacy handler tables remain implementation detail; only
 	/// these module declarations decide their parser-visible surfaces.
@@ -88,11 +132,15 @@ namespace MinorShift.Emuera.Compatibility
 		/// packModuleIds 是宿主（CompatPackHost）显式放行的兼容包合成模块白名单：闭包 =
 		/// 期望闭包 ∪ 白名单。白名单外的任何额外模块仍按未分类抛异常（信任边界：
 		/// 未知模块不会因为"看起来像包"而被放行）。null/空 = 无包，行为与历史严格校验逐字节一致。
+		/// packVariantSelections 是包清单的 builtin:* 变体选择（指令 → builtin 名），
+		/// 经 BuiltinCompatPackVariants 注册表解析为 LegacyInstructionVariant 并注入投影——
+		/// 包声明的内置变体在会话内真实替换引擎 handler。null = 无变体选择。
 		/// </summary>
 		public static LegacyCompatibilityProfile Compose(
 			CompatibilityPlan plan,
 			bool scopedVariableInstructionsEnabled,
-			System.Collections.Generic.IReadOnlyCollection<string>? packModuleIds)
+			System.Collections.Generic.IReadOnlyCollection<string>? packModuleIds,
+			System.Collections.Generic.IReadOnlyDictionary<string, string>? packVariantSelections = null)
 		{
 			if (!expectedModuleClosures.ContainsKey(plan.ProfileId))
 			{
@@ -151,6 +199,19 @@ namespace MinorShift.Emuera.Compatibility
 
 			if (packModuleIdsInClosure.Count > 0)
 				ApplyPackSurface(plan, packModuleIdsInClosure, builder);
+
+			if (packVariantSelections is { Count: > 0 })
+			{
+				foreach (KeyValuePair<string, string> selection in packVariantSelections)
+				{
+					if (!BuiltinCompatPackVariants.TryResolve(selection.Value, selection.Key, out LegacyInstructionVariant variant))
+					{
+						throw new InvalidOperationException(
+							$"内置变体 '{selection.Value}' 未注册指令 '{selection.Key}' 的 handler 变体（组合校验应已在加载段拒载）。");
+					}
+					builder.SubstituteInstruction(selection.Key, variant);
+				}
+			}
 
 			return builder.Build();
 		}

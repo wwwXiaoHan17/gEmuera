@@ -204,6 +204,41 @@ public class CompatPackRulesTests
         Assert.Contains(errors, e => e.Contains("builtin"));
     }
 
+    static CompatPackValidationContext ContextWithVariantInstructions()
+    {
+        // 组合表与引擎 BuiltinCompatPackVariants 注册表同源（此处测试用等值副本）。
+        var table = new Dictionary<string, IReadOnlySet<string>>(StringComparer.Ordinal)
+        {
+            ["builtin:snake"] = new HashSet<string>(StringComparer.Ordinal) { "SETBGIMAGE", "FOR" },
+        };
+        return new CompatPackValidationContext(
+            1,
+            new HashSet<string>(StringComparer.Ordinal) { "parse.diagnostics.v1" },
+            new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
+            new HashSet<string>(StringComparer.Ordinal) { "SETBGIMAGE", "CALLSHARP", "PRINT" },
+            new HashSet<string>(StringComparer.Ordinal) { "EXISTVAR" },
+            reservedModuleIds: null,
+            knownBuiltinVariantInstructions: table);
+    }
+
+    [Fact]
+    public void Validate_BuiltinVariantRegisteredCombination_Succeeds()
+    {
+        Assert.True(CompatPackRules.Validate(Manifest(), Array.Empty<ICompatPackContribution>(), ContextWithVariantInstructions(), out _));
+    }
+
+    [Fact]
+    public void Validate_BuiltinVariantUnregisteredInstruction_Rejects()
+    {
+        // builtin:snake 只注册了 SETBGIMAGE/FOR 的 handler 变体；选 PRINT 必须在校验段拒载。
+        string json = "{\"packId\":\"test.rules\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1,"
+            + "\"variantSelections\":{\"PRINT\":\"builtin:snake\"}}";
+        var manifest = CompatPackManifest.TryParse(json, out var m, out _)
+            ? m! : throw new InvalidOperationException();
+        Assert.False(CompatPackRules.Validate(manifest, Array.Empty<ICompatPackContribution>(), ContextWithVariantInstructions(), out var errors));
+        Assert.Contains(errors, e => e.Contains("未注册指令"));
+    }
+
     [Fact]
     public void Validate_UnknownPolicyCapability_Rejects()
     {
