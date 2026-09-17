@@ -23,6 +23,11 @@ public static class CompatPackRules
         ArgumentNullException.ThrowIfNull(context);
         var collected = new List<string>();
 
+        // 保留名：packId 撞内置方言模块 id 即拒载（否则组装后引擎闭包校验会以未捕获
+        // 异常炸掉会话绑定，违反降级不变量——必须在加载/校验段挡下）。
+        if (context.ReservedModuleIds.Contains(manifest.PackId))
+            collected.Add("packId 与内置方言模块保留名冲突：" + manifest.PackId);
+
         // 原则（3）：引擎包 API 主版本不匹配拒载（当前为整数版本，精确匹配即主版本匹配）。
         if (manifest.TargetEngineApi != context.EngineModuleApiVersion)
         {

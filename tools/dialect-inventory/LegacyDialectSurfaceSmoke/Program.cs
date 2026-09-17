@@ -331,6 +331,13 @@ static class Program
         try { LegacyCompatibilityProfile.Create(assembled, true); }
         catch (InvalidOperationException) { strictRejected = true; }
         Assert(strictRejected, "无白名单入口接受了未分类包模块（信任边界泄漏）。");
+
+        // 白名单撞内置方言模块必须抛（防御深度回归钉：保留名拒载在加载段，这里验证
+        // 即便有人绕过 Host 直接传入坏白名单，Compose 也不会放行）。
+        bool builtinWhitelistRejected = false;
+        try { LegacyCompatibilityProfile.Create(assembled, true, new[] { "game.snake" }); }
+        catch (InvalidOperationException) { builtinWhitelistRejected = true; }
+        Assert(builtinWhitelistRejected, "白名单含内置方言模块未被拒绝。");
     }
 
     private static void Assert(bool condition, string message)

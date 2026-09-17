@@ -8,12 +8,15 @@ namespace GEmuera.Core.Compatibility.Packs;
 /// </summary>
 public sealed class CompatPackValidationContext
 {
+    static readonly IReadOnlySet<string> NoReservedModules = new HashSet<string>(StringComparer.Ordinal);
+
     public CompatPackValidationContext(
         int engineModuleApiVersion,
         IReadOnlySet<string> knownCapabilityIds,
         IReadOnlySet<string> knownBuiltinVariantNames,
         IReadOnlySet<string> baselineInstructions,
-        IReadOnlySet<string> baselineFunctions)
+        IReadOnlySet<string> baselineFunctions,
+        IReadOnlySet<string>? reservedModuleIds = null)
     {
         if (engineModuleApiVersion <= 0)
             throw new ArgumentOutOfRangeException(nameof(engineModuleApiVersion));
@@ -22,6 +25,7 @@ public sealed class CompatPackValidationContext
         KnownBuiltinVariantNames = knownBuiltinVariantNames ?? throw new ArgumentNullException(nameof(knownBuiltinVariantNames));
         BaselineInstructions = baselineInstructions ?? throw new ArgumentNullException(nameof(baselineInstructions));
         BaselineFunctions = baselineFunctions ?? throw new ArgumentNullException(nameof(baselineFunctions));
+        ReservedModuleIds = reservedModuleIds ?? NoReservedModules;
     }
 
     /// <summary>引擎当前 ModuleApiVersion（与 DialectModuleDefinition.ModuleApiVersion 同源）。</summary>
@@ -38,4 +42,11 @@ public sealed class CompatPackValidationContext
 
     /// <summary>v24 基线表达式函数名；hide 对账基准。</summary>
     public IReadOnlySet<string> BaselineFunctions { get; }
+
+    /// <summary>
+    /// 内置方言模块保留名（gemuera.v24/game.snake 等）。packId 撞保留名即拒载——否则
+    /// 组装后 Compose 的白名单校验会以未捕获异常炸掉会话绑定（违反降级不变量）。
+    /// 缺省为空集（测试场景）；宿主必须传入真实保留名全集。
+    /// </summary>
+    public IReadOnlySet<string> ReservedModuleIds { get; }
 }

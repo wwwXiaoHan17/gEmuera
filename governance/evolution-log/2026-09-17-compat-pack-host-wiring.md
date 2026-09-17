@@ -44,4 +44,4 @@
 
 Core.Tests 67/67（+11 身份比对）、Facade.Tests 33/33；Core `-t:Rebuild` 新增代码零
 警告；Godot 无头构建 DLL 20:35:27 更新 0 错误；三冒烟全过（SurfaceSmoke 含包投影
-正向用例 + 信任边界反例；CoreContractSmoke 既有红线原样通过）。.uid 侧车 5 枚入库。
+正向用例 + 信任边界反例；CoreContractSmoke 既有红线原样通过）。.uid 侧车 3 枚入库。

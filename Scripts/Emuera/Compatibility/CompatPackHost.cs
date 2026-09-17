@@ -22,6 +22,13 @@ namespace MinorShift.Emuera.Compatibility
 		// capability 词汇表 = 六 profile 声明的能力并集（引擎已收录的全部 quirk id）。
 		static readonly string[] AllProfileIds = { "v24pure", "v18", "snake", "erafl", "erablue", "megaten" };
 
+		// 内置方言模块保留名（与 LegacyCompatibilityModuleCatalog.modules 的模块 id 同源）；
+		// packId 撞保留名在校验段拒载，绝不让它走到 Compose 的白名单校验（降级不变量）。
+		static readonly string[] ReservedModuleIds =
+		{
+			"gemuera.v24", "game.snake", "game.erafl", "gemuera.v18", "game.erablue", "game.megaten",
+		};
+
 		// v1 内置变体名录（与引擎 LegacyInstructionVariant 的内置映射对应；投影接线
 		// 增量落地 handler 替换，当前仅账本/哈希语义）。
 		static readonly string[] BuiltinVariantNames = { "builtin:v24", "builtin:snake" };
@@ -51,7 +58,8 @@ namespace MinorShift.Emuera.Compatibility
 				capabilities,
 				new HashSet<string>(BuiltinVariantNames, StringComparer.Ordinal),
 				new HashSet<string>(LegacyDialectInventories.V24InstructionNames, StringComparer.Ordinal),
-				new HashSet<string>(LegacyDialectInventories.V24Functions.Select(entry => entry.Name), StringComparer.Ordinal));
+				new HashSet<string>(LegacyDialectInventories.V24Functions.Select(entry => entry.Name), StringComparer.Ordinal),
+				new HashSet<string>(ReservedModuleIds, StringComparer.Ordinal));
 		}
 
 		/// <summary>引擎包 API 版本（v1 = 1；破坏性变更时递增并拒载旧包）。</summary>
@@ -78,12 +86,14 @@ namespace MinorShift.Emuera.Compatibility
 			var context = BuildValidationContext();
 			if (!CompatPackLoader.TryLoadSet(paths, context, out CompatPackSet? set, out IReadOnlyList<string> loadErrors))
 			{
+				ActivePackModuleIds = null;
 				global::GenericUtils.Error("[LOAD] CompatPack disabled (load rejected): " + string.Join("; ", loadErrors));
 				return baselinePlan;
 			}
 
 			if (!VerifyGameIdentity(set!, gameRoot, out List<string> identityErrors))
 			{
+				ActivePackModuleIds = null;
 				set!.UnloadAll();
 				global::GenericUtils.Error("[LOAD] CompatPack disabled (game identity mismatch): " + string.Join("; ", identityErrors));
 				return baselinePlan;
@@ -91,6 +101,7 @@ namespace MinorShift.Emuera.Compatibility
 
 			if (!CompatPackPlanAssembler.TryAssemble(baselinePlan, set!.Handles, out CompatibilityPlan assembled, out IReadOnlyList<string> assemblyErrors))
 			{
+				ActivePackModuleIds = null;
 				set!.UnloadAll();
 				global::GenericUtils.Error("[LOAD] CompatPack disabled (assembly rejected): " + string.Join("; ", assemblyErrors));
 				return baselinePlan;
@@ -132,7 +143,7 @@ namespace MinorShift.Emuera.Compatibility
 			bool allMatch = true;
 			foreach (CompatPackHandle handle in set.Handles)
 			{
-				global::Emuera.Compatibility.Packs.CompatPackGameIdentity identity = handle.Manifest.GameIdentity;
+				global::Emuera.Compatibility.Packs.CompatPackGameIdentity? identity = handle.Manifest.GameIdentity;
 				if (identity is null)
 					continue;
 				if (!CompatPackGameIdentityCheck.Matches(identity, gameCode, version))
