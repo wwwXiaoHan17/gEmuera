@@ -259,7 +259,7 @@ static class Program
 
             // 诊断提示（TryGetUnselectedModuleHint）：v24pure 下查询 snake 专属名字 → 归属 game.snake；
             // snake 会话查询其自身隐藏的函数形态 → 不提示。
-            Assert(v24.TryGetUnselectedModuleHint("SETANIMETIMER", out string hintModule1) && hintModule1 == "game.snake",
+            Assert(v24.TryGetUnselectedModuleHint("SETANIMETIMER", out string? hintModule1) && hintModule1 == "game.snake",
                 "v24pure 查询 SETANIMETIMER 应提示归属 game.snake。");
             Assert(v24.TryGetUnselectedModuleHint("SQL_CONNECT", out _),
                 "v24pure 查询 SQL_CONNECT 应提示归属 snake 模块。");
