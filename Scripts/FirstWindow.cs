@@ -112,7 +112,6 @@ public partial class FirstWindow : Control
 	Label manualStatusLabel;
 	CheckButton advancedCompatibilityToggle;
 	OptionButton compatibilityProfileOption;
-	LineEdit compatPackPathsEdit;
 	MarginContainer launcherMargin;
 	SafeAreaApplicator launcherSafeArea;
 	Button v24TabButton;
@@ -655,19 +654,9 @@ public partial class FirstWindow : Control
 		compatibilityProfileOption.Visible = AdvancedCompatibilityEnabled;
 		settings.AddChild(compatibilityProfileOption);
 
-		compatPackPathsEdit = new LineEdit();
-		compatPackPathsEdit.PlaceholderText = MultiLanguage.Get(
-			"FirstWindow.CompatPackPaths",
-			"兼容包路径（多个用分号分隔，按所选游戏保存）");
-		compatPackPathsEdit.TooltipText = MultiLanguage.Get(
-			"FirstWindow.CompatPackPathsTooltip",
-			"为当前选中的游戏启用兼容包（.dll，需内嵌清单）。留空 = 纯 v24；加载失败自动回退并记录日志。");
-		compatPackPathsEdit.CustomMinimumSize = new Vector2(0, 36);
-		compatPackPathsEdit.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-		compatPackPathsEdit.AddThemeFontSizeOverride("font_size", 14);
-		compatPackPathsEdit.TextSubmitted += _ => CommitCompatPackEdit();
-		compatPackPathsEdit.FocusExited += CommitCompatPackEdit;
-		settings.AddChild(compatPackPathsEdit);
+		// 兼容包选择 UI（扫描候选勾选 + 手动路径，移动端优先）整体在
+		// FirstWindow.CompatPackUi.cs（partial）构建，这里只挂接。
+		settings.AddChild(CreateCompatPackPicker());
 
 		return settings;
 	}
@@ -712,28 +701,8 @@ public partial class FirstWindow : Control
 	}
 
 	// —— 兼容包按游戏选择（launcher.cfg [compat_packs]；env 变量为进程内传递通道）——
-
-	void LoadCompatPackEditForGame(LauncherGameEntry entry)
-	{
-		if (compatPackPathsEdit == null || entry == null)
-			return;
-		GEmuera.Core.Compatibility.Packs.CompatPackLauncherConfig.TryGetSelectionForGame(
-			gEmuera.GodotHost.LauncherSettingsStore.LoadCompatPackSelections(),
-			entry.GameRoot,
-			out var paths);
-		compatPackPathsEdit.Text = GEmuera.Core.Compatibility.Packs.CompatPackLauncherConfig.SerializeSelection(paths);
-	}
-
-	void CommitCompatPackEdit()
-	{
-		if (compatPackPathsEdit == null || !TryGetSelectedGameEntry(out LauncherGameEntry entry))
-			return;
-		// 经 parse→serialize 归一（去空/去重），空串清除该游戏的选择。
-		string packed = GEmuera.Core.Compatibility.Packs.CompatPackLauncherConfig.SerializeSelection(
-			GEmuera.Core.Compatibility.Packs.CompatPackLauncherConfig.ParseSelection(compatPackPathsEdit.Text));
-		gEmuera.GodotHost.LauncherSettingsStore.SaveCompatPackSelection(
-			GEmuera.Core.Compatibility.Packs.CompatPackLauncherConfig.NormalizeGameKey(entry.GameRoot), packed);
-	}
+	// 选择 UI（候选扫描勾选 + 手动路径合并 + 提交防御）在 FirstWindow.CompatPackUi.cs；
+	// 此处只保留启动注入链：外部覆盖快照 + 按游戏写环境变量。
 
 	/// <summary>
 	/// 进程启动时的外部覆盖快照（类加载即取，早于任何注入调用）。非空 = 外部诊断/联调
@@ -938,6 +907,10 @@ public partial class FirstWindow : Control
 			selectedPath = selectedEntry.GameRoot;
 		if (string.IsNullOrEmpty(selectedPath))
 			selectedPath = ResolveStartupGamePath();
+
+		// 兼容包候选与游戏列表同生命周期刷新（进页/切 tab/授权后都会走到这里），
+		// 且必须先于 PopulateGameList 的恢复选中回填完成。
+		ScanCompatPackCandidates();
 
 		gameList.Clear();
 		gameEntries.Clear();
@@ -1425,6 +1398,10 @@ public partial class FirstWindow : Control
 			{
 				gameList.Select(gameList.ItemCount - 1);
 				startButton.Disabled = false;
+				// 程序化 Select 不触发 item_selected（Godot 信号语义），OnGameSelected
+				// 不会执行，这里显式补齐它会做的包选择回填——否则用户直接点 Start 时
+				// 提交的是空 UI 态，会按“空串清键”抹掉该游戏已存的包选择。
+				LoadCompatPackEditForGame(entry);
 			}
 		}
 	}

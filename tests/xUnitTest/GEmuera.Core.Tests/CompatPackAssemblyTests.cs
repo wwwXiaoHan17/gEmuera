@@ -23,7 +23,35 @@ public class CompatPackAssemblyTests
         },
         new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
         new HashSet<string>(LegacyDialectInventories.V24InstructionNames, StringComparer.Ordinal),
-        new HashSet<string>(LegacyDialectInventories.V24Functions.Select(entry => entry.Name), StringComparer.Ordinal));
+        new HashSet<string>(LegacyDialectInventories.V24Functions.Select(entry => entry.Name), StringComparer.Ordinal),
+        // 引擎 handler 全集（与宿主 BuildValidationContext 同口径：六 profile 清单并集），
+        // 端到端证明真实夹具包（注册 SETANIMETIMER/SQL_CONNECT）穿过 handler 对账。
+        knownInstructionHandlers: EngineInstructionHandlers(),
+        knownFunctionHandlers: EngineFunctionHandlers());
+
+    static HashSet<string> EngineInstructionHandlers()
+    {
+        var union = new HashSet<string>(StringComparer.Ordinal);
+        union.UnionWith(LegacyDialectInventories.V24InstructionNames);
+        union.UnionWith(LegacyDialectInventories.SnakeDeltaInstructionNames);
+        union.UnionWith(LegacyDialectInventories.EraFlDeltaInstructionNames);
+        union.UnionWith(LegacyDialectInventories.EraBlueDeltaInstructionNames);
+        union.UnionWith(LegacyDialectInventories.MegatenDeltaInstructionNames);
+        union.UnionWith(LegacyDialectInventories.V18InstructionNames);
+        return union;
+    }
+
+    static HashSet<string> EngineFunctionHandlers()
+    {
+        var union = new HashSet<string>(StringComparer.Ordinal);
+        union.UnionWith(LegacyDialectInventories.V24Functions.Select(entry => entry.Name));
+        union.UnionWith(LegacyDialectInventories.SnakeDeltaFunctions.Select(entry => entry.Name));
+        union.UnionWith(LegacyDialectInventories.EraFlDeltaFunctions.Select(entry => entry.Name));
+        union.UnionWith(LegacyDialectInventories.EraBlueDeltaFunctions.Select(entry => entry.Name));
+        union.UnionWith(LegacyDialectInventories.MegatenDeltaFunctions.Select(entry => entry.Name));
+        union.UnionWith(LegacyDialectInventories.V18Functions.Select(entry => entry.Name));
+        return union;
+    }
 
     static CompatibilityPlan Baseline() => BuiltInDialectCatalog.CreateLegacySessionPlan("v24pure");
 
@@ -45,15 +73,22 @@ public class CompatPackAssemblyTests
             Assert.True(assembled.Dialect.TryGetFunction("SQL_CONNECT", out var addedFunction));
             Assert.Equal("Int64", addedFunction.ReturnType);
             Assert.False(assembled.Dialect.TryGetFunction("EXISTVAR", out _));
+            // 函数名镜像声明进指令面：引擎把可见表达式函数投影为 METHOD 指令进解析器指令
+            // 注册表，会话校验要求指令侧声明（App 路径探针曾抛 "Legacy instruction
+            // 'SQL_CONNECT' is not declared by the compatibility plan"，此断言钉住该回归）。
+            Assert.True(assembled.Dialect.TryGetInstruction("SQL_CONNECT", out var mirroredInstruction));
+            Assert.Equal("test.hello-pack", mirroredInstruction.ModuleId);
 
-            // 计数守恒：v24 基线 561/266，包 +1/-1 恰好平衡。
-            Assert.Equal(baseline.Dialect.Instructions.Count, assembled.Dialect.Instructions.Count);
+            // 计数：v24 基线 561/266；指令 +SETANIMETIMER +镜像SQL_CONNECT -CALLSHARP 净+1，
+            // 函数 +SQL_CONNECT -EXISTVAR 平衡。
+            Assert.Equal(baseline.Dialect.Instructions.Count + 1, assembled.Dialect.Instructions.Count);
             Assert.Equal(baseline.Dialect.Functions.Count, assembled.Dialect.Functions.Count);
 
-            // capability 账本并入（manifest 2 + capability 贡献 1 + policy 绑定 1）。
+            // capability 账本并入（manifest 2 + capability 贡献 1；策略贡献 v1 未接线、
+            // 加载即拒载，其绑定 id 不得再进账本——DoesNotContain 钉住该回归）。
             Assert.Contains("input.pointer-button.v1", assembled.CapabilityIds);
             Assert.Contains("markup.div-v2.v1", assembled.CapabilityIds);
-            Assert.Contains("parse.diagnostics.v1", assembled.CapabilityIds);
+            Assert.DoesNotContain("parse.diagnostics.v1", assembled.CapabilityIds);
 
             // 模块闭包 = 基线 + 包合成快照。
             Assert.Equal(baseline.Dialect.Modules.Count + 1, assembled.Dialect.Modules.Count);
@@ -146,7 +181,13 @@ public class CompatPackAssemblyTests
     // —— 以下用手工句柄（internal 构造点，经 InternalsVisibleTo）直接钉哈希组成与
     //    跨包变体对账，不依赖程序集加载路径 ——
 
-    static CompatPackHandle ManualHandle(string packId, string packSha256, IReadOnlyDictionary<string, string>? variantSelections = null)
+    static CompatPackHandle ManualHandle(
+        string packId,
+        string packSha256,
+        IReadOnlyDictionary<string, string>? variantSelections = null,
+        IReadOnlyList<ISurfaceContribution>? surface = null,
+        IReadOnlyList<ICapabilityContribution>? capabilities = null,
+        IReadOnlyList<IPolicyContribution>? policies = null)
     {
         // CompatPackManifest 的构造器在 Emuera 契约程序集内为 internal（测试程序集无
         // InternalsVisibleTo），经 public TryParse 构造；变体选拼进 JSON。
@@ -159,8 +200,8 @@ public class CompatPackAssemblyTests
             ? parsed! : throw new InvalidOperationException(string.Join("; ", parseErrors));
         return new CompatPackHandle(
             manifest, null!, "Z:/manual/" + packId + ".dll", packSha256, packSha256,
-            Array.Empty<ISurfaceContribution>(), Array.Empty<ICapabilityContribution>(),
-            Array.Empty<IInstructionVariantContribution>(), Array.Empty<IPolicyContribution>(),
+            surface ?? Array.Empty<ISurfaceContribution>(), capabilities ?? Array.Empty<ICapabilityContribution>(),
+            Array.Empty<IInstructionVariantContribution>(), policies ?? Array.Empty<IPolicyContribution>(),
             new CompatPackLoadContext("Z:/manual/" + packId + ".dll"));
     }
 
@@ -211,5 +252,103 @@ public class CompatPackAssemblyTests
         Assert.True(CompatPackPlanAssembler.TryAssemble(Baseline(), new[] { plain }, out var planPlain, out _));
         Assert.True(CompatPackPlanAssembler.TryAssemble(Baseline(), new[] { withSelection }, out var planSelected, out _));
         Assert.NotEqual(planPlain!.CanonicalHash, planSelected!.CanonicalHash);
+    }
+
+    // —— hide 基线不对称（P2-G）：v24 清单内、当前 profile 基线缺席的隐藏名 = 良性 no-op ——
+
+    sealed class HideSetBgImageSurface : ISurfaceContribution
+    {
+        public string ContributionId => "test.hide-noop.surface";
+        public void Apply(IInstructionSurfaceRegistry instructions, IFunctionSurfaceRegistry functions)
+            => instructions.HideInstruction("SETBGIMAGE");
+    }
+
+    [Fact]
+    public void Assemble_HideNameAbsentFromSessionBaseline_IsBenignNoOp()
+    {
+        // v18 会话基线不含 v24 后增指令 SETBGIMAGE（v24 清单内合法隐藏目标）；
+        // 组装不得以"规则漂移"整体拒载——归类良性 no-op（隐藏差量仍进哈希，包意图可复现）。
+        CompatibilityPlan v18 = BuiltInDialectCatalog.CreateLegacySessionPlan("v18");
+        Assert.False(v18.Dialect.TryGetInstruction("SETBGIMAGE", out _), "前置：SETBGIMAGE 不在 v18 基线。");
+
+        var handle = ManualHandle("test.hide-noop", ShaOf('c'), surface: new[] { new HideSetBgImageSurface() });
+        Assert.True(CompatPackPlanAssembler.TryAssemble(v18, new[] { handle }, out var assembled, out var errors),
+            string.Join("; ", errors));
+        Assert.False(assembled!.Dialect.TryGetInstruction("SETBGIMAGE", out _));
+        // 表面与 v18 基线一致，但哈希计入隐藏差量（区别于未声明该隐藏的同字节包）。
+        Assert.Equal(v18.Dialect.Instructions.Count, assembled.Dialect.Instructions.Count);
+        Assert.NotEqual(v18.CanonicalHash, assembled.CanonicalHash);
+    }
+
+    // —— 组装段二轮回放异常安全（P1-2a）：校验期首轮回放通过、组装期第二轮抛异常的
+    //    非幂等贡献——TryAssemble 自身契约必须是"返回 false + 错误清单"而非抛异常，
+    //    不依赖宿主 ConfigureForLaunch 的顶层 catch ——
+    //    经手工句柄（internal 构造点，InternalsVisibleTo）构造，不经程序集加载路径。
+
+    sealed class ThrowingSurfaceContribution : ISurfaceContribution
+    {
+        public string ContributionId => "test.replay-throw.surface";
+        public void Apply(IInstructionSurfaceRegistry instructions, IFunctionSurfaceRegistry functions)
+            => throw new InvalidOperationException("surface-replay-boom");
+    }
+
+    sealed class ThrowingCapabilityContribution : ICapabilityContribution
+    {
+        public string ContributionId => "test.replay-throw.capability";
+        public IReadOnlyList<string> CapabilityIds => throw new InvalidOperationException("capability-replay-boom");
+    }
+
+    sealed class ThrowingPolicyContribution : IPolicyContribution
+    {
+        public string ContributionId => "test.replay-throw.policy";
+        public IReadOnlyList<EnginePolicyBinding> Policies => throw new InvalidOperationException("policy-replay-boom");
+    }
+
+    [Fact]
+    public void Assemble_SurfaceApplyThrows_RejectsWithoutExceptionEscaping()
+    {
+        var handle = ManualHandle("test.replay-throw", ShaOf('d'), surface: new[] { new ThrowingSurfaceContribution() });
+
+        var exception = Record.Exception(() =>
+        {
+            Assert.False(CompatPackPlanAssembler.TryAssemble(Baseline(), new[] { handle }, out var assembled, out var errors));
+            Assert.Null(assembled);
+            // 文案三要素：包 id + 贡献 id + 异常消息。
+            Assert.Contains(errors!, e => e.Contains("test.replay-throw")
+                && e.Contains("test.replay-throw.surface") && e.Contains("surface-replay-boom"));
+        });
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void Assemble_CapabilityGetterThrows_RejectsWithoutExceptionEscaping()
+    {
+        var handle = ManualHandle("test.replay-throw", ShaOf('d'), capabilities: new[] { new ThrowingCapabilityContribution() });
+
+        var exception = Record.Exception(() =>
+        {
+            Assert.False(CompatPackPlanAssembler.TryAssemble(Baseline(), new[] { handle }, out var assembled, out var errors));
+            Assert.Null(assembled);
+            Assert.Contains(errors!, e => e.Contains("test.replay-throw")
+                && e.Contains("test.replay-throw.capability") && e.Contains("capability-replay-boom"));
+        });
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void Assemble_PolicyGetterThrows_RejectsWithoutExceptionEscaping()
+    {
+        // 策略贡献经加载器路径已不可能到达组装段（v1 未接线、加载即拒载），本用例钉住
+        // 手工句柄/二轮回放路径的防御性契约（异常仍不得逃逸）。
+        var handle = ManualHandle("test.replay-throw", ShaOf('d'), policies: new[] { new ThrowingPolicyContribution() });
+
+        var exception = Record.Exception(() =>
+        {
+            Assert.False(CompatPackPlanAssembler.TryAssemble(Baseline(), new[] { handle }, out var assembled, out var errors));
+            Assert.Null(assembled);
+            Assert.Contains(errors!, e => e.Contains("test.replay-throw")
+                && e.Contains("test.replay-throw.policy") && e.Contains("policy-replay-boom"));
+        });
+        Assert.Null(exception);
     }
 }

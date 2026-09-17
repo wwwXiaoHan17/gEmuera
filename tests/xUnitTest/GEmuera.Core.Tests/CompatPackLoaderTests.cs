@@ -36,7 +36,8 @@ public class CompatPackLoaderTests
         Assert.DoesNotContain("SETANIMETIMER", LegacyDialectInventories.V24InstructionNames);
         Assert.Contains("EXISTVAR", LegacyDialectInventories.V24Functions.Select(entry => entry.Name));
         Assert.DoesNotContain("SQL_CONNECT", LegacyDialectInventories.V24Functions.Select(entry => entry.Name));
-        // 变体绑定/清单选择的目标指令必须在基线内（交叉对账前置事实）。
+        // 清单变体选择的目标指令必须在基线内（交叉对账前置事实）；PRINT 供规则直测的
+        // 变体贡献拒载向用例做基线前置，一并钉住。
         Assert.Contains("PRINT", LegacyDialectInventories.V24InstructionNames);
         Assert.Contains("SETBGIMAGE", LegacyDialectInventories.V24InstructionNames);
     }
@@ -50,8 +51,9 @@ public class CompatPackLoaderTests
         Assert.Equal("test.hello-pack", handle!.Manifest.PackId);
         Assert.Single(handle.Surface);
         Assert.Single(handle.Capabilities);
-        Assert.Single(handle.Variants);
-        Assert.Single(handle.Policies);
+        // v1 死契约（评审 P2-6）：变体/策略贡献加载即拒载，正向夹具不得携带——句柄侧恒为空。
+        Assert.Empty(handle.Variants);
+        Assert.Empty(handle.Policies);
         Assert.Matches("^[0-9a-f]{64}$", handle.AssemblySha256);
         Assert.Matches("^[0-9a-f]{64}$", handle.PackSha256);
         Assert.NotEqual(handle.AssemblySha256, handle.PackSha256);

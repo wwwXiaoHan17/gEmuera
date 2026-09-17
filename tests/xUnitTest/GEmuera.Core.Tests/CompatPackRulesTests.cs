@@ -54,6 +54,12 @@ public class CompatPackRulesTests
         public IReadOnlyList<string>? CapabilityIds { get; init; } = Array.Empty<string>();
     }
 
+    sealed class StubPolicy : IPolicyContribution
+    {
+        public string ContributionId { get; init; } = "stub.policy";
+        public IReadOnlyList<EnginePolicyBinding>? Policies { get; init; } = Array.Empty<EnginePolicyBinding>();
+    }
+
     [Fact]
     public void Validate_PackIdMatchesReservedModuleName_Rejects()
     {
@@ -242,6 +248,8 @@ public class CompatPackRulesTests
     [Fact]
     public void Validate_UnknownPolicyCapability_Rejects()
     {
+        // 注：v1 策略贡献整体拒载（见 Validate_PolicyContribution_V1NotWired_Rejects），
+        // 本用例钉住结构性校验（未知 capability id）在拒载之外仍照常报告（错误全量收集）。
         var policy = new HelloPolicyContribution(); // 绑定 parse.diagnostics.v1
         string json = "{\"packId\":\"test.rules\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1}";
         var manifest = CompatPackManifest.TryParse(json, out var m, out _)
@@ -254,6 +262,37 @@ public class CompatPackRulesTests
             new HashSet<string>(StringComparer.Ordinal) { "EXISTVAR" });
         Assert.False(CompatPackRules.Validate(manifest, new ICompatPackContribution[] { policy }, stricter, out var errors));
         Assert.Contains(errors, e => e.Contains("parse.diagnostics.v1"));
+    }
+
+    // —— v1 死契约显式拒载（评审 P2-6，用户裁定 fail-closed）：IInstructionVariantContribution
+    //    与 IPolicyContribution 已发布为公共契约但宿主零消费——按文档写只会静默 no-op，
+    //    必须加载期拒载并指引 manifest 通道（v2 接线后移除）。——
+
+    [Fact]
+    public void Validate_VariantContribution_V1NotWired_Rejects()
+    {
+        var variant = new StubVariant
+        {
+            ContributionId = "variant.dead",
+            Bindings = new[] { new InstructionVariantBinding("PRINT", new HelloVariantFactory()) },
+        };
+        Assert.False(CompatPackRules.Validate(Manifest(), new ICompatPackContribution[] { variant }, Context(), out var errors));
+        // 文案含包 id 与贡献 id，并明确 v1 未接线 + manifest 通道指引。
+        Assert.Contains(errors, e => e.Contains("v1 未接线") && e.Contains("test.rules") && e.Contains("variant.dead"));
+        Assert.Contains(errors, e => e.Contains("variantSelections"));
+    }
+
+    [Fact]
+    public void Validate_PolicyContribution_V1NotWired_Rejects()
+    {
+        var policy = new StubPolicy
+        {
+            ContributionId = "policy.dead",
+            Policies = new[] { new EnginePolicyBinding("parse.diagnostics.v1") },
+        };
+        Assert.False(CompatPackRules.Validate(Manifest(), new ICompatPackContribution[] { policy }, Context(), out var errors));
+        Assert.Contains(errors, e => e.Contains("v1 未接线") && e.Contains("test.rules") && e.Contains("policy.dead"));
+        Assert.Contains(errors, e => e.Contains("variantSelections"));
     }
 
     [Fact]
@@ -273,5 +312,114 @@ public class CompatPackRulesTests
         };
         Assert.False(CompatPackRules.Validate(Manifest(), new ICompatPackContribution[] { binding }, Context(), out var errors));
         Assert.Contains(errors, e => e.Contains("工厂为空"));
+    }
+
+    // —— 引擎 handler 对账（宿主传入 Known{Instruction,Function}Handlers 全集时启用）——
+
+    static CompatPackValidationContext ContextWithHandlers(
+        IReadOnlySet<string> instructionHandlers,
+        IReadOnlySet<string> functionHandlers) => new(
+        1,
+        new HashSet<string>(StringComparer.Ordinal) { "parse.diagnostics.v1" },
+        new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
+        new HashSet<string>(StringComparer.Ordinal) { "CALLSHARP", "SETBGIMAGE", "PRINT" },
+        new HashSet<string>(StringComparer.Ordinal) { "EXISTVAR" },
+        reservedModuleIds: null,
+        knownBuiltinVariantInstructions: null,
+        knownInstructionHandlers: instructionHandlers,
+        knownFunctionHandlers: functionHandlers);
+
+    [Fact]
+    public void Validate_RegisteredInstructionWithoutEngineHandler_Rejects()
+    {
+        // 拼错/未收录的指令名若穿过校验，会进 plan 哈希却在会话注册表投影时静默无
+        // handler 可绑（运行期"未知指令"）——必须在加载段拒载，文案含名字与包 id。
+        var surface = new StubSurfaceDo { Do = (instructions, _) => instructions.RegisterInstruction("TOTALLY_MISSPELED") };
+        var context = ContextWithHandlers(
+            new HashSet<string>(StringComparer.Ordinal) { "SETANIMETIMER", "SETIMAGELAYER" },
+            new HashSet<string>(StringComparer.Ordinal));
+        Assert.False(CompatPackRules.Validate(Manifest(), new ICompatPackContribution[] { surface }, context, out var errors));
+        Assert.Contains(errors, e => e.Contains("无引擎 handler") && e.Contains("TOTALLY_MISSPELED") && e.Contains("test.rules"));
+    }
+
+    [Fact]
+    public void Validate_RegisteredFunctionWithoutEngineHandler_Rejects()
+    {
+        var surface = new StubSurfaceDo { Do = (_, functions) => functions.RegisterFunction("NOSUCHFUNC", "Int64") };
+        var context = ContextWithHandlers(
+            new HashSet<string>(StringComparer.Ordinal),
+            new HashSet<string>(StringComparer.Ordinal) { "SQL_CONNECT" });
+        Assert.False(CompatPackRules.Validate(Manifest(), new ICompatPackContribution[] { surface }, context, out var errors));
+        Assert.Contains(errors, e => e.Contains("无引擎 handler") && e.Contains("NOSUCHFUNC") && e.Contains("函数"));
+    }
+
+    [Fact]
+    public void Validate_RegisteredNamesWithEngineHandlers_Succeeds()
+    {
+        // 有 handler 的注册名放行；SETANIMETIMER 同时是内置模块（snake/erafl）可 Declare
+        // 的合法名——基准并集必须覆盖它，不得误拒"复暴露内置模块声明名"的包。
+        var surface = new StubSurfaceDo
+        {
+            Do = (instructions, functions) =>
+            {
+                instructions.RegisterInstruction("SETANIMETIMER");
+                functions.RegisterFunction("SQL_CONNECT", "Int64");
+            }
+        };
+        var context = ContextWithHandlers(
+            new HashSet<string>(StringComparer.Ordinal) { "SETANIMETIMER", "SETIMAGELAYER" },
+            new HashSet<string>(StringComparer.Ordinal) { "SQL_CONNECT" });
+        Assert.True(CompatPackRules.Validate(Manifest(), new ICompatPackContribution[] { surface }, context, out var errors),
+            string.Join("; ", errors));
+    }
+
+    [Fact]
+    public void Validate_HandlerSetsOmitted_SkipsHandlerReconciliation()
+    {
+        // 缺省（空集）= 跳过 handler 对账（测试/轻量场景兼容）；名字仍受基线同名规则约束。
+        var surface = new StubSurfaceDo { Do = (instructions, _) => instructions.RegisterInstruction("TOTALLY_MISSPELED") };
+        Assert.True(CompatPackRules.Validate(Manifest(), new ICompatPackContribution[] { surface }, Context(), out var errors),
+            string.Join("; ", errors));
+    }
+
+    // —— 函数名规范化语义钉住：引擎 IsFunctionVisible 按 Trim 原样（Ordinal）比对，
+    //    规则层 Trim+ToUpper 之所以等价，依赖引擎函数注册表键全为"规范化不变"形态
+    //    （纯大写 ASCII / 无大小写 CJK）。生成清单由引擎真实投影导出，在此钉住该假设。——
+
+    public static IEnumerable<object[]> EngineFunctionInventoryNames()
+    {
+        IEnumerable<string> Collect(params IEnumerable<GEmuera.Core.Compatibility.LegacyFunctionInventoryEntry>[] inventories)
+        {
+            foreach (IEnumerable<GEmuera.Core.Compatibility.LegacyFunctionInventoryEntry> inventory in inventories)
+                foreach (GEmuera.Core.Compatibility.LegacyFunctionInventoryEntry entry in inventory)
+                    yield return entry.Name;
+        }
+        // 注意包一层 object[]：直接 yield string[] 会因数组协变被 xUnit 拆成 N 个参数。
+        yield return new object[] { Collect(
+            GEmuera.Core.Compatibility.LegacyDialectInventories.V24Functions,
+            GEmuera.Core.Compatibility.LegacyDialectInventories.SnakeDeltaFunctions,
+            GEmuera.Core.Compatibility.LegacyDialectInventories.EraFlDeltaFunctions,
+            GEmuera.Core.Compatibility.LegacyDialectInventories.EraBlueDeltaFunctions,
+            GEmuera.Core.Compatibility.LegacyDialectInventories.MegatenDeltaFunctions,
+            GEmuera.Core.Compatibility.LegacyDialectInventories.V18Functions).ToArray() };
+    }
+
+    [Theory]
+    [MemberData(nameof(EngineFunctionInventoryNames))]
+    public void EngineFunctionInventories_AreNormalizationStable(string[] names)
+    {
+        // 任一函数名经 Trim().ToUpperInvariant() 后必须与自身一致——否则规则层的规范化
+        // 与引擎 Trim 原样比对语义分歧（现状被注册表全大写掩盖），本测试先红以示警。
+        foreach (string name in names)
+            Assert.Equal(name, name.Trim().ToUpperInvariant());
+    }
+
+    [Fact]
+    public void Validate_HideFunction_NormalizesLowercaseInputToBaselineForm()
+    {
+        // 小写/带空白输入经规范化后命中基线名（EXISTVAR）——与引擎注册表全大写键等价。
+        var surface = new StubSurfaceDo { Do = (_, functions) => functions.HideFunction(" existvar ") };
+        Assert.True(CompatPackRules.Validate(Manifest(), new ICompatPackContribution[] { surface }, Context(), out var errors),
+            string.Join("; ", errors));
     }
 }
