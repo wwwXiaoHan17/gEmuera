@@ -44,3 +44,13 @@ Core.Tests 78/78（+5 配置语义）、全门禁绿。
 Core.Tests 78/78（+5 CompatPackLauncherConfig）、Facade.Tests 33/33；三冒烟全过；
 主工程构建 0 错误、新增代码零警告（仅 dev 存量两条）；Godot 无头构建 DLL 23:33:21
 更新 0 编译错误；新 .uid 2 枚入库。
+
+
+## result-review 返工记录（首轮 92 → 复评见后）
+
+首轮 92/100 三项：核心是**注释契约与实现相反**——CompatPackHost 文档承诺"外部显式
+设置优先于 launcher 注入"，但 ApplyCompatPackEnvironment 无条件覆盖/清除变量，
+外部联调设置在任何启动链（含仅打开 UI）被静默抹除。修复：FirstWindow 静态快照
+`externalCompatPacksOverride`（类加载即取，早于一切注入调用），外部值非空时注入
+完全不碰变量。另收口：测试 null→null!（CS8625）；Store 类头注释补 [compat_packs]
+节职责。复验：主工程 0 错误零新警告、Core.Tests 78/78、三冒烟全过。

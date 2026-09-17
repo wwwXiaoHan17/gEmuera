@@ -5,7 +5,8 @@ using Godot;
 namespace gEmuera.GodotHost;
 
 /// <summary>
-/// user://launcher.cfg [launcher] 节的唯一读写点。
+/// user://launcher.cfg [launcher] 节的唯一读写点；兼容包按游戏选择存于同文件
+/// [compat_packs] 节（键=游戏根目录规范化，见 CompatPackLauncherConfig）。
 /// 路径与键名是存量用户配置及 WS1 引擎侧（emuera_debug_mode / debug_show_window）的契约，不可改名。
 /// 读点在文件缺失/损坏时返回调用方默认值；写点 load-modify-save，保留节内其他键。
 /// profile 字符串的归一化/校验语义留在启动器（FirstWindow），本类只做原始存取。

@@ -735,9 +735,22 @@ public partial class FirstWindow : Control
 			GEmuera.Core.Compatibility.Packs.CompatPackLauncherConfig.NormalizeGameKey(entry.GameRoot), packed);
 	}
 
-	/// <summary>按游戏把启用清单注入进程环境变量（launcher 与引擎同进程；Host 管线不变）。</summary>
+	/// <summary>
+	/// 进程启动时的外部覆盖快照（类加载即取，早于任何注入调用）。非空 = 外部诊断/联调
+	/// 显式设置，launcher 注入对其让位（CompatPackHost 契约：外部显式设置优先）。
+	/// </summary>
+	static readonly string externalCompatPacksOverride =
+		System.Environment.GetEnvironmentVariable(
+			MinorShift.Emuera.Compatibility.CompatPackHost.EnabledPacksEnvironmentVariable);
+
+	/// <summary>
+	/// 按游戏把启用清单注入进程环境变量（launcher 与引擎同进程；Host 管线不变）。
+	/// 外部显式设置存在时不碰变量；无选择（且无外部值）时清除变量，回到纯 v24。
+	/// </summary>
 	static void ApplyCompatPackEnvironment(string gameRoot)
 	{
+		if (!string.IsNullOrEmpty(externalCompatPacksOverride))
+			return;
 		GEmuera.Core.Compatibility.Packs.CompatPackLauncherConfig.TryGetSelectionForGame(
 			gEmuera.GodotHost.LauncherSettingsStore.LoadCompatPackSelections(),
 			gameRoot,

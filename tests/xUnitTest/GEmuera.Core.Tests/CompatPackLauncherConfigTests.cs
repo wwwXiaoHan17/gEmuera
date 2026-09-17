@@ -54,6 +54,6 @@ public class CompatPackLauncherConfigTests
 
         Assert.False(CompatPackLauncherConfig.TryGetSelectionForGame(selections, "D:/Games/Other", out _));
         Assert.False(CompatPackLauncherConfig.TryGetSelectionForGame(selections, null, out _));
-        Assert.False(CompatPackLauncherConfig.TryGetSelectionForGame(null, "D:/Games/EraFL", out _));
+        Assert.False(CompatPackLauncherConfig.TryGetSelectionForGame(null!, "D:/Games/EraFL", out _));
     }
 }
