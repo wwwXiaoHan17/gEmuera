@@ -274,7 +274,7 @@ namespace MinorShift.Emuera.Compatibility
 		public static LegacyCompatibilityProfile Create(
 			CompatibilityPlan plan,
 			bool scopedVariableInstructionsEnabled,
-			System.Collections.Generic.IReadOnlyCollection<string>? packModuleIds)
+			System.Collections.Generic.IReadOnlyCollection<string> packModuleIds)
 		{
 			if (plan == null)
 				throw new ArgumentNullException(nameof(plan));
