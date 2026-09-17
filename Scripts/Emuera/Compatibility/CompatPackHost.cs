@@ -12,12 +12,15 @@ namespace MinorShift.Emuera.Compatibility
 	/// 兼容包宿主接线（设计 §5/§6）：在 legacy 会话计划绑定前，把显式启用的包集合
 	/// 加载（显式发现禁扫描）→ gameIdentity 比对 → 组装进会话计划。任何失败按降级
 	/// 不变量回退纯 v24 基线并记 [LOAD] 错误日志，绝不半加载。
-	/// 启用清单 v1 来源：环境变量 GEMUERA_COMPAT_PACKS（分号分隔的包程序集绝对/相对
-	/// 路径；仿 GEMUERA_AUTOSTART_GAME 先例做诊断/联调入口），launcher 按游戏的包选择
-	/// UI 属后续增量（届时改读 launcher 配置，管线不变）。
+	/// 启用清单来源：进程环境变量 <see cref="EnabledPacksEnvironmentVariable"/>（分号分隔的
+	/// 包程序集路径）。launcher（FirstWindow）按游戏从 launcher.cfg [compat_packs] 节读取
+	/// 选择并在启动场景切换前注入该变量——launcher 与引擎同进程，环境变量即进程内传递通道，
+	/// 加载管线不变；外部显式设置（诊断/联调）优先于 launcher 注入。
 	/// </summary>
 	internal static class CompatPackHost
 	{
+		/// <summary>启用包清单的进程内传递通道（launcher 注入 / 外部诊断覆盖）。</summary>
+		internal const string EnabledPacksEnvironmentVariable = "GEMUERA_COMPAT_PACKS";
 		// 与 tools/legacy-runner/profiles.generated.json 的 profileIds 一致；
 		// capability 词汇表 = 六 profile 声明的能力并集（引擎已收录的全部 quirk id）。
 		static readonly string[] AllProfileIds = { "v24pure", "v18", "snake", "erafl", "erablue", "megaten" };
@@ -40,7 +43,7 @@ namespace MinorShift.Emuera.Compatibility
 		/// <summary>读取启用包路径清单；未设置/全空 = 未启用任何包。</summary>
 		internal static IReadOnlyList<string> ReadEnabledPackPaths()
 		{
-			var raw = Environment.GetEnvironmentVariable("GEMUERA_COMPAT_PACKS") ?? "";
+			var raw = Environment.GetEnvironmentVariable(EnabledPacksEnvironmentVariable) ?? "";
 			var paths = new List<string>();
 			foreach (string entry in raw.Split(';'))
 			{

@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using Godot;
 
 namespace gEmuera.GodotHost;
@@ -95,6 +97,41 @@ public static class LauncherSettingsStore
 		var config = LoadOrEmpty();
 		config.SetValue(Section, EmueraDebugModeKey, emueraDebugMode);
 		config.SetValue(Section, DebugShowWindowKey, debugShowWindow);
+		config.Save(SettingsPath);
+	}
+
+	// —— 兼容包按游戏选择（[compat_packs] 节）——
+	// 键 = 游戏根目录规范化（CompatPackLauncherConfig.NormalizeGameKey），值 = 分号分隔的包路径串。
+	// 本类只做 raw 存取；解析/匹配语义在 Core 的 CompatPackLauncherConfig。
+
+	const string CompatPacksSection = "compat_packs";
+
+	/// <summary>整节读取（游戏键 → 分号串）。文件缺失/节缺失 → 空字典。</summary>
+	public static Dictionary<string, string> LoadCompatPackSelections()
+	{
+		var result = new Dictionary<string, string>(StringComparer.Ordinal);
+		if (!TryLoad(out var config) || !config.HasSection(CompatPacksSection))
+			return result;
+		foreach (string key in config.GetSectionKeys(CompatPacksSection))
+			result[key] = config.GetValue(CompatPacksSection, key, "").As<string>() ?? "";
+		return result;
+	}
+
+	/// <summary>保存单个游戏的选择；空串清除该键（不留孤儿条目）。</summary>
+	public static void SaveCompatPackSelection(string normalizedGameKey, string packedSelection)
+	{
+		if (string.IsNullOrEmpty(normalizedGameKey))
+			return;
+		var config = LoadOrEmpty();
+		if (string.IsNullOrEmpty(packedSelection))
+		{
+			if (config.HasSectionKey(CompatPacksSection, normalizedGameKey))
+				config.EraseSectionKey(CompatPacksSection, normalizedGameKey);
+		}
+		else
+		{
+			config.SetValue(CompatPacksSection, normalizedGameKey, packedSelection);
+		}
 		config.Save(SettingsPath);
 	}
 }
