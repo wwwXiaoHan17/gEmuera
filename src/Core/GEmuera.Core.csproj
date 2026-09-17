@@ -16,7 +16,8 @@
   </ItemGroup>
   <ItemGroup>
     <!-- 组装器/句柄的 internal 构造点需要直测（手工句柄构造哈希与冲突分支），
-         不为此新建夹具程序集。 -->
+         不为此新建夹具程序集。SurfaceSmoke 同理（宿主接线投影用例需要手工句柄）。 -->
     <InternalsVisibleTo Include="GEmuera.Core.Tests" />
+    <InternalsVisibleTo Include="LegacyDialectSurfaceSmoke" />
   </ItemGroup>
 </Project>

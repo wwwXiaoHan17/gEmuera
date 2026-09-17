@@ -55,6 +55,25 @@ public class CompatPackRulesTests
     }
 
     [Fact]
+    public void Validate_PackIdMatchesReservedModuleName_Rejects()
+    {
+        // packId 撞内置方言模块保留名（设计文档示例 packId 即 game.erafl 形态）必须在校验段拒载，
+        // 否则组装后 Compose 白名单校验会以未捕获异常炸掉会话绑定（违反降级不变量）。
+        string json = "{\"packId\":\"game.erafl\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1}";
+        var manifest = CompatPackManifest.TryParse(json, out var m, out _)
+            ? m! : throw new InvalidOperationException();
+        var context = new CompatPackValidationContext(
+            1,
+            new HashSet<string>(StringComparer.Ordinal) { "parse.diagnostics.v1" },
+            new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
+            new HashSet<string>(StringComparer.Ordinal) { "CALLSHARP" },
+            new HashSet<string>(StringComparer.Ordinal) { "EXISTVAR" },
+            new HashSet<string>(StringComparer.Ordinal) { "gemuera.v24", "game.erafl" });
+        Assert.False(CompatPackRules.Validate(manifest, Array.Empty<ICompatPackContribution>(), context, out var errors));
+        Assert.Contains(errors, e => e.Contains("保留名冲突"));
+    }
+
+    [Fact]
     public void Validate_NullContributionElement_Rejects()
     {
         Assert.False(CompatPackRules.Validate(Manifest(), new ICompatPackContribution[] { null! }, Context(), out var errors));

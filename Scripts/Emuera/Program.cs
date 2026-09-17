@@ -73,8 +73,12 @@ namespace MinorShift.Emuera
 			if (boundPlan == null)
 			{
 				var detectedProfile = DetectCoreProfile();
-				ConfigureCompatibilityPlan(BuiltInDialectCatalog.CreateLegacySessionPlan(
-					GetCompatibilityProfileId(detectedProfile)));
+				var sessionPlan = BuiltInDialectCatalog.CreateLegacySessionPlan(
+					GetCompatibilityProfileId(detectedProfile));
+				// 兼容包接线：显式启用的包在会话计划绑定前加载并组装；任何失败回退纯基线
+				// （降级不变量）。配置加载后的重绑沿用同一 boundPlan（组装哈希稳定）。
+				sessionPlan = MinorShift.Emuera.Compatibility.CompatPackHost.ConfigureForLaunch(sessionPlan, ExeDir);
+				ConfigureCompatibilityPlan(sessionPlan);
 				boundPlan = CurrentCompatibilityPlan;
 			}
 #if UEMUERA_DEBUG
@@ -331,7 +335,8 @@ namespace MinorShift.Emuera
 
 			LegacyCompatibilityProfile profile = LegacyCompatibilityProfile.Create(
 				plan,
-				scopedVariableInstructionsEnabled);
+				scopedVariableInstructionsEnabled,
+				MinorShift.Emuera.Compatibility.CompatPackHost.ActivePackModuleIds);
 			var existing = System.Threading.Volatile.Read(ref m1CompatibilityPlan);
 			if (existing != null && !string.Equals(existing.CanonicalHash, plan.CanonicalHash, StringComparison.Ordinal))
 				throw new InvalidOperationException("A different compatibility plan is already bound to the active legacy session.");
