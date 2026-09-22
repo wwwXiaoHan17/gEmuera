@@ -81,6 +81,22 @@ namespace MinorShift.Emuera
 				ConfigureCompatibilityPlan(sessionPlan);
 				boundPlan = CurrentCompatibilityPlan;
 			}
+			else
+			{
+				// 兼容包接线（早绑定路径）：EmueraMain 为让 EmueraContent 在 legacy 工作线程
+				// 启动前读取 profile 显示默认值，会先行绑定基线计划——若无此分支，包加载
+				// 永远不会发生（早绑定在 Main 之前，上面的 null 分支不可达）。顺序约束：
+				// 哈希防御拒绝直接换绑不同计划，故先清绑定（连带清投影静态）→ 再做包加载
+				// （ConfigureForLaunch 重设投影静态）→ 最后绑定组装/回退计划。无包时
+				// HasEnabledPacks 为假，整段跳过，行为与旧路径逐字节等价。
+				if (MinorShift.Emuera.Compatibility.CompatPackHost.HasEnabledPacks())
+				{
+					ClearCompatibilityPlan();
+					var sessionPlan = MinorShift.Emuera.Compatibility.CompatPackHost.ConfigureForLaunch(boundPlan, ExeDir);
+					ConfigureCompatibilityPlan(sessionPlan);
+					boundPlan = CurrentCompatibilityPlan;
+				}
+			}
 #if UEMUERA_DEBUG
 			//debugMode = true;
 
@@ -333,11 +349,30 @@ namespace MinorShift.Emuera
 			if (plan == null)
 				throw new ArgumentNullException(nameof(plan));
 
-			LegacyCompatibilityProfile profile = LegacyCompatibilityProfile.Create(
-				plan,
-				scopedVariableInstructionsEnabled,
-				MinorShift.Emuera.Compatibility.CompatPackHost.ActivePackModuleIds,
-				MinorShift.Emuera.Compatibility.CompatPackHost.ActiveVariantSelections);
+			// 投影注入点的异常兜底：包白名单/变体选择喂给 Compose 后抛出的
+			// InvalidOperationException（白名单撞内置模块、内置变体组合未注册等——
+			// 正常应在加载段拒载）不允许逃逸炸启动。兜底 = 回退无包白名单的历史严格
+			// 路径：按当前 profile 重建纯基线计划组合（计划与投影一致降级为该 profile
+			// 的无包基线，非 v24 时保持原 profile）。
+			LegacyCompatibilityProfile profile;
+			try
+			{
+				profile = LegacyCompatibilityProfile.Create(
+					plan,
+					scopedVariableInstructionsEnabled,
+					MinorShift.Emuera.Compatibility.CompatPackHost.ActivePackModuleIds,
+					MinorShift.Emuera.Compatibility.CompatPackHost.ActiveVariantSelections);
+			}
+			catch (Exception exception)
+			{
+				global::GenericUtils.Error("[LOAD] CompatPack projection failed, fallback to no-pack composition: "
+					+ exception.GetType().Name + ": " + exception.Message);
+				// 降级后投影静态不再合法（属已失败的包计划），同步复位——否则下方
+				// :145 语义的重组合会把残留变体选择再次喂给基线 Create。
+				MinorShift.Emuera.Compatibility.CompatPackHost.ResetActiveSessionProjection();
+				plan = BuiltInDialectCatalog.CreateLegacySessionPlan(plan.ProfileId);
+				profile = LegacyCompatibilityProfile.Create(plan, scopedVariableInstructionsEnabled);
+			}
 			var existing = System.Threading.Volatile.Read(ref m1CompatibilityPlan);
 			if (existing != null && !string.Equals(existing.CanonicalHash, plan.CanonicalHash, StringComparison.Ordinal))
 				throw new InvalidOperationException("A different compatibility plan is already bound to the active legacy session.");
@@ -346,6 +381,7 @@ namespace MinorShift.Emuera
 			System.Threading.Volatile.Write(ref m1CompatibilityProfile, profile);
 		}
 
+		/// <summary>条件解绑：仅当当前绑定计划与传入计划同哈希时清理（canary 失败回滚路径）。</summary>
 		internal static void ClearCompatibilityPlan(CompatibilityPlan plan)
 		{
 			if (plan == null)
@@ -355,6 +391,9 @@ namespace MinorShift.Emuera
 			{
 				System.Threading.Volatile.Write(ref m1CompatibilityPlan, null);
 				System.Threading.Volatile.Write(ref m1CompatibilityProfile, null);
+				// 计划解绑时同步清包投影静态：投影只对其所属计划合法，防止后续早绑定
+				// （EmueraMain 显示默认值路径）消费上一会话残留的白名单/变体选择。
+				MinorShift.Emuera.Compatibility.CompatPackHost.ResetActiveSessionProjection();
 			}
 		}
 
@@ -367,6 +406,7 @@ namespace MinorShift.Emuera
 		{
 			System.Threading.Volatile.Write(ref m1CompatibilityPlan, null);
 			System.Threading.Volatile.Write(ref m1CompatibilityProfile, null);
+			MinorShift.Emuera.Compatibility.CompatPackHost.ResetActiveSessionProjection();
 		}
 
 		private static void ApplyAndroidWindowWidthPolicy()
@@ -443,6 +483,7 @@ namespace MinorShift.Emuera
 			DebugShowWindowOverride = null;
 			System.Threading.Volatile.Write(ref m1CompatibilityPlan, null);
 			System.Threading.Volatile.Write(ref m1CompatibilityProfile, null);
+			MinorShift.Emuera.Compatibility.CompatPackHost.ResetActiveSessionProjection();
 			StartTime = 0;
 		}
 

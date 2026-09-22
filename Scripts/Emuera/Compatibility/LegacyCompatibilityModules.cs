@@ -218,21 +218,14 @@ namespace MinorShift.Emuera.Compatibility
 
 		/// <summary>
 		/// 包表面差量回放：从「组装 plan - 同 profile 无包基线 plan」反推包的 register/hide，
-		/// 在模块 Apply 之后生效（Expose 包注册名、Hide 包隐藏名，归属记录到包模块 id）。
+		/// 在模块 Apply 之后生效。注册项按 plan 描述符归属（ModuleId）分组回放；隐藏差量
+		/// 单包会话归属到该包、多包会话不记录归属（plan 不携带每包隐藏归属）。
 		/// 纯靠 plan 数据重建，不需要包句柄——Create/Compose 签名不变，无包路径零开销。
 		/// </summary>
 		static void ApplyPackSurface(CompatibilityPlan plan, HashSet<string> packModuleIds, LegacyCompatibilityProfileBuilder builder)
 		{
 			CompatibilityPlan baseline = GEmuera.Core.Compatibility.BuiltInDialectCatalog.CreateLegacySessionPlan(plan.ProfileId);
 
-			var addedInstructions = plan.Dialect.Instructions.Values
-				.Where(descriptor => packModuleIds.Contains(descriptor.ModuleId))
-				.Select(descriptor => descriptor.Name)
-				.ToList();
-			var addedFunctions = plan.Dialect.Functions.Values
-				.Where(descriptor => packModuleIds.Contains(descriptor.ModuleId))
-				.Select(descriptor => descriptor.Name)
-				.ToList();
 			var hiddenInstructions = baseline.Dialect.Instructions.Keys
 				.Where(name => !plan.Dialect.Instructions.ContainsKey(name))
 				.ToList();
@@ -240,9 +233,9 @@ namespace MinorShift.Emuera.Compatibility
 				.Where(name => !plan.Dialect.Functions.ContainsKey(name))
 				.ToList();
 
-			// 防御：包注册名的归属必须恰为包模块（反推口径自证）。
+			// 防御：相对基线新增的指令名，归属必须恰为包模块（反推口径自证）。
 			foreach (var group in plan.Dialect.Instructions.Values
-				.Where(descriptor => addedInstructions.Contains(descriptor.Name))
+				.Where(descriptor => !baseline.Dialect.Instructions.ContainsKey(descriptor.Name))
 				.GroupBy(descriptor => descriptor.ModuleId))
 			{
 				if (!packModuleIds.Contains(group.Key))
@@ -250,14 +243,46 @@ namespace MinorShift.Emuera.Compatibility
 						$"Pack surface replay found instruction ownership outside pack modules: '{group.Key}'.");
 			}
 
-			foreach (string packId in packModuleIds)
+			// 注册项按 plan 描述符的真实归属（ModuleId = 声明它的包）分组回放：每个包只
+			// Expose 自己的注册名。此前对每个包重放全部包的累计名单，SetDeclaringModule
+			// 与实际归属不符（多包时名字归属会错记到迭代在前的包）。
+			foreach (var group in plan.Dialect.Instructions.Values
+				.Where(descriptor => packModuleIds.Contains(descriptor.ModuleId))
+				.GroupBy(descriptor => descriptor.ModuleId, descriptor => descriptor.Name))
 			{
-				builder.SetDeclaringModule(packId);
-				builder.ExposeInstructionNames(addedInstructions);
-				builder.ExposeFunctionNames(addedFunctions);
+				builder.SetDeclaringModule(group.Key);
+				builder.ExposeInstructionNames(group);
+			}
+			foreach (var group in plan.Dialect.Functions.Values
+				.Where(descriptor => packModuleIds.Contains(descriptor.ModuleId))
+				.GroupBy(descriptor => descriptor.ModuleId, descriptor => descriptor.Name))
+			{
+				builder.SetDeclaringModule(group.Key);
+				builder.ExposeFunctionNames(group);
+			}
+
+			// 隐藏差量：组装段只保留合并差集（removedInstructions/removedFunctions 不带
+			// 每包归属），plan 数据无法反推唯一声明包。单包会话归属精确到该包；多包会话
+			// 不记录 owner（宁缺毋错）——TryGetUnselectedModuleHint 对包归属名恒不提示
+			//（包模块必在本会话闭包内），省略 owner 不改变可观察行为，只消除错误归属。
+			if (hiddenInstructions.Count > 0)
+			{
+				builder.SetDeclaringModule(packModuleIds.Count == 1 ? FirstPackId(packModuleIds) : "");
 				builder.HideInstructionNames(hiddenInstructions);
+			}
+			if (hiddenFunctions.Count > 0)
+			{
+				builder.SetDeclaringModule(packModuleIds.Count == 1 ? FirstPackId(packModuleIds) : "");
 				builder.HideFunctionNames(hiddenFunctions);
 			}
+		}
+
+		static string FirstPackId(HashSet<string> packModuleIds)
+		{
+			// 单包集合的唯一元素；HashSet 单元素枚举即该元素（确定性）。
+			foreach (string packId in packModuleIds)
+				return packId;
+			return "";
 		}
 	}
 

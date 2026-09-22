@@ -78,7 +78,8 @@ namespace Emuera.Compatibility.Packs
 		public IReadOnlyList<string> Capabilities { get; }
 		public string? SaveProfileId { get; }
 		/// <summary>指令名 → 变体名。v1 仅接受 "builtin:*"（引擎内置变体；未知内置名拒载）；
-		/// 包自带变体不经此字段——由 IInstructionVariantContribution 按指令名绑定隐式生效。</summary>
+		/// v1 没有自带变体通道——IInstructionVariantContribution 为 v2 接线预留（宿主尚不消费，
+		/// 携带即拒载），不要按"贡献绑定隐式生效"的旧表述使用。</summary>
 		public IReadOnlyDictionary<string, string> VariantSelections { get; }
 		public CompatPackGameIdentity? GameIdentity { get; }
 

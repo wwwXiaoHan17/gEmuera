@@ -82,6 +82,13 @@ public static class CompatPackRules
                     }
                     break;
                 case IPolicyContribution policy:
+                    // v1 fail-closed 拒载（用户裁定 2026-09-17，评审 P2-6）：策略贡献的宿主
+                    // 消费链未接线，按文档写策略贡献只会得到静默 no-op——加载期明确拒绝并
+                    // 指引 manifest 通道；v2 接线后移除此条恢复放行。下方结构校验照常执行
+                    //（错误全量收集，便于包作者一次看全问题）。
+                    collected.Add("包 " + manifest.PackId + " 策略贡献 '" + contribution.ContributionId
+                        + "' v1 未接线（v2 预留）：策略贡献宿主尚不消费，请仅使用 manifest 的"
+                        + " variantSelections/builtin 变体与 capabilities 声明。");
                     if (policy.Policies is null)
                     {
                         collected.Add("策略贡献 '" + contribution.ContributionId + "' 的 Policies 为 null。");
@@ -99,6 +106,13 @@ public static class CompatPackRules
                     }
                     break;
                 case IInstructionVariantContribution variant:
+                    // v1 fail-closed 拒载（用户裁定 2026-09-17，评审 P2-6）：自带变体工厂的
+                    // 宿主接线桥未实现（宿主只消费 manifest 的 builtin:* 变体选择），按文档写
+                    // 自定义变体会静默 no-op——加载期明确拒绝并指引 manifest 通道；v2 接线后
+                    // 移除此条恢复放行。结构校验照常执行（错误全量收集）。
+                    collected.Add("包 " + manifest.PackId + " 变体贡献 '" + contribution.ContributionId
+                        + "' v1 未接线（v2 预留）：自带变体工厂宿主尚不消费，请仅使用 manifest 的"
+                        + " variantSelections/builtin 变体。");
                     if (variant.Bindings is null)
                     {
                         collected.Add("变体贡献 '" + contribution.ContributionId + "' 的 Bindings 为 null。");
@@ -133,13 +147,13 @@ public static class CompatPackRules
         }
 
         // 变体选择对账：清单 variantSelections 的 builtin 值必须在内置变体名录；
-        // 非 builtin 值 v1 不支持（自带变体经 IInstructionVariantContribution 绑定隐式生效）；
+        // 非 builtin 值 v1 不支持（自带变体贡献 v1 未接线、携带即拒载，v2 预留）；
         // 选择键若同时被变体贡献绑定 → 冲突拒载。
         foreach (KeyValuePair<string, string> selection in manifest.VariantSelections)
         {
             if (!selection.Value.StartsWith("builtin:", StringComparison.Ordinal))
             {
-                collected.Add("变体选择 " + selection.Key + " 的值不是 builtin:*（v1 自带变体经贡献绑定隐式生效）：" + selection.Value);
+                collected.Add("变体选择 " + selection.Key + " 的值不是 builtin:*（v1 仅支持内置变体；自带变体贡献 v1 未接线、携带即拒载，v2 预留）：" + selection.Value);
                 continue;
             }
             if (!context.KnownBuiltinVariantNames.Contains(selection.Value))
@@ -190,11 +204,22 @@ public static class CompatPackRules
         {
             if (context.BaselineInstructions.Contains(registered))
                 collected.Add("注册指令与 v24 基线同名（应走变体选择通道）：" + registered);
+            // 引擎 handler 对账（宿主传入全集时启用）：注册名必须有真实 handler，否则
+            // 名字会穿过全部校验进入 plan 哈希、却在会话注册表投影时静默无 handler 可绑
+            // （"未知指令"运行期报错），违背 fail-at-load。
+            else if (context.KnownInstructionHandlers.Count > 0
+                && !context.KnownInstructionHandlers.Contains(registered))
+                collected.Add("包 " + manifest.PackId + " 注册指令 " + registered
+                    + " 无引擎 handler（指令名拼错或引擎未收录；内置模块可声明的名字均在全集内）。");
         }
         foreach (string registered in recorder.RegisteredFunctions)
         {
             if (context.BaselineFunctions.Contains(registered))
                 collected.Add("注册函数与 v24 基线同名：" + registered);
+            else if (context.KnownFunctionHandlers.Count > 0
+                && !context.KnownFunctionHandlers.Contains(registered))
+                collected.Add("包 " + manifest.PackId + " 注册函数 " + registered
+                    + " 无引擎 handler（函数名拼错或引擎未收录；内置模块可声明的名字均在全集内）。");
         }
 
         // 交叉对账：表面动作 × 变体声明。同一指令的 handler 来源必须无歧义——
@@ -239,6 +264,13 @@ public static class CompatPackRules
 
         string Normalize(string name, string kind)
         {
+            // 规范化语义契约（与引擎侧对齐的依据）：引擎 IsFunctionVisible 按 Trim 原样
+            // （Ordinal、大小写敏感）比对，但引擎函数注册表（FunctionMethodCreator.methodList）
+            // 的键全部为「Trim().ToUpperInvariant() 不变」的形态——纯大写 ASCII 或无大小写
+            // CJK（陥落状態/陷落状态，见生成清单 LegacyDialectInventories 的函数名集）。
+            // 因此本处的 Trim+ToUpper 规范化对真实注册表逐名等价（差异被全大写现状掩盖）；
+            // 该假设由 CompatPackRulesTests 依生成清单钉住——未来注册表引入非大写函数名时
+            // 该测试先红，须重新审视此规范化而非引擎侧语义。
             string normalized = (name ?? "").Trim().ToUpperInvariant();
             if (normalized.Length == 0)
                 errors.Add("表面贡献存在空" + kind + "名。");

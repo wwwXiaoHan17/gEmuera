@@ -347,6 +347,72 @@ static class Program
         Assert(packed.TryGetInstructionVariant("SETBGIMAGE", out LegacyInstructionVariant packVariant)
             && packVariant == LegacyInstructionVariant.SetBgImageSnake,
             "包声明的 builtin:snake 变体未注入 SETBGIMAGE 投影。");
+
+        // 归属诊断（包表面差量回放按描述符归属分组后）：包隐藏名（CALLSHARP）owner = 包
+        //（在闭包内 → 不提示）；内置 snake 声明名（CALLSTR）owner 保持在 game.snake
+        //（包回放不覆盖内置归属 → 提示不丢失）；包注册名（SQL_CONNECT）经 Expose 抹除
+        // owner → 不提示。
+        Assert(!packed.TryGetUnselectedModuleHint("CALLSHARP", out _),
+            "包隐藏名的归属模块在本会话闭包内，不应提示。");
+        Assert(packed.TryGetUnselectedModuleHint("CALLSTR", out string? packHintOwner) && packHintOwner == "game.snake",
+            "v24pure+包 会话查询 snake 专属指令 CALLSTR 应仍提示归属 game.snake。");
+        Assert(!packed.TryGetUnselectedModuleHint("SQL_CONNECT", out _),
+            "包注册名已解除隐藏，不应提示。");
+
+        AssertMultiPackSurfaceReplay();
+    }
+
+    // —— 多包回放归属（分组语义）：注册项按各自 packId 归属回放——每包的注册名都
+    //    可见、任一包的隐藏差量生效；此前按"每包重放全部包累计名单"实现。——
+    private sealed class MultiPackSurfaceA : ISurfaceContribution
+    {
+        public string ContributionId => "smoke.multipack.a";
+        public void Apply(IInstructionSurfaceRegistry instructions, IFunctionSurfaceRegistry functions)
+        {
+            instructions.RegisterInstruction("SETANIMETIMER");
+            instructions.HideInstruction("CALLSHARP");
+        }
+    }
+
+    private sealed class MultiPackSurfaceB : ISurfaceContribution
+    {
+        public string ContributionId => "smoke.multipack.b";
+        public void Apply(IInstructionSurfaceRegistry instructions, IFunctionSurfaceRegistry functions)
+            => instructions.RegisterInstruction("SETIMAGELAYER");
+    }
+
+    private static CompatPackHandle MultiPackHandle(string packId, char shaFill, ISurfaceContribution surface)
+    {
+        string json = "{\"packId\":\"" + packId + "\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1}";
+        var manifest = CompatPackManifest.TryParse(json, out var parsed, out var manifestErrors)
+            ? parsed! : throw new InvalidOperationException(string.Join("; ", manifestErrors));
+        return new CompatPackHandle(
+            manifest, null!, "Z:/" + packId + ".dll", new string(shaFill, 64), new string(shaFill, 64),
+            new[] { surface },
+            Array.Empty<ICapabilityContribution>(),
+            Array.Empty<IInstructionVariantContribution>(),
+            Array.Empty<IPolicyContribution>(),
+            new CompatPackLoadContext("Z:/" + packId + ".dll"));
+    }
+
+    private static void AssertMultiPackSurfaceReplay()
+    {
+        CompatPackHandle packA = MultiPackHandle("smoke.pack.a", 'a', new MultiPackSurfaceA());
+        CompatPackHandle packB = MultiPackHandle("smoke.pack.b", 'b', new MultiPackSurfaceB());
+
+        CompatibilityPlan baseline = BuiltInDialectCatalog.CreateLegacySessionPlan("v24pure");
+        if (!CompatPackPlanAssembler.TryAssemble(baseline, new[] { packA, packB }, out CompatibilityPlan assembled, out var assemblyErrors))
+            throw new InvalidOperationException("multi-pack assembly failed: " + string.Join("; ", assemblyErrors));
+
+        LegacyCompatibilityProfile multi = LegacyCompatibilityProfile.Create(
+            assembled, true, new[] { "smoke.pack.a", "smoke.pack.b" });
+
+        Assert(multi.IsInstructionVisible("SETANIMETIMER"), "包 A 注册指令 SETANIMETIMER 在多包会话不可见。");
+        Assert(multi.IsInstructionVisible("SETIMAGELAYER"), "包 B 注册指令 SETIMAGELAYER 在多包会话不可见。");
+        Assert(!multi.IsInstructionVisible("CALLSHARP"), "包 A 隐藏指令 CALLSHARP 在多包会话仍泄漏。");
+        // 多包隐藏差量不记录 owner（宁缺毋错）；包归属名恒不提示（包模块必在闭包内）。
+        Assert(!multi.TryGetUnselectedModuleHint("CALLSHARP", out _),
+            "多包会话的包隐藏名不应给出归属提示。");
     }
 
     private static void Assert(bool condition, string message)
