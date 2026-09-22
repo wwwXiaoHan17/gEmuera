@@ -42,3 +42,16 @@ ai/ui-simplify-launcher（自 dev=57ab49d，#18/#19 已并入）。
   状态失效需重 Read——**大段删除应一开始就用 python 行级脚本，别用 Edit 玩字符串拼接**。
 - 教训 → 动作：整方法/整块删除优先用脚本按行号处理；Edit 后接 python 改动的文件必须
   重新 Read 才能 Edit（工具状态跟踪）。
+
+## 交付后回归与修复（2026-09-22，用户截图反馈）
+
+- **回归**：精简标题时删掉了包裹 Label 的 ExpandFill VBox，把带 `AutowrapMode` 的
+  Label 直接放进 HBox——HBox 默认只给子控件最小宽度，autowrap 标签最小宽度塌缩到
+  单字符 → 逐字竖排换行 → 头部最小高度撑满全屏，其余控件全部挤出可视区（截图实证）。
+- **修复**：标题短文本关闭 autowrap + `SizeFlagsHorizontal = ExpandFill`（最小宽度
+  恒为全文宽，任何容器不塌缩）。
+- **教训 → 动作**：①无头错误探针抓不到布局回归（布局不抛异常）——UI 改动的验收必须
+  用**节点几何探针**（本次定型：临时 `-s` SceneTree 脚本加载主场景、等 45 帧、输出
+  Label size/line_count 与列表 pos/in_view，收尾即删）；②**HBox 子 Label 必须显式
+  ExpandFill 或关 autowrap**，VBox 子控件默认 Fill 宽度不受此影响——此坑已写入本记录，
+  后续启动器 UI 任务首读。

@@ -236,7 +236,12 @@ public partial class FirstWindow : Control
 
 		var title = new Label();
 		title.Text = MultiLanguage.Get("FirstWindow.Title", "gEmuera(Emuera for Godot)");
-		title.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+		// 布局回归修复（2026-09-22）：HBox 默认只给子控件最小宽度，带 autowrap 的
+		// Label 最小宽度会塌缩到单字符并逐字换行（实测把头部撑满全屏高、其余控件
+		// 全部被挤出可视区）。标题是短文本：关闭 autowrap + 横向占满，最小宽度恒为
+		// 全文宽，任何容器里都不会塌缩。
+		title.AutowrapMode = TextServer.AutowrapMode.Off;
+		title.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 		title.AddThemeFontSizeOverride("font_size", 18);
 		title.AddThemeColorOverride("font_color", GEmueraTheme.TextPrimary);
 		header.AddChild(title);
