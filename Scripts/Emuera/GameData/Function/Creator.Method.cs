@@ -900,6 +900,10 @@ namespace MinorShift.Emuera.GameData.Function
 
             public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
             {
+                // snake 参考：浮点实参直接截断（snake 会话经方言契约放行 Float 实参；
+                // v24 会话契约锁定 String，此分支不可达）
+                if (arguments[0].GetEraType() == EraType.Float)
+                    return (long)arguments[0].GetFloatValue(exm);
                 string str = arguments[0].GetStrValue(exm);
                 if (str == null || str == "")
                     return (0);
@@ -2346,14 +2350,10 @@ namespace MinorShift.Emuera.GameData.Function
 				Rectangle rect = new Rectangle(0, 0, g.Width, g.Height);
 				if(arguments.Length == 6)
 				{//四角形は正でも負でもよいが親画像の外を指してはいけない
+				 //参考（v24/snake 同款，EM_私家版_SPRITECREATE範囲制限緩和）：仅在与父图完全不相交时
+				 //抛错；部分越界保留原 rect 创建（负宽高亦透传，SrcRectangle 契约允许负值）。
 					rect = ReadRectangle(Name, exm, arguments, 2);
-					if (TryClipPositiveRectangleToGraphics(g, ref rect))
-					{
-						if (rect.Width <= 0 || rect.Height <= 0)
-							return 0;
-					}
-					else
-					if (rect.X + rect.Width < 0 || rect.X + rect.Width > g.Width || rect.Y + rect.Height < 0 || rect.Y + rect.Height > g.Height)
+					if (!rect.IntersectsWith(new Rectangle(0, 0, g.Width, g.Height)))
 						throw new CodeEE(string.Format(Properties.Resources.RuntimeErrMesMethodCIMGCreateOutOfRange0, Name));
 				}
 				AppContents.CreateSpriteG(imgname, g, rect);
@@ -2720,7 +2720,9 @@ namespace MinorShift.Emuera.GameData.Function
 				if (string.IsNullOrEmpty(imgname))
 					return 0;
 				SpriteAnime img = AppContents.GetSprite(imgname) as SpriteAnime;
-				if (img == null && !img.IsCreated)
+				// 参考守卫：精灵不存在或未创建时直接返回 0（原 `img == null && !img.IsCreated`
+				// 短路失败会在 null 时 NPE）
+				if (img == null || !img.IsCreated)
 					return 0;
 				GraphicsImage g = ReadGraphics(Name, exm, arguments, 1);
 				if (!g.IsCreated)
@@ -5874,9 +5876,15 @@ namespace MinorShift.Emuera.GameData.Function
 			{
 				if (arguments.Length < 1)
 						return name + "関数には少なくとも1つの引数が必要です";
-					if (arguments.Length > 2)
+				if (arguments.Length > 2)
 						return name + "関数の引数が多すぎます";
-					return null;
+				// snake 参考（ArgTypeList{Float, String}）：第 1 参必须数值型（Float/Int，
+				// 整型经 ToDouble 参与提升）、第 2 参必须字符串型，解析期即报
+				if (arguments[0] == null || (arguments[0].GetEraType() != EraType.Float && arguments[0].GetEraType() != EraType.Integer))
+					return name + "関数の1番目の引数の型が正しくありません";
+				if (arguments.Length == 2 && arguments[1] != null && arguments[1].GetEraType() != EraType.String)
+					return name + "関数の2番目の引数の型が正しくありません";
+				return null;
 			}
 			public override string GetStrValue(ExpressionMediator exm, IOperandTerm[] arguments)
 			{
@@ -6140,17 +6148,9 @@ namespace MinorShift.Emuera.GameData.Function
 					}
 					if (varTerm == null || varTerm.Identifier == null)
 						return hasDefault ? new SingleTerm(defaultValue) : throw new CodeEE(name + "は変数ではありません");
-					try
-					{
-						if (varTerm.Identifier.IsFloat)
-							return new SingleTerm(varTerm.GetFloatValue(exm));
-					}
-					catch
-					{
-						if (hasDefault)
-							return new SingleTerm(defaultValue);
-						throw;
-					}
+					// snake 参考：取值异常原样传播（不吞成默认值）
+					if (varTerm.Identifier.IsFloat)
+						return new SingleTerm(varTerm.GetFloatValue(exm));
 					return hasDefault ? new SingleTerm(defaultValue) : throw new CodeEE(name + "は小数型ではありません");
 					}
 				}

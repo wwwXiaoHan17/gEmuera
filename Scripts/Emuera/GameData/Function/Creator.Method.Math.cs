@@ -25,12 +25,23 @@ namespace MinorShift.Emuera.GameData.Function
         #region 数学関数
         private sealed class RandMethod : FunctionMethod
         {
+            // snake 参考：钳制告警只打一次（static，跨调用保持）
+            private static bool clampedWarned;
+
             public RandMethod()
             {
                 ReturnType = EraType.Integer;
                 CanReturnFloat = true;
                 argumentTypeArray = null;
                 CanRestructure = false;
+            }
+
+            private static void WarnRandClamped(ExpressionMediator exm, object max)
+            {
+                if (clampedWarned)
+                    return;
+                clampedWarned = true;
+                exm.Console.PrintError("RANDの最大値に最小値以下の値(" + max.ToString() + ")が指定されました（已钳制为下界，不再中断运行）");
             }
 
             public override string CheckArgumentType(string name, IOperandTerm[] arguments)
@@ -69,6 +80,13 @@ namespace MinorShift.Emuera.GameData.Function
                 }
                 if (max <= min)
                 {
+                    // snake 参考（Skiav12.2）：钳制为下界并告警一次，不中断运行；
+                    // v24 参考：CodeEE 致命错误
+                    if (Program.Compatibility.Snake.IsEnabled)
+                    {
+                        WarnRandClamped(exm, max);
+                        return min;
+                    }
                     if (min == 0)
                         throw new CodeEE("RANDの最大値に0以下の値(" + max.ToString() + ")が指定されました");
                     else
@@ -90,6 +108,12 @@ namespace MinorShift.Emuera.GameData.Function
                 }
                 if (max <= min)
                 {
+                    // snake 参考：钳制为下界并告警一次（浮点路径同款）；v24 参考：CodeEE
+                    if (Program.Compatibility.Snake.IsEnabled)
+                    {
+                        WarnRandClamped(exm, max);
+                        return min;
+                    }
                     if (min == 0.0)
                         throw new CodeEE("RANDの最大値に0以下の値(" + max.ToString() + ")が指定されました");
                     else

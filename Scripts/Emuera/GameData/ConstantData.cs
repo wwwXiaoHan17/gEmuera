@@ -1023,6 +1023,8 @@ check1break:
 		{
 			if (string.IsNullOrEmpty(name))
 				return -1;
+			// snake 参考语义：模板映射区分大小写（Ordinal），返回 NO 字段（非 csv 文件编号）；
+			// 重名经 No 升序 + 首个命中（= 最小 No）与参考的逆序构建 last-wins 等价。
 			for (int i = 0; i < CharacterTmplList.Count; i++)
 			{
 				CharacterTemplate tmpl = CharacterTmplList[i];
@@ -1042,8 +1044,8 @@ check1break:
 						cmp = tmpl.Mastername;
 						break;
 				}
-				if (!string.IsNullOrEmpty(cmp) && string.Equals(cmp, name, StringComparison.OrdinalIgnoreCase))
-					return tmpl.csvNo;
+				if (!string.IsNullOrEmpty(cmp) && string.Equals(cmp, name, StringComparison.Ordinal))
+					return tmpl.No;
 			}
 			return -1;
 		}

@@ -199,9 +199,9 @@ namespace MinorShift.Emuera.GameProc
 						goto whilebreak;
 					}
 					// megaten 门控（P2）：#DIM REF 后的名字位允许 OUT 作为变量名。
-					// Disabled 下 (ret.Reference && false)=false，整个条件退化为原
-					// staticDefined && !ret.Reference && (...)，与回退前基线完全等价。
-					if ((staticDefined && !ret.Reference
+					// snake 会话无此逃逸分支（snake 参考无条件按关键字处理，错位声明直接报错），
+					// 故 STATIC 形态的逃逸仅在 OUT 非关键字的会话生效。
+					if ((!Program.Compatibility.Snake.AllowsOutKeyword && staticDefined && !ret.Reference
 							|| (ret.Reference && Program.Compatibility.Megaten.AllowsOutAsVariableNameAfterRefKeyword))
 						&& ret.Name == null
 						&& (wc.EOL || wc.Current.Type == ',' || wc.Current.Type == '='))
@@ -220,7 +220,7 @@ namespace MinorShift.Emuera.GameProc
 						if (ret.Const)
 							throw new CodeEE(keyword + "とCONSTキーワードは同時に指定できません", sc);
 					if (ret.Reference)
-						throw new CodeEE(keyword + "キーワードが二重に指定されています", sc);
+						throw new CodeEE(keyword + "キーワードとREFキーワードは同時に指定できません", sc);
 					// OUT 关键字（snake 系）：Out 参数语义在此处生效（对应 snake 参考 UserDefinedVariable 的 OUT 分支）
 					ret.Reference = true;
 					ret.Out = true;
@@ -446,9 +446,16 @@ namespace MinorShift.Emuera.GameProc
 				throw new CodeEE("3次元以上のキャラ型変数を宣言することはできません", sc);
 			if (ret.Dimension > 3)
 				throw new CodeEE("4次元以上の配列変数を宣言することはできません", sc);
-			ret.Lengths = new int[sizeNum.Count];
-			if (ret.Reference)
-				return ret;
+				ret.Lengths = new int[sizeNum.Count];
+				// snake 参考：OUT 变量恒为标量引用（Dimension=0、Lengths=[1]），不做尺寸解析
+				if (ret.Out)
+				{
+					ret.Dimension = 0;
+					ret.Lengths = new int[1] { 1 };
+					return ret;
+				}
+				if (ret.Reference)
+					return ret;
 			Int64 totalBytes = 1;
 			for (int i = 0; i < sizeNum.Count; i++)
 			{

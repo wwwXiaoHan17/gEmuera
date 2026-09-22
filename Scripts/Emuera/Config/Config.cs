@@ -438,6 +438,15 @@ namespace MinorShift.Emuera
 			return getFiles(rootdir, rootdir, pattern, !SearchSubdirectory, SortWithFilename);
 		}
 
+		/// <summary>
+		/// EE_ファイル読み込み順拡張用：以 rootdir 为相对路径基准枚举 dir 下的文件
+		///（参考侧 GetFiles(dir, rootdir, pattern) 同款，*#* 目录优先加载时文件名仍相对 ERB 根）。
+		/// </summary>
+		public static List<KeyValuePair<string, string>> GetFiles(string dir, string rootdir, string pattern)
+		{
+			return getFiles(dir, rootdir, pattern, !SearchSubdirectory, SortWithFilename);
+		}
+
 		private sealed class StrIgnoreCaseComparer : IComparer<string>
 		{
 			public int Compare(string x, string y)
@@ -452,17 +461,6 @@ namespace MinorShift.Emuera
 		{
 			StringComparison strComp = StringComparison.OrdinalIgnoreCase;
 			List<KeyValuePair<string, string>> retList = new List<KeyValuePair<string, string>>();
-			if (!toponly)
-			{//サブフォルダ内の検索
-				var dirList = uEmuera.Utils.GetDirectoryPaths(dir);
-				if (dirList.Count > 0)
-				{
-					if (sort)
-						dirList.Sort(ignoreCaseComparer);
-					for (int i = 0; i < dirList.Count; i++)
-						retList.AddRange(getFiles(dirList[i], rootdir, pattern, toponly, sort));
-				}
-			}
 			string RelativePath;//相対ディレクトリ名
 			if (string.Equals(dir, rootdir, strComp))//現在のパスが検索ルートパスに等しい
 				RelativePath = "";
@@ -476,12 +474,24 @@ namespace MinorShift.Emuera
 					RelativePath += "/";//末尾が\又は/で終わるように。後でFile名を直接加算できるようにしておく
 			}
 			//filepathsは完全パスである
+			//参考顺序（v24/snake 同款）：当前目录文件（排序）在前，子目录（排序，递归）在后
 			var filepaths = uEmuera.Utils.GetFilePaths(dir, pattern, SearchOption.TopDirectoryOnly);
 			if (sort)
 				filepaths.Sort(ignoreCaseComparer);
 			for (int i = 0; i < filepaths.Count; i++)
 				if (Path.GetExtension(filepaths[i]).Length <= 4)//".erb"や".csv"であること。放置すると".erb*"等を拾う。
 					retList.Add(new KeyValuePair<string, string>(RelativePath + Path.GetFileName(filepaths[i]), filepaths[i]));
+			if (!toponly)
+			{//サブフォルダ内の検索
+				var dirList = uEmuera.Utils.GetDirectoryPaths(dir);
+				if (dirList.Count > 0)
+				{
+					if (sort)
+						dirList.Sort(ignoreCaseComparer);
+					for (int i = 0; i < dirList.Count; i++)
+						retList.AddRange(getFiles(dirList[i], rootdir, pattern, toponly, sort));
+				}
+			}
 			return retList;
 		}
 		

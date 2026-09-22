@@ -848,6 +848,12 @@ namespace MinorShift.Emuera.GameData.Variable
 			{
 				array[VarCodeInt] = value;
 			}
+			// snake 参考（FloatScalarVariableToken）：VARSET RESULTF,1.5 走 double 派发，
+			// 缺此重载会落基类 CodeEE
+			public override void SetValueAll(double value, int start, int end, int charaPos)
+			{
+				array[VarCodeInt] = value;
+			}
 		}
 
 		private sealed class Int1DVariableToken : VariableToken

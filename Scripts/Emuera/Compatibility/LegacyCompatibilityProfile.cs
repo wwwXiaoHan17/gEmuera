@@ -29,6 +29,7 @@ internal interface ISnakeCompatibilityPolicy
 	bool UsesRelationWithoutMastername { get; }
 	bool AllowsOutKeyword { get; }
 	bool UsesVariadicStrip { get; }
+	bool UsesFloatTypeSystem { get; }
 }
 
 	/// <summary>

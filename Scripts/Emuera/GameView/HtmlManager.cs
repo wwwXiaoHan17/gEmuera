@@ -1206,7 +1206,10 @@ namespace MinorShift.Emuera.GameView
 							}
 							else if (word.Code.Equals("layout", StringComparison.OrdinalIgnoreCase))
 							{
-								// Layout modes are accepted for compatibility. Godot rendering currently uses flow layout.
+								// layout 为移植私有属性：仅 snake 系会话接受（Godot 渲染当前固定流式布局）；
+								// v24 参考对其抛 CanNotInterpretAttributeName
+								if (!AllowsSnakeHtmlAttributes)
+									throw new CodeEE("<" + tag + ">タグの属性名" + word.Code + "は解釈できません");
 							}
 							else if (!tryParseStyledBoxAttribute(ref divTag.StyledBox, word.Code, attrValue))
 								throw new CodeEE("<" + tag + ">タグの属性名" + word.Code + "は解釈できません");
@@ -1433,6 +1436,10 @@ namespace MinorShift.Emuera.GameView
 									font.FontName = attrValue;
 									break;
 								case "render":
+									// render/edging/hinting/size/valign 为 snake 独有 font 属性；
+									// v24 参考落 default 抛 CanNotInterpretAttributeName
+									if (!AllowsSnakeHtmlAttributes)
+										throw new CodeEE("<" + tag + ">タグの属性名" + word.Code + "は解釈できません");
 									if (font.RenderMode != null)
 										throw new CodeEE("<" + tag + ">タグに" + word.Code + "属性が2度以上指定されています");
 									if (!attrValue.Equals("gdi", StringComparison.OrdinalIgnoreCase)
@@ -1441,6 +1448,8 @@ namespace MinorShift.Emuera.GameView
 									font.RenderMode = attrValue;
 									break;
 								case "edging":
+									if (!AllowsSnakeHtmlAttributes)
+										throw new CodeEE("<" + tag + ">タグの属性名" + word.Code + "は解釈できません");
 									if (font.FontEdging != null)
 										throw new CodeEE("<" + tag + ">タグに" + word.Code + "属性が2度以上指定されています");
 									if (!attrValue.Equals("alias", StringComparison.OrdinalIgnoreCase)
@@ -1450,6 +1459,8 @@ namespace MinorShift.Emuera.GameView
 									font.FontEdging = attrValue;
 									break;
 								case "hinting":
+									if (!AllowsSnakeHtmlAttributes)
+										throw new CodeEE("<" + tag + ">タグの属性名" + word.Code + "は解釈できません");
 									if (font.FontHinting != null)
 										throw new CodeEE("<" + tag + ">タグに" + word.Code + "属性が2度以上指定されています");
 									if (!attrValue.Equals("none", StringComparison.OrdinalIgnoreCase)
@@ -1460,6 +1471,8 @@ namespace MinorShift.Emuera.GameView
 									font.FontHinting = attrValue;
 									break;
 								case "size":
+									if (!AllowsSnakeHtmlAttributes)
+										throw new CodeEE("<" + tag + ">タグの属性名" + word.Code + "は解釈できません");
 									if (font.FontSize != null)
 										throw new CodeEE("<" + tag + ">タグに" + word.Code + "属性が2度以上指定されています");
 									string sizeStr = attrValue;
@@ -1482,6 +1495,8 @@ namespace MinorShift.Emuera.GameView
 								//		break;
 								//	}
 							case "valign":
+								if (!AllowsSnakeHtmlAttributes)
+									throw new CodeEE("<" + tag + ">タグの属性名" + word.Code + "は解釈できません");
 								if (font.VerticalAlign != null)
 									throw new CodeEE("<" + tag + ">タグに" + word.Code + "属性が2度以上指定されています");
 								if (attrValue.Equals("top", StringComparison.OrdinalIgnoreCase))
@@ -1658,20 +1673,32 @@ namespace MinorShift.Emuera.GameView
 			return value;
 		}
 
+		/// <summary>
+		/// snake 系 HTML 扩展属性（font 的 render/edging/hinting/size/valign、div 的
+		/// box-model、移植私有 layout）是否可用。v24 参考对这些属性名一律抛
+		/// CanNotInterpretAttributeName；eraFL 血统承 snake 保留可用（零回归取向）。
+		/// </summary>
+		private static bool AllowsSnakeHtmlAttributes =>
+			Program.Compatibility.Snake.IsEnabled || Program.Compatibility.EraFl.IsEnabled;
+
 		private static bool tryParseStyledBoxAttribute(ref StyledBoxModel box, string name, string attrValue)
 		{
 			switch (name.ToLower())
 			{
 				case "margin":
+					if (!AllowsSnakeHtmlAttributes) return false;
 					createBoxIfNull(ref box).Margin = parseBoxSizeParam("div", name, attrValue);
 					return true;
 				case "padding":
+					if (!AllowsSnakeHtmlAttributes) return false;
 					createBoxIfNull(ref box).Padding = parseBoxSizeParam("div", name, attrValue);
 					return true;
 				case "border":
+					if (!AllowsSnakeHtmlAttributes) return false;
 					createBoxIfNull(ref box).Border = parseBoxSizeParam("div", name, attrValue);
 					return true;
 				case "radius":
+					if (!AllowsSnakeHtmlAttributes) return false;
 					createBoxIfNull(ref box).Radius = parseBoxSizeParam("div", name, attrValue);
 					return true;
 				case "bcolor":
@@ -1756,13 +1783,15 @@ namespace MinorShift.Emuera.GameView
 				case "depth":
 				case "color":
 				case "bcolor":
+				case "display":
+					return true;
 				case "border":
 				case "padding":
 				case "margin":
 				case "radius":
-				case "display":
 				case "layout":
-					return true;
+					// box-model/layout 为 snake 系（含移植私有）div 属性；v24 参考不可用
+					return AllowsSnakeHtmlAttributes;
 				default:
 					return false;
 			}

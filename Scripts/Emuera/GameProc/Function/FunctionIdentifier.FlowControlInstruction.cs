@@ -618,11 +618,12 @@ namespace MinorShift.Emuera.GameProc.Function
 					{
 						if (label.MethodType != term.GetEraType())
 						{
+							// snake 参考：#FUNCTIONF 函数 RETURNF 整型表达式静默自动提升，不告警
 							if (label.MethodType == EraType.Integer)
 								ParserMediator.Warn("#FUNCTIONで始まる関数の戻り値に整数型以外が指定されました", func, 2, true, false);
 							else if (label.MethodType == EraType.String)
 								ParserMediator.Warn("#FUNCTIONSで始まる関数の戻り値に文字列型以外が指定されました", func, 2, true, false);
-							else if (label.MethodType == EraType.Float)
+							else if (label.MethodType == EraType.Float && term.GetEraType() != EraType.Integer)
 								ParserMediator.Warn("#FUNCTIONFで始まる関数の戻り値に小数型以外が指定されました", func, 2, true, false);
 						}
 					}

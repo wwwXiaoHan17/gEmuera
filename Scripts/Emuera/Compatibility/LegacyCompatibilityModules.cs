@@ -750,6 +750,7 @@ namespace MinorShift.Emuera.Compatibility
 		public bool UsesRelationWithoutMastername => false;
 		public bool AllowsOutKeyword => false;
 		public bool UsesVariadicStrip => false;
+		public bool UsesFloatTypeSystem => false;
 	}
 
 	internal sealed class LegacySnakeCompatibilityPolicy : ISnakeCompatibilityPolicy
@@ -787,6 +788,7 @@ namespace MinorShift.Emuera.Compatibility
 		public bool UsesRelationWithoutMastername => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.RelationWithoutMastername);
 		public bool AllowsOutKeyword => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.OutKeyword);
 		public bool UsesVariadicStrip => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.VariadicStrip);
+		public bool UsesFloatTypeSystem => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.FloatTypeSystem);
 	}
 
 	// megaten 默认策略：三个 flag 全 false，保证 v24pure/snake/erafl 会话下

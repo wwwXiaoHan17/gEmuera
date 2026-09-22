@@ -60,6 +60,14 @@ public static class SnakeCompatibilityCapabilities
     public const string VariadicStrip = "parse.variadic-strip.v1";
 
     /// <summary>
+    /// float 类型系统全族入口：词法浮点字面量、RESULTF/LOCALF/ARGF 变量注册、
+    /// #DIMF/#REFF/#LOCALFSIZE/#FUNCTIONF（ERB 与 ERH）。v24 参考无任何浮点产物
+    /// （emuera.em-master grep 为空）。eraFL 0.47 无源码且实测全库零浮点使用
+    /// （2026-09-22 扫描），不随本能力放行——erafl 模块如需可自行声明。
+    /// </summary>
+    public const string FloatTypeSystem = "type.float-system.v1";
+
+    /// <summary>
     /// ISnakeCompatibilityPolicy（除 IsEnabled 外）与 capability id 的一一映射。
     /// 属性名以字符串给出，由 SurfaceSmoke 反射 legacy 桥接口校验真实存在
     ///（拼写错误会在冒烟时暴露，不会静默漂移）。
@@ -84,6 +92,7 @@ public static class SnakeCompatibilityCapabilities
                 [RelationWithoutMastername] = "UsesRelationWithoutMastername",
                 [OutKeyword] = "AllowsOutKeyword",
                 [VariadicStrip] = "UsesVariadicStrip",
+                [FloatTypeSystem] = "UsesFloatTypeSystem",
             });
 
     public static readonly IReadOnlyList<string> RequiredCapabilityIds =
@@ -105,5 +114,6 @@ public static class SnakeCompatibilityCapabilities
             RelationWithoutMastername,
             OutKeyword,
             VariadicStrip,
+            FloatTypeSystem,
         });
 }

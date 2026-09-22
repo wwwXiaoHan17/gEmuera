@@ -157,12 +157,16 @@ namespace MinorShift.Emuera
 			nameDic.Add("PRIVATE", DefinedNameType.Reserved);
 			nameDic.Add("SAVEDATA", DefinedNameType.Reserved);
 			nameDic.Add("CHARADATA", DefinedNameType.Reserved);//CHARDATAから変更
-			nameDic.Add("REF", DefinedNameType.Reserved);
-			nameDic.Add("REFF", DefinedNameType.Reserved);
-			nameDic.Add("__DEBUG__", DefinedNameType.Reserved);
-			nameDic.Add("__SKIP__", DefinedNameType.Reserved);
-			nameDic.Add("_", DefinedNameType.Reserved);
-			nameDic.Add("VARIADIC", DefinedNameType.Reserved);
+				nameDic.Add("REF", DefinedNameType.Reserved);
+				// REFF（float 类型系统）与 VARIADIC（变长参数标记）为 snake 独有保留字；
+				// v24 参考均无，非蛇会话不注册（v24 游戏可将其用作普通标识符）
+				if (Program.Compatibility.Snake.UsesFloatTypeSystem)
+					nameDic.Add("REFF", DefinedNameType.Reserved);
+				if (Program.Compatibility.Snake.UsesVariadicStrip)
+					nameDic.Add("VARIADIC", DefinedNameType.Reserved);
+				nameDic.Add("__DEBUG__", DefinedNameType.Reserved);
+				nameDic.Add("__SKIP__", DefinedNameType.Reserved);
+				nameDic.Add("_", DefinedNameType.Reserved);
 			var compatibility = Program.Compatibility;
 			instructionDic = FunctionIdentifier.GetInstructionNameDic(compatibility);
 
@@ -543,7 +547,11 @@ namespace MinorShift.Emuera
 				}
 			}
             VariableLocal vl = null;
-			if (localvarTokenDic.TryGetValue(key, out vl))
+			// LOCALF/ARGF 属 float 类型系统（snake 专属能力）：注册保留供引擎簿记，
+			// 非蛇会话在此跳过名字解析（后续解釈できない識別子，与 v24 参考一致）
+			bool floatLocalVisible = Program.Compatibility.Snake.UsesFloatTypeSystem
+				|| (!key.Equals("LOCALF", StringComparison.Ordinal) && !key.Equals("ARGF", StringComparison.Ordinal));
+			if (floatLocalVisible && localvarTokenDic.TryGetValue(key, out vl))
 			{
 				if (vl.IsForbid)
                 {

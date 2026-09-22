@@ -30,6 +30,11 @@ namespace MinorShift.Emuera.Content
 		uEmuera.Drawing.Color brushColor = uEmuera.Drawing.Color.Transparent;
 		uEmuera.Drawing.Color penColor = Config.ForeColor;
 		long penWidth = 1;
+		// 参考语义（v24/snake 同款）：pen/brush 未设置（null）时多边形与矩形用默认
+		// 画具——pen → 黑色 1px（SKPaint/GDI+ Pen 默认），brush → Config.BackColor；
+		// 已设置的画具被 GDisposePen/Brush 释放后同样回到"未设置"。
+		bool penSet;
+		bool brushSet;
 		DashStyle dashStyle = DashStyle.Solid;
 		DashCap dashCap = DashCap.Flat;
 		string fontName = Config.FontName;
@@ -196,8 +201,8 @@ namespace MinorShift.Emuera.Content
 			lock (imageSync)
 			{
 				if (godotImage == null) return;
-				var c = brushColor;
-				if (c.a <= 0) return;
+				// 参考语义：未设置画刷时用 Config.BackColor 填充（不再因透明色跳过）
+				var c = brushSet ? brushColor : Config.BackColor;
 				int x1 = Math.Max(0, rect.X);
 				int y1 = Math.Max(0, rect.Y);
 				int x2 = Math.Min(width, rect.X + rect.Width);
@@ -796,13 +801,17 @@ namespace MinorShift.Emuera.Content
 		public void GSetBrush(Brush r)
 		{
 			if (r is SolidBrush sb)
+			{
 				brushColor = sb.Color;
+				brushSet = true;
+			}
 		}
 		public void GSetPen(Pen r)
 		{
 			if (r == null) return;
 			penColor = r.Color;
 			penWidth = Math.Max(1, r.Width);
+			penSet = true;
 			r.DashStyle = dashStyle;
 			r.DashCap = dashCap;
 		}
@@ -872,13 +881,16 @@ namespace MinorShift.Emuera.Content
 		{
 			lock (imageSync)
 			{
-				if (polygonPoints.Count < 2)
-					return;
+				// 参考语义：点表为空抛致命错误（snake 参考经 Creator.Method 包装为 CodeEE）
+				if (polygonPoints.Count == 0)
+					throw new MinorShift.Emuera.Sub.CodeEE("DrawPolygonに渡されるPointsが空です");
 				if (godotImage == null)
 					return;
 				// M6：所有边共享一次 GetData/SetData，避免每条边重复整图拷贝。
 				// 输出与逐边调用 GDrawLine 逐位一致（同色覆盖，写入顺序无关）。
-				var penBytes = ColorToRgba8Bytes(penColor.ToGodotColor());
+				// 未设置画笔时用黑色（参考侧 SKPaint 默认色）。
+				var pen = penSet ? penColor : uEmuera.Drawing.Color.FromArgb(255, 0, 0, 0);
+				var penBytes = ColorToRgba8Bytes(pen.ToGodotColor());
 				byte[] data = godotImage.GetData();
 				int imgW = godotImage.GetWidth();
 				int imgH = godotImage.GetHeight();
@@ -932,12 +944,17 @@ namespace MinorShift.Emuera.Content
 		{
 			lock (imageSync)
 			{
-				if (godotImage == null || polygonPoints.Count < 3)
+				// 参考语义：点表为空抛致命错误；未设置画刷用黑色填充（SKPaint 默认色，
+				// 不再用透明色把区域擦除）
+				if (polygonPoints.Count == 0)
+					throw new MinorShift.Emuera.Sub.CodeEE("FillPolygonに渡されるPointsが空です");
+				if (godotImage == null)
 					return;
 				int minY = Math.Max(0, polygonPoints.Min(p => p.Y));
 				int maxY = Math.Min(Math.Min(height - 1, godotImage.GetHeight() - 1), polygonPoints.Max(p => p.Y));
 				// M6：扫描线填充改为一次 GetData + 内存写入 + 一次 SetData，输出与逐点 SetPixel 逐位一致。
-				var fillBytes = ColorToRgba8Bytes(brushColor.ToGodotColor());
+				var fill = brushSet ? brushColor : uEmuera.Drawing.Color.FromArgb(255, 0, 0, 0);
+				var fillBytes = ColorToRgba8Bytes(fill.ToGodotColor());
 				byte[] data = godotImage.GetData();
 				int imgW = godotImage.GetWidth();
 				bool anyWrite = false;
