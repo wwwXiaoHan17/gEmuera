@@ -101,6 +101,41 @@ public static class LauncherSettingsStore
 		config.Save(SettingsPath);
 	}
 
+	// —— 手动浏览添加的游戏（[launcher] manual_games）——
+	// 值 = "profile|path" 分号清单；本类只做 raw 存取，条目有效性/去重语义在启动器
+	//（FirstWindow.GameBrowseUi partial）。era 游戏目录不含 '|' 与 ';'，无转义需求。
+
+	const string ManualGamesKey = "manual_games";
+
+	/// <summary>读取手动游戏条目原串清单。文件缺失/键缺失 → 空列表。</summary>
+	public static IReadOnlyList<string> LoadManualGameEntries()
+	{
+		if (!TryLoad(out var config))
+			return Array.Empty<string>();
+		string packed = config.GetValue(Section, ManualGamesKey, "").As<string>() ?? "";
+		if (string.IsNullOrEmpty(packed))
+			return Array.Empty<string>();
+		var entries = new List<string>();
+		foreach (string part in packed.Split(';', StringSplitOptions.RemoveEmptyEntries))
+		{
+			string trimmed = part.Trim();
+			if (trimmed.Length > 0)
+				entries.Add(trimmed);
+		}
+		return entries;
+	}
+
+	/// <summary>整表覆写（调用方负责去重与剔除失效条目）；空表清除键。</summary>
+	public static void SaveManualGameEntries(IReadOnlyList<string> entries)
+	{
+		var config = LoadOrEmpty();
+		if (entries is { Count: > 0 })
+			config.SetValue(Section, ManualGamesKey, string.Join(";", entries));
+		else if (config.HasSectionKey(Section, ManualGamesKey))
+			config.EraseSectionKey(Section, ManualGamesKey);
+		config.Save(SettingsPath);
+	}
+
 	// —— 兼容包按游戏选择（[compat_packs] 节）——
 	// 键 = 游戏根目录规范化（CompatPackLauncherConfig.NormalizeGameKey），值 = 分号分隔的包路径串。
 	// 本类只做 raw 存取；解析/匹配语义在 Core 的 CompatPackLauncherConfig。
