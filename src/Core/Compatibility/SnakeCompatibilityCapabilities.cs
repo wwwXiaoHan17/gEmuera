@@ -35,6 +35,9 @@ public static class SnakeCompatibilityCapabilities
     /// <summary>TIMES 结果钳制到 [0,1000] 并打印越界警告（v24 参考为 unchecked 直转）。</summary>
     public const string TimesClamp = "math.times-clamp.v1";
 
+    /// <summary>RAND 最大值≤最小值时钳制为下界并告警一次（v24 参考为 CodeEE 致命错误）。</summary>
+    public const string RandClamp = "math.rand-clamp.v1";
+
     /// <summary>PRINTBUTTON 等蒙版混合读取 Alpha 通道（v24 参考读 B 通道）。</summary>
     public const string MaskAlphaChannel = "graphics.mask-alpha-channel.v1";
 
@@ -84,6 +87,7 @@ public static class SnakeCompatibilityCapabilities
                 [ContinueAfterStartupFault] = "ContinuesAfterStartupFault",
                 [FastDisplayRefresh] = "UsesFastDisplayRefresh",
                 [TimesClamp] = "UsesTimesClamp",
+                [RandClamp] = "UsesRandClamp",
                 [MaskAlphaChannel] = "UsesMaskAlphaChannel",
                 [EscapeESequence] = "UsesEscapeESequence",
                 [ThrowEvent] = "UsesThrowEvent",
@@ -106,6 +110,7 @@ public static class SnakeCompatibilityCapabilities
             ContinueAfterStartupFault,
             FastDisplayRefresh,
             TimesClamp,
+            RandClamp,
             MaskAlphaChannel,
             EscapeESequence,
             ThrowEvent,

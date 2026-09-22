@@ -330,33 +330,33 @@ namespace MinorShift.Emuera.GameView
 				RequestCbgRefresh();
 		}
 
-			public void SetImageLayer(string spriteName, long depth, int x, int y, int width, int height, int opacity, float[][] colorMatrix, bool followScroll)
+		public void SetImageLayer(string spriteName, long depth, int x, int y, int width, int height, int opacity, float[][] colorMatrix, bool followScroll)
+		{
+			ASprite sprite = GetSnakeSprite(spriteName);
+			if (sprite == null || !sprite.IsCreated)
+				return;
+			int zdepth = normalizeSnakeDepth(depth);
+			lock (cbgLock)
 			{
-				ASprite sprite = GetSnakeSprite(spriteName);
-				if (sprite == null || !sprite.IsCreated)
-					return;
-				int zdepth = normalizeSnakeDepth(depth);
-				lock (cbgLock)
-				{
-					// snake 参考（ImageLayerManager.SetLayer）：同深度多图层共存（纯 Add），
-					// 稳定排序逐层绘制；同深度替换语义属 CLEARIMAGELAYER。
-					ClientBackGroundImage cbg = new ClientBackGroundImage(zdepth);
-					cbg.Img = sprite;
-					cbg.x = x;
-					cbg.y = y;
-					cbg.width = width;
-					cbg.height = height;
-					cbg.opacity = clampOpacity(opacity / 255.0f);
-					cbg.colorMatrix = colorMatrix;
-					cbg.followScroll = followScroll;
-					cbg.isSnakeImageLayer = true;
-					cbg.snakeImageDepth = depth;
-					cbg.snakeImageName = spriteName;
-					cbgList.Add(cbg);
-					cbgList.Sort();
-				}
-				RequestCbgRefresh();
+				// snake 参考（ImageLayerManager.SetLayer）：同深度多图层共存（纯 Add），
+				// 稳定排序逐层绘制；同深度替换语义属 CLEARIMAGELAYER。
+				ClientBackGroundImage cbg = new ClientBackGroundImage(zdepth);
+				cbg.Img = sprite;
+				cbg.x = x;
+				cbg.y = y;
+				cbg.width = width;
+				cbg.height = height;
+				cbg.opacity = clampOpacity(opacity / 255.0f);
+				cbg.colorMatrix = colorMatrix;
+				cbg.followScroll = followScroll;
+				cbg.isSnakeImageLayer = true;
+				cbg.snakeImageDepth = depth;
+				cbg.snakeImageName = spriteName;
+				cbgList.Add(cbg);
+				cbgList.Sort();
 			}
+			RequestCbgRefresh();
+		}
 
 		public void ClearImageLayer(long depth)
 		{

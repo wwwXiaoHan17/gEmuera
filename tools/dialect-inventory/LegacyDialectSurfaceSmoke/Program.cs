@@ -127,7 +127,7 @@ static class Program
                 && timerErafl == LegacyInstructionVariant.SharedTable,
                 "erafl 的 SETANIMETIMER 必须显式绑定共享表 handler。");
 
-            // capability 账本（quirk ledger）：snake 声明 7 项解析/调用/显示 quirk，erafl 声明
+            // capability 账本（quirk ledger）：snake 声明 18 项解析/调用/显示 quirk，erafl 声明
             // markup 系 + 3 项布尔 policy quirk，v24pure 不声明任何 quirk。
             // [LOAD] 日志输出的能力清单即此账本的运行期消费。
             foreach (string quirkId in GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.RequiredCapabilityIds)

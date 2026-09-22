@@ -32,13 +32,16 @@
 - 新增 `src/Core/Compatibility/SnakeCompatibilityModule.cs`（ModuleId=game.snake，
   CreateDefinition/CreateProfile，与 erafl/megaten 同构）；BuiltInDialectCatalog 基线+profile
   注册改用模块类，删除内联 SnakePortTypeIds。
-- 能力账本 7→17 项：新增 times-clamp / mask-alpha-channel / escape-e-two-char / throw-event /
+- 能力账本 7→18 项：新增 times-clamp / rand-clamp / mask-alpha-channel / escape-e-two-char / throw-event /
   before-error-event / randomize-reseed / relation-without-mastername / out-keyword /
   variadic-strip / **float-system**。
 - ISnakeCompatibilityPolicy +10 属性（含 UsesFloatTypeSystem），Disabled/Legacy 双实现同步；
   SurfaceSmoke 反射穷尽性断言自动把关。
-- 11 处粗粒度 IsEnabled 门控改具名 flag；3 处保留 IsEnabled（VARI/VARS 文法族选择、
-  snake 专用函数守卫、会话身份查询——属模块选择语义）。
+- 11 处粗粒度 IsEnabled 门控改具名 flag；保留 IsEnabled 的门控（按账本分类学属"算法族/
+  文法族选择"或"会话身份"语义）：VARI/VARS 文法族选择、snake 专用函数守卫（Creator.Method
+  Snake互換モード専用）、Program.IsSnakeProfile 会话身份、PRINTC 像素分栏 vs 字节基准的
+  算法族选择（EmueraConsole.Print 三入口）、HTML 扩展属性家族（AllowsSnakeHtmlAttributes，
+  font 五属性）。
 - 运行期等价证明：v24pure/snake fixtures 语义哈希与 HEAD 基线逐字节一致
   （14a36f1ddde0 / d701c4042ef7）。
 
@@ -70,7 +73,10 @@ v24pure 会话原可触达全部 snake 浮点入口，违反"未选择侧不变"
 - **TOSTRF**：解析期第 1 参数值值型/第 2 参字符串型检查（参考 ArgTypeList）。
 - **GETVARF**：取值异常原样传播（不再吞成默认值）。
 - **SETIMAGELAYER**：同深度多图层共存（参考 ImageLayerManager.SetLayer 纯 Add）。
-- **HTML_PRINTC/PRINTC 换行判定**：整列基准（装不下整列即换行），参考 534-538。
+- ~~**HTML_PRINTC/PRINTC 换行判定**：整列基准（装不下整列即换行），参考 534-538。~~
+  **【复审返工】**上段方向错误：snake 参考（PrintC/ButtonC 三处）换行判定以**内容**为准
+  （`!contentFits` 才 flush），装得下内容装不下列时**不换行不补白**并标记满行——基线代码本就
+  正确，本批误改后已恢复原状。
 - **deleteLine**：补 MaxLog-2 dummy 插入（消费打印缓冲）+ MaxLog 超额顶替（参考 GETDISPLAYLINE 修正段）。
 - **OUT 关键字**：标量形状强制（Dimension=0/Lengths=[1]）；snake 会话移除 STATIC 名字位逃逸；
   OUT+REF 冲突文案对齐 CanNotSpecifiedWith。
@@ -85,9 +91,17 @@ v24pure 会话原可触达全部 snake 浮点入口，违反"未选择侧不变"
 - snake 会话保持像素分栏（appendPrintCCell）；HTML_PRINTC 为 snake 专属指令不受影响。
 
 ### E. HTML 属性门控（P0 泄漏）
-- font 的 render/edging/hinting/size/valign（snake 独有）与 div 的 margin/padding/border/radius
-  + 移植私有 layout：非蛇会话（v24pure）按参考抛 CanNotInterpretAttributeName；
-  eraFL 血统承 snake 保留可用（零回归取向，eraFL 无源码不可证伪）。bcolor/display 为 v24 既有，不门控。
+- ~~font 的 render/edging/hinting/size/valign（snake 独有）与 div 的 margin/padding/border/radius
+  + 移植私有 layout：非蛇会话（v24pure）按参考抛 CanNotInterpretAttributeName；eraFL 血统承
+  snake 保留可用。~~
+  **【复审返工】**div 的 box-model 四属性（margin/padding/border/radius）**两参考均经
+  EvilMask TryParseStyledBoxModel 合法接受**（v24 Runtime/Utils/EvilMask/Utils.cs:95-124 +
+  HtmlManager.cs:1185；snake 同构）——原门控误杀 v24pure，已撤出（全会话可用）。修正后口径：
+  - font 的 render/edging/hinting/size/valign：v24 参考仅 color/bcolor/face（default 抛），
+    非蛇会话（v24pure）抛 CanNotInterpretAttributeName；eraFL 保留（血统承 snake）。
+  - div box-model：不门控（两参考合法）。
+  - layout（移植私有）：两参考均抛 + 实测全部 fixture/游戏零使用 → 全会话拒绝。
+  - bcolor/display 为 v24 既有，不门控。
 
 ### F. 加载顺序族（P1，v24pure 同受益）
 - **getFiles 遍历顺序转正**：移植原为"子目录优先→文件"；参考（v24/snake 同款）为
@@ -129,9 +143,30 @@ v24pure 会话原可触达全部 snake 浮点入口，违反"未选择侧不变"
 ## 验证
 
 - build 0 错误（Godot mono 回调）；三契约冒烟（Surface/Runtime/CoreContract）全绿；
-  清单再生零差异；v24pure/snake/erafl fixtures 全部 Passed（语义哈希变化均为预期语义修正：
-  PRINTC v24 字节基准、GETCSVNOBY、deleteLine、*#* 顺序等）。
-- 模组化零差异证明：改造点提交（11f6d37）与 HEAD（c45226c）在同 fixture 下语义哈希逐字节一致。
+  清单再生零差异（生成文件仅 EOL 漂移，已还原）。
+- v24pure/snake/erafl fixtures 全部 3/3 Passed（run 级），三 profile 语义哈希与改动前
+  基线**逐字节一致**（14a36f1d/d701c404/e3f6667b；基线取自 PR #22 合并树 b7acca7 =
+  c45226c 内容）。两点如实说明：
+  - **fixture 未覆盖被改路径**（无 PRINTC 溢列/div box-model/浮点/RAND 越界等用法），
+    哈希一致只证明"无回归"，不能作为漂移修复正确性的证据——正确性依据为双参考逐点核证
+    + 复审代理独立复核。已登记待办：为 PRINTC 溢列/div box-model/GDISPOSE 后默认画具
+    补 fixture 断言。
+  - runner 首次 run 存在热身期哈希偏离（48f67c98/0d7c037b/2642f2b5 一类），对比一律取
+    稳态 run（2/3）；summary 级 gateStatus=Blocked/EvidenceMissing 为观察模式纸面门
+  （需人工签字），非语义判定。
+
+## 复审与返工（result-review 76/100 → 返工后复验）
+
+复审发现 P0×1 / P1×2 / P2×8，全部处置：
+- **P0-1** div box-model 误门控（两参考合法）→ 撤出门控（见 E 节返工注）。
+- **P1-1** PRINTC 换行方向改反 → 恢复 `!contentFits` 原语义（见 C 节返工注）。
+- **P1-2** penSet/brushSet 跨 GDISPOSE 不复位 → GDispose 复位两标志（对应参考置 null）。
+- **P2** 死代码 TryClipPositiveRectangleToGraphics 删除；RAND 钳制转具名 capability
+  （math.rand-clamp.v1，TimesClamp 先例）；账本/注释计数修正（18 项）；"保留 IsEnabled"
+  清单如实补全（见 A 节）；本节矛盾句修正；7 处格式漂移归位；layout 改全线拒绝（零使用+
+  两参考均抛）；OUT 标量短路前移到维度校验之前（#DIM OUT X,1,1,1,1 不再误报）；
+  SPRITEANIMEADDFRAME/CreateTypeCV24String 注释改为如实陈述（防御性偏离/测量近似）。
+- **P3** RAND 告警文案硬编码日文、OUT 文案措辞、GetCsvNo 空串键等登记不修。
 
 ## 教训
 
@@ -139,6 +174,9 @@ v24pure 会话原可触达全部 snake 浮点入口，违反"未选择侧不变"
   无条件读取，注册层门控炸的是引擎自身；门控点应放在脚本名字解析处（本次返工实证）。
 - **双参考核对必须覆盖"删除的旧实现"**：PR #22 的 SafeArithmetic 误判源于只验证了"新实现
   对 v24 正确"，未验证"被删实现对 snake 正确"。删除性改动要双向举证。
+- **"恢复参考行为"的改动要先确认现状不是参考行为**：本批 PRINTC 换行与 div box-model
+  两项"对齐"其实把本来就对的代码改错——对齐前必须先读参考原文定位差异方向，不能依赖
+  审计报告的转述。
 - **门控粒度**：粗粒度 IsEnabled 在"snake 会话=全能力"时与具名 flag 等价，但账本的可组合性
   是模组化的核心价值（未来拆 profile/兼容包复用）；SurfaceSmoke 穷尽性断言是廉价护栏。
 - **eraFL 取向裁决模式**：无源码方言按"实测零使用→不随能力放行；有使用→保守放行"处理，

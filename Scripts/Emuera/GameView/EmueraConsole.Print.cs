@@ -574,9 +574,12 @@ namespace MinorShift.Emuera.GameView
 		private int printCWidthL = -1;
 
 		/// <summary>
-		/// v24 参考的 CreateTypeCString：列宽按 SJIS 字节数（LangManager.GetStrlenLang）
-		/// 补空格——右对齐补 PrintCLength 字节、左对齐补 PrintCLength+1 字节；补出后按像素
-		/// 宽度回删前导/尾随空格（printCWidth/printCWidthL 阈值）。
+		/// v24 参考的 CreateTypeCString 移植：列宽按字节宽（LangManager.GetStrlenLang，
+		/// SJIS 半角 1/全角 2 口径；与参考硬编码 Shift-JIS GetByteCount 在代理对/稀有字上
+		/// 有 ±1 字节级近似）补空格——右对齐补 PrintCLength、左对齐补 PrintCLength+1；
+		/// 补出后按像素宽度回删前导/尾随空格（printCWidth/printCWidthL 阈值；测量字体用
+		/// Config.Font，参考按样式字体 new Font(Style.Fontname,...)——非默认样式下回删
+		/// 阈值的已知近似）。
 		/// </summary>
 		private string CreateTypeCV24String(string str, bool alignmentRight)
 		{
@@ -628,10 +631,12 @@ namespace MinorShift.Emuera.GameView
 			int currentPx = getPrintCCurrentLinePx();
 			int maxLineWidth = Config.DrawableWidth;
 			bool fullColumnFits = currentPx + cellWidth <= maxLineWidth;
+			bool contentFits = currentPx + contentWidth <= maxLineWidth;
 
-			// 参考侧（snake/v24 的 PRINTC 族）：换行判定以整列宽为准——剩余宽度装不下
-			// 整列即换行（装得下内容但装不下列时同样换行），而非仅按内容宽。
-			if (currentPx > 0 && !fullColumnFits)
+			// 参考侧（snake PrintC/ButtonC 三处同款）：剩余宽度装不下"内容"即换行；
+			// 装得下内容但装不下整列时不换行、不补白（fullColumnFits=false 抑制 padding），
+			// 并把行累计标记为满行（maxLineWidth）。
+			if (currentPx > 0 && !contentFits)
 			{
 				flushPrintBufferForPrintC();
 				currentPx = 0;

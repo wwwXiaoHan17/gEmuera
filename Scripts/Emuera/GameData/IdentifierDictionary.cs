@@ -157,16 +157,16 @@ namespace MinorShift.Emuera
 			nameDic.Add("PRIVATE", DefinedNameType.Reserved);
 			nameDic.Add("SAVEDATA", DefinedNameType.Reserved);
 			nameDic.Add("CHARADATA", DefinedNameType.Reserved);//CHARDATAから変更
-				nameDic.Add("REF", DefinedNameType.Reserved);
-				// REFF（float 类型系统）与 VARIADIC（变长参数标记）为 snake 独有保留字；
-				// v24 参考均无，非蛇会话不注册（v24 游戏可将其用作普通标识符）
-				if (Program.Compatibility.Snake.UsesFloatTypeSystem)
-					nameDic.Add("REFF", DefinedNameType.Reserved);
-				if (Program.Compatibility.Snake.UsesVariadicStrip)
-					nameDic.Add("VARIADIC", DefinedNameType.Reserved);
-				nameDic.Add("__DEBUG__", DefinedNameType.Reserved);
-				nameDic.Add("__SKIP__", DefinedNameType.Reserved);
-				nameDic.Add("_", DefinedNameType.Reserved);
+			nameDic.Add("REF", DefinedNameType.Reserved);
+			// REFF（float 类型系统）与 VARIADIC（变长参数标记）为 snake 独有保留字；
+			// v24 参考均无，非蛇会话不注册（v24 游戏可将其用作普通标识符）
+			if (Program.Compatibility.Snake.UsesFloatTypeSystem)
+				nameDic.Add("REFF", DefinedNameType.Reserved);
+			if (Program.Compatibility.Snake.UsesVariadicStrip)
+				nameDic.Add("VARIADIC", DefinedNameType.Reserved);
+			nameDic.Add("__DEBUG__", DefinedNameType.Reserved);
+			nameDic.Add("__SKIP__", DefinedNameType.Reserved);
+			nameDic.Add("_", DefinedNameType.Reserved);
 			var compatibility = Program.Compatibility;
 			instructionDic = FunctionIdentifier.GetInstructionNameDic(compatibility);
 

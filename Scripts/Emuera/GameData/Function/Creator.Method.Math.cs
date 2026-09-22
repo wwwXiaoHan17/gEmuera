@@ -82,7 +82,7 @@ namespace MinorShift.Emuera.GameData.Function
                 {
                     // snake 参考（Skiav12.2）：钳制为下界并告警一次，不中断运行；
                     // v24 参考：CodeEE 致命错误
-                    if (Program.Compatibility.Snake.IsEnabled)
+                    if (Program.Compatibility.Snake.UsesRandClamp)
                     {
                         WarnRandClamped(exm, max);
                         return min;
@@ -109,7 +109,7 @@ namespace MinorShift.Emuera.GameData.Function
                 if (max <= min)
                 {
                     // snake 参考：钳制为下界并告警一次（浮点路径同款）；v24 参考：CodeEE
-                    if (Program.Compatibility.Snake.IsEnabled)
+                    if (Program.Compatibility.Snake.UsesRandClamp)
                     {
                         WarnRandClamped(exm, max);
                         return min;

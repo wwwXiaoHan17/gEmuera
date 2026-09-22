@@ -673,9 +673,9 @@ check1break:
 				if (!string.IsNullOrEmpty(tmpl.Nickname))
                     relationDic.TryAdd(tmpl.Nickname, (int)tmpl.No);
 				// v24 参考侧同时注册 Mastername（RELATION 字符串索引与 GETNUM 均可用）；
-                // snake 参考侧 relationDic 不含 Mastername（走独立 masternameToTemplateMap），故按方言门控
-                if (!Program.Compatibility.Snake.UsesRelationWithoutMastername && !string.IsNullOrEmpty(tmpl.Mastername))
-                    relationDic.TryAdd(tmpl.Mastername, (int)tmpl.No);
+				// snake 参考侧 relationDic 不含 Mastername（走独立 masternameToTemplateMap），故按方言门控
+				if (!Program.Compatibility.Snake.UsesRelationWithoutMastername && !string.IsNullOrEmpty(tmpl.Mastername))
+					relationDic.TryAdd(tmpl.Mastername, (int)tmpl.No);
 			}
 		}
 

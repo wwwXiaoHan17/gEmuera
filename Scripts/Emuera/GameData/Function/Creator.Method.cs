@@ -2361,24 +2361,6 @@ namespace MinorShift.Emuera.GameData.Function
 			}
 		}
 
-		private static bool TryClipPositiveRectangleToGraphics(GraphicsImage g, ref Rectangle rect)
-		{
-			if (rect.Width <= 0 || rect.Height <= 0)
-				return false;
-			int left = Math.Max(0, rect.X);
-			int top = Math.Max(0, rect.Y);
-			int right = Math.Min(g.Width, rect.X + rect.Width);
-			int bottom = Math.Min(g.Height, rect.Y + rect.Height);
-			if (right <= left || bottom <= top)
-			{
-				rect = new Rectangle(0, 0, 0, 0);
-				return true;
-			}
-			if (left == rect.X && top == rect.Y && right == rect.X + rect.Width && bottom == rect.Y + rect.Height)
-				return false;
-			rect = new Rectangle(left, top, right - left, bottom - top);
-			return true;
-		}
 
 		public sealed class SpriteDisposeMethod : FunctionMethod
 		{
@@ -2720,8 +2702,8 @@ namespace MinorShift.Emuera.GameData.Function
 				if (string.IsNullOrEmpty(imgname))
 					return 0;
 				SpriteAnime img = AppContents.GetSprite(imgname) as SpriteAnime;
-				// 参考守卫：精灵不存在或未创建时直接返回 0（原 `img == null && !img.IsCreated`
-				// 短路失败会在 null 时 NPE）
+				// snake 参考此处为 `img == null && !img.IsCreated`（img 为 null 时真 NRE）；
+				// 移植有意收敛为 || 守卫返回 0（崩溃 → RESULT 0），防御性偏离
 				if (img == null || !img.IsCreated)
 					return 0;
 				GraphicsImage g = ReadGraphics(Name, exm, arguments, 1);

@@ -3,10 +3,10 @@ namespace GEmuera.Core.Compatibility;
 /// <summary>
 /// 内置 snake 兼容模块（lazy loading fork，Skiav12.1 血统）。
 /// 会话闭包 = v24 基座 + 本模块：指令/函数表面差集由生成清单镜像（见
-/// LegacyDialectInventories.SnakeDelta*），16 项 quirk capability 账本驱动
+/// LegacyDialectInventories.SnakeDelta*），18 项 quirk capability 账本驱动
 /// legacy 桥的 ISnakeCompatibilityPolicy 逐属性派生（映射穷尽性由 SurfaceSmoke
-/// 反射断言把关）。文法族选择（VARI/VARS 动态路径、FOR 共享表内核）属模块
-/// 选择语义（IsEnabled），不在 capability 账本内。
+/// 反射断言把关）。文法族选择（VARI/VARS 动态路径、FOR 共享表内核、PRINTC 像素
+/// 分栏算法）属模块选择语义（IsEnabled），不在 capability 账本内。
 /// </summary>
 public static class SnakeCompatibilityModule
 {

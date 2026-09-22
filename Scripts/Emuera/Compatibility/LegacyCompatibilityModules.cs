@@ -742,6 +742,7 @@ namespace MinorShift.Emuera.Compatibility
 		public bool UsesFastDisplayRefresh => false;
 		public bool UsesLazyResourceIndex => false;
 		public bool UsesTimesClamp => false;
+		public bool UsesRandClamp => false;
 		public bool UsesMaskAlphaChannel => false;
 		public bool UsesEscapeESequence => false;
 		public bool UsesThrowEvent => false;
@@ -780,6 +781,7 @@ namespace MinorShift.Emuera.Compatibility
 		public bool UsesFastDisplayRefresh => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.FastDisplayRefresh);
 		public bool UsesLazyResourceIndex => true;
 		public bool UsesTimesClamp => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.TimesClamp);
+		public bool UsesRandClamp => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.RandClamp);
 		public bool UsesMaskAlphaChannel => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.MaskAlphaChannel);
 		public bool UsesEscapeESequence => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.EscapeESequence);
 		public bool UsesThrowEvent => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.ThrowEvent);

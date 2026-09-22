@@ -855,7 +855,8 @@ namespace MinorShift.Emuera.GameProc
 			}
 		}
 
-		private void RemoveSnakeVariadicMarker(WordCollection wc, out bool hasVariadic, out int variadicArgIndex)		{
+		private void RemoveSnakeVariadicMarker(WordCollection wc, out bool hasVariadic, out int variadicArgIndex)
+		{
 			hasVariadic = false;
 			variadicArgIndex = -1;
 			if (wc == null)

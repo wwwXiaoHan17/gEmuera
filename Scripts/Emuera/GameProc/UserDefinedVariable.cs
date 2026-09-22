@@ -438,6 +438,16 @@ namespace MinorShift.Emuera.GameProc
 			if (sizeNum.Count == 0)
 				sizeNum.Add(1);
 
+			// snake 参考（UserDefinedVariable 351-354）：OUT 变量恒为标量引用
+			//（Dimension=0、Lengths=[1]），短路在维度/尺寸校验之前——#DIM OUT X,1,1,1,1 不报多维错
+			if (ret.Out)
+			{
+				ret.Private = isPrivate;
+				ret.Dimension = 0;
+				ret.Lengths = new int[1] { 1 };
+				return ret;
+			}
+
 			ret.Private = isPrivate;
 			ret.Dimension = sizeNum.Count;
 			if (ret.Const && ret.Dimension > 1)
@@ -446,16 +456,9 @@ namespace MinorShift.Emuera.GameProc
 				throw new CodeEE("3次元以上のキャラ型変数を宣言することはできません", sc);
 			if (ret.Dimension > 3)
 				throw new CodeEE("4次元以上の配列変数を宣言することはできません", sc);
-				ret.Lengths = new int[sizeNum.Count];
-				// snake 参考：OUT 变量恒为标量引用（Dimension=0、Lengths=[1]），不做尺寸解析
-				if (ret.Out)
-				{
-					ret.Dimension = 0;
-					ret.Lengths = new int[1] { 1 };
-					return ret;
-				}
-				if (ret.Reference)
-					return ret;
+			ret.Lengths = new int[sizeNum.Count];
+			if (ret.Reference)
+				return ret;
 			Int64 totalBytes = 1;
 			for (int i = 0; i < sizeNum.Count; i++)
 			{

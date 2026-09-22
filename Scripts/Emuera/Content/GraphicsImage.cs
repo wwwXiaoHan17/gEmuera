@@ -31,8 +31,8 @@ namespace MinorShift.Emuera.Content
 		uEmuera.Drawing.Color penColor = Config.ForeColor;
 		long penWidth = 1;
 		// 参考语义（v24/snake 同款）：pen/brush 未设置（null）时多边形与矩形用默认
-		// 画具——pen → 黑色 1px（SKPaint/GDI+ Pen 默认），brush → Config.BackColor；
-		// 已设置的画具被 GDisposePen/Brush 释放后同样回到"未设置"。
+		// 画具——pen → 黑色 1px（SKPaint/GDI+ Pen 默认），brush → Config.BackColor。
+		// 参考侧 GDispose 把 pen/brush 置 null，移植对应在 GDispose 复位标志。
 		bool penSet;
 		bool brushSet;
 		DashStyle dashStyle = DashStyle.Solid;
@@ -1283,6 +1283,9 @@ namespace MinorShift.Emuera.Content
 				is_created = false;
 				width = 0;
 				height = 0;
+				// 参考语义：GDispose 释放画具（pen/brush 置 null），后续绘制回落默认
+				penSet = false;
+				brushSet = false;
 				if (renderBitmap != null)
 					renderBitmap.image = null;
 				renderBitmap = null;
