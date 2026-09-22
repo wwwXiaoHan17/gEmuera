@@ -126,7 +126,9 @@ public partial class FirstWindow
 				continue;
 			kept.Add(raw);
 		}
-		kept.Add(GetCurrentCategoryDefaultProfileId() + ManualGamePairSeparator + gameRoot);
+		// 手动条目默认 profile = v24pure（分类标签已合并，无标签上下文；snake 游戏
+		// 经 snake 扫描根命中自带 snake profile，高级兼容模式可按次覆盖启动 profile）。
+		kept.Add(CoreProfileV24Pure + ManualGamePairSeparator + gameRoot);
 		LauncherSettingsStore.SaveManualGameEntries(kept);
 
 		ScanGames();
@@ -232,9 +234,4 @@ public partial class FirstWindow
 		gameRoot = raw[(separator + 1)..].TrimEnd('/', '\\');
 		return profileId.Length > 0 && gameRoot.Length > 0;
 	}
-
-	/// <summary>手动条目的默认 profile = 添加时所在标签的目录路由 profile
-	///（与扫描条目同源：v24 标签→v24pure、snake 标签→snake）。</summary>
-	string GetCurrentCategoryDefaultProfileId()
-		=> currentCategory == LauncherGameCategory.Snake ? CoreProfileSnake : CoreProfileV24Pure;
 }
