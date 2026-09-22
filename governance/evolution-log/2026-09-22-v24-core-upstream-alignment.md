@@ -13,7 +13,14 @@
 ## 本批修复（已落地，构建+三冒烟+反射对比全绿）
 
 ### 语义恢复（两参考一致，无门控直修）
-- **SafeArithmetic 重写**：整型 +−* 溢出恢复 unchecked 回绕（原为 checked+钳制+控制台告警）；/ % 除零恢复 CodeEE 致命错误（原为告警+返回 0 继续跑）；单目负号对 long.MinValue 打系统行后原值返回。TIMES/++/--/变量 PlusValue 全部连带归位。
+- ~~**SafeArithmetic 重写**：整型 +−* 溢出恢复 unchecked 回绕（原为 checked+钳制+控制台告警）；/ % 除零恢复 CodeEE 致命错误（原为告警+返回 0 继续跑）；单目负号对 long.MinValue 打系统行后原值返回。TIMES/++/--/变量 PlusValue 全部连带归位。~~
+  **【定性错误，复审返工 2026-09-22】**上段"两参考一致"结论不成立：snake 参考存在同名同路径类
+  `Runtime/Script/Statements/Expression/SafeArithmetic.cs`，其内容与被本批删除的旧实现逐点一致
+  （checked+整数溢出告警+钳制；除零告警得 0；MinValue 取负告警得 MaxValue），且 snake CHANGELOG v2.0.0
+  明文记载「SafeArithmetic 安全运算：溢出保护，不再静默溢出」——与 TIMES 溢出钳制同批同性质。
+  无门控重写构成 snake/erafl 会话语义回归（除零由容错变致命）。已返工：SafeArithmetic 改为
+  `Snake.IsEnabled || EraFl.IsEnabled` 双分支——snake 系会话恢复参考原样安全语义，v24 会话保持
+  emuera.em-master 的 unchecked/CodeEE/系统行语义（OperatorMethod 193/222/236/301/318/696 行核实）。
 - **TIMES**：恢复参考 unchecked 回绕 + decimal 溢出 `(long)(double)d` 路径（v24 分支；snake 分支保留钳制+告警）。
 - **INPUT 家族端到端恢复 EM 三参扩展**（Def/Mouse/CanSkip）：新增 `SpInputsArgument`（含 eraFL 指针元数据透传）；SP_INPUT/SP_INPUTS builder 恢复参考解析（INPUTS form 串以 Comma 结束、后随 1-2 整数参）；INPUT/INPUTS/ONEINPUT(S)/BINPUT(S)/ONEBINPUT(S)/TINPUT(S) 执行侧恢复 MouseInput 与 CanSkip+MesSkip 默认值直通；ONEINPUT 系默认值截断/负数作废（解析期+执行期）全部解除。
 - **INPUTANY**：flag 恢复 `EXTENDED`（SKIPDISP 下照常等待）。
@@ -40,7 +47,7 @@
 - **杂项**：ReadMap/存档 Map 字典恢复 Ordinal（区分大小写，含 RuntimeDataStore 外层三字典）；StringStream.Find 恢复 Ordinal；TOOLTIP_SETFONT/SETFONTSIZE/CUSTOM/FORMAT/IMG 恢复 `EXTENDED`（无 METHOD_SAFE）；DT_COLUMN_OPTIONS 成功路径不再写 RESULT=1；UPDATECHECK 空白判定恢复 `null||""`。
 
 ### 方言投影层
-- **DialectFunctionContracts**：ABS/CBRT/EXPONENT/LOG/LOG10/POWER/SIGN 的 v24 分支补 Wrap 固定 Int 声明（原透传 snake 双态实现致声明漂移）；新增 RAND/MAX/MIN 的 v24 契约（第 1 参不可省略、全 Integer，形状保持 custom 与参考 argumentTypeArrayEx 对齐）。反射对比 v24/snake 双侧全部归零。
+- **DialectFunctionContracts**：ABS/CBRT/EXPONENT/LOG/LOG10/POWER/SIGN 的 v24 分支补 Wrap 固定 Int 声明（原透传 snake 双态实现致声明漂移）；新增 RAND/MAX/MIN 的 v24 契约（第 1 参不可省略、全 Integer，形状保持 custom 与参考 argumentTypeArrayEx 对齐）。反射对比 v24/snake 双侧全部归零（复审注：工具只遍历参考侧键，current 侧溢额各 +2 不在 mismatch 口径内——推测为端口隐藏名族 OUTPUTLOG/BITMAP_CACHE_ENABLE 一类，非参考侧漂移；P2 登记：工具应补 extras 清单输出以便核实）。
 - **FunctionMethod.CheckArgumentType**：补 argumentTypeArray==null 防护（参考同构 else-if）。
 - **BEFORE_ERROR/BEFORE_THROW**：事件名注册与两处调用点（异常路径/THROW）加 Snake.IsEnabled 门控；v24 会话中这两个名字恢复为普通可 CALL 函数、错误即停。
 - **REF/OUT 关键字**：`Out=true` 从 REF 移到 OUT（v24/snake 两参考一致：REF 只置 Reference）；OUT 关键字本身加 Snake/EraFl 门控（v24 会话 OUT 落 default 作变量名）。
