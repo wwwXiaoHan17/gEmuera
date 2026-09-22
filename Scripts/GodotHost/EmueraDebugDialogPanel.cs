@@ -709,7 +709,7 @@ namespace gEmuera.GodotHost
 		/// 显隐往返强制内容重绘。gl_compatibility 下 Godot 把子 Window 强制嵌入主窗口
 		/// （无独立 OS 窗口），该路径首帧合成不提交（2026-09-13 Win32 枚举+截图实证：
 		/// Show 后窗口矩形/内容均不渲染，主窗口 resize 才出现）。非嵌入（Forward+ 原生
-		/// 窗口）时为空操作。悬浮诊断窗（RuntimeDiagnosticsPanel）同症状共用。
+		/// 窗口）时为空操作。
 		/// </summary>
 		public static void KickEmbeddedComposite(Window window, Control content)
 		{

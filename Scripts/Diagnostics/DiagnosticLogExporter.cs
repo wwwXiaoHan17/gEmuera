@@ -79,6 +79,10 @@ namespace gEmuera.Diagnostics
 		{
 			if (!DiagnosticLogRouter.IsLoggingEnabled())
 				return;
+			// 2026-09-19 审计修复：level=none 契约修补——基础设施记录此前绕过等级门，
+			// “关闭全部日志（错误也不记录）”语义下仍持续写入。none 即一条不留。
+			if (global::GenericUtils.RuntimeLogLevel == EmueraLogLevel.None)
+				return;
 			if (!DiagnosticLogRouter.CheckRateLimit(eventId, category))
 				return;
 
@@ -505,8 +509,6 @@ namespace gEmuera.Diagnostics
 			sb.AppendLine("enabled = " + config.ImageDebugEnabled.ToString().ToLowerInvariant());
 			sb.AppendLine("[debug.ui_layout]");
 			sb.AppendLine("enabled = " + config.UiLayoutEnabled.ToString().ToLowerInvariant());
-			sb.AppendLine("[debug.runtime_panel]");
-			sb.AppendLine("enabled = " + config.RuntimePanelEnabled.ToString().ToLowerInvariant());
 			return sb.ToString();
 		}
 

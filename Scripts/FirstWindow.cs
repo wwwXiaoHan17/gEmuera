@@ -121,7 +121,6 @@ public partial class FirstWindow : Control
 	CheckButton debugShowWindowToggle;
 	CheckButton loggingEnabledToggle;
 	CheckButton fileSinkToggle;
-	CheckButton panelVisibleToggle;
 	CheckButton mirrorToGodotToggle;
 	OptionButton logLevelOption;
 	readonly List<CheckButton> logCategoryToggles = new();

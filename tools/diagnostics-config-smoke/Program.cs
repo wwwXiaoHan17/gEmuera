@@ -1,10 +1,11 @@
 // 诊断配置往返一致性 smoke（2026-08-21 日志系统修复回归）：
 // 1. Writer.BuildToml（完整格式）→ RuntimeTomlParser.Parse → Loader 私有 BuildConfig 语义
 //    （通过公开 Load 的字面读取路径验证：完整格式文件必须跳过 minimal 破坏性展开）。
-// 2. 完整格式保存后重启加载，专家字段（debug_model / quick_debug / 触摸细项 / 分类掩码 /
-//    panel_visible）必须与写出值一致——旧版 Writer 只写精简键导致全部丢失的回归。
+// 2. 完整格式保存后重启加载，专家字段（debug_model / quick_debug / 触摸细项 / 分类掩码）
+//    必须与写出值一致——旧版 Writer 只写精简键导致全部丢失的回归。
 // 3. ExtractForeignSections 必须原样保留非诊断 section（[agent.llm]），丢弃诊断 section。
-// 4. Loader 对旧精简格式（仓库 res://config.toml 形态）保持原语义。
+// 4. 旧精简格式（仓库 res://config.toml 形态）：enabled 缺省回退已改为开启（2026-09-19
+//    日志默认开启；Release 构建仍由编译期剥离兜底只留 Error），仅验证解析语义不变。
 using gEmuera.Diagnostics;
 using System.IO;
 using System.Text;
@@ -35,7 +36,6 @@ config.DebugModelJp.Enabled = true;
 config.TouchEnabled = true;
 config.TouchPinch = true; // 旧版精简键写不出的细项
 config.TouchInertia = true;
-config.RuntimePanelEnabled = true;
 config.Categories.Touch = true;
 config.Categories.StatementRecognition = true;
 config.FileSinkEnabled = true;
@@ -52,8 +52,8 @@ Assert(string.Equals(ParseSectionValue(toml, "debug.touch", "pinch"), "true", St
     "round-trip lost debug.touch.pinch (expert detail)");
 Assert(string.Equals(ParseSectionValue(toml, "debug.touch", "inertia"), "true", StringComparison.Ordinal),
     "round-trip lost debug.touch.inertia (expert detail)");
-Assert(string.Equals(ParseSectionValue(toml, "logging", "panel_visible"), "true", StringComparison.Ordinal),
-    "round-trip lost logging.panel_visible");
+Assert(string.Equals(ParseSectionValue(toml, "logging", "file_sink_max_files"), "8", StringComparison.Ordinal),
+    "round-trip lost logging.file_sink_max_files");
 Assert(string.Equals(ParseSectionValue(toml, "logging.categories", "touch"), "true", StringComparison.Ordinal),
     "round-trip lost logging.categories.touch");
 Assert(string.Equals(ParseSectionValue(toml, "logging.categories", "statement_recognition"), "true", StringComparison.Ordinal),

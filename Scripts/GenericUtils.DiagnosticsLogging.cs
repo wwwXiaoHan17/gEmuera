@@ -117,7 +117,6 @@ internal static partial class GenericUtils
             ScrollTraceEnabled = false;
             DiagnosticLogSinks.SetMirrorNonErrorToGodot(false);
             DiagnosticLogSinks.Reload(_runtimeConfig);
-            RuntimeDiagnosticsPanel.SetDiagnosticsPanelVisible(false);
             _inputReplay = null;
             return;
         }
@@ -140,20 +139,9 @@ internal static partial class GenericUtils
 
         DiagnosticLogSinks.SetMirrorNonErrorToGodot(MirrorNonErrorLogsToGodot);
         DiagnosticLogSinks.Reload(_runtimeConfig);
-        RuntimeDiagnosticsPanel.SetDiagnosticsPanelVisible(_runtimeConfig.RuntimePanelEnabled);
         _inputReplay = _runtimeConfig.InputReplayEnabled
             ? new InputReplayBuffer(_runtimeConfig.InputReplayMaxEvents)
             : null;
-    }
-
-    /// <summary>
-    /// 运行时显示/隐藏诊断悬浮球与面板（悬浮球与面板节点均由 RuntimeDiagnosticsPanel 静态管理）。
-    /// 悬浮窗未挂载（debug.runtime_panel.enabled=false 或启动时 panel_visible=false）时为空操作，
-    /// 此时需重启或开启挂载门后生效。
-    /// </summary>
-    public static void SetDiagnosticsPanelVisible(bool visible)
-    {
-        RuntimeDiagnosticsPanel.SetDiagnosticsPanelVisible(visible);
     }
 
     static void WriteConfigSelfCheck(RuntimeDiagnosticsConfigLoader.LoadResult loadResult)
@@ -208,7 +196,6 @@ internal static partial class GenericUtils
         if (cfg.ImageDebugEnabled) parts.Add("image");
         if (cfg.UiLayoutEnabled) parts.Add("ui_layout");
         if (cfg.DynamicMapDebugEnabled) parts.Add("dynamic_map");
-        if (cfg.RuntimePanelEnabled) parts.Add("runtime_panel");
         if (cfg.InputReplayEnabled) parts.Add("input_replay");
         if (cfg.AndroidStorageEnabled) parts.Add("android_storage");
         if (cfg.PerformanceSamplingEnabled) parts.Add("performance_sampling");
@@ -780,6 +767,13 @@ internal static partial class GenericUtils
 
     static string ClipLogMessage(string value)
     {
-        return ClipFlatText(value, MaxLogMessageChars, "...<truncated>");
+        // 2026-09-19 审计修复：max_message_chars 此前是死键（裁剪固定用编译期常量 8192）。
+        // 现读运行时配置并夹在 [256, 65536]；配置缺失/手误回退常量，行为与旧版一致。
+        int limit = _runtimeConfig?.LoggingMaxMessageChars ?? MaxLogMessageChars;
+        if (limit < 256)
+            limit = 256;
+        if (limit > 65536)
+            limit = 65536;
+        return ClipFlatText(value, limit, "...<truncated>");
     }
 }

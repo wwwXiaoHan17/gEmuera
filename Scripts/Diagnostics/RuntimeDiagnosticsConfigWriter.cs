@@ -44,6 +44,7 @@ namespace gEmuera.Diagnostics
             "debug.ui_layout",
             "debug.dynamic_map",
             "debug.lifecycle",
+            // 2026-09-19 悬浮窗移除：仍声明为诊断管理 section，保存时把旧文件里的废弃 [debug.runtime_panel] 清出。
             "debug.runtime_panel",
             "diagnostic_package",
             "diagnostic_summary",
@@ -178,7 +179,6 @@ namespace gEmuera.Diagnostics
             sb.AppendLine("language = \"" + Escape(c.QuickDebugLanguage) + "\"");
             sb.AppendLine("apk_safe = " + Bool(c.QuickDebugApkSafe));
             sb.AppendLine("mirror_non_error_to_godot = " + Bool(c.QuickDebugMirrorNonErrorToGodot));
-            sb.AppendLine("runtime_panel = " + Bool(c.QuickDebugRuntimePanel));
             sb.AppendLine("diagnostic_package = " + Bool(c.QuickDebugDiagnosticPackage));
             sb.AppendLine();
             sb.AppendLine("[quick_debug.modules]");
@@ -202,7 +202,7 @@ namespace gEmuera.Diagnostics
             sb.AppendLine("level = \"" + Escape(c.LoggingLevel) + "\"");
             sb.AppendLine("file_sink = " + Bool(c.FileSinkEnabled));
             sb.AppendLine("file_sink_level = \"" + Escape(c.FileSinkLevel) + "\"");
-            sb.AppendLine("panel_visible = " + Bool(c.RuntimePanelEnabled));
+            sb.AppendLine("file_sink_max_files = " + c.LoggingFileSinkMaxFiles);
             sb.AppendLine("mirror_non_error_to_godot = " + Bool(c.LoggingMirrorNonErrorToGodot));
             sb.AppendLine("diagnostic_ring_capacity = " + c.LoggingDiagnosticRingCapacity);
             sb.AppendLine("max_message_chars = " + c.LoggingMaxMessageChars);
@@ -245,12 +245,10 @@ namespace gEmuera.Diagnostics
             sb.AppendLine("[logging.redaction]");
             sb.AppendLine("enabled = " + Bool(c.RedactionEnabled));
             sb.AppendLine("normalize_paths = " + Bool(c.RedactionNormalizePaths));
-            sb.AppendLine("path_mode = \"" + Escape(c.RedactionPathMode) + "\"");
             sb.AppendLine("max_path_chars = " + c.RedactionMaxPathChars);
             sb.AppendLine("max_script_text_chars = " + c.RedactionMaxScriptTextChars);
             sb.AppendLine("max_user_text_chars = " + c.RedactionMaxUserTextChars);
             sb.AppendLine("replace_newlines = " + Bool(c.RedactionReplaceNewlines));
-            sb.AppendLine("hash_sensitive_text = " + Bool(c.RedactionHashSensitiveText));
             sb.AppendLine();
             sb.AppendLine("[debug.touch]");
             sb.AppendLine("enabled = " + Bool(c.TouchEnabled));
@@ -341,13 +339,6 @@ namespace gEmuera.Diagnostics
             sb.AppendLine("[debug.lifecycle]");
             sb.AppendLine("enabled = " + Bool(c.LifecycleEnabled));
             sb.AppendLine("android_pause_resume = " + Bool(c.LifecycleAndroidPauseResume));
-            sb.AppendLine();
-            sb.AppendLine("[debug.runtime_panel]");
-            sb.AppendLine("enabled = " + Bool(c.RuntimePanelEnabled));
-            sb.AppendLine("allow_runtime_toggle = " + Bool(c.RuntimePanelAllowRuntimeToggle));
-            sb.AppendLine("persist_changes = " + Bool(c.RuntimePanelPersistChanges));
-            sb.AppendLine("show_active_modules = " + Bool(c.RuntimePanelShowActiveModules));
-            sb.AppendLine("show_ring_buffer_stats = " + Bool(c.RuntimePanelShowRingBufferStats));
             sb.AppendLine();
             sb.AppendLine("[diagnostic_package]");
             sb.AppendLine("enabled = " + Bool(c.DiagnosticPackageEnabled));

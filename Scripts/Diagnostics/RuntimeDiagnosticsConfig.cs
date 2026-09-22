@@ -28,7 +28,6 @@ namespace gEmuera.Diagnostics
         public bool QuickDebugLanguageInvalid { get; private set; }
         public bool QuickDebugApkSafe { get; set; } = true;
         public bool QuickDebugMirrorNonErrorToGodot { get; set; } = false;
-        public bool QuickDebugRuntimePanel { get; set; } = false;
         public bool QuickDebugDiagnosticPackage { get; set; } = true;
 
         public sealed class QuickDebugModuleSwitches
@@ -63,7 +62,9 @@ namespace gEmuera.Diagnostics
         public DebugModelProfile DebugModelEn { get; set; } = new DebugModelProfile { Enabled = false, Language = "en", LogLevel = "debug", MirrorToGodot = true, ScrollTrace = false };
 
         // ---------- logging ----------
-        public string LoggingLevel { get; set; } = "error";
+        // 2026-09-19 日志默认开启：代码默认等级与 res://config.toml 模板注释（"默认 warn"）对齐；
+        // 无配置文件/未写 level 键时按 warn 捕获（Release 构建仍由编译期剥离兜底只留 Error）。
+        public string LoggingLevel { get; set; } = "warn";
         public bool LoggingMirrorNonErrorToGodot { get; set; } = false;
         // 持续文件 sink：LoggingEnabled && FileSinkEnabled 双重门控；等级独立于全局 level（FileSinkLevel）。
         // Debug/诊断构建默认开启，Release APK 默认关闭（避免磁盘增长）；config.toml 显式 file_sink 值优先。
@@ -73,8 +74,9 @@ namespace gEmuera.Diagnostics
         public bool FileSinkEnabled { get; set; } = false;
 #endif
         public string FileSinkLevel { get; set; } = "info";
-        // 诊断面板显示：复用 RuntimePanelEnabled（等价键 debug.runtime_panel.enabled / [logging] panel_visible）。
-        // false 时启动不挂载悬浮窗；运行时 GenericUtils.SetDiagnosticsPanelVisible 可即时显隐。
+        // 2026-09-19 审计 P0 修复：user:// 轮转文件总量上限（含当前文件）。0 = 显式不限量。
+        // 每次新开轮转文件后按时间保留最新 N 份，防止 Android 私有存储静默累积。
+        public int LoggingFileSinkMaxFiles { get; set; } = 8;
         public int LoggingDiagnosticRingCapacity { get; set; } = 1000;
         public int LoggingMaxMessageChars { get; set; } = 8192;
         public string LoggingExportDirectory { get; set; } = "game://";
@@ -116,14 +118,14 @@ namespace gEmuera.Diagnostics
         public bool RateLimitRecordDroppedCount { get; set; } = true;
 
         // ---------- redaction ----------
+        // 2026-09-19 审计修复：删除从未被消费的 path_mode / hash_sensitive_text 死旋钮
+        //（RedactPath/RedactText 实际只消费 enabled/normalize_paths/max_path_chars/replace_newlines）。
         public bool RedactionEnabled { get; set; } = true;
         public bool RedactionNormalizePaths { get; set; } = true;
-        public string RedactionPathMode { get; set; } = "basename_and_root";
         public int RedactionMaxPathChars { get; set; } = 160;
         public int RedactionMaxScriptTextChars { get; set; } = 120;
         public int RedactionMaxUserTextChars { get; set; } = 64;
         public bool RedactionReplaceNewlines { get; set; } = true;
-        public bool RedactionHashSensitiveText { get; set; } = false;
 
         // ---------- debug.touch ----------
         public bool TouchEnabled { get; set; } = false;
@@ -216,11 +218,7 @@ namespace gEmuera.Diagnostics
         public bool LifecycleAndroidPauseResume { get; set; } = false;
 
         // ---------- debug.runtime_panel ----------
-        public bool RuntimePanelEnabled { get; set; } = false;
-        public bool RuntimePanelAllowRuntimeToggle { get; set; } = true;
-        public bool RuntimePanelPersistChanges { get; set; } = false;
-        public bool RuntimePanelShowActiveModules { get; set; } = true;
-        public bool RuntimePanelShowRingBufferStats { get; set; } = true;
+        // 2026-09-19 移除：日志悬浮窗（悬浮球/悬浮弹窗）功能整体下线，配置键一并删除。
 
         // ---------- diagnostic_package ----------
         public bool DiagnosticPackageEnabled { get; set; } = false;
@@ -276,7 +274,10 @@ namespace gEmuera.Diagnostics
         public int InputReplayMaxTextChars { get; set; } = 32;
 
         // ---------- diagnostic_retention ----------
-        public bool RetentionEnabled { get; set; } = false;
+        // 2026-09-19 审计修复：默认开启。游戏目录选择时（NotifyGamePathSelected，game:// 已解析）
+        // 与诊断包导出前按 max_packages/max_total_mb 清理 gemuera_* 管理命名文件，
+        // 防止 auto/manual 导出物跨会话无限累积污染游戏目录（eraMegaten 17 份出厂日志实证）。
+        public bool RetentionEnabled { get; set; } = true;
         public string RetentionDirectory { get; set; } = "game://";
         public int RetentionMaxPackages { get; set; } = 20;
         public int RetentionMaxTotalMb { get; set; } = 128;
@@ -325,7 +326,6 @@ namespace gEmuera.Diagnostics
             LoggingLevel = "none";
             LoggingMirrorNonErrorToGodot = false;
             QuickDebugMirrorNonErrorToGodot = false;
-            QuickDebugRuntimePanel = false;
             QuickDebugDiagnosticPackage = false;
 
             DebugModelZhCn.Enabled = false;
@@ -403,7 +403,6 @@ namespace gEmuera.Diagnostics
             DynamicMapLogButtons = false;
             LifecycleEnabled = false;
             LifecycleAndroidPauseResume = false;
-            RuntimePanelEnabled = false;
             DiagnosticPackageEnabled = false;
             DiagnosticSummaryEnabled = false;
             UiOverlayEnabled = false;
@@ -432,7 +431,6 @@ namespace gEmuera.Diagnostics
             bool androidStorage,
             bool performance,
             bool statementRecognition,
-            bool runtimePanel,
             bool inputReplay,
             bool diagnosticPackage,
             bool mirrorToGodot,
@@ -444,8 +442,9 @@ namespace gEmuera.Diagnostics
 
             LoggingEnabled = true;
             // 企业级说明：配置文件显式给出 [logging] level 时，minimal 展开以它为基准，
-            // 避免旧“enabled=true 强制 debug”把用户设置的文件等级吞掉；缺省仍保持历史行为 debug。
-            LoggingLevel = string.IsNullOrWhiteSpace(levelOverride) ? "debug" : levelOverride;
+            // 避免旧“enabled=true 强制 debug”把用户设置的文件等级吞掉；
+            // 缺省回退 warn（2026-09-19 与代码默认等级对齐，此前为 debug）。
+            LoggingLevel = string.IsNullOrWhiteSpace(levelOverride) ? "warn" : levelOverride;
             LoggingMirrorNonErrorToGodot = mirrorToGodot;
             ActiveDebugModel = "debug_model_zh_cn";
             DebugModelZhCn.Enabled = true;
@@ -459,7 +458,6 @@ namespace gEmuera.Diagnostics
             CorrelationEnabled = true;
             RateLimitEnabled = true;
             RedactionEnabled = true;
-            RuntimePanelEnabled = runtimePanel;
             DiagnosticPackageEnabled = diagnosticPackage;
             InputReplayEnabled = inputReplay;
 
@@ -632,7 +630,6 @@ namespace gEmuera.Diagnostics
 
             LoggingLevel = "error";
             LoggingMirrorNonErrorToGodot = !QuickDebugApkSafe && QuickDebugMirrorNonErrorToGodot;
-            RuntimePanelEnabled = QuickDebugRuntimePanel;
             DiagnosticPackageEnabled = QuickDebugDiagnosticPackage;
 
             Categories.General = false;

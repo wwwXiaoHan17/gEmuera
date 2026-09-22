@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Threading;
@@ -53,13 +54,19 @@ namespace gEmuera.Diagnostics
 				Reload(_config);
 				return;
 			}
-			_ringCapacity = Math.Max(64, _config.LoggingDiagnosticRingCapacity);
+			_ringCapacity = ClampRingCapacity(_config.LoggingDiagnosticRingCapacity);
 			_ring = new DiagnosticLogRecord[_ringCapacity];
 			_ringStart = 0;
 			_ringCount = 0;
 			_overwrittenTotal = 0;
 			_mirrorNonErrorToGodot = _config.LoggingMirrorNonErrorToGodot ? 1 : 0;
 			Reload(_config);
+		}
+
+		/// <summary>ring 容量夹在 [64, 100000]：旧实现只有下限，配置手误（多打零）会在启动期分配巨型数组。</summary>
+		static int ClampRingCapacity(int capacity)
+		{
+			return Math.Clamp(capacity, 64, 100_000);
 		}
 
 		/// <summary>
@@ -70,6 +77,24 @@ namespace gEmuera.Diagnostics
 		{
 			if (config == null)
 				return;
+			// 2026-09-19 审计 P0 修复：热重载必须刷新 _config——启动时日志关闭的会话，
+			// Write 一直被陈旧 _config.LoggingEnabled 拦截，路由放行的记录全部静默丢失。
+			// 与同文件其它热标志一致用 Volatile（主线程写、Emuera worker 线程读）。
+			Volatile.Write(ref _config, config);
+			// 关→开补建 ring：旧实现只在 Initialize 分配，关闭启动后热重载开启时 ring 仍为 null。
+			if (config.LoggingEnabled && (_ring == null || _ringCapacity <= 0))
+			{
+				lock (_ringLock)
+				{
+					if (_ring == null || _ringCapacity <= 0)
+					{
+						_ringCapacity = ClampRingCapacity(config.LoggingDiagnosticRingCapacity);
+						_ring = new DiagnosticLogRecord[_ringCapacity];
+						_ringStart = 0;
+						_ringCount = 0;
+					}
+				}
+			}
 			Volatile.Write(ref _fileSinkLevel, (int)RuntimeDiagnosticsConfig.ParseLogLevel(config.FileSinkLevel));
 			// 企业级说明：user 数据目录根只在这里（主线程）解析并缓存；
 			// 文件写入可能发生在 Emuera worker 线程，不能直接调用 ProjectSettings.GlobalizePath。
@@ -125,7 +150,8 @@ namespace gEmuera.Diagnostics
 		/// </summary>
 		public static void Write(in DiagnosticLogRecord record)
 		{
-			if (_config == null || !_config.LoggingEnabled)
+			var config = Volatile.Read(ref _config);
+			if (config == null || !config.LoggingEnabled)
 				return;
 			AppendToRing(record);
 			if (record.Level >= EmueraLogLevel.Error && global::gEmuera.LegacyRunner.LegacyTrace.IsEnabled)
@@ -208,6 +234,7 @@ namespace gEmuera.Diagnostics
 				_fileSinkBytes = 0;
 				_fileSinkPath = absolutePath;
 				_fileSinkOpenFailures = 0;
+				PruneFileSinkRotatedFilesLocked(absolutePath);
 				return true;
 			}
 			catch (Exception ex)
@@ -258,6 +285,46 @@ namespace gEmuera.Diagnostics
 			_fileSinkStamp = stamp;
 			_fileSinkRotationSuffix = 0;
 			return "gemuera_runtime_" + stamp + ".log";
+		}
+
+		/// <summary>
+		/// 2026-09-19 审计 P0 修复：user:// 轮转文件原本无总量上限、无任何清理路径
+		///（retention 只覆盖 game://），Android 私有存储会静默累积直至耗尽。
+		/// 每次新开文件后按修改时间保留最新 file_sink_max_files-1 份历史文件（另加当前文件），
+		/// 删除更旧的轮转文件；单文件删除失败静默跳过（尽力而为的清理，不阻断写入）。
+		/// 调用方需持有 _fileSinkLock。
+		/// </summary>
+		static void PruneFileSinkRotatedFilesLocked(string currentAbsolutePath)
+		{
+			try
+			{
+				string root = _fileSinkUserRoot;
+				if (string.IsNullOrEmpty(root) || !Directory.Exists(root))
+					return;
+				int maxFiles = Volatile.Read(ref _config)?.LoggingFileSinkMaxFiles ?? 8;
+				if (maxFiles <= 0)
+					return; // 0 = 显式不限量
+				var files = new List<FileInfo>(Math.Max(0, maxFiles * 2));
+				foreach (string path in Directory.EnumerateFiles(root, "gemuera_runtime_*.log", SearchOption.TopDirectoryOnly))
+				{
+					if (string.Equals(path, currentAbsolutePath, StringComparison.OrdinalIgnoreCase))
+						continue;
+					files.Add(new FileInfo(path));
+				}
+				int keepOld = maxFiles - 1;
+				if (files.Count <= keepOld)
+					return;
+				files.Sort((a, b) => b.LastWriteTimeUtc.CompareTo(a.LastWriteTimeUtc));
+				for (int i = keepOld; i < files.Count; i++)
+				{
+					try { files[i].Delete(); }
+					catch { }
+				}
+			}
+			catch
+			{
+				// 清理自身故障不影响日志写入主路径。
+			}
 		}
 
 		/// <summary>

@@ -15,6 +15,10 @@
 - `Info/Warn/Debug` 带 `[Conditional("DEBUG")]`/`[Conditional("GEMUERA_DIAGNOSTIC_LOGS")]`，
   非诊断构建编译期剥离；`Error` 无条件编译但仍受运行时总闸门控制。
 - `VerboseLogBuild=false`（Release/APK）时仅 Error 级且 `logging.enabled` 才输出。
+- 例外：`DiagnosticLogExporter.WriteInfrastructureRecord`（CONFIG.SELF_CHECK / RETENTION.* /
+  DIAGNOSTIC_PACKAGE.* 等低频基础设施事件）不带 `[Conditional]` 且不受等级门控，只受
+  总开关+限流约束（启动自检在 Release 也需可见，量固定有界）；`level=none`（全关契约）
+  时与普通记录一并拦截（2026-09-19 修补）。
 
 ## 1. 消息句式
 
@@ -86,8 +90,8 @@ Audio: BGM 加载失败 → file=bgm01.ogg error=FileNotFoundException
 | --- | --- | --- | --- | --- |
 | `emuera.log` | 对齐区 `OutputLog`（Process.SystemProc / EmueraConsole*）+ Program.cs 兼容默认 | ERB `OutputLog` 指令 / 兼容行为 | 游戏目录 | 保留（上游契约） |
 | `emuera_startup_errors.log` | Program.cs | 启动期错误 | 游戏目录 | 保留（上游契约） |
-| `gemuera_runtime_*.log` | DiagnosticLogSinks 文件 sink | `[logging] file_sink` 开启时持续写入，1 MiB 轮转 | `user://` | 保留（主结构化日志） |
-| `gemuera_{stamp}.log` | `GenericUtils.ExportDiagnosticLog` 默认路径 | 用户主动导出 | 默认 `game://`（`logging_export_directory` 可改） | **收敛候选**：默认落点是否改 `user://` 待决策——真机排障依赖游戏目录可见性，但反复导出会污染游戏目录（实测 eraMegaten 汉化包带 17 个导出日志出厂） |
+| `gemuera_runtime_*.log` | DiagnosticLogSinks 文件 sink | `[logging] file_sink` 开启时持续写入，1 MiB 轮转 | `user://` | 保留（主结构化日志）；总量上限 `file_sink_max_files`（默认 8，新开文件时删最旧，2026-09-19） |
+| `gemuera_{stamp}.log` | `GenericUtils.ExportDiagnosticLog` 默认路径 | 用户主动导出 | 默认 `game://`（`logging_export_directory` 可改） | **已收敛**（2026-09-19）：`diagnostic_retention` 默认开启，游戏目录选择时与诊断包导出前按 20 份/128 MiB 清理 `gemuera_*` 管理命名文件（含 auto 导出） |
 | `launcher.cfg` | LauncherSettingsStore | 启动器设置 | `user://` | 非日志，顺带登记 |
 
 导出包内格式（三种产物各守其格式，**不跨产物统一**）：
@@ -106,14 +110,17 @@ Audio: BGM 加载失败 → file=bgm01.ogg error=FileNotFoundException
      （transport，非旁路）。
   2. Godot 生命周期级致命输出（崩溃前最后手段），须注释说明为何不能走路由。
 
-**存量直推 `GD.Push*` 台账**（2026-09-04 盘点，各有基础设施生命周期理由，暂不收口；触碰时再评估）：
+**存量直推 `GD.Push*` 台账**（2026-09-19 重新盘点，各有基础设施生命周期理由，暂不收口；触碰时再评估）：
 
 | 位置 | 理由 |
 | --- | --- |
-| DiagnosticLogExporter.cs:154/165（BREADCRUMB 写入失败/拒绝） | 日志基础设施自身的失败通道，走路由有递归/依赖倒置风险 |
-| RuntimeDiagnosticsConfig.cs:863（未知日志等级回退） | 配置解析期，路由尚未初始化 |
-| GodotHost/PrototypeRuntimeNode.cs:329（原型命令关闭失败） | 关闭期，sink 可能已释放 |
-| LegacyRunner/LegacyRunnerHost.cs:625（runner 报告失败） | 无头诊断宿主自身的输出 |
+| DiagnosticLogSinks.cs:395-401（`WriteToGodotConsole`） | 路由自身的 Godot 控制台渲染通道（transport，非旁路） |
+| DiagnosticLogSinks.cs:223/240（文件 sink 打开失败/拒绝） | 日志基础设施自身的失败通道，走路由有递归/依赖倒置风险 |
+| DiagnosticLogExporter.cs:158/169（BREADCRUMB 写入失败/拒绝） | 同上（基础设施失败通道） |
+| RuntimeDiagnosticsConfig.cs:859（未知日志等级回退） | 配置解析期，路由尚未初始化 |
+| GodotHost/PrototypeRuntimeNode.cs:338（原型命令关闭失败） | 关闭期，sink 可能已释放 |
+| LegacyRunner/LegacyRunnerHost.cs:138/594/637/642（runner 启动失败/中止/UIQUEUE 统计/报告失败） | 无头诊断宿主自身的输出；:138/:642 为裸 `+ ex` 拼接（已知句式债务，触碰时顺手修） |
 
-治理基线（2026-09-04 首次收口）：`Scripts/` 下裸 `GD.Print` 仅剩上述渲染通道 1 处；
+治理基线（2026-09-04 首次收口，2026-09-19 复盘）：`Scripts/` 解释器对齐区之外的裸
+`GD.Print` 仅剩渲染通道 1 处 + LegacyRunnerHost UIQUEUE 统计 1 处（台账内）；
 PerformanceBenchmark 17 处、VirtualMouse 9 处、EmueraThread 1 处已收口进路由。
