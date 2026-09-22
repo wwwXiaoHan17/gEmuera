@@ -111,7 +111,6 @@ namespace gEmuera.Diagnostics
             if (TryGetString(sections, "quick_debug", "language", out v)) cfg.QuickDebugLanguage = v;
             if (TryGetBool(sections, "quick_debug", "apk_safe", out b)) cfg.QuickDebugApkSafe = b;
             if (TryGetBool(sections, "quick_debug", "mirror_non_error_to_godot", out b)) cfg.QuickDebugMirrorNonErrorToGodot = b;
-            if (TryGetBool(sections, "quick_debug", "runtime_panel", out b)) cfg.QuickDebugRuntimePanel = b;
             if (TryGetBool(sections, "quick_debug", "diagnostic_package", out b)) cfg.QuickDebugDiagnosticPackage = b;
 
             // quick_debug.modules
@@ -138,7 +137,7 @@ namespace gEmuera.Diagnostics
             // WS2 持续文件 sink：LoggingEnabled && FileSinkEnabled 双重门控；等级独立于全局 level。
             if (TryGetBool(sections, "logging", "file_sink", out b)) cfg.FileSinkEnabled = b;
             if (TryGetString(sections, "logging", "file_sink_level", out v)) cfg.FileSinkLevel = v;
-            // 诊断面板显示：等价键复用 RuntimePanelEnabled（[logging] panel_visible 由 ApplyMinimalLoggingSwitches 在 minimal 展开后应用）。
+            if (TryGetInt(sections, "logging", "file_sink_max_files", out int fileSinkMaxFiles)) cfg.LoggingFileSinkMaxFiles = fileSinkMaxFiles;
             if (TryGetBool(sections, "logging", "mirror_non_error_to_godot", out b)) cfg.LoggingMirrorNonErrorToGodot = b;
             if (TryGetInt(sections, "logging", "diagnostic_ring_capacity", out int i)) cfg.LoggingDiagnosticRingCapacity = i;
             if (TryGetInt(sections, "logging", "max_message_chars", out i)) cfg.LoggingMaxMessageChars = i;
@@ -179,12 +178,10 @@ namespace gEmuera.Diagnostics
             // redaction
             if (TryGetBool(sections, "logging.redaction", "enabled", out b)) cfg.RedactionEnabled = b;
             if (TryGetBool(sections, "logging.redaction", "normalize_paths", out b)) cfg.RedactionNormalizePaths = b;
-            if (TryGetString(sections, "logging.redaction", "path_mode", out v)) cfg.RedactionPathMode = v;
             if (TryGetInt(sections, "logging.redaction", "max_path_chars", out i)) cfg.RedactionMaxPathChars = i;
             if (TryGetInt(sections, "logging.redaction", "max_script_text_chars", out i)) cfg.RedactionMaxScriptTextChars = i;
             if (TryGetInt(sections, "logging.redaction", "max_user_text_chars", out i)) cfg.RedactionMaxUserTextChars = i;
             if (TryGetBool(sections, "logging.redaction", "replace_newlines", out b)) cfg.RedactionReplaceNewlines = b;
-            if (TryGetBool(sections, "logging.redaction", "hash_sensitive_text", out b)) cfg.RedactionHashSensitiveText = b;
 
             // debug.touch
             if (TryGetBool(sections, "debug.touch", "enabled", out b)) cfg.TouchEnabled = b;
@@ -276,12 +273,7 @@ namespace gEmuera.Diagnostics
             if (TryGetBool(sections, "debug.lifecycle", "enabled", out b)) cfg.LifecycleEnabled = b;
             if (TryGetBool(sections, "debug.lifecycle", "android_pause_resume", out b)) cfg.LifecycleAndroidPauseResume = b;
 
-            // debug.runtime_panel
-            if (TryGetBool(sections, "debug.runtime_panel", "enabled", out b)) cfg.RuntimePanelEnabled = b;
-            if (TryGetBool(sections, "debug.runtime_panel", "allow_runtime_toggle", out b)) cfg.RuntimePanelAllowRuntimeToggle = b;
-            if (TryGetBool(sections, "debug.runtime_panel", "persist_changes", out b)) cfg.RuntimePanelPersistChanges = b;
-            if (TryGetBool(sections, "debug.runtime_panel", "show_active_modules", out b)) cfg.RuntimePanelShowActiveModules = b;
-            if (TryGetBool(sections, "debug.runtime_panel", "show_ring_buffer_stats", out b)) cfg.RuntimePanelShowRingBufferStats = b;
+            // debug.runtime_panel：2026-09-19 悬浮窗功能移除，配置键不再读取（旧文件中的该 section 按未知 section 忽略）。
 
             // diagnostic_package
             if (TryGetBool(sections, "diagnostic_package", "enabled", out b)) cfg.DiagnosticPackageEnabled = b;
@@ -394,28 +386,20 @@ namespace gEmuera.Diagnostics
             // DisableAllDiagnostics 后按精简键重建，缺省模块关闭，避免误开 APK 热路径诊断。
             if (HasExpertDiagnosticsSections(sections))
             {
-                // 完整格式：专家键已全量读取，但 [logging] panel_visible / runtime_panel
-                // 等价键只在本方法应用（BuildConfig 不读它们），跳过展开前必须补上，
-                // 否则面板保存的 panel_visible 重启后丢失。
-                if (TryGetBool(sections, "logging", "panel_visible", out bool panelVisibleFull))
-                    cfg.RuntimePanelEnabled = panelVisibleFull;
-                else if (TryGetBool(sections, "logging", "runtime_panel", out bool runtimePanelFull))
-                    cfg.RuntimePanelEnabled = runtimePanelFull;
+                // 完整格式：专家键已全量读取，直接跳过破坏性展开。
+                // （旧 [logging] panel_visible / runtime_panel 等价键随悬浮窗移除一并废弃，不再读取。）
                 return;
             }
 
-            // 精简配置只认一个总开关和少量模块开关；缺省即关闭，避免旧 user://config.toml 误把 APK 热路径诊断打开。
-            bool enabled = GetMinimalBool(sections, "enabled", false);
+            // 精简配置只认一个总开关和少量模块开关；缺省视为开启（2026-09-19 日志默认开启：
+            // 未写 enabled 键的旧精简文件不再回退关闭，Release 构建仍由编译期剥离兜底只留 Error）。
+            bool enabled = GetMinimalBool(sections, "enabled", true);
             bool mirrorToGodot = GetMinimalBool(sections, "mirror_to_godot",
                 GetMinimalBool(sections, "mirror_non_error_to_godot", false));
             // WS2：显式 [logging] level 参与 minimal 展开，避免 enabled=true 强制回退 debug。
             string levelOverride = null;
             if (TryGetString(sections, "logging", "level", out string explicitLevel))
                 levelOverride = explicitLevel;
-            // WS2：面板显示等价键 [logging] panel_visible（默认 true）优先于旧 minimal runtime_panel（默认 false），
-            // 两者都映射到 RuntimePanelEnabled，避免 minimal 展开把用户设置吞掉。
-            bool panelVisible = GetMinimalBool(sections, "panel_visible",
-                GetMinimalBool(sections, "runtime_panel", false));
             cfg.ApplyMinimalLoggingConfig(
                 enabled,
                 GetMinimalBool(sections, "touch", false),
@@ -428,7 +412,6 @@ namespace gEmuera.Diagnostics
                 GetMinimalBool(sections, "android_storage", false),
                 GetMinimalBool(sections, "performance", GetMinimalBool(sections, "performance_sampling", false)),
                 GetMinimalBool(sections, "statement_recognition", false),
-                panelVisible,
                 GetMinimalBool(sections, "input_replay", false),
                 GetMinimalBool(sections, "diagnostic_package", false),
                 mirrorToGodot,

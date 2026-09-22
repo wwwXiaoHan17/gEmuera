@@ -5,7 +5,6 @@ using MinorShift.Emuera;
 using MinorShift.Emuera.GameView;
 using System.Threading;
 using MinorShift.Emuera.Content;
-using gEmuera.Diagnostics;
 using GEmuera.Core.Compatibility;
 using GEmuera.Core.Session;
 using gEmuera.GodotHost;
@@ -87,7 +86,6 @@ public partial class EmueraMain : Node
 		ResolutionHelper.Apply();
 		GenericUtils.SetMainThread();
 		GenericUtils.InitializeLogging();
-		RuntimeDiagnosticsPanel.AttachFloatingTo(this);
 		uEmuera.Logger.isEnabled = GenericUtils.IsLogEnabled;
 		uEmuera.Logger.sink = GenericUtils.LogFromBridge;
 		uEmuera.Logger.info = content => GenericUtils.Info(content);

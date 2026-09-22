@@ -88,14 +88,6 @@ public partial class FirstWindow : Control
 		body.AddChild(CreateHintLabel(MultiLanguage.Get("FirstWindow.FileSinkHint",
 			"持续写入 user://gemuera_runtime_*.log（自动轮转）。仅在日志/诊断系统开启时生效。")));
 
-		panelVisibleToggle = CreateSettingsToggle(
-			MultiLanguage.Get("FirstWindow.PanelVisibleToggle", "诊断面板显示"),
-			diagnosticsLoggingConfig.RuntimePanelEnabled,
-			null);
-		body.AddChild(panelVisibleToggle);
-		body.AddChild(CreateHintLabel(MultiLanguage.Get("FirstWindow.PanelVisibleHint",
-			"控制游戏内诊断面板（悬浮球）显示；进入游戏后即时生效。")));
-
 		mirrorToGodotToggle = CreateSettingsToggle(
 			MultiLanguage.Get("FirstWindow.MirrorToGodotToggle", "非错误日志镜像到 Godot 控制台"),
 			diagnosticsLoggingConfig.LoggingMirrorNonErrorToGodot,
@@ -310,7 +302,6 @@ public partial class FirstWindow : Control
 
 		config.LoggingEnabled = loggingEnabledToggle.ButtonPressed;
 		config.FileSinkEnabled = fileSinkToggle.ButtonPressed;
-		config.RuntimePanelEnabled = panelVisibleToggle.ButtonPressed;
 		config.LoggingMirrorNonErrorToGodot = mirrorToGodotToggle.ButtonPressed;
 		if (logLevelOption != null)
 			config.LoggingLevel = logLevelOption.GetItemText(logLevelOption.Selected);

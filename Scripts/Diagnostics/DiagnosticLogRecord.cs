@@ -44,7 +44,9 @@ namespace gEmuera.Diagnostics
 
         public string FormatForGodot()
         {
-            string text = $"[{Level.ToString().ToUpperInvariant()}][{Category}] {EventId} {Source}:{Line} {Member} | {Message}";
+            // 2026-09-19 审计修复：Message 此前未转义换行，多行消息会污染 Godot 控制台镜像
+            //（仅控制台；导出格式一直有转义）。与 data 同用单行转义。
+            string text = $"[{Level.ToString().ToUpperInvariant()}][{Category}] {EventId} {Source}:{Line} {Member} | {EscapeForSingleLine(Message)}";
             if (!string.IsNullOrEmpty(Data) && EventId.StartsWith("PERF.", StringComparison.OrdinalIgnoreCase))
                 text += " | data=" + EscapeForSingleLine(Data);
             return text;

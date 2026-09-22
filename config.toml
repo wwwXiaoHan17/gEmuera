@@ -27,15 +27,9 @@ file_sink = false
 # 只决定哪些记录写入文件，不影响 ring buffer / Godot 控制台。默认 info。
 file_sink_level = "info"
 
-# 诊断面板可见 / Diagnostics panel visible.
-# 与 debug.runtime_panel.enabled 等价复用（同一字段 RuntimePanelEnabled，二选一即可）：
-# true=启动挂载悬浮窗；false=启动不挂载。运行中可经 GenericUtils.SetDiagnosticsPanelVisible(bool)
-# 即时显隐（热重载同样生效）。
-# Equivalent to debug.runtime_panel.enabled (shared RuntimePanelEnabled field): true = mount the
-# floating ball at startup; false = never mount. GenericUtils.SetDiagnosticsPanelVisible(bool)
-# toggles it at runtime (hot reload applies too).
-# 默认 false：不开启 gEmuera 日志调试就不显示调试悬浮窗（fix 2026-08-09）。
-panel_visible = false
+# 运行时日志文件保留上限（含当前文件），超出自动删除最旧文件（0 = 不限）。
+# Max retained runtime log files (including current); oldest deleted beyond this (0 = unlimited).
+file_sink_max_files = 8
 
 touch = false
 input = false
