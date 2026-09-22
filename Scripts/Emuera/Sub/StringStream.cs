@@ -118,7 +118,8 @@ namespace MinorShift.Emuera.Sub
 		/// <param name="str"></param>
 		public int Find(string str)
 		{
-			return source.IndexOf(str, pointer) - pointer;
+			// 参考侧为 Ordinal 比较（避免文化感知匹配差异）
+			return source.IndexOf(str, pointer, StringComparison.Ordinal) - pointer;
 		}
 
 		/// <summary>

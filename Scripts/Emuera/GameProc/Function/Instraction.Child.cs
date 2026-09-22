@@ -339,30 +339,54 @@ namespace MinorShift.Emuera.GameProc.Function
 				{
 					var.SetValue(var.GetFloatValue(exm) * multiplier, exm);
 				}
+				else if (Program.Compatibility.Snake.IsEnabled)
+				{
+					// snake 参考：checked + 溢出告警 + 钳位（skia fork 有意行为）
+					if (Config.TimesNotRigorousCalculation)
+					{
+						double d = (double)var.GetIntValue(exm) * multiplier;
+						try
+						{
+							checked { var.SetValue((Int64)d, exm); }
+						}
+						catch (OverflowException)
+						{
+							GlobalStatic.EMediator.Console.PrintWarning($"TIMES整数溢出: {d}", null, 1);
+							var.SetValue(d > 0 ? Int64.MaxValue : Int64.MinValue, exm);
+						}
+					}
+					else
+					{
+						decimal d = var.GetIntValue(exm) * (decimal)multiplier;
+						if (d <= Int64.MaxValue && d >= Int64.MinValue)
+							var.SetValue((Int64)d, exm);
+						else
+						{
+							GlobalStatic.EMediator.Console.PrintWarning($"TIMES整数溢出: {d}", null, 1);
+							var.SetValue(d > 0 ? Int64.MaxValue : Int64.MinValue, exm);
+						}
+					}
+				}
 				else if (Config.TimesNotRigorousCalculation)
 				{
+					// v24 参考：unchecked 回绕，无警告
 					double d = (double)var.GetIntValue(exm) * multiplier;
-					try
+					unchecked
 					{
-						checked { var.SetValue((Int64)d, exm); }
-					}
-					catch (OverflowException)
-					{
-						GlobalStatic.EMediator.Console.PrintWarning(
-							$"TIMES整数溢出: {d}", null, 1);
-						var.SetValue(d > 0 ? Int64.MaxValue : Int64.MinValue, exm);
+						var.SetValue((Int64)d, exm);
 					}
 				}
 				else
 				{
 					decimal d = var.GetIntValue(exm) * (decimal)multiplier;
-					if (d <= Int64.MaxValue && d >= Int64.MinValue)
-						var.SetValue((Int64)d, exm);
-					else
+					unchecked
 					{
-						GlobalStatic.EMediator.Console.PrintWarning(
-							$"TIMES整数溢出: {d}", null, 1);
-						var.SetValue(d > 0 ? Int64.MaxValue : Int64.MinValue, exm);
+						//decimal型は強制的にOverFlowExceptionを投げるので対策が必要
+						//OverFlowの場合は昔の挙動に近づけてみる
+						if (d <= Int64.MaxValue && d >= Int64.MinValue)
+							var.SetValue((Int64)d, exm);
+						else
+							var.SetValue((Int64)(double)d, exm);
 					}
 				}
 			}
@@ -1222,7 +1246,8 @@ namespace MinorShift.Emuera.GameProc.Function
 					using StringReader reader = new StringReader(text);
 					string version = reader.ReadLine();
 					string link = reader.ReadLine();
-					if (string.IsNullOrWhiteSpace(version) || string.IsNullOrWhiteSpace(link))
+					// 参考侧空白判定为 link == null || link == ""（版本行同样）
+					if ((version == null || version.Length == 0) || (link == null || link.Length == 0))
 					{
 						exm.VEvaluator.RESULT = 3;
 						return;
@@ -1357,7 +1382,7 @@ namespace MinorShift.Emuera.GameProc.Function
 							break;
 					}
 				}
-				exm.VEvaluator.RESULT = 1;
+				// 参考侧成功路径不写 RESULT（保持旧值）；失败路径维持 -1/0。
 			}
 		}
 
@@ -1475,7 +1500,8 @@ namespace MinorShift.Emuera.GameProc.Function
 			public SNAKE_TOOLTIP_SETFONT_Instruction()
 			{
 				ArgBuilder = ArgumentParser.GetArgumentBuilder(FunctionArgType.STR_EXPRESSION);
-				flag = METHOD_SAFE | EXTENDED;
+				// 参考（v24 与 snake 均同）：TOOLTIP 系不设 METHOD_SAFE（#FUNCTION 体内使用应在加载期报错）
+				flag = EXTENDED;
 			}
 
 			public override void DoInstruction(ExpressionMediator exm, InstructionLine func, ProcessState state)
@@ -1491,7 +1517,8 @@ namespace MinorShift.Emuera.GameProc.Function
 			{
 				this.code = code;
 				ArgBuilder = ArgumentParser.GetArgumentBuilder(FunctionArgType.INT_EXPRESSION);
-				flag = METHOD_SAFE | EXTENDED;
+				// 参考（v24 与 snake 均同）：TOOLTIP 系不设 METHOD_SAFE
+				flag = EXTENDED;
 			}
 
 			readonly FunctionCode code;

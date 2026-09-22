@@ -1,0 +1,37 @@
+{
+  "V24": {
+    "Instructions": {
+      "ExpectedCount": 301,
+      "CurrentCount": 303,
+      "Mismatches": []
+    },
+    "Functions": {
+      "ExpectedCount": 266,
+      "CurrentCount": 266,
+      "Mismatches": []
+    }
+  },
+  "Snake": {
+    "Instructions": {
+      "ExpectedCount": 324,
+      "CurrentCount": 326,
+      "Mismatches": []
+    },
+    "Functions": {
+      "ExpectedCount": 347,
+      "CurrentCount": 349,
+      "Mismatches": []
+    }
+  },
+  "V24FunctionBehavior": {
+    "CoveredFunctionCount": 0,
+    "Mismatches": [],
+    "Uncovered": []
+  },
+  "SnakeFunctionBehavior": {
+    "CoveredFunctionCount": 0,
+    "Mismatches": [],
+    "Uncovered": []
+  },
+  "TotalMismatchCount": 0
+}

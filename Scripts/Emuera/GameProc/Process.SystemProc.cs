@@ -121,6 +121,7 @@ namespace MinorShift.Emuera.GameProc
 				req.HasDefValue = true;
 				req.DefIntValue = flowinputDef;
 				req.DefStrValue = flowinputDefString;
+				req.MouseInput = flowinput;
 			}
 			req.InputType = flowinputString ? InputType.StrValue : InputType.IntValue;
 			req.IsSystemInput = true;

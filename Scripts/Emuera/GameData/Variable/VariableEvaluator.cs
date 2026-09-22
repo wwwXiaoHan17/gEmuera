@@ -51,7 +51,9 @@ namespace MinorShift.Emuera.GameData.Variable
 		public void Randomize(Int64 seed)
 		{
 			rand = new MTRandom(seed);
-			newRand = new Random((int)seed);
+			// snake 参考：Randomize 同时重播种 newRand；v24 参考只动 rand（UseNewRandom 时指令层直接跳过）
+			if (Program.Compatibility.Snake.IsEnabled)
+				newRand = new Random((int)seed);
 		}
 
 		public void InitRanddata()
@@ -1264,6 +1266,9 @@ namespace MinorShift.Emuera.GameData.Variable
 				else
 					arrays = identifier.GetArray();
 
+				// 参考侧 string 分支与 int/float 分支同样做 start 越界检查
+				if (start >= Get1DLength(arrays))
+					throw new CodeEE("命令ARRAYREMOVEの第２引数(" + start.ToString() + ")が配列" + p.Identifier.Name + "の範囲を超えています");
                 if (num <= 0)
 					num = Get1DLength(arrays);
 				if (arrays is SparseArray<string> sparseArrays)
@@ -3322,7 +3327,7 @@ namespace MinorShift.Emuera.GameData.Variable
 			{
 				string mapName = bReader.ReadString();
 				long entryCount = bReader.ReadInt64();
-				var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+				var map = new Dictionary<string, string>();
 				for (long j = 0; j < entryCount; j++)
 				{
 					string key = bReader.ReadString();
@@ -3444,7 +3449,7 @@ namespace MinorShift.Emuera.GameData.Variable
 			{
 				string mapName = ReadEncodedString(reader);
 				long entryCount = reader.ReadInt64();
-				var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+				var map = new Dictionary<string, string>();
 				for (long j = 0; j < entryCount; j++)
 				{
 					string key = ReadEncodedString(reader);

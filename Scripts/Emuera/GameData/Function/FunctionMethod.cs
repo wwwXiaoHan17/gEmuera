@@ -262,6 +262,9 @@ namespace MinorShift.Emuera.GameData.Function
 		{
 			if (argumentTypeArrayEx != null)
 				return CheckArgumentTypeEx(name, arguments);
+			// 参考实现的同构防护：argumentTypeArray 为 null（custom 校验类）时不做默认校验
+			if (argumentTypeArray == null)
+				return null;
 			if (arguments.Length != argumentTypeArray.Length)
 				return string.Format(Properties.Resources.SyntaxErrMesMethodDefaultArgumentNum0, name);
 			for (int i = 0; i < argumentTypeArray.Length; i++)

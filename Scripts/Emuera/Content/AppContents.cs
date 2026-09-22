@@ -334,7 +334,8 @@ namespace MinorShift.Emuera.Content
 			if(tokens.Length < 2)
 				return null;
 			string name = tokens[0].Trim().ToUpper();//
-			string arg2 = tokens[1].Trim();
+			// 参考侧第 2 列不 Trim（带空格的文件名按原文匹配，自然因文件不存在而跳过）
+			string arg2 = tokens[1];
 			if (name.Length == 0 || arg2.Length == 0)
 				return null;
 			// アニメーションスプライト宣言
@@ -428,13 +429,13 @@ namespace MinorShift.Emuera.Content
 						ParserMediator.Warn("スプライトの高さまたは幅には正の値のみ指定できます: " + name, sp, 1);
 						return null;
 					}
+					// 参考侧：裁剪矩形越出父图像时警告并拒绝（lazy 实体化路径共用此处，Bitmap 尺寸可得）
+					if (!rect.IntersectsWith(new Rectangle(0, 0, parentImage.Bitmap.Width, parentImage.Bitmap.Height)))
+					{
+						ParserMediator.Warn("親画像の範囲外を参照しています: " + name, sp, 1);
+						return null;
+					}
 					destSize = rect.Size;
-                    // uEmueraではこの時点で画像寸法を取得していない。
-					//if (!rect.IntersectsWith(new Rectangle(0,0,parentImage.Bitmap.Width, parentImage.Bitmap.Height)))
-					//{
-					//	ParserMediator.Warn("親画像の範囲外を参照しています: " + name, sp, 1);
-					//	return null;
-					//}
 				}
 				if(tokens.Length >= 8)
 				{
@@ -457,7 +458,8 @@ namespace MinorShift.Emuera.Content
 				{
 					int destWidth;
 					int destHeight;
-					if (int.TryParse(tokens[9], out destWidth) && int.TryParse(tokens[10], out destHeight) && destWidth > 0 && destHeight > 0)
+					// 参考侧：dest_w/dest_h 解析成功即采用（负值由 ASprite 构造取绝对值实现放大语义），仅 0 值跳过
+					if (int.TryParse(tokens[9], out destWidth) && int.TryParse(tokens[10], out destHeight) && destWidth != 0 && destHeight != 0)
 						destSize = new Size(destWidth, destHeight);
 				}
 			}

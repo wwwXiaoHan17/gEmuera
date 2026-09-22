@@ -413,6 +413,8 @@ namespace MinorShift.Emuera.GameProc
 			if (!eReader.OpenOnCache(filepath, filename))
 			{
 				output.PrintError(eReader.Filename + "のオープンに失敗しました");
+				// 参考侧文件打开失败会经外层 catch 令整体加载失败（返回 false），不能静默跳过
+				noError = false;
 				return;
 			}
 			uint traceStartTick = WinmmTimer.TickCount;
@@ -637,7 +639,9 @@ namespace MinorShift.Emuera.GameProc
 			int maxArgF = -1;
 			bool hasVariadic = false;
 			int variadicArgIndex = -1;
-			RemoveSnakeVariadicMarker(wc, out hasVariadic, out variadicArgIndex);
+			// VARIADIC 标识符剥除为 snake 独有语法；v24 参考把 VARIADIC 当普通标识符解析
+			if (Program.Compatibility.Snake.IsEnabled)
+				RemoveSnakeVariadicMarker(wc, out hasVariadic, out variadicArgIndex);
 			//1807 非イベント関数のシステム関数については警告レベル低下＆エラー解除＆引数を設定するように。
 			if (label.IsEvent)
 			{
@@ -654,7 +658,7 @@ namespace MinorShift.Emuera.GameProc
 			if (!wc.EOL)
 			{
 				if (label.IsSystem)
-					ParserMediator.Warn("システム関数@" + label.LabelName + " に引数が設定されています", label, 1, false, false);
+					ParserMediator.Warn("システム関数@" + label.LabelName + " に引数が設定されています", label, 2, true, false);
 				SymbolWord symbol = wc.Current as SymbolWord;
 				wc.ShiftNext();
                 if (symbol == null)

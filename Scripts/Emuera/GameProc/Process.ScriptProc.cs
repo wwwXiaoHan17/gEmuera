@@ -711,10 +711,7 @@ namespace MinorShift.Emuera.GameProc
 						int num = (int)arrayArg.Num2.GetIntValue(exm);
 						if (start < 0)
 							throw new CodeEE("ARRAYREMOVEの第２引数が負の値(" + start.ToString() + ")です");
-						if (num < 0)
-							throw new CodeEE("ARRAYREMOVEの第３引数が負の値(" + start.ToString() + ")です");
-						if (num == 0)
-							break;
+						// 参考侧不在此拦截第 3 参：num<=0 由 VariableEvaluator 解释为"删除到末尾"
 						vEvaluator.RemoveArray(p, start, num);
 						break;
 					}
@@ -813,6 +810,11 @@ namespace MinorShift.Emuera.GameProc
 						{
 							console.PrintSingleLine(throwMessage);
 							break;
+						}
+						// BEFORE_THROW 事件机制为 snake 独有；v24 参考侧 THROW 直接抛 CodeEE
+						if (!Program.Compatibility.Snake.IsEnabled)
+						{
+							throw new CodeEE(throwMessage);
 						}
 						state.PendingThrowMessage = throwMessage;
 						state.PendingThrowLine = func;

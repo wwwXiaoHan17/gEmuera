@@ -255,6 +255,12 @@ namespace MinorShift.Emuera.GameView
 							logicalLineCount--;
 					}
 				}
+				// 参考侧下溢补偿：列表已空但未删够时，把差值从逻辑行数中扣除（LINECOUNT 语义）
+				if (delNum < num)
+				{
+					lineNo = 0;
+					logicalLineCount -= num - delNum;
+				}
 				if (lineNo < 0)
 					lineNo += int.MaxValue;
 				lastDrawnLineNo = -1;
@@ -321,11 +327,11 @@ namespace MinorShift.Emuera.GameView
 			{
 				if (position.LineNo >= 0)
 				{
-					PrintErrorButton(string.Format("警告Lv{0}:{1}:{2}行目:{3}", level, position.Filename, position.LineNo, str), position);
+					PrintErrorButton(string.Format("警告Lv{0}:{1}:{2}行目:{3}", level, position.Filename, position.LineNo, str), position, level);
 					GlobalStatic.Process.printRawLine(position);
 				}
 				else
-					PrintErrorButton(string.Format("警告Lv{0}:{1}:{2}", level, position.Filename, str), position);
+					PrintErrorButton(string.Format("警告Lv{0}:{1}:{2}", level, position.Filename, str), position, level);
 
 			}
 			else
@@ -367,7 +373,7 @@ namespace MinorShift.Emuera.GameView
 			RefreshStrings(false);
 		}
 
-		internal void PrintErrorButton(string str, ScriptPosition pos)
+		internal void PrintErrorButton(string str, ScriptPosition pos, int level = 0)
 		{
 			if (string.IsNullOrEmpty(str))
 				return;
@@ -378,7 +384,11 @@ namespace MinorShift.Emuera.GameView
 				this.DebugNewLine();
 			}
 			UseUserStyle = false;
-			ConsoleDisplayLine dispLine = printBuffer.AppendAndFlushErrButton(str, Style, ErrorButtonsText, pos, stringMeasure);
+			// 参考侧按警告级别着色：Lv0-2 淡黄 (255,255,255,160)、Lv3+ 红。
+			// 参考侧通过引用别名直接改写 Style（连带污染默认样式），此处用结构体副本保持语义、避免副作用。
+			StringStyle errStyle = Style;
+			errStyle.Color = level >= 3 ? Color.FromArgb(255, 255, 0, 0) : Color.FromArgb(255, 255, 255, 160);
+			ConsoleDisplayLine dispLine = printBuffer.AppendAndFlushErrButton(str, errStyle, ErrorButtonsText, pos, stringMeasure);
 			if (dispLine == null)
 				return;
 			addDisplayLine(dispLine, true);

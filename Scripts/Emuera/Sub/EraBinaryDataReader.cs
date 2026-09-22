@@ -245,7 +245,7 @@ namespace MinorShift.Emuera.Sub
 			public override Dictionary<string, string> ReadMap()
 			{
 				int count = reader.ReadInt32();
-				var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+				var dict = new Dictionary<string, string>();
 				for (int i = 0; i < count; i++)
 					dict[reader.ReadString()] = reader.ReadString();
 				return dict;

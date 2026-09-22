@@ -588,7 +588,18 @@ namespace MinorShift.Emuera.Sub
 							case 'S': buffer.Append('　'); break;
 							case 't': buffer.Append('\t'); break;
 							case 'n': buffer.Append('\n'); break;
-							case 'e': buffer.Append('\\'); buffer.Append('e'); break;
+							case 'e':
+								// snake 参考：\e 保留两字符（SEQUENCEINPUT 的 MesSkip 标记）；
+								// v24 参考：default 分支仅附加被转义字符本身（\e → e）
+								if (Program.Compatibility.Snake.IsEnabled)
+								{
+									buffer.Append('\\'); buffer.Append('e');
+								}
+								else
+								{
+									buffer.Append('e');
+								}
+								break;
 							default: buffer.Append(st.Current); break;
 						}
 						st.ShiftNext();//\の次の文字を読み飛ばす
@@ -864,7 +875,7 @@ namespace MinorShift.Emuera.Sub
 							st.Jump(3);
 							continue;
 						}
-						else if (st.CurrentEqualTo(";!;"))
+						else if (st.CurrentEqualTo(";!;") || st.CurrentEqualTo(";^;"))
 						{
 							st.Jump(3);
 							continue;
