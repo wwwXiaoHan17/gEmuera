@@ -640,7 +640,7 @@ namespace MinorShift.Emuera.GameProc
 			bool hasVariadic = false;
 			int variadicArgIndex = -1;
 			// VARIADIC 标识符剥除为 snake 独有语法；v24 参考把 VARIADIC 当普通标识符解析
-			if (Program.Compatibility.Snake.IsEnabled)
+			if (Program.Compatibility.Snake.UsesVariadicStrip)
 				RemoveSnakeVariadicMarker(wc, out hasVariadic, out variadicArgIndex);
 			//1807 非イベント関数のシステム関数については警告レベル低下＆エラー解除＆引数を設定するように。
 			if (label.IsEvent)

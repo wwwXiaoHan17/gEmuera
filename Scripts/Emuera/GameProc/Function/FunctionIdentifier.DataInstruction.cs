@@ -147,7 +147,7 @@ namespace MinorShift.Emuera.GameProc.Function
 				else
 					iValue = ((ExpressionArgument)func.Argument).Term.GetIntValue(exm);
 				// v24 参考：UseNewRandom 时 RANDOMIZE 只警告不重播种；snake 参考则无条件执行（含 newRand 重播种）
-				if (!Program.Compatibility.Snake.IsEnabled && Config.UseNewRandom)
+				if (!Program.Compatibility.Snake.UsesRandomizeReseed && Config.UseNewRandom)
 				{
 					ParserMediator.Warn("新しい乱数アルゴリズムではRANDOMIZEは無視されます", null, 0);
 					ParserMediator.FlushWarningList();

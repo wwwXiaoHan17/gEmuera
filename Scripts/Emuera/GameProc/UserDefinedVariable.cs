@@ -192,8 +192,8 @@ namespace MinorShift.Emuera.GameProc
 						ret.Static = false;
 						break;
 				case "OUT":
-					// OUT 关键字为 snake 系语法；v24 参考中 OUT 落 default 分支作为普通变量名
-					if (!Program.Compatibility.Snake.IsEnabled && !Program.Compatibility.EraFl.IsEnabled)
+					// OUT 关键字为 snake 系语法（eraFL 同源继承）；v24 参考中 OUT 落 default 分支作为普通变量名
+					if (!Program.Compatibility.Snake.AllowsOutKeyword && !Program.Compatibility.EraFl.IsEnabled)
 					{
 						ret.Name = keyword;
 						goto whilebreak;

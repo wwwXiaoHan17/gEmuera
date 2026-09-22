@@ -741,6 +741,15 @@ namespace MinorShift.Emuera.Compatibility
 		public bool ContinuesAfterStartupFault => false;
 		public bool UsesFastDisplayRefresh => false;
 		public bool UsesLazyResourceIndex => false;
+		public bool UsesTimesClamp => false;
+		public bool UsesMaskAlphaChannel => false;
+		public bool UsesEscapeESequence => false;
+		public bool UsesThrowEvent => false;
+		public bool UsesBeforeErrorEvent => false;
+		public bool UsesRandomizeReseed => false;
+		public bool UsesRelationWithoutMastername => false;
+		public bool AllowsOutKeyword => false;
+		public bool UsesVariadicStrip => false;
 	}
 
 	internal sealed class LegacySnakeCompatibilityPolicy : ISnakeCompatibilityPolicy
@@ -769,6 +778,15 @@ namespace MinorShift.Emuera.Compatibility
 		public bool ContinuesAfterStartupFault => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.ContinueAfterStartupFault);
 		public bool UsesFastDisplayRefresh => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.FastDisplayRefresh);
 		public bool UsesLazyResourceIndex => true;
+		public bool UsesTimesClamp => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.TimesClamp);
+		public bool UsesMaskAlphaChannel => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.MaskAlphaChannel);
+		public bool UsesEscapeESequence => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.EscapeESequence);
+		public bool UsesThrowEvent => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.ThrowEvent);
+		public bool UsesBeforeErrorEvent => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.BeforeErrorEvent);
+		public bool UsesRandomizeReseed => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.RandomizeReseed);
+		public bool UsesRelationWithoutMastername => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.RelationWithoutMastername);
+		public bool AllowsOutKeyword => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.OutKeyword);
+		public bool UsesVariadicStrip => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.VariadicStrip);
 	}
 
 	// megaten 默认策略：三个 flag 全 false，保证 v24pure/snake/erafl 会话下

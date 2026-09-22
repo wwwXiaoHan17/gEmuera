@@ -519,7 +519,7 @@ namespace MinorShift.Emuera.Content
 					if (dx < 0 || dx >= dw) continue;
 					int mi = (y * maskW + x) * 4;
 					// v24 参考（LockBits BGRA 取 B 通道，不看 mask 自身 alpha）；snake 参考（Skia DstIn）取 Alpha 通道
-					int maskByte = Program.Compatibility.Snake.IsEnabled ? maskData[mi + 3] : maskData[mi + 2];
+					int maskByte = Program.Compatibility.Snake.UsesMaskAlphaChannel ? maskData[mi + 3] : maskData[mi + 2];
 					if (maskByte == 0) continue;
 					int si = (y * srcW + x) * 4;
 					int di = (dy * dw + dx) * 4;

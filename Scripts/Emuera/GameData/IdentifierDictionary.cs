@@ -60,8 +60,9 @@ namespace MinorShift.Emuera
 				// BEFORE_THROW/BEFORE_ERROR 事件机制为 snake 独有；
 				// v24 参考侧它们是普通函数名（可 CALL、不参与事件分发）
 				case "BEFORE_THROW":
+					return Program.Compatibility.Snake.UsesThrowEvent;
 				case "BEFORE_ERROR":
-					return Program.Compatibility.Snake.IsEnabled;
+					return Program.Compatibility.Snake.UsesBeforeErrorEvent;
 			}
 			return false;
 		}

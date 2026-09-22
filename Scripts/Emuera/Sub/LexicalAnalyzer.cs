@@ -591,7 +591,7 @@ namespace MinorShift.Emuera.Sub
 							case 'e':
 								// snake 参考：\e 保留两字符（SEQUENCEINPUT 的 MesSkip 标记）；
 								// v24 参考：default 分支仅附加被转义字符本身（\e → e）
-								if (Program.Compatibility.Snake.IsEnabled)
+								if (Program.Compatibility.Snake.UsesEscapeESequence)
 								{
 									buffer.Append('\\'); buffer.Append('e');
 								}
