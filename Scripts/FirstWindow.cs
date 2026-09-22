@@ -49,7 +49,10 @@ public partial class FirstWindow : Control
 	{
 		V24Root,
 		SnakeRoot,
-		CompatibilityDirectory
+		CompatibilityDirectory,
+		// FileDialog 浏览手动添加（FirstWindow.GameBrowseUi.cs partial），持久化于
+		// launcher.cfg [launcher] manual_games。
+		ManualBrowse
 	}
 
 	/// <summary>
@@ -602,6 +605,10 @@ public partial class FirstWindow : Control
 		gameList.ItemActivated += OnGameActivated;
 		content.AddChild(gameList);
 
+		// 游戏选择扩展：扫描列表 + FileDialog 浏览任意目录（FirstWindow.GameBrowseUi.cs
+		// partial 构建浏览/移除按钮，这里只挂接）。
+		content.AddChild(CreateGameBrowseControls());
+
 		startButton = new Button();
 		startButton.Text = MultiLanguage.Get("FirstWindow.Start", "Start");
 		startButton.Disabled = true;
@@ -927,6 +934,8 @@ public partial class FirstWindow : Control
 			else
 				ScanV24Root(root, scannedEntries, addedPaths, scanMessages);
 		}
+		// 手动浏览添加的条目随扫描一起装配（同路径扫描优先，失效记录自动剔除）。
+		AppendManualGameEntries(scannedEntries, addedPaths, scanMessages);
 
 		PopulateGameList(scannedEntries, selectedPath);
 
@@ -953,6 +962,7 @@ public partial class FirstWindow : Control
 			statusLabel.Text = "";
 			UpdateSelectedGameCompatibilityHint();
 		}
+		UpdateRemoveManualGameButtonState();
 	}
 
 	List<string> GetScanRoots(LauncherGameCategory category)
@@ -1412,6 +1422,7 @@ public partial class FirstWindow : Control
 		{
 			LauncherGameSource.V24Root => "v24",
 			LauncherGameSource.SnakeRoot => "snake",
+			LauncherGameSource.ManualBrowse => MultiLanguage.Get("FirstWindow.ManualGameRoute", "手动"),
 			_ => CompatibilityDirectoryName + "/" + entry.ProfileId,
 		};
 	}
@@ -1453,6 +1464,7 @@ public partial class FirstWindow : Control
 		startButton.Disabled = false;
 		UpdateSelectedGameCompatibilityHint(entry);
 		LoadCompatPackEditForGame(entry);
+		UpdateRemoveManualGameButtonState();
 	}
 
 	void OnGameActivated(long index)
