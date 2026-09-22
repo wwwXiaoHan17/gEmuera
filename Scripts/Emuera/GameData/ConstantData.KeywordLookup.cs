@@ -187,22 +187,41 @@ namespace MinorShift.Emuera.GameData
 
 		public bool isUserDefined(string varname, string str, int dim)
 		{
-			if (string.IsNullOrEmpty(varname) || string.IsNullOrEmpty(str))
+			if (string.IsNullOrEmpty(str))
 				return false;
+			// 参考侧：ERD 变量键未定义时抛 CodeEE（致命），而非返回 false 落入通用未知标识符路径
 			if (dim <= 1)
 			{
 				EnsureUserDefinedNameDataLoaded(varname);
-				return erdNameToIntDics.ContainsKey(varname) && erdNameToIntDics[varname].ContainsKey(str);
+				if (!erdNameToIntDics.ContainsKey(varname) || !erdNameToIntDics[varname].ContainsKey(str))
+					throw new CodeEE(string.Format("変数\"{0}\"には\"{1}\"の定義がありません", varname, str));
 			}
-			for (int i = 1; i <= dim; i++)
+			//CDFLAGの判定も割とガバガバなのでこれで良い（暴論）
+			if (dim == 2)
 			{
-				string key = varname + "@" + i.ToString();
-				EnsureUserDefinedNameDataLoaded(key);
-				Dictionary<string, int> dic;
-				if (erdNameToIntDics.TryGetValue(key, out dic) && dic.ContainsKey(str))
-					return true;
+				EnsureUserDefinedNameDataLoaded(varname + "@1");
+				EnsureUserDefinedNameDataLoaded(varname + "@2");
+				if (!erdNameToIntDics.ContainsKey(varname + "@1") || !erdNameToIntDics[varname + "@1"].ContainsKey(str))
+				{
+					if (!erdNameToIntDics.ContainsKey(varname + "@2") || !erdNameToIntDics[varname + "@2"].ContainsKey(str))
+						throw new CodeEE(string.Format("変数\"{0}\"には\"{1}\"の定義がありません", varname, str));
+				}
 			}
-			return false;
+			if (dim == 3)
+			{
+				EnsureUserDefinedNameDataLoaded(varname + "@1");
+				EnsureUserDefinedNameDataLoaded(varname + "@2");
+				EnsureUserDefinedNameDataLoaded(varname + "@3");
+				if (!erdNameToIntDics.ContainsKey(varname + "@1") || !erdNameToIntDics[varname + "@1"].ContainsKey(str))
+				{
+					if (!erdNameToIntDics.ContainsKey(varname + "@2") || !erdNameToIntDics[varname + "@2"].ContainsKey(str))
+					{
+						if (!erdNameToIntDics.ContainsKey(varname + "@3") || !erdNameToIntDics[varname + "@3"].ContainsKey(str))
+							throw new CodeEE(string.Format("変数\"{0}\"には\"{1}\"の定義がありません", varname, str));
+					}
+				}
+			}
+			return true;
 		}
 
 		public bool TryKeywordToInteger(out int ret, VariableCode code, string key, int index)
@@ -215,20 +234,17 @@ namespace MinorShift.Emuera.GameData
             ret = 0;
             if (string.IsNullOrEmpty(key))
                 return false;
-            try
-            {
-                Dictionary<string, int> dic = GetKeywordDictionary(out string errPos, code, index, null);
-				if (dic != null && dic.TryGetValue(key, out ret))
-					return true;
-				if (string.IsNullOrEmpty(varname))
-					return false;
-				EnsureUserDefinedNameDataLoaded(varname);
-				if (erdNameToIntDics.TryGetValue(varname, out dic))
-					return dic.TryGetValue(key, out ret);
-				dic = GetKeywordDictionary(out errPos, code, index, varname);
-				return dic != null && dic.TryGetValue(key, out ret);
-            }
-            catch { return false; }
+            // 参考侧无兜底 catch：GetKeywordDictionary 的 CodeEE（非法维度等）直接上抛
+            Dictionary<string, int> dic = GetKeywordDictionary(out string errPos, code, index, null);
+			if (dic != null && dic.TryGetValue(key, out ret))
+				return true;
+			if (string.IsNullOrEmpty(varname))
+				return false;
+			EnsureUserDefinedNameDataLoaded(varname);
+			if (erdNameToIntDics.TryGetValue(varname, out dic))
+				return dic.TryGetValue(key, out ret);
+			dic = GetKeywordDictionary(out errPos, code, index, varname);
+			return dic != null && dic.TryGetValue(key, out ret);
         }
 
 		public bool TryIntegerToKeyword(out string ret, long value, string varname)
@@ -463,6 +479,7 @@ namespace MinorShift.Emuera.GameData
 					allowIndex = 1;
 					break;
 				case VariableCode.NAME:
+				case VariableCode.CALLNAME:
 					ret = relationDic;
 					errPos = "chara*.csv";
 					allowIndex = -1;

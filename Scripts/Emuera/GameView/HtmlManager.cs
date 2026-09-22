@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Text.RegularExpressions;
 using MinorShift.Emuera.Sub;
 //using System.Drawing;
 using MinorShift.Emuera.GameData.Expression;
@@ -337,29 +338,30 @@ namespace MinorShift.Emuera.GameView
 
 		public static string[] HtmlTagSplit(string str)
 		{
+			// 参考侧算法：任意 '<'…下一个 '>' 原始切分（不区分是否受支持标签、不感知引号），缺 '>' 返回 null
 			List<string> strList = new List<string>();
-			int segmentStart = 0;
-			int searchStart = 0;
-			while (searchStart < str.Length)
+			StringStream st = new StringStream(str);
+			int found;
+			while (!st.EOS)
 			{
-				int tagStart = str.IndexOf('<', searchStart);
-				if (tagStart < 0)
-					break;
-				if (!TryReadSupportedHtmlTagAt(str, tagStart, out _, out int tagEnd))
+				found = st.Find('<');
+				if (found < 0)
 				{
-					if (LooksLikeSupportedHtmlTagStart(str, tagStart))
-						return null;
-					searchStart = tagStart + 1;
-					continue;
+					strList.Add(st.Substring());
+					break;
 				}
-				if (tagStart > segmentStart)
-					strList.Add(str.Substring(segmentStart, tagStart - segmentStart));
-				strList.Add(str.Substring(tagStart, tagEnd - tagStart + 1));
-				segmentStart = tagEnd + 1;
-				searchStart = segmentStart;
+				else if (found > 0)
+				{
+					strList.Add(st.Substring(st.CurrentPosition, found));
+					st.CurrentPosition += found;
+				}
+				found = st.Find('>');
+				if (found < 0)
+					return null;
+				found++;
+				strList.Add(st.Substring(st.CurrentPosition, found));
+				st.CurrentPosition += found;
 			}
-			if (segmentStart < str.Length)
-				strList.Add(str.Substring(segmentStart));
 			string[] ret = new string[strList.Count];
 			strList.CopyTo(ret);
 			return ret;
@@ -377,7 +379,7 @@ namespace MinorShift.Emuera.GameView
 			return Html2DisplayLine(str, sm, console, -1);
 		}
 
-		private static ConsoleDisplayLine[] Html2DisplayLine(string str, StringMeasure sm, EmueraConsole console, int customWidth, List<ConsoleButtonString> buttonsOutput = null)
+		private static ConsoleDisplayLine[] Html2DisplayLine(string str, StringMeasure sm, EmueraConsole console, int customWidth, List<ConsoleButtonString> buttonsOutput = null, HtmlAnalzeState parentState = null)
 		{
 			List<AConsoleDisplayPart> cssList = new List<AConsoleDisplayPart>();
 			List<ConsoleButtonString> buttonList = buttonsOutput ?? new List<ConsoleButtonString>();
@@ -386,6 +388,12 @@ namespace MinorShift.Emuera.GameView
 			bool hasComment = str.IndexOf("<!--") >= 0;
 			bool hasReturn = str.IndexOf('\n') >= 0;
 			HtmlAnalzeState state = new HtmlAnalzeState();
+			if (parentState != null)
+			{
+				// 参考侧：div 递归解析继承父解析器的 clearbutton 状态
+				state.FlagClearButton = parentState.FlagClearButton;
+				state.FlagClearButtonTooltip = parentState.FlagClearButtonTooltip;
+			}
 			while (!st.EOS)
 			{
 				found = st.Find('<');
@@ -444,9 +452,9 @@ namespace MinorShift.Emuera.GameView
 						int divContentWidth = GetDivContentWidth(divTag);
 						// div 子行的 align=center/right 必须使用内容框宽度；否则会按整窗居中，
 						// 在 Godot 的裁剪容器里表现为图片节点已创建但被挤到 div 外不可见。
-						ConsoleDisplayLine[] divLines = Html2DisplayLine(divHtml, sm, console, divContentWidth);
+						// 参考侧：div 状态继承父解析器的 clearbutton 标志（作用域内 div 按钮同样被抑制）
+						ConsoleDisplayLine[] divLines = Html2DisplayLine(divHtml, sm, console, divContentWidth, null, state);
 						cssList.Add(new ConsoleDivPart(divTag.X, divTag.Y, divTag.Width, divTag.Height, divTag.Depth, divTag.Color, divTag.StyledBox, divTag.IsRelative, divTag.Display, divLines));
-						state.LineHead = false;
 					}
 				}
 
@@ -466,7 +474,8 @@ namespace MinorShift.Emuera.GameView
 				state.LastButtonTag = state.CurrentButtonTag;
 			}
 			//</nobr></p>は省略許可
-			if (state.CurrentButtonTag != null || state.FlagClearButton || state.FontStyle != FontStyle.Regular || state.FonttagList.Count > 0 || state.DivDepth > 0)
+			// 参考侧尾部校验不含 clearbutton（未闭合 <clearbutton> 作用到串尾属合法）
+			if (state.CurrentButtonTag != null || state.FontStyle != FontStyle.Regular || state.FonttagList.Count > 0 || state.DivDepth > 0)
 				throw new CodeEE("閉じられていないタグがあります");
 			if (cssList.Count > 0)
 				buttonList.Add(cssToButton(cssList, state, console));
@@ -560,8 +569,13 @@ namespace MinorShift.Emuera.GameView
 		{
 			if (string.IsNullOrEmpty(str))
 				return str;
-			// eraFL 等脚本会把 <A>/<C>/<S> 当作正文等级标记；这里只剥离本解析器支持的标签，
-			// 未知尖括号文本必须原样保留，避免 HTML_TOPLAINTEXT 误删游戏内容。
+			// eraFL 等脚本会把 <A>/<C>/<S> 当作正文等级标记；该场景下只剥离本解析器支持的标签，
+			// 未知尖括号文本原样保留。v24/snake 参考侧为正则全剥（Regex.Replace("\\<[^<]*\\>", "")）。
+			if (!Program.Compatibility.EraFl.IsEnabled)
+			{
+				string plain = Regex.Replace(str, "\\<[^<]*\\>", "");
+				return Unescape(plain);
+			}
 			StringBuilder builder = new StringBuilder(str.Length);
 			int segmentStart = 0;
 			int searchStart = 0;
@@ -1216,7 +1230,8 @@ namespace MinorShift.Emuera.GameView
 					{
 					if (wc == null)
 						throw new CodeEE("<" + tag + ">タグに属性が設定されていません");
-					int[] param = null;
+					// 参考侧：param 为 MixedNum[]（px 值直传，不做 percent 往返换算）
+					MixedNum[] param = null;
 					string logParamText = null;
 					string type = null;
 						int color = int.MinValue;
@@ -1255,14 +1270,22 @@ namespace MinorShift.Emuera.GameView
 							{
 								logParamText = attrValue;
 								string[] tokens = attrValue.Split(',');
-										param = new int[tokens.Length];
-										for (int i = 0; i < tokens.Length; i++)
-										{
-											if (!tryParseShapeParam(tokens[i], out param[i]))
-												throw new CodeEE("<" + tag + ">タグの" + word.Code + "属性の属性値が数値として解釈できません");
-										}
-										break;
+								param = new MixedNum[tokens.Length];
+								for (int i = 0; i < tokens.Length; i++)
+								{
+									param[i] = new MixedNum();
+									string token = tokens[i].Trim();
+									if (token.EndsWith("px", StringComparison.OrdinalIgnoreCase))
+									{
+										if (!int.TryParse(token.Substring(0, token.Length - 2), out param[i].num))
+											throw new CodeEE("<" + tag + ">タグの" + word.Code + "属性の属性値が数値として解釈できません");
+										param[i].isPx = true;
 									}
+									else if (!int.TryParse(token, out param[i].num))
+										throw new CodeEE("<" + tag + ">タグの" + word.Code + "属性の属性値が数値として解釈できません");
+								}
+								break;
+							}
 								default:
 									throw new CodeEE("<" + tag + ">タグの属性名" + word.Code + "は解釈できません");
 							}
@@ -1281,7 +1304,7 @@ namespace MinorShift.Emuera.GameView
 						{
 							b = Color.FromArgb(bcolor);
 						}
-						return ConsoleShapePart.CreateShape(type, param, c, b, color != int.MinValue, logParamText);
+						return ConsoleShapePart.CreateShape(type, param, c, b, color != int.MinValue);
 					}
 				case "button":
 				case "nonbutton":

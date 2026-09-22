@@ -154,7 +154,8 @@ namespace MinorShift.Emuera.GameData
                             Version targetVersoin = new Version(Compatible_EmueraVer);
                             if (curerntVersion < targetVersoin)
                             {
-                                ParserMediator.Warn("このバリアント動作させるにはVer. " + GlobalStatic.MainWindow.EmueraVerText + "以降のバージョンのEmueraが必要です", pos, 2);
+                                // 参考侧打印 CSV 要求的版本（targetVersoin），而非引擎自身版本
+                                ParserMediator.Warn("このバリアント動作させるにはVer." + targetVersoin + "以降のバージョンのEmueraが必要です", pos, 2);
                                 return false;
                             }
                             break;

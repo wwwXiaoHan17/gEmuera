@@ -95,15 +95,16 @@ namespace MinorShift.Emuera.GameData
 		private readonly Dictionary<string, Int64> callnameToTemplateMap = new Dictionary<string, Int64>();
 		private readonly Dictionary<string, Int64> masternameToTemplateMap = new Dictionary<string, Int64>();
 
-		public HashSet<string> GlobalSaveMaps { get; private set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-		public HashSet<string> SaveMaps { get; private set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-		public HashSet<string> GlobalSaveXmls { get; private set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-		public HashSet<string> SaveXmls { get; private set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-		public HashSet<string> GlobalSaveDTs { get; private set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-		public HashSet<string> SaveDTs { get; private set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-		public HashSet<string> StaticMaps { get; private set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-		public HashSet<string> StaticXmls { get; private set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-		public HashSet<string> StaticDTs { get; private set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+		// VarExt 名册：参考侧为默认（区分大小写）HashSet，仅大小写不同的名字视为两个
+		public HashSet<string> GlobalSaveMaps { get; private set; } = [];
+		public HashSet<string> SaveMaps { get; private set; } = [];
+		public HashSet<string> GlobalSaveXmls { get; private set; } = [];
+		public HashSet<string> SaveXmls { get; private set; } = [];
+		public HashSet<string> GlobalSaveDTs { get; private set; } = [];
+		public HashSet<string> SaveDTs { get; private set; } = [];
+		public HashSet<string> StaticMaps { get; private set; } = [];
+		public HashSet<string> StaticXmls { get; private set; } = [];
+		public HashSet<string> StaticDTs { get; private set; } = [];
 
 		public IReadOnlyDictionary<string, Int64> NameToTemplateMap { get { return nameToTemplateMap; } }
 		public IReadOnlyDictionary<string, Int64> NicknameToTemplateMap { get { return nicknameToTemplateMap; } }
@@ -661,7 +662,7 @@ check1break:
 			Preload.RemoveByExtension(".als");
 
 			//逆引き辞書を作成2 (RELATION)
-			relationDic.EnsureCapacity(CharacterTmplList.Count * 3);
+			relationDic.EnsureCapacity(CharacterTmplList.Count * 4);
 			for (int i = 0; i < CharacterTmplList.Count; i++)
 			{
 				CharacterTemplate tmpl = CharacterTmplList[i];
@@ -671,6 +672,10 @@ check1break:
                     relationDic.TryAdd(tmpl.Callname, (int)tmpl.No);
 				if (!string.IsNullOrEmpty(tmpl.Nickname))
                     relationDic.TryAdd(tmpl.Nickname, (int)tmpl.No);
+				// v24 参考侧同时注册 Mastername（RELATION 字符串索引与 GETNUM 均可用）；
+				// snake 参考侧 relationDic 不含 Mastername（走独立 masternameToTemplateMap），故按方言门控
+				if (!Program.Compatibility.Snake.IsEnabled && !string.IsNullOrEmpty(tmpl.Mastername))
+					relationDic.TryAdd(tmpl.Mastername, (int)tmpl.No);
 			}
 		}
 
@@ -1057,9 +1062,9 @@ check1break:
 
 		private void loadCharacterData(string csvDir, bool disp)
 		{
+			// 参考侧 csv 目录缺失时静默返回
 			if (!uEmuera.Utils.DirectoryExists(csvDir))
 			{
-				ParserMediator.Warn("csvフォルダが見つかりません:" + csvDir, null, 1);
 				return;
 			}
 			List<KeyValuePair<string, string>> csvPaths = Config.GetFiles(csvDir, "CHARA*.CSV");
@@ -1366,6 +1371,11 @@ check1break:
 				namearray = nameToIntDics[cstrIndex];//CStrName;
 				errPos = "cstr.csv";
 			}
+			// 参考侧对 ISASSI/助手 行静默忽略
+			else if (FieldMatchesUpper(source, f0, "ISASSI") || FieldMatchesUpper(source, f0, "助手"))
+			{
+				return;
+			}
 			else
 			{
 				ctx.Warn("\"" + GetFieldString(source, f0) + "\"は解釈できない識別子です", position, 1);
@@ -1440,6 +1450,13 @@ check1break:
 
 		private void loadDataWithAliases(string csvDir, string baseName, int targetIndex, Int64[] targetI, bool disp, CsvLoadContext ctx)
 		{
+			// 参考侧别名加载位于 loadDataTo 内部、CSV 存在性检查之后：CSV 缺失时 .ALS 也不加载
+			string csvPath = Path.Combine(csvDir, baseName + ".CSV");
+			string resolvedCsvPath = uEmuera.Utils.ResolveExistingFilePath(csvPath);
+			if (!string.IsNullOrEmpty(resolvedCsvPath))
+				csvPath = resolvedCsvPath;
+			if (!uEmuera.Utils.FileExists(csvPath))
+				return;
 			loadDataTo(Path.Combine(csvDir, baseName + ".CSV"), targetIndex, targetI, disp, ctx);
 			loadAliases(Path.Combine(csvDir, baseName + ".ALS"), targetIndex, ctx);
 		}

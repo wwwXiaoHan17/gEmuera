@@ -602,8 +602,32 @@ static ConfigData() { }
 					break;
 				default:
 				{
-					errMes = "コンフィグ文字列\"" + text + "\"の値の取得は許可されていません";
-					return null;
+					// 参考侧：白名单外的已定义配置项按值类型解析返回（YES/NO→1/0、数字、字符串），不报错
+					if (Enum.IsDefined(typeof(ConfigCode), item.Code))
+					{
+						switch (item.ValueToString())
+						{
+							case "YES":
+								term = new SingleTerm(1L);
+								break;
+							case "NO":
+								term = new SingleTerm(0L);
+								break;
+							default:
+								string val = item.ValueToString();
+								if (Int64.TryParse(val, out long i))
+									term = new SingleTerm(i);
+								else
+									term = new SingleTerm(val);
+								break;
+						}
+					}
+					else
+					{
+						errMes = "コンフィグ文字列\"" + text + "\"の値の取得は許可されていません";
+						return null;
+					}
+					break;
 				}
 			}
 			return term;

@@ -332,7 +332,9 @@ namespace MinorShift.Emuera.GameProc
 		{
             if (loadedFileDic.TryGetValue(filename, out int curCount))
             {
-                currentFileCount = curCount;
+                // 参考侧：重载已载文件时 FileIndex 取已载文件总数（loadedFileSet.Count），
+                // 使重载文件在同名标签排序中排在更晚载入的文件之后
+                currentFileCount = loadedFileDic.Count;
                 RemoveLabelWithPath(filename);
                 return;
             }

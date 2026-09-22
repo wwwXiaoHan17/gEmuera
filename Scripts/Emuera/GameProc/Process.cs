@@ -441,19 +441,23 @@ namespace MinorShift.Emuera.GameProc
 						state.ClearFunctionListPreserveTrace();
 						return;
 					}
-					state.InBeforeError = true;
-					var beforeError = Config.DisableBeforeErrorThrow
-						? null
-						: CalledFunction.CallEventFunction(this, "BEFORE_ERROR", null);
-					if (beforeError != null)
+					// BEFORE_ERROR 事件机制为 snake 独有；v24 参考侧异常直接停机处理
+					if (Program.Compatibility.Snake.IsEnabled)
 					{
-						state.IntoFunction(beforeError, null, null);
-						state.PendingErrorException = ec;
-						state.PendingErrorCurrentLine = currentLine;
-						state.PendingErrorSystemProc = systemProcRunning;
-						continue;
+						state.InBeforeError = true;
+						var beforeError = Config.DisableBeforeErrorThrow
+							? null
+							: CalledFunction.CallEventFunction(this, "BEFORE_ERROR", null);
+						if (beforeError != null)
+						{
+							state.IntoFunction(beforeError, null, null);
+							state.PendingErrorException = ec;
+							state.PendingErrorCurrentLine = currentLine;
+							state.PendingErrorSystemProc = systemProcRunning;
+							continue;
+						}
+						state.InBeforeError = false;
 					}
-					state.InBeforeError = false;
 					if (systemProcRunning)
 						handleExceptionInSystemProc(ec, currentLine, true);
 					else
@@ -670,7 +674,8 @@ namespace MinorShift.Emuera.GameProc
                     }
                     else
                     {
-                        console.PrintErrorButton(posString + "エラーが発生しました:" + Program.ExeName, position);
+                        // 参考侧错误尾串使用引擎版本文本（AssemblyData.EmueraVersionText），而非 exe 名
+                        console.PrintErrorButton(posString + "エラーが発生しました:" + GlobalStatic.MainWindow.EmueraVerText, position);
 						printRawLine(position);
 						console.PrintError("エラー内容：" + exc.Message);
                     }

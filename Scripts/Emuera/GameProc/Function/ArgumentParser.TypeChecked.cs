@@ -53,6 +53,9 @@ namespace MinorShift.Emuera.GameProc.Function
 				
 				if (line.FunctionCode == FunctionCode.REPEAT)
 				{
+					// 参考侧：COUNT 变量被禁用时 REPEAT 不可用（解析期致命错误，参考文案）
+					if (GlobalStatic.IdentifierDictionary.getVarTokenIsForbid("COUNT"))
+						throw new CodeEE("COUNTが使用禁止変数になっているため、REPEATは使用できません");
 					if ((term is SingleTerm) && (term.GetIntValue(null) <= 0L))
 					{
 						warn("0回以下のREPEATです。(eramakerではエラーになります)", line, 0, true);
@@ -1086,40 +1089,23 @@ namespace MinorShift.Emuera.GameProc.Function
                 IOperandTerm[] terms = popTerms(line);
                 if (!checkArgumentType(line, exm, terms))
                     return null;
-                IOperandTerm term = null;
-                ExpressionArgument ret;
-                if (terms.Length == 0)
+                // 参考（EM_私家版_INPUT系機能拡張＆ONEINPUT系制限解除）：
+                // 全参数必须为整型；按个数构造 Def/Mouse/CanSkip 三元组，不做解析期截断
+                for (int i = 0; i < terms.Length; i++)
                 {
-                    ret = new ExpressionArgument(term);
-                    return ret;
-                }
-                else
-                {
-                    term = terms[0];
-                    ret = new ExpressionArgument(term);
-                }
-
-                if (term is SingleTerm)
-                {
-                    Int64 i = term.GetIntValue(null);
-                    if (line.FunctionCode == FunctionCode.ONEINPUT)
+                    if (terms[i] != null && terms[i].GetEraType() != EraType.Integer)
                     {
-                        if (i < 0)
-                        {
-                            warn("ONEINPUTの引数にONEINPUTが受け取れない負の数数が指定されています（引数を無効とします）", line, 1, false);
-                            ret = new ExpressionArgument(null);
-                            return ret;
-                        }
-                        else if (i > 9)
-                        {
-                            warn("ONEINPUTの引数にONEINPUTが受け取れない2桁以上の数数が指定されています（最初の桁を引数と見なします）", line, 1, false);
-                            i = Int64.Parse(i.ToString().Remove(1));
-                        }
+                        warn("第" + (i + 1) + "引数の型が違います", line, 2, false);
+                        return null;
                     }
-                    ret.ConstInt = i;
-                    ret.IsConst = true;
                 }
-                return ret;
+                if (terms.Length == 0)
+                    return new SpInputsArgument(null, null, null);
+                if (terms.Length == 1)
+                    return new SpInputsArgument(terms[0], null, null);
+                if (terms.Length == 2)
+                    return new SpInputsArgument(terms[0], terms[1], null);
+                return new SpInputsArgument(terms[0], terms[1], terms[2]);
             }
         }
 

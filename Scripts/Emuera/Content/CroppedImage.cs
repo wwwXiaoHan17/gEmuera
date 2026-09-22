@@ -68,8 +68,15 @@ namespace MinorShift.Emuera.Content
 		}
 		private static Size ResolveDestSize(Rectangle rect, Size destSize)
 		{
-			if (destSize.Width > 0 && destSize.Height > 0)
+			// 参考侧（ASprite 构造）：显式指定的目标尺寸取绝对值（负值=放大绘制语义）
+			if (destSize.Width != 0 && destSize.Height != 0)
+			{
+				if (destSize.Width < 0)
+					destSize.Width = -destSize.Width;
+				if (destSize.Height < 0)
+					destSize.Height = -destSize.Height;
 				return destSize;
+			}
 			return rect.Size;
 		}
 		internal bool UsesDestBaseCanvas()

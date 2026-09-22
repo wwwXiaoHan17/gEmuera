@@ -289,7 +289,8 @@ namespace uEmuera.Window
 
     public class MainWindow : IDisposable
     {
-        public static string uEmueraVer = "";
+        // 对齐参考侧 EMUERA_VERSION / 错误输出所用的引擎版本文本（emuera.em 参考值 1.824.0.0）
+        public static string uEmueraVer = "1.824.0.0";
 
         public MainWindow()
         {}

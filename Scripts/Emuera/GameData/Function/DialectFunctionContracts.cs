@@ -27,7 +27,7 @@ namespace MinorShift.Emuera.GameData.Function
 			switch (name)
 			{
 				case "ABS":
-					return snake ? Wrap(method, null, CheckAnyCount(name, 1, 1)) : method;
+					return snake ? Wrap(method, null, CheckAnyCount(name, 1, 1)) : Wrap(method, Int1, CheckFixedInt);
 				case "ARGLEN":
 					return snake ? Wrap(method, null, AllowAny) : method;
 				case "CBGSETBUTTONSPRITE":
@@ -38,7 +38,7 @@ namespace MinorShift.Emuera.GameData.Function
 						: Wrap(method, new[] { EraType.String, EraType.Integer, EraType.Integer, EraType.Integer },
 							CheckFixedStringIntIntInt);
 				case "CBRT":
-					return snake ? Wrap(method, null, CheckAnyCount(name, 1, 1)) : method;
+					return snake ? Wrap(method, null, CheckAnyCount(name, 1, 1)) : Wrap(method, Int1, CheckFixedInt);
 				case "ENCODETOUNI":
 					return Wrap(method, null, CheckEncodeToUni);
 				case "ENUMFUNCBEGINSWITH":
@@ -52,7 +52,7 @@ namespace MinorShift.Emuera.GameData.Function
 				case "ENUMVARWITH":
 					return Wrap(method, null, CheckEnumName);
 				case "EXPONENT":
-					return snake ? Wrap(method, null, CheckAnyCount(name, 1, 1)) : method;
+					return snake ? Wrap(method, null, CheckAnyCount(name, 1, 1)) : Wrap(method, Int1, CheckFixedInt);
 				case "EXISTFUNCTION":
 					return Wrap(method, null, CheckExistFunction);
 				case "EXISTVAR":
@@ -87,11 +87,20 @@ namespace MinorShift.Emuera.GameData.Function
 						: Wrap(method, Int3, CheckFixedInt3);
 				case "LOADTEXT":
 					return Wrap(method, null, CheckLoadText);
+				case "MAX":
+				case "MIN":
+					// 参考侧为 argumentTypeArrayEx（[{Int,VariadicInt},OmitStart=1]），
+					// 形状同为 custom；此处冻结"第 1 参不可省略、全部 Integer"的 v24 契约。
+					return snake ? method : Wrap(method, null, CheckMinMaxV24);
 				case "LOG":
 				case "LOG10":
-					return snake ? Wrap(method, null, CheckAnyCount(name, 1, 1)) : method;
+					return snake ? Wrap(method, null, CheckAnyCount(name, 1, 1)) : Wrap(method, Int1, CheckFixedInt);
 				case "POWER":
-					return snake ? Wrap(method, null, CheckAnyCount(name, 2, 2)) : method;
+					return snake ? Wrap(method, null, CheckAnyCount(name, 2, 2)) : Wrap(method, Int2, CheckFixedInt2);
+				case "RAND":
+					// 参考侧为 argumentTypeArrayEx（[{Int,Int},OmitStart=1]），
+					// 形状同为 custom；此处冻结"第 1 参不可省略、1~2 个 Integer"的 v24 契约。
+					return snake ? method : Wrap(method, null, CheckRandV24);
 				case "REPLACE":
 					return Wrap(method, null, CheckReplace);
 				case "RESUMETEXTBOX":
@@ -99,7 +108,7 @@ namespace MinorShift.Emuera.GameData.Function
 				case "SAVETEXT":
 					return Wrap(method, null, CheckSaveText);
 				case "SIGN":
-					return snake ? Wrap(method, null, CheckAnyCount(name, 1, 1)) : method;
+					return snake ? Wrap(method, null, CheckAnyCount(name, 1, 1)) : Wrap(method, Int1, CheckFixedInt);
 				case "SPRITECREATE":
 					return Wrap(method, null, snake ? CheckSpriteCreateSnake : CheckSpriteCreateV24);
 				case "SPRITECREATEFROMFILE":
@@ -139,6 +148,27 @@ namespace MinorShift.Emuera.GameData.Function
 					return functionName + " has too many arguments";
 				return null;
 			};
+		}
+
+		private static string CheckRandV24(string name, IOperandTerm[] arguments)
+		{
+			if (arguments.Length < 1 || arguments.Length > 2)
+				return name + " has an invalid argument count";
+			return CheckMinMaxV24(name, arguments);
+		}
+
+		private static string CheckMinMaxV24(string name, IOperandTerm[] arguments)
+		{
+			if (arguments.Length < 1)
+				return name + " has an invalid argument count";
+			if (arguments[0] == null)
+				return name + " argument 1 cannot be omitted";
+			for (int i = 0; i < arguments.Length; i++)
+			{
+				if (arguments[i] != null && arguments[i].GetEraType() != EraType.Integer)
+					return name + " argument " + (i + 1) + " has the wrong type";
+			}
+			return null;
 		}
 
 		private static string CheckFixedString(string name, IOperandTerm[] arguments) => CheckFixed(name, arguments, new[] { EraType.String }, false);

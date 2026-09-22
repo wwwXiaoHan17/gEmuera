@@ -797,7 +797,8 @@ namespace MinorShift.Emuera.GameView
 				//timer_nextDisplayTime = timer_startTime + 100;
 				long start = inputReq.Timelimit / 100;
 				string timeString1 = "残り ";
-				string timeString2 = ((double)start / 10.0).ToString();
+				// 参考侧固定一位小数（{...:0.0}）
+				string timeString2 = ((double)start / 10.0).ToString("0.0");
 				PrintSingleLine(timeString1 + timeString2);
 			}
 		}
@@ -850,7 +851,8 @@ namespace MinorShift.Emuera.GameView
 				timer_nextDisplayTime = curtime + 100;
 				long time = (timer_endTime - curtime) / 100;
 				string timeString1 = "残り ";
-				string timeString2 = ((double)time / 10.0).ToString();
+				// 参考侧固定一位小数（{...:0.0}）
+				string timeString2 = ((double)time / 10.0).ToString("0.0");
 				changeLastLine(timeString1 + timeString2);
 			}
 		}

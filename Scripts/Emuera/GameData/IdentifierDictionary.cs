@@ -56,9 +56,12 @@ namespace MinorShift.Emuera
 				case "EVENTCOMEND":
 				case "EVENTEND":
 				case "EVENTLOAD":
+					return true;
+				// BEFORE_THROW/BEFORE_ERROR 事件机制为 snake 独有；
+				// v24 参考侧它们是普通函数名（可 CALL、不参与事件分发）
 				case "BEFORE_THROW":
 				case "BEFORE_ERROR":
-					return true;
+					return Program.Compatibility.Snake.IsEnabled;
 			}
 			return false;
 		}
@@ -325,7 +328,8 @@ namespace MinorShift.Emuera
 						break;
 					case DefinedNameType.SystemMethod:
 						errMes = "変数名" + varName + "はEmueraの式中関数名として使われています";
-						warnLevel = 1;
+						// 参考两侧均为致命级 2（随后该名字仍解析到内置函数，变量不可用）
+						warnLevel = 2;
 						break;
 					case DefinedNameType.SystemVariable:
 						errMes = "変数名" + varName + "はEmueraの変数名として使われています";
@@ -436,7 +440,10 @@ namespace MinorShift.Emuera
 							break;
 						}
 					case DefinedNameType.SystemMethod:
-						break;
+						// 参考两侧：私有变量与内置式中函数同名同为致命级 2，且不进入 privateDimList
+						errMes = "変数名" + varName + "はEmueraの式中関数名として使われています";
+						warnLevel = 2;
+						return;
 					case DefinedNameType.SystemVariable:
 						//システム変数の上書きは不可
                         errMes = "変数名" + varName + "はEmueraの変数名として使われています";
@@ -511,16 +518,8 @@ namespace MinorShift.Emuera
 
 		public IEnumerable<string> VarKeys
 		{
-			get
-			{
-				List<string> list = new List<string>();
-				foreach (var pair in nameDic)
-				{
-					if (pair.Value == DefinedNameType.UserGlobalVariable)
-						list.Add(pair.Key);
-				}
-				return list;
-			}
+			// 参考侧：返回全部变量名（varTokenDic.Keys，含系统变量），ENUMVAR 系可见
+			get { return varTokenDic.Keys; }
 		}
 
 		public VariableToken GetVariableToken(string key, string subKey, bool allowPrivate)

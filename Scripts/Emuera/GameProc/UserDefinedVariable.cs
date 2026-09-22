@@ -186,11 +186,18 @@ namespace MinorShift.Emuera.GameProc
 							throw new CodeEE(keyword + "とCONSTキーワードは同時に指定できません", sc);
 						if (ret.Reference)
 							throw new CodeEE(keyword + "キーワードが二重に指定されています", sc);
+						// 参考两侧（v24 与 snake）：REF 只置 Reference，不置 Out；
+						// Out 语义归 OUT 关键字（snake 系），否则 REF 实参省略/跨作用域校验语义漂移
 						ret.Reference = true;
-						ret.Out = true;
 						ret.Static = false;
 						break;
 				case "OUT":
+					// OUT 关键字为 snake 系语法；v24 参考中 OUT 落 default 分支作为普通变量名
+					if (!Program.Compatibility.Snake.IsEnabled && !Program.Compatibility.EraFl.IsEnabled)
+					{
+						ret.Name = keyword;
+						goto whilebreak;
+					}
 					// megaten 门控（P2）：#DIM REF 后的名字位允许 OUT 作为变量名。
 					// Disabled 下 (ret.Reference && false)=false，整个条件退化为原
 					// staticDefined && !ret.Reference && (...)，与回退前基线完全等价。
@@ -198,10 +205,10 @@ namespace MinorShift.Emuera.GameProc
 							|| (ret.Reference && Program.Compatibility.Megaten.AllowsOutAsVariableNameAfterRefKeyword))
 						&& ret.Name == null
 						&& (wc.EOL || wc.Current.Type == ',' || wc.Current.Type == '='))
-						{
-							ret.Name = keyword;
-							goto whilebreak;
-						}
+					{
+						ret.Name = keyword;
+						goto whilebreak;
+					}
 						if (staticDefined && ret.Static)
 							throw new CodeEE(keyword + "とSTATICキーワードは同時に指定できません", sc);
 						if (ret.CharaData)
@@ -212,11 +219,13 @@ namespace MinorShift.Emuera.GameProc
 							throw new CodeEE(keyword + "とSAVEDATAキーワードは同時に指定できません", sc);
 						if (ret.Const)
 							throw new CodeEE(keyword + "とCONSTキーワードは同時に指定できません", sc);
-						if (ret.Reference)
-							throw new CodeEE(keyword + "キーワードが二重に指定されています", sc);
-						ret.Reference = true;
-						ret.Static = false;
-						break;
+					if (ret.Reference)
+						throw new CodeEE(keyword + "キーワードが二重に指定されています", sc);
+					// OUT 关键字（snake 系）：Out 参数语义在此处生效（对应 snake 参考 UserDefinedVariable 的 OUT 分支）
+					ret.Reference = true;
+					ret.Out = true;
+					ret.Static = false;
+					break;
 					case "DYNAMIC":
 						if (!isPrivate)
 							throw new CodeEE("広域変数の宣言に" + keyword + "キーワードは指定できません", sc);

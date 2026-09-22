@@ -57,6 +57,33 @@ namespace MinorShift.Emuera.GameProc.Function
 		readonly public bool EnablePointerInputMetadata;
 	}
 
+	/// <summary>
+	/// INPUT 系（EM 私家版 INPUT 機能拡張）参数载体：默认值 + 鼠标输入开关 + 阅读跳过开关。
+	/// eraFL 的指针元数据选项随构造传入。
+	/// </summary>
+	internal sealed class SpInputsArgument : Argument
+	{
+		public SpInputsArgument(IOperandTerm def, IOperandTerm mouse, IOperandTerm canSkip, bool enablePointerInputMetadata = false)
+		{
+			Def = def;
+			Mouse = mouse;
+			CanSkip = canSkip;
+			EnablePointerInputMetadata = enablePointerInputMetadata;
+			if (def is SingleTerm)
+			{
+				IsConst = true;
+				if (def.IsString)
+					ConstStr = def.GetStrValue(null);
+				else
+					ConstInt = def.GetIntValue(null);
+			}
+		}
+		readonly public IOperandTerm Def;
+		readonly public IOperandTerm Mouse;
+		readonly public IOperandTerm CanSkip;
+		readonly public bool EnablePointerInputMetadata;
+	}
+
 	internal sealed class ExpressionArrayArgument : Argument
 	{
 		public ExpressionArrayArgument(List<IOperandTerm> termList)

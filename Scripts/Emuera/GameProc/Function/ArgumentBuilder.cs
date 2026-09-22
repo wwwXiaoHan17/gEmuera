@@ -363,7 +363,12 @@ namespace MinorShift.Emuera.GameProc.Function
 					words.ShiftNext();
 				}
 
-				if (parameters.Count != 1 && parameters.Count != maxArguments)
+				// 参考两段式校验：超 maxArg 仅警告放行；个数非 1 且非 4 才是错误
+				if (parameters.Count > maxArguments)
+				{
+					warn("引数が多すぎます", line, 1, false);
+				}
+				if (parameters.Count != 1 && parameters.Count != 4)
 				{
 					warn("引数の数が正しくありません", line, 2, false);
 					return null;
@@ -1118,53 +1123,45 @@ namespace MinorShift.Emuera.GameProc.Function
             public override Argument CreateArgument(InstructionLine line, ExpressionMediator exm)
             {
                 StringStream st = line.PopArgumentPrimitive();
-                Argument ret;
-                if (st.EOS)
-                {
-                    ret = new ExpressionArgument(null);
-                    return ret;
-                }
-                LexicalAnalyzer.SkipWhiteSpace(st);
-                if (st.EOS)
-                    return new ExpressionArgument(null);
                 // eraFL 的 "INPUTS ,1" 同时表示省略默认字符串并启用鼠标扩展结果。
                 // 该标记必须跟随等待请求进入提交链，不能只丢弃第二参数，否则技能按钮值无法写入 RESULTS:1。
-				if (!st.EOS && Program.Compatibility.EraFl.IsOmittedDefaultArgument(st.Current))
-				{
-					st.ShiftNext();
-					bool enablePointerInputMetadata = Program.Compatibility.EraFl
-						.IsPointerInputMetadataOption(st.Substring());
+                if (!st.EOS && Program.Compatibility.EraFl.IsOmittedDefaultArgument(st.Current))
+                {
+                    st.ShiftNext();
+                    bool enablePointerInputMetadata = Program.Compatibility.EraFl
+                        .IsPointerInputMetadataOption(st.Substring());
                     if (!enablePointerInputMetadata)
                         warn("eraFLのINPUTS省略引数にはマウス拡張オプション1を指定してください", line, 1, false);
-                    return new ExpressionArgument(null, enablePointerInputMetadata);
+                    return new SpInputsArgument(null, null, null, enablePointerInputMetadata);
                 }
-                StrFormWord sfwt = LexicalAnalyzer.AnalyseFormattedString(st, FormStrEndWith.EoL, false);
-                if (!st.EOS)
+                // 参考（EM_私家版_INPUT系機能拡張）：form 串以逗号结束，其后至多 2 个整数参数（Mouse/CanSkip）
+                if (st.EOS)
+                    return new SpInputsArgument(null, null, null);
+                StrFormWord sfwt = LexicalAnalyzer.AnalyseFormattedString(st, FormStrEndWith.Comma, false);
+                IOperandTerm term = ExpressionParser.ToStrFormTerm(sfwt);
+                term = term.Restructure(exm);
+                if (st.EOS)
+                    return new SpInputsArgument(term, null, null);
+                st.ShiftNext();
+                WordCollection wc = LexicalAnalyzer.Analyse(st, LexEndWith.EoL, LexAnalyzeFlag.None);
+                IOperandTerm[] terms = ExpressionParser.ReduceArguments(wc, ArgsEndWith.EoL, false);
+                if (!st.EOS || terms.Length > 1)
                 {
                     warn("引数が多すぎます", line, 1, false);
                 }
-                IOperandTerm term = ExpressionParser.ToStrFormTerm(sfwt);
-                term = term.Restructure(exm);
-                ret = new ExpressionArgument(term);
-                if (term is SingleTerm)
+                if (terms.Length > 0)
                 {
-                    ret.ConstStr = term.GetStrValue(exm);
-                    if (line.FunctionCode == FunctionCode.ONEINPUTS)
+                    if (terms[0] == null || !terms[0].IsInteger)
                     {
-                        if (string.IsNullOrEmpty(ret.ConstStr))
-                        {
-                            warn("引数が空文字列なため、引数は無視されます", line, 1, false);
-                            return new ExpressionArgument(null);
-                        }
-                        else if (ret.ConstStr.Length > 1)
-                        {
-                            warn("ONEINPUTSの引数に２文字以上の文字列が渡されています（２文字目以降は無視されます）", line, 1, false);
-                            ret.ConstStr = ret.ConstStr.Remove(1);
-                        }
+                        warn("第2引数は整数型ではないため、無視されます", line, 1, false);
+                        return new SpInputsArgument(term, null, null);
                     }
-                    ret.IsConst = true;
+                    if (terms.Length == 1)
+                        return new SpInputsArgument(term, terms[0], null);
+                    return new SpInputsArgument(term, terms[0], terms[1]);
                 }
-                return ret;
+                // 参考侧此路径（逗号后无实参）返回 null 交由上游报错
+                return null;
             }
         }
         
