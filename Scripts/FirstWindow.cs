@@ -39,12 +39,6 @@ public partial class FirstWindow : Control
 	// 保留旧配置值，避免升级时无法读取 launcher.cfg；启动器不再执行自动探测。
 	public const string CoreProfileAutomatic = "auto";
 
-	enum LauncherGameCategory
-	{
-		V24Pure,
-		Snake
-	}
-
 	enum LauncherGameSource
 	{
 		V24Root,
@@ -67,8 +61,9 @@ public partial class FirstWindow : Control
 
 	enum LauncherTab
 	{
-		V24Pure,
-		Snake,
+		// v24/snake 双标签已合并（2026-09-22）：游戏条目自带 profile 路由（列表后缀
+		// 显示 v24/snake/手动），扫描也统一一次全扫，分类标签只剩导航噪音。
+		Game,
 		Diagnostics,
 		Manual
 	}
@@ -111,14 +106,12 @@ public partial class FirstWindow : Control
 	ItemList gameList;
 	Button startButton;
 	Label statusLabel;
-	Label categoryHintLabel;
 	Label manualStatusLabel;
 	CheckButton advancedCompatibilityToggle;
 	OptionButton compatibilityProfileOption;
 	MarginContainer launcherMargin;
 	SafeAreaApplicator launcherSafeArea;
-	Button v24TabButton;
-	Button snakeTabButton;
+	Button gameTabButton;
 	Button diagnosticsTabButton;
 	Button manualTabButton;
 	Control gameTabContent;
@@ -134,9 +127,7 @@ public partial class FirstWindow : Control
 	readonly List<CheckButton> logCategoryToggles = new();
 	Label diagnosticsStatusLabel;
 	RuntimeDiagnosticsConfig diagnosticsLoggingConfig;
-	Tween tabFadeTween;
-	LauncherGameCategory currentCategory = LauncherGameCategory.V24Pure;
-	LauncherTab currentTab = LauncherTab.V24Pure;
+	LauncherTab currentTab = LauncherTab.Game;
 	readonly List<LauncherGameEntry> gameEntries = new();
 	bool androidPermissionCheckPending = false;
 	bool androidPermissionResultReceived = false;
@@ -155,7 +146,6 @@ public partial class FirstWindow : Control
 		Theme = GEmueraTheme.LoadTheme();
 
 		BuildLauncherUi();
-		PlayLauncherEntrance();
 
 		// Why（回退到菜单布局修复）：游戏经 ChangeSceneToFile 从 main.tscn（根为纯
 		// Node）回到 first_window.tscn（根为全矩形 Control）时，canvas_items stretch 下
@@ -238,46 +228,23 @@ public partial class FirstWindow : Control
 		AddChild(launcherSafeArea);
 	}
 
-	/// <summary>启动器入场动效：fade + 轻微上移（300-400ms ease-out）。</summary>
-	void PlayLauncherEntrance()
-	{
-		if (launcherMargin == null)
-			return;
-		launcherMargin.Modulate = new Color(1, 1, 1, 0f);
-		launcherMargin.PivotOffset = launcherMargin.Size * 0.5f;
-		var tween = CreateTween();
-		tween.BindNode(launcherMargin);
-		tween.SetTrans(Tween.TransitionType.Cubic);
-		tween.SetEase(Tween.EaseType.Out);
-		tween.TweenProperty(launcherMargin, "modulate:a", 1.0f, GEmueraTheme.EnterSeconds);
-		tween.Parallel().TweenProperty(launcherMargin, "position:y", launcherMargin.Position.Y, GEmueraTheme.EnterSeconds)
-			.From(launcherMargin.Position.Y + 18);
-	}
-
 	Control CreateHeader()
 	{
 		var header = new HBoxContainer();
 		header.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 		header.AddThemeConstantOverride("separation", 12);
 
-		var titleBlock = new VBoxContainer();
-		titleBlock.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-		header.AddChild(titleBlock);
-
 		var title = new Label();
 		title.Text = MultiLanguage.Get("FirstWindow.Title", "gEmuera(Emuera for Godot)");
-		title.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-		title.AddThemeFontSizeOverride("font_size", 28);
+		// 布局回归修复（2026-09-22）：HBox 默认只给子控件最小宽度，带 autowrap 的
+		// Label 最小宽度会塌缩到单字符并逐字换行（实测把头部撑满全屏高、其余控件
+		// 全部被挤出可视区）。标题是短文本：关闭 autowrap + 横向占满，最小宽度恒为
+		// 全文宽，任何容器里都不会塌缩。
+		title.AutowrapMode = TextServer.AutowrapMode.Off;
+		title.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		title.AddThemeFontSizeOverride("font_size", 18);
 		title.AddThemeColorOverride("font_color", GEmueraTheme.TextPrimary);
-		titleBlock.AddChild(title);
-
-		// 标题下的蓝紫强调渐变条（#6C8CFF → #9B6CFF），纯视觉装饰。
-		var accentBar = new ColorRect();
-		accentBar.CustomMinimumSize = new Vector2(96, 3);
-		accentBar.SizeFlagsHorizontal = SizeFlags.ShrinkBegin;
-		accentBar.Color = GEmueraTheme.Accent;
-		accentBar.MouseFilter = MouseFilterEnum.Ignore;
-		titleBlock.AddChild(accentBar);
+		header.AddChild(title);
 
 		return header;
 	}
@@ -332,13 +299,11 @@ public partial class FirstWindow : Control
 		rail.SizeFlagsVertical = SizeFlags.ExpandFill;
 		rail.AddThemeConstantOverride("separation", 8);
 
-		v24TabButton = CreateRailButton("v24", () => SelectLauncherTab(LauncherTab.V24Pure));
-		snakeTabButton = CreateRailButton("snake", () => SelectLauncherTab(LauncherTab.Snake));
+		gameTabButton = CreateRailButton(MultiLanguage.Get("FirstWindow.GameTab", "游戏"), () => SelectLauncherTab(LauncherTab.Game));
 		diagnosticsTabButton = CreateRailButton(MultiLanguage.Get("FirstWindow.DebugLogButton", "调试/日志"), () => SelectLauncherTab(LauncherTab.Diagnostics));
 		manualTabButton = CreateRailButton(MultiLanguage.Get("FirstWindow.ManualButton", "操作手册"), () => SelectLauncherTab(LauncherTab.Manual));
 
-		rail.AddChild(v24TabButton);
-		rail.AddChild(snakeTabButton);
+		rail.AddChild(gameTabButton);
 		rail.AddChild(diagnosticsTabButton);
 		rail.AddChild(manualTabButton);
 
@@ -366,10 +331,6 @@ public partial class FirstWindow : Control
 			return;
 
 		currentTab = tab;
-		if (tab == LauncherTab.Snake)
-			currentCategory = LauncherGameCategory.Snake;
-		else if (tab == LauncherTab.V24Pure)
-			currentCategory = LauncherGameCategory.V24Pure;
 
 		// contentStack 规则：先隐藏全部子 content，再显示选中项。
 		// 不沿用 game/manual 的两两互斥判断，避免新增第三个 content 后出现显隐竞态。
@@ -382,12 +343,7 @@ public partial class FirstWindow : Control
 		if (tab == LauncherTab.Diagnostics)
 		{
 			if (diagnosticsTabContent != null)
-			{
-				// FadeInContent 只淡入 modulate 不改 Visible，必须先显式显示（与下方
-				// game/manual 分支一致），否则页面永远空白。
 				diagnosticsTabContent.Visible = true;
-				FadeInContent(diagnosticsTabContent);
-			}
 			return;
 		}
 
@@ -395,22 +351,13 @@ public partial class FirstWindow : Control
 		gameTabContent.Visible = !showingManual;
 		manualTabContent.Visible = showingManual;
 
-		if (showingManual)
-		{
-			FadeInContent(manualTabContent);
-		}
-		else
-		{
-			UpdateCategoryHint();
+		if (!showingManual)
 			ScanGames();
-			FadeInContent(gameTabContent);
-		}
 	}
 
 	void UpdateTabButtonStyles()
 	{
-		ApplyRailButtonStyle(v24TabButton, currentTab == LauncherTab.V24Pure);
-		ApplyRailButtonStyle(snakeTabButton, currentTab == LauncherTab.Snake);
+		ApplyRailButtonStyle(gameTabButton, currentTab == LauncherTab.Game);
 		ApplyRailButtonStyle(diagnosticsTabButton, currentTab == LauncherTab.Diagnostics);
 		ApplyRailButtonStyle(manualTabButton, currentTab == LauncherTab.Manual);
 	}
@@ -428,21 +375,6 @@ public partial class FirstWindow : Control
 			return;
 		button.SetMeta("gemuera_rail_active", active);
 		GEmueraTheme.ApplyRailButton(button, active);
-	}
-
-	void FadeInContent(Control content)
-	{
-		if (content == null)
-			return;
-		if (tabFadeTween != null && tabFadeTween.IsRunning())
-			tabFadeTween.Kill();
-
-		content.Modulate = new Color(1, 1, 1, 0.72f);
-		tabFadeTween = CreateTween();
-		tabFadeTween.BindNode(content);
-		tabFadeTween.SetTrans(Tween.TransitionType.Cubic);
-		tabFadeTween.SetEase(Tween.EaseType.Out);
-		tabFadeTween.TweenProperty(content, "modulate:a", 1.0, 0.22);
 	}
 
 	Control CreateManualContent()
@@ -575,7 +507,6 @@ public partial class FirstWindow : Control
 		return label;
 	}
 
-
 	Control CreateGameContent()
 	{
 		var content = new VBoxContainer();
@@ -583,14 +514,8 @@ public partial class FirstWindow : Control
 		content.SizeFlagsVertical = SizeFlags.ExpandFill;
 		content.AddThemeConstantOverride("separation", 12);
 
-		content.AddChild(CreateSectionTitle(MultiLanguage.Get("FirstWindow.SelectGame", "选择游戏")));
-
-		categoryHintLabel = new Label();
-		categoryHintLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-		categoryHintLabel.AddThemeFontSizeOverride("font_size", 13);
-		categoryHintLabel.AddThemeColorOverride("font_color", GEmueraTheme.TextSecondary);
-		content.AddChild(categoryHintLabel);
-		UpdateCategoryHint();
+		// 兼容设置默认折叠（移动端优先：游戏列表第一眼可见），折叠开关在
+		// CreateCompatibilitySettings 内部构建。
 		content.AddChild(CreateCompatibilitySettings());
 
 		gameList = new ItemList();
@@ -629,6 +554,29 @@ public partial class FirstWindow : Control
 		settings.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 		settings.AddThemeConstantOverride("separation", 6);
 
+		// 折叠开关：默认收起，点击展开高级兼容/profile/兼容包整块（移动端优先，
+		// 游戏列表上方只占一行）。状态不持久化——低频设置，每次进启动器默认收起。
+		var collapseToggle = new Button();
+		collapseToggle.Text = MultiLanguage.Get("FirstWindow.CompatSettingsToggle", "兼容设置") + " ▸";
+		collapseToggle.CustomMinimumSize = new Vector2(0, 40);
+		collapseToggle.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		collapseToggle.AddThemeFontSizeOverride("font_size", 14);
+		GEmueraTheme.ApplyButton(collapseToggle, GEmueraTheme.Surface, GEmueraTheme.Border);
+		settings.AddChild(collapseToggle);
+
+		var body = new VBoxContainer();
+		body.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		body.AddThemeConstantOverride("separation", 6);
+		body.Visible = false;
+		settings.AddChild(body);
+		collapseToggle.Pressed += () =>
+		{
+			body.Visible = !body.Visible;
+			collapseToggle.Text = MultiLanguage.Get(
+				"FirstWindow.CompatSettingsToggle",
+				"兼容设置") + (body.Visible ? " ▾" : " ▸");
+		};
+
 		advancedCompatibilityToggle = new CheckButton();
 		advancedCompatibilityToggle.Text = MultiLanguage.Get(
 			"FirstWindow.AdvancedCompatibility",
@@ -641,7 +589,7 @@ public partial class FirstWindow : Control
 		advancedCompatibilityToggle.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 		advancedCompatibilityToggle.AddThemeFontSizeOverride("font_size", 15);
 		advancedCompatibilityToggle.Toggled += OnAdvancedCompatibilityToggled;
-		settings.AddChild(advancedCompatibilityToggle);
+		body.AddChild(advancedCompatibilityToggle);
 
 		compatibilityProfileOption = new OptionButton();
 		compatibilityProfileOption.TooltipText = MultiLanguage.Get(
@@ -659,11 +607,11 @@ public partial class FirstWindow : Control
 		compatibilityProfileOption.Select(GetManualProfileOptionIndex());
 		compatibilityProfileOption.ItemSelected += OnManualProfileSelected;
 		compatibilityProfileOption.Visible = AdvancedCompatibilityEnabled;
-		settings.AddChild(compatibilityProfileOption);
+		body.AddChild(compatibilityProfileOption);
 
 		// 兼容包选择 UI（扫描候选勾选 + 手动路径，移动端优先）整体在
 		// FirstWindow.CompatPackUi.cs（partial）构建，这里只挂接。
-		settings.AddChild(CreateCompatPackPicker());
+		body.AddChild(CreateCompatPackPicker());
 
 		return settings;
 	}
@@ -825,18 +773,6 @@ public partial class FirstWindow : Control
 			statusLabel.Text = "";
 	}
 
-	void UpdateCategoryHint()
-	{
-		if (categoryHintLabel == null)
-			return;
-
-		categoryHintLabel.Text = MultiLanguage.Get(
-			currentCategory == LauncherGameCategory.Snake ? "FirstWindow.SnakeHint" : "FirstWindow.V24PureHint",
-			currentCategory == LauncherGameCategory.Snake
-				? $"snake: 扫描 {GetSnakeRootHint()} 下的直接游戏目录，并使用 snake 核心。"
-				: $"v24: 扫描 {GetNormalRootHint()} 下的直接游戏目录，以及 compat/<profile>/<game>。例如 compat/erafl/eraFL0.48 会显示在本列表，但会自动使用 erafl 模块；不会读取游戏内容识别类型。");
-	}
-
 	public override void _ExitTree()
 	{
 		GetViewport()?.SizeChanged -= OnLauncherViewportSizeChanged;
@@ -923,16 +859,16 @@ public partial class FirstWindow : Control
 		gameEntries.Clear();
 		startButton.Disabled = true;
 
-		var roots = GetScanRoots(currentCategory);
+		// v24/snake 双分类已合并：一次全扫（基根本身=v24 语义 + 各基根 /snake 子目录
+		// =snake 语义 + 兼容目录），条目自带 profile 路由。
+		var roots = GetScanRoots();
 		var scannedEntries = new List<LauncherGameEntry>();
 		var addedPaths = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
 		var scanMessages = new List<string>();
 		foreach (var root in roots)
 		{
-			if (currentCategory == LauncherGameCategory.Snake)
-				ScanSnakeRoot(root, scannedEntries, addedPaths, scanMessages);
-			else
-				ScanV24Root(root, scannedEntries, addedPaths, scanMessages);
+			ScanRoot(root, CoreProfileV24Pure, LauncherGameSource.V24Root, scannedEntries, addedPaths, scanMessages, scanCompatibilityDirectory: true);
+			ScanRoot(root.TrimEnd('/', '\\') + "/" + SnakeDirectoryName, CoreProfileSnake, LauncherGameSource.SnakeRoot, scannedEntries, addedPaths, scanMessages, scanCompatibilityDirectory: false);
 		}
 		// 手动浏览添加的条目随扫描一起装配（同路径扫描优先，失效记录自动剔除）。
 		AppendManualGameEntries(scannedEntries, addedPaths, scanMessages);
@@ -965,19 +901,11 @@ public partial class FirstWindow : Control
 		UpdateRemoveManualGameButtonState();
 	}
 
-	List<string> GetScanRoots(LauncherGameCategory category)
+	List<string> GetScanRoots()
 	{
+		// 合并扫描的根 = 全部基根（v24 语义）；snake 子目录在 ScanGames 里按基根派生。
 		var roots = new List<string>();
-		var baseRoots = GetBaseScanRoots();
-
-		if (category == LauncherGameCategory.Snake)
-		{
-			foreach (var root in baseRoots)
-				AddUniqueRoot(roots, root.TrimEnd('/', '\\') + "/snake");
-			return roots;
-		}
-
-		foreach (var root in baseRoots)
+		foreach (var root in GetBaseScanRoots())
 			AddUniqueRoot(roots, root);
 		return roots;
 	}
@@ -1063,28 +991,18 @@ public partial class FirstWindow : Control
 		roots.Add(normalized);
 	}
 
-	string GetNormalRootHint()
-	{
-		if (OS.GetName() == "Android")
-			return "/storage/emulated/0/emuera";
-
-		string exeDir = OS.GetExecutablePath().GetBaseDir();
-		return string.IsNullOrEmpty(exeDir) ? "emuera" : exeDir.TrimEnd('/', '\\');
-	}
-
-	string GetSnakeRootHint()
-	{
-		if (OS.GetName() == "Android")
-			return "/storage/emulated/0/emuera/snake";
-
-		return GetNormalRootHint().TrimEnd('/', '\\') + "/snake";
-	}
-
-	void ScanV24Root(
+	/// <summary>统一扫描器（v24/snake 双分类合并后共用）：遍历根下直接子目录，
+	/// 是游戏的入列（profileId/source 由调用方给出），非游戏的嵌套再找一层。
+	/// v24 语义调用（scanCompatibilityDirectory=true）会跳过 snake/compat 两个容器
+	/// 目录并在尾部扫 compat/&lt;profile&gt; 路由；snake 语义调用扫基根/snake 子目录。</summary>
+	void ScanRoot(
 		string root,
+		string profileId,
+		LauncherGameSource source,
 		List<LauncherGameEntry> entries,
 		HashSet<string> addedPaths,
-		List<string> scanMessages)
+		List<string> scanMessages,
+		bool scanCompatibilityDirectory)
 	{
 		if (string.IsNullOrEmpty(root))
 			return;
@@ -1098,8 +1016,11 @@ public partial class FirstWindow : Control
 				break;
 			}
 
+			// snake 容器目录不作为 v24 游戏扫描（由 snake 语义调用负责）；
+			// compat 容器目录不作为普通游戏扫描（由路由扫描负责）。
 			if (string.Equals(directoryName, SnakeDirectoryName, System.StringComparison.OrdinalIgnoreCase)
-				|| string.Equals(directoryName, CompatibilityDirectoryName, System.StringComparison.OrdinalIgnoreCase))
+				|| (scanCompatibilityDirectory
+					&& string.Equals(directoryName, CompatibilityDirectoryName, System.StringComparison.OrdinalIgnoreCase)))
 				continue;
 
 			string gameRoot = CombineDirectory(normalizedRoot, directoryName);
@@ -1110,8 +1031,8 @@ public partial class FirstWindow : Control
 					addedPaths,
 					GetGameDisplayName(normalizedRoot, gameRoot),
 					gameRoot,
-					CoreProfileV24Pure,
-					LauncherGameSource.V24Root,
+					profileId,
+					source,
 					scanMessages);
 			}
 			else
@@ -1122,59 +1043,16 @@ public partial class FirstWindow : Control
 				ScanNestedEraGameDirectories(
 					gameRoot,
 					1,
-					CoreProfileV24Pure,
-					LauncherGameSource.V24Root,
+					profileId,
+					source,
 					entries,
 					addedPaths,
 					scanMessages);
 			}
 		}
 
-		ScanCompatibilityDirectory(normalizedRoot, entries, addedPaths, scanMessages);
-	}
-
-	void ScanSnakeRoot(
-		string root,
-		List<LauncherGameEntry> entries,
-		HashSet<string> addedPaths,
-		List<string> scanMessages)
-	{
-		if (string.IsNullOrEmpty(root))
-			return;
-
-		string normalizedRoot = root.TrimEnd('/', '\\');
-		foreach (string directoryName in GetDirectDirectoryNames(normalizedRoot))
-		{
-			if (entries.Count >= MaxLauncherGameEntries)
-			{
-				AddScanMessage(scanMessages, $"游戏条目超过 {MaxLauncherGameEntries} 个，已停止继续扫描。");
-				break;
-			}
-
-			string gameRoot = CombineDirectory(normalizedRoot, directoryName);
-			if (IsEraGameDirectory(gameRoot))
-			{
-				AddGameEntry(
-					entries,
-					addedPaths,
-					GetGameDisplayName(normalizedRoot, gameRoot),
-					gameRoot,
-					CoreProfileSnake,
-					LauncherGameSource.SnakeRoot,
-					scanMessages);
-			}
-			else
-			{
-				ScanNestedEraGameDirectories(
-					gameRoot,
-					1,
-					CoreProfileSnake,
-					LauncherGameSource.SnakeRoot,
-					entries,
-					addedPaths,
-					scanMessages);
-			}
-		}
+		if (scanCompatibilityDirectory)
+			ScanCompatibilityDirectory(normalizedRoot, entries, addedPaths, scanMessages);
 	}
 
 	// 在非游戏目录内再找一层游戏目录（总深度不超过 2）。
