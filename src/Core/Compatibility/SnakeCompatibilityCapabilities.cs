@@ -56,7 +56,8 @@ public static class SnakeCompatibilityCapabilities
     /// <summary>relationDic 不注册 Mastername（snake 参考走独立映射；v24 参考同时注册）。</summary>
     public const string RelationWithoutMastername = "csv.relation-without-mastername.v1";
 
-    /// <summary>#DIM 声明支持 OUT 关键字（eraFL 同源继承，erafl 会话经自身 IsEnabled 放行）。</summary>
+    /// <summary>#DIM 声明支持 OUT 关键字。与 eraFL 模块同名共享 id（declare.out-keyword.v1）：
+    /// erafl 会话经自身 AllowsOutKeyword 派生放行（EraFlCompatibilityModule.OutKeywordBehavior）。</summary>
     public const string OutKeyword = "declare.out-keyword.v1";
 
     /// <summary>函数声明行剥除 VARIADIC 变长参数标记（v24 参考按普通标识符解析）。</summary>

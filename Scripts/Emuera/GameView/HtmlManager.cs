@@ -1676,10 +1676,10 @@ namespace MinorShift.Emuera.GameView
 		/// snake 系 HTML 扩展属性（font 的 render/edging/hinting/size/valign）是否可用。
 		/// v24 参考对未知 font 属性名抛 CanNotInterpretAttributeName；div 的 box-model
 		///（margin/padding/border/radius）两参考均经 EvilMask TryParseStyledBoxModel 接受，
-		/// 不门控；eraFL 血统承 snake 保留可用（零回归取向）。
+		/// 不门控；eraFL 血统承 snake（markup.font-extended-attributes.v1）。
 		/// </summary>
 		private static bool AllowsSnakeHtmlAttributes =>
-			Program.Compatibility.Snake.IsEnabled || Program.Compatibility.EraFl.IsEnabled;
+			Program.Compatibility.Snake.IsEnabled || Program.Compatibility.EraFl.AllowsExtendedHtmlAttributes;
 
 		private static bool tryParseStyledBoxAttribute(ref StyledBoxModel box, string name, string attrValue)
 		{

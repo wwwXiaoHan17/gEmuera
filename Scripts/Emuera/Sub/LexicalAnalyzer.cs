@@ -947,9 +947,9 @@ namespace MinorShift.Emuera.Sub
 								st.ShiftNext();
 							if (!st.EOS && st.Current == '.')
 							{
-								//浮点字面量为 snake 专属能力（type.float-system.v1）；v24 参考无浮点词法，
-								//非蛇会话走整数路径，'.' 由后续词法按 v24 语义报错。
-								if (!Program.Compatibility.Snake.UsesFloatTypeSystem)
+								//浮点字面量属 snake（float 类型系统）与 eraFL（float-literals 能力）专属；
+								//v24 参考无浮点词法，其余会话走整数路径，'.' 由后续词法按 v24 语义报错。
+								if (!Program.Compatibility.Snake.UsesFloatTypeSystem && !Program.Compatibility.EraFl.AllowsFloatLiterals)
 								{
 									st.CurrentPosition = pos;
 									ret.Add(new LiteralIntegerWord(ReadInt64(st, false)));

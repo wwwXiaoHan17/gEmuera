@@ -819,6 +819,10 @@ namespace MinorShift.Emuera.Compatibility
 		public static readonly DisabledEraFlCompatibilityPolicy Instance = new DisabledEraFlCompatibilityPolicy();
 		public bool IsEnabled => false;
 		public bool UsesExtendedDisplayHistory => false;
+		public bool AllowsFloatLiterals => false;
+		public bool AllowsOutKeyword => false;
+		public bool UsesSafeArithmeticGuard => false;
+		public bool AllowsExtendedHtmlAttributes => false;
 		public string TaskStartRoomLookupFunction => string.Empty;
 		public string GMapQuestType => string.Empty;
 		public bool IsOmittedDefaultArgument(char currentToken) => false;
@@ -862,6 +866,10 @@ namespace MinorShift.Emuera.Compatibility
 
 		public bool IsEnabled => true;
 		public bool UsesExtendedDisplayHistory => capabilities.Contains(EraFlCompatibilityModule.DisplayExtendedHistoryBehavior);
+		public bool AllowsFloatLiterals => capabilities.Contains(EraFlCompatibilityModule.FloatLiteralsBehavior);
+		public bool AllowsOutKeyword => capabilities.Contains(EraFlCompatibilityModule.OutKeywordBehavior);
+		public bool UsesSafeArithmeticGuard => capabilities.Contains(EraFlCompatibilityModule.SafeArithmeticGuardBehavior);
+		public bool AllowsExtendedHtmlAttributes => capabilities.Contains(EraFlCompatibilityModule.ExtendedHtmlAttributesBehavior);
 		public string TaskStartRoomLookupFunction => EraFlCompatibilityModule.TaskStartRoomLookupFunction;
 		public string GMapQuestType => EraFlCompatibilityModule.GMapQuestType;
 		public bool IsOmittedDefaultArgument(char currentToken) =>

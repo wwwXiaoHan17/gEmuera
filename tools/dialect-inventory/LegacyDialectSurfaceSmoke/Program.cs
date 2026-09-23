@@ -134,12 +134,22 @@ static class Program
             {
                 Assert(snake.Plan.CapabilityIds.Contains(quirkId), $"snake 计划必须声明 quirk capability：{quirkId}。");
                 Assert(!v24.Plan.CapabilityIds.Contains(quirkId), $"v24pure 不得声明 snake quirk：{quirkId}。");
-                Assert(!erafl.Plan.CapabilityIds.Contains(quirkId), $"erafl 不得声明 snake quirk：{quirkId}。");
+                // 例外：OUT 关键字是"蛇系血统"共享能力（同名 id declare.out-keyword.v1），
+                // erafl 模块也声明它（血统继承）；其余 snake quirk 不得出现在 erafl 计划。
+                if (quirkId != GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.OutKeyword)
+                    Assert(!erafl.Plan.CapabilityIds.Contains(quirkId), $"erafl 不得声明 snake quirk：{quirkId}。");
             }
             Assert(erafl.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.EraFlCompatibilityModule.DisplayExtendedHistoryBehavior)
                 && erafl.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.EraFlCompatibilityModule.InputOmittedDefaultArgumentBehavior)
                 && erafl.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.EraFlCompatibilityModule.PointerBlankStringBehavior),
                 "erafl 计划必须声明三项布尔 policy quirk（display.extended-history / input.omitted-default-argument / input.pointer-blank-string）。");
+            Assert(erafl.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.EraFlCompatibilityModule.FloatLiteralsBehavior)
+                && erafl.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.EraFlCompatibilityModule.OutKeywordBehavior)
+                && erafl.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.EraFlCompatibilityModule.SafeArithmeticGuardBehavior)
+                && erafl.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.EraFlCompatibilityModule.ExtendedHtmlAttributesBehavior),
+                "erafl 计划必须声明四项蛇系血继承 quirk（type.float-literals / declare.out-keyword / arith.safe-arithmetic-guard / markup.font-extended-attributes）。");
+            Assert(!v24.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.EraFlCompatibilityModule.FloatLiteralsBehavior),
+                "v24pure 不得声明 erafl 浮点字面量 quirk。");
             Assert(v24.Plan.CapabilityIds.Count == 0, "v24pure 不应声明任何 capability。");
 
             // quirk 账本 → policy 映射穷尽性：ISnakeCompatibilityPolicy 的全部布尔属性
@@ -169,8 +179,14 @@ static class Program
                 && erafl.EraFl.IsOmittedDefaultArgument(',')
                 && erafl.EraFl.ShouldSubmitBlankPointerStringInput(2, true),
                 "erafl 会话的三项布尔 quirk 必须由 capability 账本派生为真。");
+            Assert(erafl.EraFl.AllowsFloatLiterals && erafl.EraFl.AllowsOutKeyword
+                && erafl.EraFl.UsesSafeArithmeticGuard && erafl.EraFl.AllowsExtendedHtmlAttributes,
+                "erafl 会话的四项蛇系血继承 quirk 必须由 capability 账本派生为真。");
             Assert(!v24.EraFl.UsesExtendedDisplayHistory && !v24.EraFl.IsOmittedDefaultArgument(','),
                 "v24pure 会话不得激活 erafl quirk。");
+            Assert(!v24.EraFl.AllowsFloatLiterals && !v24.EraFl.AllowsOutKeyword
+                && !v24.EraFl.UsesSafeArithmeticGuard && !v24.EraFl.AllowsExtendedHtmlAttributes,
+                "v24pure 会话不得激活 erafl 蛇系血继承 quirk。");
 
             // 描述符通道（生成清单）：plan.Dialect.Instructions/Functions 必须非空且与
             // LegacyDialectInventories 生成数据逐量一致——这是描述符路由激活的前置契约。
