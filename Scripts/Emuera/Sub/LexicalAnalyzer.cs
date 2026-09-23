@@ -591,7 +591,7 @@ namespace MinorShift.Emuera.Sub
 							case 'e':
 								// snake 参考：\e 保留两字符（SEQUENCEINPUT 的 MesSkip 标记）；
 								// v24 参考：default 分支仅附加被转义字符本身（\e → e）
-								if (Program.Compatibility.Snake.IsEnabled)
+								if (Program.Compatibility.Snake.UsesEscapeESequence)
 								{
 									buffer.Append('\\'); buffer.Append('e');
 								}
@@ -947,6 +947,14 @@ namespace MinorShift.Emuera.Sub
 								st.ShiftNext();
 							if (!st.EOS && st.Current == '.')
 							{
+								//浮点字面量属 snake（float 类型系统）与 eraFL（float-literals 能力）专属；
+								//v24 参考无浮点词法，其余会话走整数路径，'.' 由后续词法按 v24 语义报错。
+								if (!Program.Compatibility.Snake.UsesFloatTypeSystem && !Program.Compatibility.EraFl.AllowsFloatLiterals)
+								{
+									st.CurrentPosition = pos;
+									ret.Add(new LiteralIntegerWord(ReadInt64(st, false)));
+									continue;
+								}
 								//浮点数：预扫后不回卷，单遍扫描小数部与 e/E 指数（语义与 ReadDouble 一致）。
 								st.ShiftNext();
 								while (!st.EOS && char.IsDigit(st.Current))

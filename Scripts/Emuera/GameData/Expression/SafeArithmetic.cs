@@ -17,7 +17,7 @@ namespace MinorShift.Emuera.GameData.Expression
 	internal static class SafeArithmetic
 	{
 		private static bool UsesSnakeOverflowGuard =>
-			Program.Compatibility.Snake.IsEnabled || Program.Compatibility.EraFl.IsEnabled;
+			Program.Compatibility.Snake.IsEnabled || Program.Compatibility.EraFl.UsesSafeArithmeticGuard;
 
 		public static long SafeAdd(long a, long b) => SafeAdd(a, b, null);
 		public static long SafeAdd(long a, long b, ScriptPosition pos)

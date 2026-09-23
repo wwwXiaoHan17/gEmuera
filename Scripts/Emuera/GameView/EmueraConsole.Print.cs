@@ -254,6 +254,13 @@ namespace MinorShift.Emuera.GameView
 						if (line.IsLineEnd)
 							logicalLineCount--;
 					}
+					// 参考侧 GETDISPLAYLINE 修正：深度历史删除时从打印缓冲生成 dummy 行插入顶部，
+					// 防止 lineNo 与显示行错位（BufferToSingleLine 消费打印缓冲）
+					if (displayLineList.Count == Config.MaxLog - 2 && lineNo > displayLineList.Count)
+					{
+						ConsoleDisplayLine dummyline = BufferToSingleLine(true, false);
+						displayLineList.Insert(0, dummyline);
+					}
 				}
 				// 参考侧下溢补偿：列表已空但未删够时，把差值从逻辑行数中扣除（LINECOUNT 语义）
 				if (delNum < num)
@@ -264,6 +271,9 @@ namespace MinorShift.Emuera.GameView
 				if (lineNo < 0)
 					lineNo += int.MaxValue;
 				lastDrawnLineNo = -1;
+				// 参考侧 MaxLog 超额补偿：CLEARLINE 会补充新行使列表超 MaxLog，此时只移除最旧一行
+				if (displayLineList.Count == Config.MaxLog)
+					displayLineList.RemoveAt(0);
 			}
 			if (delNum > 0)
 				MarkDisplayRewriteInProgress();
@@ -545,6 +555,14 @@ namespace MinorShift.Emuera.GameView
 			if (string.IsNullOrEmpty(str))
 				return;
 
+			// v24 参考：PRINTC 列宽按 SJIS 字节基准补空格（CreateTypeCString），
+			// 像素测量仅用于超宽回删；snake 参考为像素分栏（appendPrintCCell）。
+			if (!Program.Compatibility.Snake.IsEnabled)
+			{
+				printBuffer.Append(CreateTypeCV24String(str, alignmentRight), Style, true);
+				return;
+			}
+
 			if (printCWidth == -1)
 				calcPrintCWidth(stringMeasure);
 
@@ -553,11 +571,56 @@ namespace MinorShift.Emuera.GameView
 			appendPrintCCell(contentWidth, printCWidth, alignmentRight, () => printBuffer.Append(str, Style, true));
 		}
 
+		private int printCWidthL = -1;
+
+		/// <summary>
+		/// v24 参考的 CreateTypeCString 移植：列宽按字节宽（LangManager.GetStrlenLang，
+		/// SJIS 半角 1/全角 2 口径；与参考硬编码 Shift-JIS GetByteCount 在代理对/稀有字上
+		/// 有 ±1 字节级近似）补空格——右对齐补 PrintCLength、左对齐补 PrintCLength+1；
+		/// 补出后按像素宽度回删前导/尾随空格（printCWidth/printCWidthL 阈值；测量字体用
+		/// Config.Font，参考按样式字体 new Font(Style.Fontname,...)——非默认样式下回删
+		/// 阈值的已知近似）。
+		/// </summary>
+		private string CreateTypeCV24String(string str, bool alignmentRight)
+		{
+			if (printCWidth == -1 || printCWidthL == -1)
+				calcPrintCWidth(stringMeasure);
+			int length = LangManager.GetStrlenLang(str);
+			int printcLength = Config.PrintCLength;
+			Font font = Config.Font;
+			if (alignmentRight && length < printcLength)
+			{
+				str = new string(' ', printcLength - length) + str;
+				int width = stringMeasure.GetDisplayLength(str, font);
+				while (width > printCWidth)
+				{
+					if (str[0] != ' ')
+						break;
+					str = str.Remove(0, 1);
+					width = stringMeasure.GetDisplayLength(str, font);
+				}
+			}
+			else if (!alignmentRight && length < printcLength + 1)
+			{
+				str += new string(' ', printcLength + 1 - length);
+				int width = stringMeasure.GetDisplayLength(str, font);
+				while (width > printCWidthL)
+				{
+					if (str[str.Length - 1] != ' ')
+						break;
+					str = str.Remove(str.Length - 1, 1);
+					width = stringMeasure.GetDisplayLength(str, font);
+				}
+			}
+			return str;
+		}
+
 		private void calcPrintCWidth(StringMeasure stringMeasure)
 		{
 			string str = new string(' ', Config.PrintCLength);
 			Font font = Config.Font;
 			printCWidth = stringMeasure.GetDisplayLength(str, font);
+			printCWidthL = stringMeasure.GetDisplayLength(str, font);
 		}
 
 		private void appendPrintCCell(int contentWidth, int cellWidth, bool alignmentRight, Action appendContent)
@@ -570,6 +633,9 @@ namespace MinorShift.Emuera.GameView
 			bool fullColumnFits = currentPx + cellWidth <= maxLineWidth;
 			bool contentFits = currentPx + contentWidth <= maxLineWidth;
 
+			// 参考侧（snake PrintC/ButtonC 三处同款）：剩余宽度装不下"内容"即换行；
+			// 装得下内容但装不下整列时不换行、不补白（fullColumnFits=false 抑制 padding），
+			// 并把行累计标记为满行（maxLineWidth）。
 			if (currentPx > 0 && !contentFits)
 			{
 				flushPrintBufferForPrintC();
@@ -629,6 +695,13 @@ namespace MinorShift.Emuera.GameView
 			if (string.IsNullOrEmpty(str))
 				return;
 
+			// v24 参考：PRINTBUTTONC 同样走 CreateTypeCString 字节基准补白
+			if (!Program.Compatibility.Snake.IsEnabled)
+			{
+				printBuffer.AppendButton(CreateTypeCV24String(str, isRight), Style, p);
+				return;
+			}
+
 			if (printCWidth == -1)
 				calcPrintCWidth(stringMeasure);
 
@@ -640,6 +713,13 @@ namespace MinorShift.Emuera.GameView
 		{
 			if (string.IsNullOrEmpty(str))
 				return;
+
+			// v24 参考：PRINTBUTTONC 同样走 CreateTypeCString 字节基准补白
+			if (!Program.Compatibility.Snake.IsEnabled)
+			{
+				printBuffer.AppendButton(CreateTypeCV24String(str, isRight), Style, p);
+				return;
+			}
 
 			if (printCWidth == -1)
 				calcPrintCWidth(stringMeasure);

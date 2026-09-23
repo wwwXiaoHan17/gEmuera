@@ -812,7 +812,7 @@ namespace MinorShift.Emuera.GameProc
 							break;
 						}
 						// BEFORE_THROW 事件机制为 snake 独有；v24 参考侧 THROW 直接抛 CodeEE
-						if (!Program.Compatibility.Snake.IsEnabled)
+						if (!Program.Compatibility.Snake.UsesThrowEvent)
 						{
 							throw new CodeEE(throwMessage);
 						}

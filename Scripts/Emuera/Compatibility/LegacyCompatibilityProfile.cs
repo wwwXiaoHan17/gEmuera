@@ -20,6 +20,17 @@ namespace MinorShift.Emuera.Compatibility
 		bool ContinuesAfterStartupFault { get; }
 		bool UsesFastDisplayRefresh { get; }
 		bool UsesLazyResourceIndex { get; }
+		bool UsesTimesClamp { get; }
+		bool UsesRandClamp { get; }
+		bool UsesMaskAlphaChannel { get; }
+		bool UsesEscapeESequence { get; }
+		bool UsesThrowEvent { get; }
+		bool UsesBeforeErrorEvent { get; }
+		bool UsesRandomizeReseed { get; }
+		bool UsesRelationWithoutMastername { get; }
+		bool AllowsOutKeyword { get; }
+		bool UsesVariadicStrip { get; }
+		bool UsesFloatTypeSystem { get; }
 	}
 
 	/// <summary>
@@ -31,6 +42,14 @@ namespace MinorShift.Emuera.Compatibility
 	{
 		bool IsEnabled { get; }
 		bool UsesExtendedDisplayHistory { get; }
+		/// <summary>浮点字面量词法（type.float-literals.v1）。</summary>
+		bool AllowsFloatLiterals { get; }
+		/// <summary>#DIM 声明的 OUT 关键字（declare.out-keyword.v1）。</summary>
+		bool AllowsOutKeyword { get; }
+		/// <summary>SafeArithmetic 溢出/除零保护（arith.safe-arithmetic-guard.v1）。</summary>
+		bool UsesSafeArithmeticGuard { get; }
+		/// <summary>HTML font 扩展属性（markup.font-extended-attributes.v1）。</summary>
+		bool AllowsExtendedHtmlAttributes { get; }
 		string TaskStartRoomLookupFunction { get; }
 		string GMapQuestType { get; }
 		bool IsOmittedDefaultArgument(char currentToken);

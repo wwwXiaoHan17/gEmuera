@@ -119,6 +119,9 @@ namespace MinorShift.Emuera.GameProc
 							analyzeSharpFunction(st, position, sharpID == "FUNCTIONS", false);
 							break;
 						case "FUNCTIONF":
+							// float 类型系统（snake 专属能力）；v24 参考落 default 致命错误。
+							if (!Program.Compatibility.Snake.UsesFloatTypeSystem)
+								throw new CodeEE("#" + sharpID + "は解釈できないプリプロセッサです", position);
 							analyzeSharpFunction(st, position, false, true);
 							break;
 						case "DIM":
@@ -131,6 +134,9 @@ namespace MinorShift.Emuera.GameProc
 							//analyzeSharpDim(st, position, sharpID == "DIMS");
 							break;
 						case "DIMF":
+							// float 类型系统（snake 专属能力）；v24 参考落 default 致命错误。
+							if (!Program.Compatibility.Snake.UsesFloatTypeSystem)
+								throw new CodeEE("#" + sharpID + "は解釈できないプリプロセッサです", position);
 							//1822 #DIMは保留しておいて後でまとめてやる
 							{
 								WordCollection wc = LexicalAnalyzer.Analyse(
@@ -145,6 +151,9 @@ namespace MinorShift.Emuera.GameProc
 						case "REFS":
 						case "REFF":
 							{
+								// #REFF 属 float 类型系统（snake 专属能力）；v24 参考落 default 致命错误。
+								if (sharpID == "REFF" && !Program.Compatibility.Snake.UsesFloatTypeSystem)
+									throw new CodeEE("#" + sharpID + "は解釈できないプリプロセッサです", position);
 								WordCollection wc = LexicalAnalyzer.Analyse(st, LexEndWith.EoL, LexAnalyzeFlag.AllowAssignment);
 								bool isStr = sharpID == "REFS";
 								bool isFloat = sharpID == "REFF";

@@ -210,7 +210,10 @@ namespace MinorShift.Emuera.GameData.Variable
 
 			varTokenDic.Add("GLOBAL", new Int1DVariableToken(VariableCode.GLOBAL, this));
 			varTokenDic.Add("RANDDATA", new Int1DVariableToken(VariableCode.RANDDATA, this));
-			varTokenDic.Add("RESULTF", new FloatVariableToken(VariableCode.RESULTF, this));
+			// float 类型系统为 snake 专属能力（type.float-system.v1）：v24 参考无浮点变量，
+			// 非蛇会话不注册，解析层自然"解釈できない識別子"。
+			if (Program.Compatibility.Snake.UsesFloatTypeSystem)
+				varTokenDic.Add("RESULTF", new FloatVariableToken(VariableCode.RESULTF, this));
 
 			varTokenDic.Add("SAVESTR", new Str1DVariableToken(VariableCode.SAVESTR, this));
 			varTokenDic.Add("TSTR", new Str1DVariableToken(VariableCode.TSTR, this));
@@ -350,6 +353,9 @@ namespace MinorShift.Emuera.GameData.Variable
 			localvarTokenDic.Add("LOCAL", new VariableLocal(VariableCode.LOCAL, size, CreateLocalInt));
 			size = constant.VariableIntArrayLength[(int)(VariableCode.__LOWERCASE__ & VariableCode.ARG)];
 			localvarTokenDic.Add("ARG", new VariableLocal(VariableCode.ARG, size, CreateLocalInt));
+			// LOCALF/ARGF 保持注册：ExecutionContext/LabelDictionary 的浮点支撑簿记
+			//（默认尺寸/resize）无条件读取；脚本级可见性在 IdentifierDictionary 解析点
+			// 按 float 类型系统门控（非蛇会话解析 LOCALF/ARGF 名 → 解釈できない）。
 			size = constant.VariableFloatArrayLength[(int)(VariableCode.__LOWERCASE__ & VariableCode.LOCALF)];
 			localvarTokenDic.Add("LOCALF", new VariableLocal(VariableCode.LOCALF, size, CreateLocalFloat));
 			size = constant.VariableFloatArrayLength[(int)(VariableCode.__LOWERCASE__ & VariableCode.ARGF)];

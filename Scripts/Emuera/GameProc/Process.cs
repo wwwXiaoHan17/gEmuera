@@ -442,7 +442,7 @@ namespace MinorShift.Emuera.GameProc
 						return;
 					}
 					// BEFORE_ERROR 事件机制为 snake 独有；v24 参考侧异常直接停机处理
-					if (Program.Compatibility.Snake.IsEnabled)
+					if (Program.Compatibility.Snake.UsesBeforeErrorEvent)
 					{
 						state.InBeforeError = true;
 						var beforeError = Config.DisableBeforeErrorThrow

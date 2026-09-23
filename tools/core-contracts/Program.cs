@@ -912,14 +912,18 @@ Assert(
 Assert(
     eraFlFacade.CurrentPlan?.CapabilityIds.SequenceEqual(new[]
     {
+        "arith.safe-arithmetic-guard.v1",
+        "declare.out-keyword.v1",
         "display.dynamic-map-transaction.v1",
         "display.extended-history.v1",
         "input.omitted-default-argument.v1",
         "input.pointer-blank-string.v1",
         "input.pointer-button.v1",
         "markup.div-v2.v1",
+        "markup.font-extended-attributes.v1",
         "markup.image-dual-src.v1",
         "resource.dynamic-sprite.v1",
+        "type.float-literals.v1",
     }) == true,
     "eraFL plan did not include the required capability set.");
 Assert(

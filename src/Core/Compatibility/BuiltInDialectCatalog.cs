@@ -7,23 +7,8 @@ namespace GEmuera.Core.Compatibility;
 /// </summary>
 public static class BuiltInDialectCatalog
 {
-    // These are declaration-only port type ids from the reviewed static
-    // dialect surface. They intentionally do not provide policy values or
-    // legacy Parser/VM bindings; a plan still requires an explicit immutable
-    // BehaviorPortSnapshot for every behavior it elects to expose.
-    private static readonly string[] SnakePortTypeIds =
-    {
-        "IExtraArgumentPolicy",
-        "IPrivateArgumentShapePolicy",
-        "IEffectiveDisplayConfigurationProjection",
-        "IDisplayRefreshTimingPolicy",
-        "IExpressionFunctionCatalog",
-        "IInstructionCatalogBuilder",
-        "IStartupFaultPolicy",
-        "IUserVariableResolutionPolicy",
-        "IParserDiagnosticsSinkPolicy",
-        "IResourceLazyIndexPolicy",
-    };
+    // snake 的声明专用端口类型 id 已随 SnakeCompatibilityModule 成模组化
+    //（SnakeCompatibilityModule.PortTypeIds），此处不再内联。
 
     public static DialectModuleCatalog CreateLegacyBaseline()
     {
@@ -32,15 +17,7 @@ public static class BuiltInDialectCatalog
             new DialectModuleDefinition("gemuera.v24", "1.0.0", 1),
             V24Contributions()));
         catalog.Register(new DeclaredDialectModule(
-            new DialectModuleDefinition(
-                "game.snake",
-                "1.0.0",
-                1,
-                dependencies: new[]
-                {
-                    new ModuleDependencySnapshot("gemuera.v24", "[1.0.0,2.0.0)"),
-                },
-                portTypeIds: SnakePortTypeIds),
+            SnakeCompatibilityModule.CreateDefinition(),
             SnakeContributions()));
         catalog.Register(new DeclaredDialectModule(
             EraFlCompatibilityModule.CreateDefinition(),
@@ -117,10 +94,7 @@ public static class BuiltInDialectCatalog
             new[] { "gemuera.v18" }));
         catalog.Register(EraBlueCompatibilityModule.CreateProfile());
         catalog.Register(MegatenCompatibilityModule.CreateProfile());
-        catalog.Register(new CompatibilityProfileDefinition(
-            "snake",
-            new[] { "game.snake" },
-            requiredCapabilityIds: SnakeCompatibilityCapabilities.RequiredCapabilityIds));
+        catalog.Register(SnakeCompatibilityModule.CreateProfile());
         catalog.Register(EraFlCompatibilityModule.CreateProfile());
         return catalog;
     }

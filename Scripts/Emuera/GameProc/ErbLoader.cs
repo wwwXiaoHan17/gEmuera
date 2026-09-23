@@ -61,6 +61,11 @@ namespace MinorShift.Emuera.GameProc
 			{
 				labelDic.RemoveAll();
 				labelDic.EnsureCapacity(EstimateLabelCapacity(erbFiles.Count, useLazyLoading), erbFiles.Count);
+				// EE_ファイル読み込み順拡張（v24/snake 同款）：名字含 '#' 的目录下 ERB
+				// 最先加载（覆盖声明次序优先），且不受 lazy 表跳过约束。
+				var firstDirs = new List<string>();
+				CollectHashDirectories(erbDir, Config.SearchSubdirectory, firstDirs);
+				List<string> loadedFirstFiles = new List<string>();
 				if (useLazyLoading)
 				{
 					parentProcess.LoadLazyLoadingTable(erbFiles);
@@ -83,10 +88,32 @@ namespace MinorShift.Emuera.GameProc
 				//（loadErb 本身及其内部 output.PrintXxx 原本就已在 Task.Run 线程池线程上执行）。
 				await Task.Run(() =>
 				{
+					foreach (string hashDir in firstDirs)
+					{
+						// 相对路径以 ERB 根为基准（参考侧 GetFiles(dir, erbDir, pattern) 语义）
+						List<KeyValuePair<string, string>> firstErbFiles = Config.GetFiles(hashDir, erbDir, "*.ERB");
+						for (int i = 0; i < firstErbFiles.Count; i++)
+						{
+							string filename = firstErbFiles[i].Key;
+							string file = firstErbFiles[i].Value;
+							loadedFirstFiles.Add(file);
+#if UEMUERA_DEBUG
+							if (displayReport)
+								output.PrintSystemLine("経過時間:" + (WinmmTimer.TickCount - starttime).ToString("D4") + "ms:" + filename + "読み込み中・・・");
+#else
+							if (displayReport)
+								output.PrintSystemLine(filename + "読み込み中・・・");
+#endif
+							loadErb(file, filename, isOnlyEvent);
+						}
+					}
 					for (int i = 0; i < erbFiles.Count; i++)
 					{
 						string filename = erbFiles[i].Key;
 						string file = erbFiles[i].Value;
+						// 参考侧顺序：已加载（*#* 目录）短路在 lazy 跳过之前
+						if (loadedFirstFiles.Contains(file))
+							continue;
 						if (useLazyLoading && parentProcess.IsLazyLoadingFile(file))
 							continue;
 #if UEMUERA_DEBUG
@@ -640,7 +667,7 @@ namespace MinorShift.Emuera.GameProc
 			bool hasVariadic = false;
 			int variadicArgIndex = -1;
 			// VARIADIC 标识符剥除为 snake 独有语法；v24 参考把 VARIADIC 当普通标识符解析
-			if (Program.Compatibility.Snake.IsEnabled)
+			if (Program.Compatibility.Snake.UsesVariadicStrip)
 				RemoveSnakeVariadicMarker(wc, out hasVariadic, out variadicArgIndex);
 			//1807 非イベント関数のシステム関数については警告レベル低下＆エラー解除＆引数を設定するように。
 			if (label.IsEvent)
@@ -774,31 +801,30 @@ namespace MinorShift.Emuera.GameProc
 
 			if (hasVariadic)
 			{
-				if (args.Length == 0)
+				// snake 参考：零参数时跳过整个校验块照常 label.Arg = args（VariadicArgIndex 保持 -1）
+				if (args.Length > 0)
 				{
-					ParserMediator.Warn("VARIADICが指定されていますが関数引数がありません", label, 2, true, false);
-					return;
-				}
-				if (variadicArgIndex != args.Length - 1)
-				{
-					ParserMediator.Warn("VARIADIC引数は最後の引数として宣言してください", label, 2, true, false);
-					return;
-				}
-				VariableCode code = args[args.Length - 1].Identifier.Code;
-				if (code != VariableCode.ARG && code != VariableCode.ARGS && code != VariableCode.ARGF)
-				{
-					ParserMediator.Warn("VARIADICはARG、ARGSまたはARGFだけを修飾できます", label, 2, true, false);
-					return;
-				}
-				for (int i = 0; i < args.Length - 1; i++)
-				{
-					if (args[i].Identifier.Code == code)
+					if (variadicArgIndex != args.Length - 1)
 					{
-						ParserMediator.Warn("VARIADICに指定したARG/ARGSは固定引数側では使用できません: " + args[i].GetFullString(), label, 2, true, false);
+						ParserMediator.Warn("VARIADIC引数は最後の引数として宣言してください", label, 2, true, false);
 						return;
 					}
+					VariableCode code = args[args.Length - 1].Identifier.Code;
+					if (code != VariableCode.ARG && code != VariableCode.ARGS && code != VariableCode.ARGF)
+					{
+						ParserMediator.Warn("VARIADICはARG、ARGSまたはARGFだけを修飾できます", label, 2, true, false);
+						return;
+					}
+					for (int i = 0; i < args.Length - 1; i++)
+					{
+						if (args[i].Identifier.Code == code)
+						{
+							ParserMediator.Warn("VARIADICに指定したARG/ARGSは固定引数側では使用できません: " + args[i].GetFullString(), label, 2, true, false);
+							return;
+						}
+					}
+					label.VariadicArgIndex = args.Length - 1;
 				}
-				label.VariadicArgIndex = args.Length - 1;
 			}
 
             //label.SubNames = subNames;
@@ -811,6 +837,22 @@ namespace MinorShift.Emuera.GameProc
 		err:
 			ParserMediator.Warn("関数@" + label.LabelName + " の引数のエラー:" + errMes, label, 2, true, false);
 			return;
+		}
+
+		/// <summary>
+		/// EE_ファイル読み込み順拡張：收集名字含 '#' 的目录（SearchSubdirectory 时含全部
+		/// 后代，否则仅顶层）——参考侧 Directory.GetDirectories(erbDir, "*#*", …) 同款语义。
+		/// </summary>
+		private static void CollectHashDirectories(string dir, bool recursive, List<string> result)
+		{
+			var subDirs = uEmuera.Utils.GetDirectoryPaths(dir);
+			foreach (string sub in subDirs)
+			{
+				if (System.IO.Path.GetFileName(sub).Contains('#'))
+					result.Add(sub);
+				if (recursive)
+					CollectHashDirectories(sub, recursive, result);
+			}
 		}
 
 		private void RemoveSnakeVariadicMarker(WordCollection wc, out bool hasVariadic, out int variadicArgIndex)
@@ -829,17 +871,8 @@ namespace MinorShift.Emuera.GameProc
 				{
 					hasVariadic = true;
 					variadicArgIndex = commaCount;
+					// snake 参考：只删标识符本身，不动相邻逗号（Remove 后指针落在下一词）
 					wc.Remove();
-					// Remove adjacent comma to prevent double commas in argument lists
-					if (!wc.EOL && wc.Current is SymbolWord symNext && symNext.Type == ',')
-					{
-						wc.Remove();
-					}
-					else if (wc.Pointer > 0 && wc.Collection[wc.Pointer - 1] is SymbolWord symPrev && symPrev.Type == ',')
-					{
-						wc.Pointer--;
-						wc.Remove();
-					}
 					continue;
 				}
 				if (wc.Current is SymbolWord sym && sym.Type == ',')
@@ -1262,6 +1295,10 @@ namespace MinorShift.Emuera.GameProc
 					case FunctionCode.TRYCGOTOFORM:
 					case FunctionCode.TRYCJUMPFORM:
 					case FunctionCode.TRYCCALLFORM:
+					// snake 扩展指令（TRYC*STR）：与 TRYC* 同样入栈，供 CATCH 弹出配对
+					//（snake 参考 ErbLoader 压栈表包含它们；缺失时 CATCH 报"対応するTRYC系命令がありません"）
+					case FunctionCode.TRYCJUMPSTR:
+					case FunctionCode.TRYCCALLSTR:
 					case FunctionCode.DO:
 						nestStack.Push(func);
 						break;

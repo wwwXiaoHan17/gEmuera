@@ -192,16 +192,16 @@ namespace MinorShift.Emuera.GameProc
 						ret.Static = false;
 						break;
 				case "OUT":
-					// OUT 关键字为 snake 系语法；v24 参考中 OUT 落 default 分支作为普通变量名
-					if (!Program.Compatibility.Snake.IsEnabled && !Program.Compatibility.EraFl.IsEnabled)
+					// OUT 关键字为 snake 系语法（eraFL 同源继承）；v24 参考中 OUT 落 default 分支作为普通变量名
+					if (!Program.Compatibility.Snake.AllowsOutKeyword && !Program.Compatibility.EraFl.AllowsOutKeyword)
 					{
 						ret.Name = keyword;
 						goto whilebreak;
 					}
 					// megaten 门控（P2）：#DIM REF 后的名字位允许 OUT 作为变量名。
-					// Disabled 下 (ret.Reference && false)=false，整个条件退化为原
-					// staticDefined && !ret.Reference && (...)，与回退前基线完全等价。
-					if ((staticDefined && !ret.Reference
+					// snake 会话无此逃逸分支（snake 参考无条件按关键字处理，错位声明直接报错），
+					// 故 STATIC 形态的逃逸仅在 OUT 非关键字的会话生效。
+					if ((!Program.Compatibility.Snake.AllowsOutKeyword && staticDefined && !ret.Reference
 							|| (ret.Reference && Program.Compatibility.Megaten.AllowsOutAsVariableNameAfterRefKeyword))
 						&& ret.Name == null
 						&& (wc.EOL || wc.Current.Type == ',' || wc.Current.Type == '='))
@@ -220,7 +220,7 @@ namespace MinorShift.Emuera.GameProc
 						if (ret.Const)
 							throw new CodeEE(keyword + "とCONSTキーワードは同時に指定できません", sc);
 					if (ret.Reference)
-						throw new CodeEE(keyword + "キーワードが二重に指定されています", sc);
+						throw new CodeEE(keyword + "キーワードとREFキーワードは同時に指定できません", sc);
 					// OUT 关键字（snake 系）：Out 参数语义在此处生效（对应 snake 参考 UserDefinedVariable 的 OUT 分支）
 					ret.Reference = true;
 					ret.Out = true;
@@ -437,6 +437,16 @@ namespace MinorShift.Emuera.GameProc
 
 			if (sizeNum.Count == 0)
 				sizeNum.Add(1);
+
+			// snake 参考（UserDefinedVariable 351-354）：OUT 变量恒为标量引用
+			//（Dimension=0、Lengths=[1]），短路在维度/尺寸校验之前——#DIM OUT X,1,1,1,1 不报多维错
+			if (ret.Out)
+			{
+				ret.Private = isPrivate;
+				ret.Dimension = 0;
+				ret.Lengths = new int[1] { 1 };
+				return ret;
+			}
 
 			ret.Private = isPrivate;
 			ret.Dimension = sizeNum.Count;

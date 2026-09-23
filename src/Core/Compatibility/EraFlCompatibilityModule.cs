@@ -40,6 +40,22 @@ public static class EraFlCompatibilityModule
     /// <summary>扩展显示历史（IEraFlCompatibilityPolicy.UsesExtendedDisplayHistory）。</summary>
     public const string DisplayExtendedHistoryBehavior = "display.extended-history.v1";
 
+    /// <summary>
+    /// 浮点字面量词法（IEraFlCompatibilityPolicy.AllowsFloatLiterals）。eraFL0.47 的 TIMES 小数倍率
+    /// 依赖浮点字面量（源码 grep 口径 151 个 *.ERB 文件；emuera.log 2026-09-23 实证 2455 处），
+    /// eraFL 引擎血统承 snake；浮点变量族（RESULTF/#DIMF 等）实测零使用，仍不随本能力放行。
+    /// </summary>
+    public const string FloatLiteralsBehavior = "type.float-literals.v1";
+
+    /// <summary>#DIM 声明的 OUT 关键字（IEraFlCompatibilityPolicy.AllowsOutKeyword，snake 系语法血统继承）。</summary>
+    public const string OutKeywordBehavior = "declare.out-keyword.v1";
+
+    /// <summary>SafeArithmetic 溢出/除零保护（IEraFlCompatibilityPolicy.UsesSafeArithmeticGuard，snake 系语义血统继承）。</summary>
+    public const string SafeArithmeticGuardBehavior = "arith.safe-arithmetic-guard.v1";
+
+    /// <summary>HTML font 扩展属性 render/edging/hinting/size/valign（IEraFlCompatibilityPolicy.AllowsExtendedHtmlAttributes）。</summary>
+    public const string ExtendedHtmlAttributesBehavior = "markup.font-extended-attributes.v1";
+
     public const string TaskStartRoomLookupFunction = "HO_FIND_ROOM_BY_TAG";
     public const string TaskStartRoomTag = "任务開始地点";
     public const string TaskStartRoomIdMarker = "[ROOM_ID:200]";
@@ -59,6 +75,10 @@ public static class EraFlCompatibilityModule
             InputOmittedDefaultArgumentBehavior,
             PointerBlankStringBehavior,
             DisplayExtendedHistoryBehavior,
+            FloatLiteralsBehavior,
+            OutKeywordBehavior,
+            SafeArithmeticGuardBehavior,
+            ExtendedHtmlAttributesBehavior,
         });
 
     private static readonly ReadOnlyCollection<BehaviorPortSnapshot> DefaultBehaviorPorts =

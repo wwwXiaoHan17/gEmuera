@@ -155,6 +155,12 @@ namespace MinorShift.Emuera.GameProc
 					case "FUNCTION":
 					case "FUNCTIONS":
 					case "FUNCTIONF":
+						// #FUNCTIONF 属 float 类型系统（snake 专属能力）；v24 参考落 default 警告忽略。
+						if (token == "FUNCTIONF" && !Program.Compatibility.Snake.UsesFloatTypeSystem)
+						{
+							ParserMediator.Warn("解釈できない#行です", position, 1);
+							break;
+						}
 						if (!string.IsNullOrEmpty(label.LabelName) && char.IsDigit(label.LabelName[0]))
 						{
 							ParserMediator.Warn("#" + token + "属性は関数名が数字で始まる関数には指定できません", position, 1);
@@ -217,6 +223,12 @@ namespace MinorShift.Emuera.GameProc
 					case "LOCALSSIZE":
 					case "LOCALFSIZE":
 						{
+							// #LOCALFSIZE 属 float 类型系统（snake 专属能力）；v24 参考落 default 警告忽略。
+							if (token == "LOCALFSIZE" && !Program.Compatibility.Snake.UsesFloatTypeSystem)
+							{
+								ParserMediator.Warn("解釈できない#行です", position, 1);
+								break;
+							}
 							wc = AnalyzeSharpArguments(st);
 							if (wc.EOL)
 							{
@@ -285,6 +297,12 @@ namespace MinorShift.Emuera.GameProc
 					case "DIMS":
 					case "DIMF":
 						{
+							// #DIMF 属 float 类型系统（snake 专属能力）；v24 参考落 default 警告忽略。
+							if (token == "DIMF" && !Program.Compatibility.Snake.UsesFloatTypeSystem)
+							{
+								ParserMediator.Warn("解釈できない#行です", position, 1);
+								break;
+							}
 							wc = AnalyzeSharpArguments(st, token);
 							UserDefinedVariableData data = UserDefinedVariableData.Create(wc, token == "DIMS", token == "DIMF", true, position);
 							if (!label.AddPrivateVariable(data))
@@ -298,6 +316,12 @@ namespace MinorShift.Emuera.GameProc
 					case "REFS":
 					case "REFF":
 						{
+							// #REFF 属 float 类型系统（snake 专属能力）；v24 参考落 default 警告忽略。
+							if (token == "REFF" && !Program.Compatibility.Snake.UsesFloatTypeSystem)
+							{
+								ParserMediator.Warn("解釈できない#行です", position, 1);
+								break;
+							}
 							wc = AnalyzeSharpArguments(st);
 							bool isStr = token == "REFS";
 							bool isFloat = token == "REFF";

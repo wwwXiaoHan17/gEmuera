@@ -483,13 +483,38 @@ namespace MinorShift.Emuera.GameProc.Function
 				st.ShiftNext();
 				if (st.EOS)
 					{warn("引数が足りません", line, 2, false); return null;}
-				WordCollection wc2 = LexicalAnalyzer.Analyse(st, LexEndWith.EoL, LexAnalyzeFlag.None);
-				IOperandTerm multiplier = ExpressionParser.ReduceExpressionTerm(wc2, TermEndWith.EoL);
-				if (multiplier == null)
-				{ warn("書式が間違っています", line, 2, false); return null; }
-				if (multiplier.IsString)
-				{ warn("第２引数を文字列式にすることはできません", line, 2, false); return null; }
-				multiplier = multiplier.Restructure(exm);
+				IOperandTerm multiplier;
+				if (Program.Compatibility.Snake.UsesFloatTypeSystem || Program.Compatibility.EraFl.AllowsFloatLiterals)
+				{
+					// snake 参考：倍率为一般表达式项（浮点字面量可用）；eraFL 同源继承
+					WordCollection wc2 = LexicalAnalyzer.Analyse(st, LexEndWith.EoL, LexAnalyzeFlag.None);
+					multiplier = ExpressionParser.ReduceExpressionTerm(wc2, TermEndWith.EoL);
+					if (multiplier == null)
+					{ warn("書式が間違っています", line, 2, false); return null; }
+					if (multiplier.IsString)
+					{ warn("第２引数を文字列式にすることはできません", line, 2, false); return null; }
+					multiplier = multiplier.Restructure(exm);
+				}
+				else
+				{
+					// v24 参考：倍率经 ReadDouble 特殊扫描——仅接受小数字面量（不接受表达式），
+					// 解析失败打 Lv1 警告并以 0.0 继续（ArgIsNotRealNumber 语义），多余字符警告
+					double d;
+					try
+					{
+						LexicalAnalyzer.SkipWhiteSpace(st);
+						d = LexicalAnalyzer.ReadDouble(st);
+						LexicalAnalyzer.SkipWhiteSpace(st);
+						if (!st.EOS)
+							warn("引数が多すぎます", line, 1, false);
+					}
+					catch
+					{
+						warn("第2引数が実数として解釈できません", line, 1, false);
+						d = 0.0;
+					}
+					multiplier = new SingleTerm(d);
+				}
 				IOperandTerm term = ExpressionParser.ReduceExpressionTerm(wc, TermEndWith.EoL);
 				if (term == null)
 				{ warn("書式が間違っています", line, 2, false); return null; }
