@@ -1087,10 +1087,9 @@ namespace MinorShift.Emuera.GameProc.Function
             public override Argument CreateArgument(InstructionLine line, ExpressionMediator exm)
             {
                 IOperandTerm[] terms = popTerms(line);
-                if (!checkArgumentType(line, exm, terms))
-                    return null;
-                // 参考（EM_私家版_INPUT系機能拡張＆ONEINPUT系制限解除）：
-                // 全参数必须为整型；按个数构造 Def/Mouse/CanSkip 三元组，不做解析期截断
+                // 参考（EM_私家版_INPUT系機能拡張＆ONEINPUT系制限解除）：活动代码不走
+                // checkArgumentType（其 null-省略与多余参数判定会误拒/误警），手工循环
+                // 只查"非 null 且非整型"——null 表示省略位，越界参数静默丢弃。
                 for (int i = 0; i < terms.Length; i++)
                 {
                     if (terms[i] != null && terms[i].GetEraType() != EraType.Integer)

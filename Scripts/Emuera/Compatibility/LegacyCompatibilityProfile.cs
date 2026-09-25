@@ -20,6 +20,17 @@ namespace MinorShift.Emuera.Compatibility
 		bool ContinuesAfterStartupFault { get; }
 		bool UsesFastDisplayRefresh { get; }
 		bool UsesLazyResourceIndex { get; }
+		bool UsesTimesClamp { get; }
+		bool UsesRandClamp { get; }
+		bool UsesMaskAlphaChannel { get; }
+		bool UsesEscapeESequence { get; }
+		bool UsesThrowEvent { get; }
+		bool UsesBeforeErrorEvent { get; }
+		bool UsesRandomizeReseed { get; }
+		bool UsesRelationWithoutMastername { get; }
+		bool AllowsOutKeyword { get; }
+		bool UsesVariadicStrip { get; }
+		bool UsesFloatTypeSystem { get; }
 	}
 
 	/// <summary>

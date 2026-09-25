@@ -52,7 +52,7 @@ namespace MinorShift.Emuera.GameData.Variable
 		{
 			rand = new MTRandom(seed);
 			// snake 参考：Randomize 同时重播种 newRand；v24 参考只动 rand（UseNewRandom 时指令层直接跳过）
-			if (Program.Compatibility.Snake.IsEnabled)
+			if (Program.Compatibility.Snake.UsesRandomizeReseed)
 				newRand = new Random((int)seed);
 		}
 

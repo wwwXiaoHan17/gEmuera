@@ -339,7 +339,7 @@ namespace MinorShift.Emuera.GameProc.Function
 				{
 					var.SetValue(var.GetFloatValue(exm) * multiplier, exm);
 				}
-				else if (Program.Compatibility.Snake.IsEnabled)
+				else if (Program.Compatibility.Snake.UsesTimesClamp)
 				{
 					// snake 参考：checked + 溢出告警 + 钳位（skia fork 有意行为）
 					if (Config.TimesNotRigorousCalculation)

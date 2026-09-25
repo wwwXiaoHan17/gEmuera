@@ -336,20 +336,10 @@ namespace MinorShift.Emuera.GameView
 			if (sprite == null || !sprite.IsCreated)
 				return;
 			int zdepth = normalizeSnakeDepth(depth);
-			bool changed = false;
 			lock (cbgLock)
 			{
-				for (int i = 0; i < cbgList.Count; i++)
-				{
-					// SETIMAGELAYER 的脚本可见 depth 是 long，允许 0 和 -1 同时存在。
-					// CBG 渲染层内部保留 zdepth==0 作为文字哑元，因此这里只能用原始 depth 做逻辑匹配。
-					if (cbgList[i].isSnakeImageLayer && cbgList[i].snakeImageDepth == depth)
-					{
-						cbgList.RemoveAt(i);
-						i--;
-						changed = true;
-					}
-				}
+				// snake 参考（ImageLayerManager.SetLayer）：同深度多图层共存（纯 Add），
+				// 稳定排序逐层绘制；同深度替换语义属 CLEARIMAGELAYER。
 				ClientBackGroundImage cbg = new ClientBackGroundImage(zdepth);
 				cbg.Img = sprite;
 				cbg.x = x;
@@ -364,10 +354,8 @@ namespace MinorShift.Emuera.GameView
 				cbg.snakeImageName = spriteName;
 				cbgList.Add(cbg);
 				cbgList.Sort();
-				changed = true;
 			}
-			if (changed)
-				RequestCbgRefresh();
+			RequestCbgRefresh();
 		}
 
 		public void ClearImageLayer(long depth)
