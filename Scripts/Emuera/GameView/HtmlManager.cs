@@ -1827,6 +1827,12 @@ namespace MinorShift.Emuera.GameView
 						long value = Convert.ToInt64(colorvalue, 16);
 						if (value < 0 || value > 0xFFFFFFFFL)
 							throw new CodeEE(colorvalue + "は適切な色指定の範囲外です");
+						// eraMegaten 的 TOSTR_HTML 将无 alpha 的 RGB 整数格式化为
+						// #00RRGGBB。该会话沿用原 Emuera 语义，把零 alpha 视为 FF，
+						// 使 PARTY 的 HP/MP 当前值和状态文字可见。
+						if (MinorShift.Emuera.Program.Compatibility.Megaten.TreatZeroAlphaRgbHexAsOpaque
+							&& ((value >> 24) & 0xFFL) == 0)
+							value |= 0xFF000000L;
 						i = unchecked((int)value);
 					}
 				}

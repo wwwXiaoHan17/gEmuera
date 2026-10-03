@@ -1381,7 +1381,7 @@ public partial class FirstWindow : Control
 	{
 		CommitCompatPackEdit();
 		SetSelectedGamePath(entry.GameRoot, GetSelectedCoreProfileName(entry));
-		GetTree().ChangeSceneToFile("res://main.tscn");
+		GetTree().ChangeSceneToFile("res://assets/scenes/main.tscn");
 	}
 
 	public static string ResolveStartupGamePath()

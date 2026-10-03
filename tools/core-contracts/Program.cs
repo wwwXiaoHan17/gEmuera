@@ -469,16 +469,39 @@ var descriptorRoute = CompatibilityDescriptorRoute<string, string>.Create(
         ["PRINT"] = "legacy-print",
         ["SNAKE_PRINT"] = "legacy-snake-print",
     },
-    new Dictionary<string, string> { ["RESULT"] = "legacy-result" });
+    StringComparer.Ordinal,
+    new Dictionary<string, string> { ["RESULT"] = "legacy-result" },
+    StringComparer.Ordinal);
 Assert(
     descriptorRoute.Instructions.Count == snakePlan.Dialect.Instructions.Count &&
     descriptorRoute.Instructions["SNAKE_PRINT"] == "legacy-snake-print",
     "Descriptor route did not expose the selected legacy instruction handler.");
+// 回归（方言路由比较器契约）：旧注册表常被包装成 ReadOnlyDictionary，比较器无法从
+// 接口取出。路由曾靠运行时类型嗅探（registry is Dictionary<,>）推断比较器，包装后
+// 静默回退到 Ordinal，于是进入方言路由（snake/erafl/megaten）后 PRINTFORMw、
+// ENDSELECt、TryCall、call 这类混合大小写拼写不再解析，进而整文件加载失败。
+// 比较器现为显式入参，必须被真正用于构造查找面——下面断言这一点。
+var mixedCaseRoute = CompatibilityDescriptorRoute<string, string>.Create(
+    snakePlan,
+    new Dictionary<string, string>
+    {
+        ["PRINT"] = "legacy-print",
+        ["SNAKE_PRINT"] = "legacy-snake-print",
+    },
+    StringComparer.OrdinalIgnoreCase,
+    new Dictionary<string, string> { ["RESULT"] = "legacy-result" },
+    StringComparer.Ordinal);
+Assert(
+    mixedCaseRoute.Instructions.TryGetValue("print", out var mixedCaseHandler) &&
+    mixedCaseHandler == "legacy-print",
+    "Descriptor route dropped the caller-supplied instruction comparer; mixed-case spellings (PRINTFORMw/CASe/TryCall/call) would stop resolving.");
 AssertThrows<InvalidOperationException>(
     () => CompatibilityDescriptorRoute<string, string>.Create(
         snakePlan,
         new Dictionary<string, string> { ["PRINT"] = "legacy-print" },
-        new Dictionary<string, string> { ["RESULT"] = "legacy-result" }),
+        StringComparer.Ordinal,
+        new Dictionary<string, string> { ["RESULT"] = "legacy-result" },
+        StringComparer.Ordinal),
     "Descriptor route accepted a missing legacy instruction handler.");
 // 内置方言目录的模块贡献已通电（生成清单）：BuiltIn v24 计划携带真实指令/函数描述符。
 // 会话驱动路由视图：会话名必须被计划声明（漂移门禁），计划多余名字按条件可见性跳过。
@@ -490,7 +513,9 @@ Assert(
     CompatibilityDescriptorRoute<string, string>.TryCreateSessionView(
         builtInSessionPlan,
         new Dictionary<string, string>(),
+        StringComparer.Ordinal,
         new Dictionary<string, string>(),
+        StringComparer.Ordinal,
         out var emptySessionRoute)
     && emptySessionRoute.Instructions.Count == 0
     && emptySessionRoute.Functions.Count == 0,
@@ -499,7 +524,9 @@ Assert(
     CompatibilityDescriptorRoute<string, string>.TryCreateSessionView(
         builtInSessionPlan,
         new Dictionary<string, string> { ["PRINT"] = "legacy-print" },
+        StringComparer.Ordinal,
         new Dictionary<string, string> { ["SETANIMETIMER"] = "legacy-timer" },
+        StringComparer.Ordinal,
         out var declaredSessionRoute)
     && declaredSessionRoute.Instructions["PRINT"] == "legacy-print"
     && declaredSessionRoute.Functions["SETANIMETIMER"] == "legacy-timer",
@@ -508,7 +535,9 @@ Assert(
     !CompatibilityDescriptorRoute<string, string>.TryCreateSessionView(
         builtInSessionPlan,
         new Dictionary<string, string> { ["UNDECLARED_LEGACY"] = "drift" },
+        StringComparer.Ordinal,
         new Dictionary<string, string>(),
+        StringComparer.Ordinal,
         out _),
     "Session view accepted a legacy instruction missing from the compatibility plan.");
 

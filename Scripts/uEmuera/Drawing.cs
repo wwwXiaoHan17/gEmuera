@@ -689,7 +689,8 @@ namespace uEmuera.Drawing
 		//public static Color Yellow { get { return new Color(uColor.yellow); } }
 		public static Color FromName(string name)
 		{
-			switch((name ?? "").Trim().ToLowerInvariant())
+			string key = (name ?? "").Trim().ToLowerInvariant();
+			switch(key)
 			{
 			case "black":
 				return Black;
@@ -754,6 +755,12 @@ namespace uEmuera.Drawing
 			case "tomato":
 				return new Color(0xFF, 0x63, 0x47);
 			}
+			// megaten 门控（P4）：会话声明 ui.standard-color-name.v1 时，颜色名解析改用
+			// System.Drawing 标准调色板（参考实现用 Color.FromName，认识全部 141 个标准名）。
+			// 未声明的会话保持上面的 32 名表与 Black 回退，逐点等价于基线。
+			if (MinorShift.Emuera.Program.Compatibility.Megaten.UsesStandardColorNameTable
+				&& StandardColorNames.TryGet(key, out Color standard))
+				return standard;
 			uEmuera.Logger.Warn(EmueraLogCategory.UI, () => "Not Match Color '" + name + "'");
 			return Black;
 		}

@@ -26,6 +26,16 @@ public static class MegatenCompatibilityModule
     public const string RefOutNameBehavior = "parser.ref-out-name.v1";
     // P3：私有 #DIM 遮蔽内置变量（SystemVariable 冲突）降为警告级 1。
     public const string PrivateSystemShadowBehavior = "parser.private-system-shadow.v1";
+    // P4：HTML <font color> 的颜色名解析对齐 System.Drawing 的标准调色板（141 名）。
+    // 父项目参考实现用 System.Drawing.Color.FromName，认识全部标准名；本仓垫片只实现了
+    // 32 个，其余落到 Black 回退——eraMegaten 汉化版背景为黑（emuera.config
+    // BACKGROUND COLOR:0,0,0），Violet/Brown/ForestGreen 等名字因此渲染成黑底黑字而
+    // "消失"（2026-10-03 实测：PARTY 面板的名字、当前HP/MP、状态串全部隐形）。
+    // 未声明该 behavior 的会话保持 32 名表，逐点等价于基线。
+    public const string StandardColorNameBehavior = "ui.standard-color-name.v1";
+    // eraMegaten 的 TOSTR_HTML 将普通 RGB 值格式化为 #00RRGGBB；原引擎
+    // 将该形式作为不透明 RGB 处理，否则 PARTY 的 HP/MP 当前值会变成全透明。
+    public const string HtmlRgbZeroAlphaBehavior = "ui.html-rgb-zero-alpha.v1";
 
     /// <summary>
     /// 启动容错 quirk（与 snake/erablue 同源）：私改文法行在严格 v24 下解释不了时
@@ -34,10 +44,12 @@ public static class MegatenCompatibilityModule
     public const string ContinueAfterStartupFaultCapability =
         SnakeCompatibilityCapabilities.ContinueAfterStartupFault;
 
-    // 三个策略端口类型 id（erafl 用 5 个具名端口；megaten 只有 3 个门控行为）。
+    // 五个策略端口类型 id（erafl 用 5 个具名端口；megaten 有 5 个门控行为）。
     public const string LabelLookupPortType = "ILabelLookupCasePolicy";
     public const string OutNamePortType = "IOutNamePolicy";
     public const string PrivateShadowPortType = "IPrivateShadowPolicy";
+    public const string StandardColorNamePortType = "IStandardColorNamePolicy";
+    public const string HtmlRgbZeroAlphaPortType = "IHtmlRgbZeroAlphaPolicy";
 
     private static readonly ReadOnlyCollection<BehaviorPortSnapshot> DefaultBehaviorPorts =
         Array.AsReadOnly(new[]
@@ -66,6 +78,22 @@ public static class MegatenCompatibilityModule
                 "parser.private-shadow-policy.v1",
                 ModuleId,
                 "DIA-MEGATEN-03"),
+            new BehaviorPortSnapshot(
+                StandardColorNameBehavior,
+                StandardColorNamePortType,
+                PortContractKind.PolicyDecision,
+                ModuleId,
+                "ui.standard-color-name-policy.v1",
+                ModuleId,
+                "DIA-MEGATEN-04"),
+            new BehaviorPortSnapshot(
+                HtmlRgbZeroAlphaBehavior,
+                HtmlRgbZeroAlphaPortType,
+                PortContractKind.PolicyDecision,
+                ModuleId,
+                "ui.html-rgb-zero-alpha-policy.v1",
+                ModuleId,
+                "DIA-MEGATEN-05"),
         });
 
     public static IReadOnlyList<BehaviorPortSnapshot> DefaultPorts => DefaultBehaviorPorts;
@@ -85,6 +113,8 @@ public static class MegatenCompatibilityModule
                 LabelLookupPortType,
                 OutNamePortType,
                 PrivateShadowPortType,
+                StandardColorNamePortType,
+                HtmlRgbZeroAlphaPortType,
             });
     }
 
@@ -100,6 +130,8 @@ public static class MegatenCompatibilityModule
                 LabelLookupCaseBehavior,
                 RefOutNameBehavior,
                 PrivateSystemShadowBehavior,
+                StandardColorNameBehavior,
+                HtmlRgbZeroAlphaBehavior,
             },
             defaultSaveProfileId: SaveProfileId);
     }
