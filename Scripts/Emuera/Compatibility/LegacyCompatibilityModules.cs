@@ -815,6 +815,8 @@ namespace MinorShift.Emuera.Compatibility
 		public bool UsesVariableCaseForFunctionLabelLookup => false;
 		public bool AllowsOutAsVariableNameAfterRefKeyword => false;
 		public bool AllowsPrivateSystemVariableShadowing => false;
+		public bool UsesStandardColorNameTable => false;
+		public bool TreatZeroAlphaRgbHexAsOpaque => false;
 	}
 
 	// megaten 策略：moduleSelected 保持内置 profile 语义；三个 flag 由 plan capability 派生，
@@ -853,6 +855,10 @@ namespace MinorShift.Emuera.Compatibility
 			capabilities.Contains(MegatenCompatibilityModule.RefOutNameBehavior);
 		public bool AllowsPrivateSystemVariableShadowing =>
 			capabilities.Contains(MegatenCompatibilityModule.PrivateSystemShadowBehavior);
+		public bool UsesStandardColorNameTable =>
+			capabilities.Contains(MegatenCompatibilityModule.StandardColorNameBehavior);
+		public bool TreatZeroAlphaRgbHexAsOpaque =>
+			capabilities.Contains(MegatenCompatibilityModule.HtmlRgbZeroAlphaBehavior);
 	}
 
 	internal sealed class DisabledEraFlCompatibilityPolicy : IEraFlCompatibilityPolicy

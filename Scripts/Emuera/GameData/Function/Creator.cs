@@ -410,6 +410,13 @@ namespace MinorShift.Emuera.GameData.Function
 		// registries must use the profile-scoped surface below.
 		private static readonly Dictionary<string, FunctionMethod> methodList;
 
+		/// <summary>
+		/// 函数（式中函数）注册表的比较器。methodList 使用默认比较器（Ordinal），与上游
+		/// 一致——表达式函数查询侧自行归一化大小写，字典本身不承担该职责。此处由
+		/// methodList.Comparer 统一给出，避免投影面另写一遍导致两处策略分叉。
+		/// </summary>
+		internal static IEqualityComparer<string> MethodComparer { get { return methodList.Comparer; } }
+
 		internal static IReadOnlyDictionary<string, FunctionMethod> GetLegacyHandlerMethodList()
 		{
 			return methodList;
@@ -427,7 +434,7 @@ namespace MinorShift.Emuera.GameData.Function
 				if (registrySurfaces.TryGetValue(cacheKey, out var existing))
 					return existing;
 
-				var selected = new Dictionary<string, FunctionMethod>(StringComparer.Ordinal);
+				var selected = new Dictionary<string, FunctionMethod>(methodList.Comparer);
 				foreach (KeyValuePair<string, FunctionMethod> pair in methodList)
 				{
 					if (!compatibility.IsFunctionVisible(pair.Key))

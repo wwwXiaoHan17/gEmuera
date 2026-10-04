@@ -6091,7 +6091,7 @@ public partial class EmueraContent : Control
 			() =>
 			{
 				EmueraThread.instance.End();
-				GetTree().ChangeSceneToFile("res://first_window.tscn");
+				GetTree().ChangeSceneToFile("res://assets/scenes/first_window.tscn");
 			});
 	}
 

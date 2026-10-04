@@ -68,6 +68,7 @@ const int AsyncTextureWorkerQuiescenceTimeoutMs = 2000;
 			if (img != null)
 			{
 				_image = img;
+				RememberSourceSize(img);
 				cpuBytes = EstimateImageBytes(img);
 				cachedWidth = img.GetWidth();
 				cachedHeight = img.GetHeight();
@@ -196,6 +197,94 @@ const int AsyncTextureWorkerQuiescenceTimeoutMs = 2000;
 		int cachedWidth;
 		int cachedHeight;
 
+		// 源文件解码后的原始像素尺寸，只在首次拿到整图时记录一次，之后永不改写。
+		// Android 的 GPU 尺寸上限会把「上传用的副本」缩小（见 EnsureImageFitsGpu），
+		// 但 CPU 侧的 image 始终是原始尺寸；CSV 里的裁剪坐标也始终以原始尺寸为基准。
+		// 两者一旦混用（把原始坐标套到缩小后的位图上）就会越界采样，因此这里保留
+		// 原始尺寸供 ScaleSourceRectToImageSpace 做坐标空间换算。
+		int sourceWidth;
+		int sourceHeight;
+		internal bool HasSourceSize { get { return sourceWidth > 0 && sourceHeight > 0; } }
+		internal int SourceWidth { get { return sourceWidth; } }
+		internal int SourceHeight { get { return sourceHeight; } }
+
+		/// <summary>
+		/// GPU 上传副本相对原始图的缩放比。返回 false 表示当前 CPU 位图就是原始尺寸
+		/// （桌面端恒为此情形，Android 上图片未超过上限时亦然）。
+		/// </summary>
+		internal bool TryGetImageScale(out float scaleX, out float scaleY)
+		{
+			scaleX = 1f;
+			scaleY = 1f;
+			if (!HasSourceSize)
+				return false;
+			Image current = Volatile.Read(ref _image);
+			int w = current != null ? current.GetWidth() : cachedWidth;
+			int h = current != null ? current.GetHeight() : cachedHeight;
+			if (w <= 0 || h <= 0 || (w == sourceWidth && h == sourceHeight))
+				return false;
+			scaleX = (float)w / sourceWidth;
+			scaleY = (float)h / sourceHeight;
+			return true;
+		}
+
+		// 首次得到整图时记录原始尺寸。只有 sourceWidth/Height 尚未记录时才写入，
+		// 后续 RecreateTexture（SetPixel 后重建）不会覆盖基准。
+		void RememberSourceSize(Image img)
+		{
+			if (img == null || sourceWidth > 0 || sourceHeight > 0)
+				return;
+			sourceWidth = img.GetWidth();
+			sourceHeight = img.GetHeight();
+		}
+
+		/// <summary>
+		/// 把 CSV 的裁剪矩形（源文件原始图像坐标）换算到当前 CPU 位图的坐标空间。
+		/// 位图即原始尺寸时原样返回（scale 保持 1）；已缩小时按比例缩放，再夹取到
+		/// 位图边界内（原始矩形合法，换算后最多因取整落到界外一两像素）。
+		/// 结果为保证与位图相交；完全不相交时返回退化矩形。
+		/// 返回是否真正做了换算；scaleX/scaleY 恒为实际使用的缩放比，调用方可用它判断
+		/// 结果是否需要放大回原尺寸以还原物理大小。
+		/// </summary>
+		internal bool ScaleSourceRectToImageSpace(ref Rectangle ex, out float scaleX, out float scaleY)
+		{
+			scaleX = 1f;
+			scaleY = 1f;
+			if (ex.Width <= 0 || ex.Height <= 0)
+				return false;
+			if (!TryGetImageScale(out scaleX, out scaleY))
+			{
+				scaleX = 1f;
+				scaleY = 1f;
+				return false;
+			}
+
+			Image current = Volatile.Read(ref _image);
+			int w = current != null ? current.GetWidth() : cachedWidth;
+			int h = current != null ? current.GetHeight() : cachedHeight;
+			int sx = (int)System.Math.Floor(ex.X * (double)scaleX);
+			int sy = (int)System.Math.Floor(ex.Y * (double)scaleY);
+			int sw = (int)System.Math.Round(ex.Width * (double)scaleX);
+			int sh = (int)System.Math.Round(ex.Height * (double)scaleY);
+			if (sw < 1) sw = 1;
+			if (sh < 1) sh = 1;
+
+			// 夹取而不是直接放弃：原始矩形合法时它本就落在原始图内，换算后最多因
+			// 取整/缩放落到边界外一两个像素，夹取即可保证仍取到同一块内容。
+			if (sx < 0) { sw += sx; sx = 0; }
+			if (sy < 0) { sh += sy; sy = 0; }
+			if (sx + sw > w) sw = w - sx;
+			if (sy + sh > h) sh = h - sy;
+			if (sw <= 0 || sh <= 0)
+			{
+				ex = new Rectangle(0, 0, 0, 0);
+				return true;
+			}
+
+			ex = new Rectangle(sx, sy, sw, sh);
+			return true;
+		}
+
 		internal int width { get { Image current = Volatile.Read(ref _image); return current != null ? current.GetWidth() : cachedWidth; } }
 		internal int height { get { Image current = Volatile.Read(ref _image); return current != null ? current.GetHeight() : cachedHeight; } }
 
@@ -229,11 +318,9 @@ const int AsyncTextureWorkerQuiescenceTimeoutMs = 2000;
 						img?.Dispose();
 						return null;
 					}
-					// 与首次上传一致的缩放：Android 大图在 texture 创建时被 EnsureImageFitsGpu
-					// 缩小，重新解码必须恢复到相同尺寸，否则 GDraw 合成/GetPixel 坐标错位。
-					if (cachedWidth > 0 && cachedHeight > 0
-						&& (img.GetWidth() != cachedWidth || img.GetHeight() != cachedHeight))
-						img.Resize(cachedWidth, cachedHeight, Image.Interpolation.Bilinear);
+					// 与首次解码保持同一尺寸：CPU 侧 image 恒为源文件原始尺寸
+					// （GPU 上传副本才受 EnsureImageFitsGpu 的尺寸上限约束），
+					// 因此这里不需要再按 cachedWidth/cachedHeight 反向缩放。
 					cpuBytes = EstimateImageBytes(img);
 					cachedWidth = img.GetWidth();
 					cachedHeight = img.GetHeight();
@@ -317,7 +404,7 @@ const int AsyncTextureWorkerQuiescenceTimeoutMs = 2000;
 			}
 		}
 
-		// 首次 GPU 上传（decode 已完成的前提下：resize + ImageTexture.CreateFromImage）。
+		// 首次 GPU 上传（decode 已完成的前提下：按平台上限缩放副本 + ImageTexture.CreateFromImage）。
 		// 渲染路径不要直接调用它——请用 SpriteManager.EnsureGpuTextureDeferred 走每帧限量队列。
 		internal bool CreateGpuTextureIfNeeded()
 		{
@@ -328,13 +415,15 @@ const int AsyncTextureWorkerQuiescenceTimeoutMs = 2000;
 			Image src = image;
 			if (src == null)
 				return false;
+			Image upload = null;
 			try
 			{
-				EnsureImageFitsGpu(src);
-				_texture = ImageTexture.CreateFromImage(src);
-				gpuBytes = EstimateImageBytes(src);
-				cachedWidth = src.GetWidth();
-				cachedHeight = src.GetHeight();
+				RememberSourceSize(src);
+				upload = CreateGpuUploadImage(src);
+				_texture = ImageTexture.CreateFromImage(upload);
+				gpuBytes = EstimateImageBytes(upload);
+				cachedWidth = upload.GetWidth();
+				cachedHeight = upload.GetHeight();
 				if (ShouldReleaseCpuImageAfterUpload())
 					ReleaseCpuImage();
 				return true;
@@ -347,20 +436,28 @@ const int AsyncTextureWorkerQuiescenceTimeoutMs = 2000;
 						() => $"name={imagename} failure_kind=texture_create_fail error={ex.GetType().Name}");
 				return false;
 			}
+			finally
+			{
+				// 只在确实生成了缩小副本时释放；源图本身由 _image 持有。
+				if (upload != null && !ReferenceEquals(upload, src))
+					upload.Dispose();
+			}
 		}
 		internal void RecreateTexture()
 		{
 			_texture?.Dispose();
+			Image upload = null;
 			try
 			{
 				Image src = image;
 				if (src != null)
 				{
-					EnsureImageFitsGpu(src);
-					_texture = ImageTexture.CreateFromImage(src);
-					gpuBytes = EstimateImageBytes(src);
-					cachedWidth = src.GetWidth();
-					cachedHeight = src.GetHeight();
+					RememberSourceSize(src);
+					upload = CreateGpuUploadImage(src);
+					_texture = ImageTexture.CreateFromImage(upload);
+					gpuBytes = EstimateImageBytes(upload);
+					cachedWidth = upload.GetWidth();
+					cachedHeight = upload.GetHeight();
 				}
 				else
 					_texture = null;
@@ -373,9 +470,23 @@ const int AsyncTextureWorkerQuiescenceTimeoutMs = 2000;
 					GenericUtils.ImageTrace("IMAGE.TEXTURE.CREATE_FAIL", () => "texture recreate failed",
 						() => $"name={imagename} failure_kind=texture_create_fail error={ex.GetType().Name}");
 			}
+			finally
+			{
+				if (upload != null && !ReferenceEquals(upload, _image))
+					upload.Dispose();
+			}
 		}
 
-		static void EnsureImageFitsGpu(Image img)
+		/// <summary>
+		/// 返回一张「可安全上传」的图：超出当前平台 GPU 尺寸上限时返回缩小后的副本，
+		/// 否则原样返回入参。
+		/// 关键约束：**绝不原地改写入参**。入参是 TextureInfo 的共享 CPU 位图，而 CSV 的
+		/// 裁剪坐标一律以源文件原始尺寸为基准；一旦原地缩小，Android 上就会出现
+		/// 「原始坐标 × 缩小位图」的越界采样，表现为立绘空白或被裁掉一块
+		/// （实测：完全越界的 AtlasTexture 区域整块透明）。因此缩小只作用于上传副本，
+		/// CPU 侧始终保留原始尺寸供裁剪与像素读取。
+		/// </summary>
+		static Image CreateGpuUploadImage(Image img)
 		{
 			// Some Android GPUs reject or silently fail very large texture uploads.
 			// Downscaling here preserves a visible placeholder-quality result instead
@@ -384,13 +495,17 @@ const int AsyncTextureWorkerQuiescenceTimeoutMs = 2000;
 			int w = img.GetWidth();
 			int h = img.GetHeight();
 			if (w <= maxSize && h <= maxSize)
-				return;
+				return img;
 			float scale = System.Math.Min((float)maxSize / w, (float)maxSize / h);
 			int newW = (int)(w * scale);
 			int newH = (int)(h * scale);
 			if (newW < 1) newW = 1;
 			if (newH < 1) newH = 1;
-			img.Resize(newW, newH, Image.Interpolation.Bilinear);
+			Image scaled = img.Duplicate() as Image;
+			if (scaled == null)
+				return img;
+			scaled.Resize(newW, newH, Image.Interpolation.Bilinear);
+			return scaled;
 		}
 
 		internal bool CanRetryPlaceholderLoad(ulong nowMs)

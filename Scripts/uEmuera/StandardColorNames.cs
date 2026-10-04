@@ -1,0 +1,145 @@
+using System;
+using System.Collections.Generic;
+
+namespace uEmuera.Drawing
+{
+	/// <summary>
+	/// System.Drawing 的标准命名颜色表（112 个非系统色）。
+	/// Why：参考实现 Emuera 用 System.Drawing.Color.FromName 解析 HTML &lt;font color&gt;，
+	/// 认识全部标准名；本仓垫片的 Color.FromName 只实现了 32 个，未命中即回退 Black。
+	/// 背景为黑时（如 eraMegaten 汉化版 BACKGROUND COLOR:0,0,0）这类颜色会把整段文字
+	/// 渲染成黑底黑字而"消失"（2026-10-03 实测：PARTY 面板的名字/当前 HP·MP/状态串）。
+	/// What：仅提供查表，不做任何策略判断。How：由 Color.FromName 在 megaten 策略声明
+	/// ui.standard-color-name.v1 时咨询；未声明的会话走原有 32 名表，逐点等价于基线。
+	/// 数值由 System.Drawing.KnownColor 反射导出（排除主题相关的系统色），与 .NET 一致。
+	/// </summary>
+	internal static class StandardColorNames
+	{
+		static readonly Dictionary<string, Color> Table =
+			new Dictionary<string, Color>(StringComparer.Ordinal)
+		{
+			{ "aliceblue", new Color(0xF0, 0xF8, 0xFF) },
+			{ "antiquewhite", new Color(0xFA, 0xEB, 0xD7) },
+			{ "azure", new Color(0xF0, 0xFF, 0xFF) },
+			{ "beige", new Color(0xF5, 0xF5, 0xDC) },
+			{ "bisque", new Color(0xFF, 0xE4, 0xC4) },
+			{ "blanchedalmond", new Color(0xFF, 0xEB, 0xCD) },
+			{ "blueviolet", new Color(0x8A, 0x2B, 0xE2) },
+			{ "brown", new Color(0xA5, 0x2A, 0x2A) },
+			{ "burlywood", new Color(0xDE, 0xB8, 0x87) },
+			{ "cadetblue", new Color(0x5F, 0x9E, 0xA0) },
+			{ "chartreuse", new Color(0x7F, 0xFF, 0x00) },
+			{ "coral", new Color(0xFF, 0x7F, 0x50) },
+			{ "cornflowerblue", new Color(0x64, 0x95, 0xED) },
+			{ "cornsilk", new Color(0xFF, 0xF8, 0xDC) },
+			{ "crimson", new Color(0xDC, 0x14, 0x3C) },
+			{ "darkblue", new Color(0x00, 0x00, 0x8B) },
+			{ "darkcyan", new Color(0x00, 0x8B, 0x8B) },
+			{ "darkgoldenrod", new Color(0xB8, 0x86, 0x0B) },
+			{ "darkgray", new Color(0xA9, 0xA9, 0xA9) },
+			{ "darkgreen", new Color(0x00, 0x64, 0x00) },
+			{ "darkkhaki", new Color(0xBD, 0xB7, 0x6B) },
+			{ "darkmagenta", new Color(0x8B, 0x00, 0x8B) },
+			{ "darkolivegreen", new Color(0x55, 0x6B, 0x2F) },
+			{ "darkorange", new Color(0xFF, 0x8C, 0x00) },
+			{ "darkorchid", new Color(0x99, 0x32, 0xCC) },
+			{ "darkred", new Color(0x8B, 0x00, 0x00) },
+			{ "darksalmon", new Color(0xE9, 0x96, 0x7A) },
+			{ "darkseagreen", new Color(0x8F, 0xBC, 0x8B) },
+			{ "darkslateblue", new Color(0x48, 0x3D, 0x8B) },
+			{ "darkslategray", new Color(0x2F, 0x4F, 0x4F) },
+			{ "darkviolet", new Color(0x94, 0x00, 0xD3) },
+			{ "deeppink", new Color(0xFF, 0x14, 0x93) },
+			{ "firebrick", new Color(0xB2, 0x22, 0x22) },
+			{ "floralwhite", new Color(0xFF, 0xFA, 0xF0) },
+			{ "forestgreen", new Color(0x22, 0x8B, 0x22) },
+			{ "gainsboro", new Color(0xDC, 0xDC, 0xDC) },
+			{ "ghostwhite", new Color(0xF8, 0xF8, 0xFF) },
+			{ "goldenrod", new Color(0xDA, 0xA5, 0x20) },
+			{ "greenyellow", new Color(0xAD, 0xFF, 0x2F) },
+			{ "honeydew", new Color(0xF0, 0xFF, 0xF0) },
+			{ "indianred", new Color(0xCD, 0x5C, 0x5C) },
+			{ "indigo", new Color(0x4B, 0x00, 0x82) },
+			{ "ivory", new Color(0xFF, 0xFF, 0xF0) },
+			{ "khaki", new Color(0xF0, 0xE6, 0x8C) },
+			{ "lavender", new Color(0xE6, 0xE6, 0xFA) },
+			{ "lavenderblush", new Color(0xFF, 0xF0, 0xF5) },
+			{ "lemonchiffon", new Color(0xFF, 0xFA, 0xCD) },
+			{ "lightblue", new Color(0xAD, 0xD8, 0xE6) },
+			{ "lightcoral", new Color(0xF0, 0x80, 0x80) },
+			{ "lightcyan", new Color(0xE0, 0xFF, 0xFF) },
+			{ "lightgoldenrodyellow", new Color(0xFA, 0xFA, 0xD2) },
+			{ "lightgreen", new Color(0x90, 0xEE, 0x90) },
+			{ "lightpink", new Color(0xFF, 0xB6, 0xC1) },
+			{ "lightsalmon", new Color(0xFF, 0xA0, 0x7A) },
+			{ "lightseagreen", new Color(0x20, 0xB2, 0xAA) },
+			{ "lightskyblue", new Color(0x87, 0xCE, 0xFA) },
+			{ "lightslategray", new Color(0x77, 0x88, 0x99) },
+			{ "lightsteelblue", new Color(0xB0, 0xC4, 0xDE) },
+			{ "lightyellow", new Color(0xFF, 0xFF, 0xE0) },
+			{ "linen", new Color(0xFA, 0xF0, 0xE6) },
+			{ "maroon", new Color(0x80, 0x00, 0x00) },
+			{ "mediumaquamarine", new Color(0x66, 0xCD, 0xAA) },
+			{ "mediumblue", new Color(0x00, 0x00, 0xCD) },
+			{ "mediumorchid", new Color(0xBA, 0x55, 0xD3) },
+			{ "mediumpurple", new Color(0x93, 0x70, 0xDB) },
+			{ "mediumseagreen", new Color(0x3C, 0xB3, 0x71) },
+			{ "mediumslateblue", new Color(0x7B, 0x68, 0xEE) },
+			{ "mediumspringgreen", new Color(0x00, 0xFA, 0x9A) },
+			{ "mediumturquoise", new Color(0x48, 0xD1, 0xCC) },
+			{ "mediumvioletred", new Color(0xC7, 0x15, 0x85) },
+			{ "mintcream", new Color(0xF5, 0xFF, 0xFA) },
+			{ "mistyrose", new Color(0xFF, 0xE4, 0xE1) },
+			{ "moccasin", new Color(0xFF, 0xE4, 0xB5) },
+			{ "navajowhite", new Color(0xFF, 0xDE, 0xAD) },
+			{ "navy", new Color(0x00, 0x00, 0x80) },
+			{ "oldlace", new Color(0xFD, 0xF5, 0xE6) },
+			{ "olive", new Color(0x80, 0x80, 0x00) },
+			{ "olivedrab", new Color(0x6B, 0x8E, 0x23) },
+			{ "orangered", new Color(0xFF, 0x45, 0x00) },
+			{ "orchid", new Color(0xDA, 0x70, 0xD6) },
+			{ "palegoldenrod", new Color(0xEE, 0xE8, 0xAA) },
+			{ "palegreen", new Color(0x98, 0xFB, 0x98) },
+			{ "paleturquoise", new Color(0xAF, 0xEE, 0xEE) },
+			{ "palevioletred", new Color(0xDB, 0x70, 0x93) },
+			{ "papayawhip", new Color(0xFF, 0xEF, 0xD5) },
+			{ "peachpuff", new Color(0xFF, 0xDA, 0xB9) },
+			{ "peru", new Color(0xCD, 0x85, 0x3F) },
+			{ "powderblue", new Color(0xB0, 0xE0, 0xE6) },
+			{ "purple", new Color(0x80, 0x00, 0x80) },
+			{ "rosybrown", new Color(0xBC, 0x8F, 0x8F) },
+			{ "saddlebrown", new Color(0x8B, 0x45, 0x13) },
+			{ "salmon", new Color(0xFA, 0x80, 0x72) },
+			{ "sandybrown", new Color(0xF4, 0xA4, 0x60) },
+			{ "seagreen", new Color(0x2E, 0x8B, 0x57) },
+			{ "seashell", new Color(0xFF, 0xF5, 0xEE) },
+			{ "sienna", new Color(0xA0, 0x52, 0x2D) },
+			{ "silver", new Color(0xC0, 0xC0, 0xC0) },
+			{ "skyblue", new Color(0x87, 0xCE, 0xEB) },
+			{ "slateblue", new Color(0x6A, 0x5A, 0xCD) },
+			{ "slategray", new Color(0x70, 0x80, 0x90) },
+			{ "snow", new Color(0xFF, 0xFA, 0xFA) },
+			{ "springgreen", new Color(0x00, 0xFF, 0x7F) },
+			{ "steelblue", new Color(0x46, 0x82, 0xB4) },
+			{ "tan", new Color(0xD2, 0xB4, 0x8C) },
+			{ "teal", new Color(0x00, 0x80, 0x80) },
+			{ "thistle", new Color(0xD8, 0xBF, 0xD8) },
+			{ "turquoise", new Color(0x40, 0xE0, 0xD0) },
+			{ "violet", new Color(0xEE, 0x82, 0xEE) },
+			{ "wheat", new Color(0xF5, 0xDE, 0xB3) },
+			{ "whitesmoke", new Color(0xF5, 0xF5, 0xF5) },
+			{ "yellowgreen", new Color(0x9A, 0xCD, 0x32) },
+		};
+
+		/// <summary>按小写名查表。调用方负责已做 Trim().ToLowerInvariant()。</summary>
+		internal static bool TryGet(string lowerName, out Color color)
+		{
+			if (string.IsNullOrEmpty(lowerName))
+			{
+				color = default(Color);
+				return false;
+			}
+			return Table.TryGetValue(lowerName, out color);
+		}
+	}
+}

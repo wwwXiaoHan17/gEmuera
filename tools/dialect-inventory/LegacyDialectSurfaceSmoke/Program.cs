@@ -257,16 +257,20 @@ static class Program
             // 实测证据：VELVET_ROOM.ERB:2860 的 DITEMTYPE:ARG:Persona(LOCALS)（私改文法）
             // 在严格 v24 下致命退出，原生启动器容错继续。
             LegacyCompatibilityProfile megaten = LegacyCompatibilityProfile.CreateForProfile("megaten", true);
-            Assert(megaten.ContinuesAfterStartupFault
-                && megaten.Plan.CapabilityIds.Count == 4
+			Assert(megaten.ContinuesAfterStartupFault
+				&& megaten.Plan.CapabilityIds.Count == 6
                 && megaten.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.MegatenCompatibilityModule.ContinueAfterStartupFaultCapability)
                 && megaten.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.MegatenCompatibilityModule.LabelLookupCaseBehavior)
                 && megaten.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.MegatenCompatibilityModule.RefOutNameBehavior)
-                && megaten.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.MegatenCompatibilityModule.PrivateSystemShadowBehavior)
+				&& megaten.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.MegatenCompatibilityModule.PrivateSystemShadowBehavior)
+				&& megaten.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.MegatenCompatibilityModule.StandardColorNameBehavior)
+				&& megaten.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.MegatenCompatibilityModule.HtmlRgbZeroAlphaBehavior)
                 && megaten.Megaten.UsesVariableCaseForFunctionLabelLookup
-                && megaten.Megaten.AllowsOutAsVariableNameAfterRefKeyword
-                && megaten.Megaten.AllowsPrivateSystemVariableShadowing,
-                "megaten 计划必须声明启动容错 + 三个 behavior capability，并激活对应 policy flag。");
+				&& megaten.Megaten.AllowsOutAsVariableNameAfterRefKeyword
+				&& megaten.Megaten.AllowsPrivateSystemVariableShadowing
+				&& megaten.Megaten.UsesStandardColorNameTable
+				&& megaten.Megaten.TreatZeroAlphaRgbHexAsOpaque,
+				"megaten 计划必须声明启动容错 + 五个 behavior capability，并激活对应 policy flag。");
             Assert(megaten.IsInstructionVisible("PRINT") && megaten.IsInstructionVisible("CALLSHARP"),
                 "megaten 保持 v24 基座指令面。");
             Assert(!megaten.IsInstructionVisible("SETANIMETIMER") && !megaten.IsInstructionVisible("CALLSTR")

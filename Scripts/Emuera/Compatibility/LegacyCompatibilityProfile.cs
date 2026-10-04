@@ -84,6 +84,13 @@ namespace MinorShift.Emuera.Compatibility
 		bool UsesVariableCaseForFunctionLabelLookup { get; }
 		bool AllowsOutAsVariableNameAfterRefKeyword { get; }
 		bool AllowsPrivateSystemVariableShadowing { get; }
+		/// <summary>
+		/// HTML &lt;font color&gt; 的颜色名解析是否使用 System.Drawing 标准调色板（141 名）。
+		/// false = 垫片自带的 32 名表，未命中回退 Black（基线行为）。
+		/// </summary>
+		bool UsesStandardColorNameTable { get; }
+		/// <summary>将 eraMegaten 的 #00RRGGBB 视为不透明 RGB。</summary>
+		bool TreatZeroAlphaRgbHexAsOpaque { get; }
 	}
 
 	/// <summary>

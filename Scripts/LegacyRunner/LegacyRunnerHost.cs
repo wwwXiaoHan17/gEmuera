@@ -117,7 +117,7 @@ namespace gEmuera.LegacyRunner
                 // Normal project startup never calls this runner-only path.
                 diagnosticsConfig.MigrationSessionIsolationEnabled = _config.SessionIsolationCanary;
 
-                var mainScene = ResourceLoader.Load<PackedScene>("res://main.tscn");
+                var mainScene = ResourceLoader.Load<PackedScene>("res://assets/scenes/main.tscn");
                 if (mainScene == null)
                     throw new InvalidDataException("main_scene_not_found");
                 var mainInstance = mainScene.Instantiate();
