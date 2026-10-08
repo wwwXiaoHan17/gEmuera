@@ -50,6 +50,8 @@ namespace MinorShift.Emuera.Compatibility
 		bool UsesSafeArithmeticGuard { get; }
 		/// <summary>HTML font 扩展属性（markup.font-extended-attributes.v1）。</summary>
 		bool AllowsExtendedHtmlAttributes { get; }
+		/// <summary>DT_FROMXML 装载前去除 LOADTEXT 遗留的前导 BOM（datatable.xml-leading-bom.v1）。</summary>
+		bool StripsLeadingBomFromDataTableXml { get; }
 		string TaskStartRoomLookupFunction { get; }
 		string GMapQuestType { get; }
 		bool IsOmittedDefaultArgument(char currentToken);

@@ -942,6 +942,7 @@ Assert(
     eraFlFacade.CurrentPlan?.CapabilityIds.SequenceEqual(new[]
     {
         "arith.safe-arithmetic-guard.v1",
+        "datatable.xml-leading-bom.v1",
         "declare.out-keyword.v1",
         "display.dynamic-map-transaction.v1",
         "display.extended-history.v1",
@@ -958,6 +959,66 @@ Assert(
 Assert(
     eraFlFacade.CurrentPlan?.SaveProfileId == EraFlCompatibilityModule.SaveProfileId,
     "eraFL plan did not select its independent save profile.");
+// eraFL 的 XML/*.xml 与 *_schema.xml 带 UTF-8 BOM，LOADTEXT 读入后首字符是 \uFEFF。
+// DT_FROMXML 装载 schema/XML 前必须按方言能力剥离，否则整表静默失败，后面的
+// DT_SELECT(..., "name = ...") 会抛 EvaluateException: Cannot find column [name]。
+{
+    string bomSchemaXml = new StringBuilder()
+        .Append('\uFEFF')
+        .Append("<?xml version=\"1.0\" encoding=\"utf-16\"?>")
+        .Append("<xs:schema id=\"NewDataSet\" xmlns=\"\" xmlns:xs=\"http://www.w3.org/2001/XMLSchema\" xmlns:msdata=\"urn:schemas-microsoft-com:xml-msdata\">")
+        .Append("<xs:element name=\"NewDataSet\" msdata:IsDataSet=\"true\" msdata:MainDataTable=\"GLOBAL_GOAL\">")
+        .Append("<xs:complexType><xs:choice minOccurs=\"0\" maxOccurs=\"unbounded\">")
+        .Append("<xs:element name=\"GLOBAL_GOAL\"><xs:complexType><xs:sequence>")
+        .Append("<xs:element name=\"id\" type=\"xs:long\" />")
+        .Append("<xs:element name=\"name\" type=\"xs:string\" minOccurs=\"0\" />")
+        .Append("</xs:sequence></xs:complexType></xs:element>")
+        .Append("</xs:choice></xs:complexType></xs:element></xs:schema>")
+        .ToString();
+    string bomDataXml = new StringBuilder()
+        .Append('\uFEFF')
+        .Append("<DocumentElement><GLOBAL_GOAL><id>1</id>")
+        .Append("<name>GOAL_CHANGE_EQUIPMENT</name>")
+        .Append("</GLOBAL_GOAL></DocumentElement>")
+        .ToString();
+
+    Assert(
+        EraFlCompatibilityModule.StripLeadingBom(bomSchemaXml) == bomSchemaXml.Substring(1)
+            && EraFlCompatibilityModule.StripLeadingBom(bomDataXml) == bomDataXml.Substring(1)
+            && EraFlCompatibilityModule.StripLeadingBom("<a />") == "<a />"
+            && EraFlCompatibilityModule.StripLeadingBom("") == ""
+            && EraFlCompatibilityModule.StripLeadingBom(null) == "",
+        "eraFL leading-BOM stripping changed text beyond the first BOM character.");
+
+    var bomTable = new DataTable("GLOBAL_GOAL");
+    using (var reader = new StringReader(EraFlCompatibilityModule.StripLeadingBom(bomSchemaXml)))
+        bomTable.ReadXmlSchema(reader);
+    using (var reader = new StringReader(EraFlCompatibilityModule.StripLeadingBom(bomDataXml)))
+        bomTable.ReadXml(reader);
+    Assert(
+        bomTable.Columns.Contains("name")
+            && bomTable.Rows.Count == 1
+            && bomTable.Select("name = 'GOAL_CHANGE_EQUIPMENT'").Length == 1,
+        "eraFL leading-BOM stripping did not expose the DT_SELECT filter column.");
+
+    // 反向前提：不剥离时 ReadXmlSchema 直接抛 XmlException（"Data at the root level is invalid"），
+    // 这也正是 DT_FROMXML 静默吞掉的那个异常。若此断言失效，说明方言门控的前提已经过时。
+    var unstrippedTable = new DataTable("GLOBAL_GOAL");
+    bool unstrippedSchemaRejected;
+    try
+    {
+        using (var reader = new StringReader(bomSchemaXml))
+            unstrippedTable.ReadXmlSchema(reader);
+        unstrippedSchemaRejected = unstrippedTable.Columns.Count == 0;
+    }
+    catch (System.Xml.XmlException)
+    {
+        unstrippedSchemaRejected = true;
+    }
+    Assert(
+        unstrippedSchemaRejected,
+        "the unstripped BOM schema unexpectedly parsed; the eraFL gate premise would be stale.");
+}
 Assert(
     EraFlCompatibilityModule.IsOmittedDefaultArgument(',')
         && !EraFlCompatibilityModule.IsOmittedDefaultArgument('1'),

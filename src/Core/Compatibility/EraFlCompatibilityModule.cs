@@ -56,6 +56,14 @@ public static class EraFlCompatibilityModule
     /// <summary>HTML font 扩展属性 render/edging/hinting/size/valign（IEraFlCompatibilityPolicy.AllowsExtendedHtmlAttributes）。</summary>
     public const string ExtendedHtmlAttributesBehavior = "markup.font-extended-attributes.v1";
 
+    /// <summary>
+    /// DT_FROMXML 装载 schema/XML 文本前去除 LOADTEXT 遗留的前导 BOM
+    /// （IEraFlCompatibilityPolicy.StripsLeadingBomFromDataTableXml）。eraFL 的
+    /// XML/*.xml 与 *_schema.xml 均带 UTF-8 BOM，LOADTEXT 读入后首字符即 U+FEFF，
+    /// XmlReader 会以 "Data at the root level is invalid" 拒绝整段文本。
+    /// </summary>
+    public const string DataTableXmlLeadingBomBehavior = "datatable.xml-leading-bom.v1";
+
     public const string TaskStartRoomLookupFunction = "HO_FIND_ROOM_BY_TAG";
     public const string TaskStartRoomTag = "任务開始地点";
     public const string TaskStartRoomIdMarker = "[ROOM_ID:200]";
@@ -79,6 +87,7 @@ public static class EraFlCompatibilityModule
             OutKeywordBehavior,
             SafeArithmeticGuardBehavior,
             ExtendedHtmlAttributesBehavior,
+            DataTableXmlLeadingBomBehavior,
         });
 
     private static readonly ReadOnlyCollection<BehaviorPortSnapshot> DefaultBehaviorPorts =
@@ -157,6 +166,22 @@ public static class EraFlCompatibilityModule
             defaultPorts: DefaultPorts,
             requiredCapabilityIds: RequiredCapabilities,
             defaultSaveProfileId: SaveProfileId);
+    }
+
+    /// <summary>
+    /// 去除文本开头的 BOM 字符（U+FEFF）。eraFL 的 <c>XML/*.xml</c> 与
+    /// <c>*_schema.xml</c> 均以 UTF-8 BOM 开头，legacy <c>LOADTEXT</c> 按 BOM
+    /// 识别编码后把 <c>\uFEFF</c> 留在字符串首部；<c>XmlDocument.LoadXml</c> 路径
+    /// 已有等价归一化（Creator.Method.Xml.cs NormalizeXmlText），而
+    /// <c>DataTable.ReadXmlSchema/ReadXml</c> 会直接抛出
+    /// "Data at the root level is invalid"，导致 DT_FROMXML 静默失败。
+    /// 这里只处理前导 BOM：其余字符（含标签间空白）与参考实现读入内容逐字一致。
+    /// </summary>
+    public static string StripLeadingBom(string? text)
+    {
+        if (string.IsNullOrEmpty(text) || text[0] != '\uFEFF')
+            return text ?? string.Empty;
+        return text.Substring(1);
     }
 
     /// <summary>

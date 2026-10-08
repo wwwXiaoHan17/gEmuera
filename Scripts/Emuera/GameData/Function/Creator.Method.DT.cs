@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using MinorShift.Emuera.GameData;
 using MinorShift.Emuera.GameData.Expression;
 using MinorShift.Emuera.GameData.Variable;
 using MinorShift.Emuera.Sub;
@@ -669,12 +670,36 @@ namespace MinorShift.Emuera.GameData.Function
             public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
             {
                 string key = arguments[0].GetStrValue(exm) ?? "";
+                string schemaXml = arguments[1].GetStrValue(exm) ?? "";
+                string dataXml = arguments[2].GetStrValue(exm) ?? "";
+                bool stripsLeadingBom = Program.Compatibility.EraFl.StripsLeadingBomFromDataTableXml;
+                bool logGate = Program.Compatibility.EraFl.IsEnabled;
+                // eraFL 的 schema/XML 带 UTF-8 BOM，LOADTEXT 会把 \uFEFF 留在首字符。
+                // XmlDocument 路径已有等价归一化，DataTable 路径没有，于是整表装载静默失败
+                // （表只剩 DT_CREATE 的 id 壳，后续 DT_SELECT(..., "name = ...") 抛
+                // EvaluateException: Cannot find column [name]）。按方言能力放行，未选中方言零变化。
+                if (stripsLeadingBom)
+                {
+                    schemaXml = GEmuera.Core.Compatibility.EraFlCompatibilityModule.StripLeadingBom(schemaXml);
+                    dataXml = GEmuera.Core.Compatibility.EraFlCompatibilityModule.StripLeadingBom(dataXml);
+                }
+                if (logGate && key == "GLOBAL_GOAL")
+                {
+                    // 该表的 schema/XML 必须经 LOADTEXT 的 BOM 边界，是"不可见首字符"
+                    // 缺陷家族的唯一已知入口；入口/结果各留一条诊断，便于下次区分
+                    // "修复未生效" 与 "修复生效但游戏数据仍缺列"。
+                    global::GenericUtils.Warn(global::EmueraLogCategory.Script, () =>
+                        "[ERAFL_COMPAT] DT_FROMXML 入口: table=" + key
+                        + ", stripBom=" + stripsLeadingBom
+                        + ", schemaLen=" + schemaXml.Length + ", schemaHead=" + DescribeHead(schemaXml)
+                        + ", dataLen=" + dataXml.Length + ", dataHead=" + DescribeHead(dataXml));
+                }
                 try
                 {
                     var table = new DataTable(key);
-                    using (var reader = new StringReader(arguments[1].GetStrValue(exm) ?? ""))
+                    using (var reader = new StringReader(schemaXml))
                         table.ReadXmlSchema(reader);
-                    using (var reader = new StringReader(arguments[2].GetStrValue(exm) ?? ""))
+                    using (var reader = new StringReader(dataXml))
                         table.ReadXml(reader);
                     RuntimeDataStore.DataTables[key] = table;
                     if (table.PrimaryKey == null || table.PrimaryKey.Length == 0)
@@ -682,12 +707,45 @@ namespace MinorShift.Emuera.GameData.Function
                         if (table.Columns.Contains("id"))
                             table.PrimaryKey = new[] { table.Columns["id"] };
                     }
+                    if (logGate && key == "GLOBAL_GOAL")
+                    {
+                        global::GenericUtils.Warn(global::EmueraLogCategory.Script, () =>
+                            "[ERAFL_COMPAT] DT_FROMXML 成功: table=" + key
+                            + ", rows=" + table.Rows.Count
+                            + ", columns=" + string.Join("/", table.Columns.Cast<DataColumn>().Select(column => column.ColumnName)));
+                    }
                     return 1;
                 }
-                catch
+                catch (Exception ex)
                 {
+                    // 参考实现同样以 0 表示失败，但静默会让"表存在却缺列"在很远的
+                    // DT_SELECT 处才爆栈；eraFL 会话下把原始异常写进诊断日志。
+                    if (logGate)
+                        global::GenericUtils.Warn(global::EmueraLogCategory.Script, () =>
+                            "[ERAFL_COMPAT] DT_FROMXML 装载失败: table=" + key + ", " + ex.GetType().Name + ": " + ex.Message);
                     return 0;
                 }
+            }
+
+            /// <summary>
+            /// 诊断辅助：把文本头部渲染成可读形式，U+FEFF 等控制字符写成 &lt;U+XXXX&gt;，
+            /// 避免日志里看不见 BOM 这类"不可见首字符"。
+            /// </summary>
+            private static string DescribeHead(string text)
+            {
+                if (string.IsNullOrEmpty(text))
+                    return "<empty>";
+                int length = Math.Min(12, text.Length);
+                var builder = new StringBuilder(length + 8);
+                for (int i = 0; i < length; i++)
+                {
+                    char c = text[i];
+                    if (c < 0x20 || c == '\uFEFF' || c == '\uFFFE')
+                        builder.Append("<U+").Append(((int)c).ToString("X4", CultureInfo.InvariantCulture)).Append('>');
+                    else
+                        builder.Append(c);
+                }
+                return builder.ToString();
             }
         }
 

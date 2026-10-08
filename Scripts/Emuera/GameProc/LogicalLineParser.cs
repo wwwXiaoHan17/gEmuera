@@ -529,12 +529,30 @@ namespace MinorShift.Emuera.GameProc
 					// v24 declares VARI/VARS while building the logical line.  Snake
 					// retains its dynamic ArgumentBuilder path, so the selected profile
 					// determines the grammar once during parsing rather than execution.
+					// eraFL 虽然 VARI/VARS 实现继承 snake 指令，但内置 erafl 会话的
+					// Snake.IsEnabled 为 false（血统≠模块选中），本来就走本路径；保留
+					// EraFl.IsEnabled 是为了社区包同时选中 snake+erafl 模块时仍按 eraFL
+					// 的 v24 系脚本风格（声明可后置、声明后立即使用）解析。
+					// 2026-10 eraFL0.49 QUEST_57 实证：本路径真正的缺陷是登记名未按
+					// IGNORE CASE 归一——`VARI nLOOP` 登记 "nLOOP"，而查找侧
+					// GetVariableToken 在 ICVariable 下按 "NLOOP" 查找，导致
+					// "変数はこの関数中では定義されていません" 误报（FOR 行 3184 及
+					// 后续三行）。修复在 ParseV24ScopedVariableDeclaration 的归一处。
 					// A "#DIMS VARS" followed by "VARS = CFLAG" is an assignment to a
 					// same-named private variable, not a declaration — the assignment
 					// must win over the v24 declaration grammar in every profile.
 					bool preferPrivateVariableAssignment = ShouldPreferPrivateVariableAssignment(idCode, currentLabel, stream);
+					// v24pure（snake 未启用）与 eraFL 都在解析期登记；snake 会话保留运行期
+					// ArgumentBuilder 路径。eraFL 的 VARI/VARS 在注册表上就是 snake 指令，
+					// 但它的脚本风格是 v24 系（声明可后置、声明后立即使用），所以按 v24
+					// 语法处理才是正确契约。v24pure/snake 的取值组合与基线逐字节等价
+					//（首个条件就是修复前的 !Snake.IsEnabled；EraFl.IsEnabled 仅 erafl
+					// 会话为真，不改变其余会话）。
+					bool declaresScopedVariableAtParseTime =
+						!Program.Compatibility.Snake.IsEnabled
+						|| Program.Compatibility.EraFl.IsEnabled;
 					if ((func.Code == FunctionCode.VARI || func.Code == FunctionCode.VARS)
-						&& !Program.Compatibility.Snake.IsEnabled
+						&& declaresScopedVariableAtParseTime
 						&& !preferPrivateVariableAssignment)
 					{
 						return ParseV24ScopedVariableDeclaration(position, func, currentLabel, stream);
@@ -675,6 +693,13 @@ namespace MinorShift.Emuera.GameProc
 			string name = leftParts[0].Trim();
 			if (name.Length == 0)
 				throw new CodeEE("VARI/VARS requires a private variable name.");
+			// IGNORE CASE:YES（eraTW/eraFL 系游戏默认）下，查找侧 GetVariableToken
+			// 会把标识符归一为大写再查表；登记侧必须同步归一，否则 `VARI nLOOP`
+			// 登记 "nLOOP"、FOR nLOOP 按 "NLOOP" 查找失败，误报"変数はこの関数中で
+			// は定義されていません"（eraFL0.49 QUEST_57 3184 行实证）。与
+			// TryCreateSnakeDynamic（snake 运行期路径）及 #DIM/#REF 声明路径保持一致。
+			if (Config.ICVariable)
+				name = name.ToUpper();
 
 			var lengths = new List<int> { 1 };
 			if (leftParts.Length > 1)
