@@ -922,16 +922,16 @@ public partial class EmueraContent : Control
 		menuPanel.AddChild(menuExpandedBar);
 
 		menuBar = menuExpandedBar;
-		AddIconButton("res://assets/icons/fenxiang.svg", OnBackPressed);
+		AddIconButton("res://assets/icons/return.svg", OnBackPressed);
 		AddIconButton("res://assets/icons/restart.svg", OnRestartPressed);
 		AddIconButton("res://assets/icons/options.svg", OnOptionsPressed);
-		inputMenuButton = AddIconButton("res://assets/icons/io-input.svg", OnInputTogglePressed);
+		inputMenuButton = AddIconButton("res://assets/icons/io_input.svg", OnInputTogglePressed);
 		quickMenuButton = AddIconButton("res://assets/icons/quick.svg", OnQuickTogglePressed);
-		autoSkipMenuButton = AddIconButton("res://assets/icons/autoskip.svg", OnAutoSkipTogglePressed);
+		autoSkipMenuButton = AddIconButton("res://assets/icons/auto_skip.svg", OnAutoSkipTogglePressed);
 		AddIconButton("res://assets/icons/menu_save_log.svg", OnSaveLogPressed);
 		AddIconButton("res://assets/icons/Title.svg", OnGotoTitlePressed);
 		AddIconButton("res://assets/icons/exit.svg", OnExitPressed);
-		scaleMenuButton = AddIconButton("res://assets/icons/Scale.svg", OnScaleTogglePressed);
+		scaleMenuButton = AddIconButton("res://assets/icons/scale.svg", OnScaleTogglePressed);
 		mouseMenuButton = AddIconButton("res://assets/icons/mouse.svg", OnVirtualMouseTogglePressed);
 
 		// Toggle at the right edge (last child = rightmost in HBox).
