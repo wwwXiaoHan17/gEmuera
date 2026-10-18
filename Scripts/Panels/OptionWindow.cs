@@ -24,6 +24,11 @@ public partial class OptionWindow : Control
 	CheckButton vsyncToggle;
 	Slider maxVisibleLinesSlider;
 	Label maxVisibleLinesLabel;
+	// 游戏界面左右额外留白（仅移动端生效）：全面屏/曲面屏安全区显示异常时手动修正。
+	Slider gameViewLeftPaddingSlider;
+	Label gameViewLeftPaddingValue;
+	Slider gameViewRightPaddingSlider;
+	Label gameViewRightPaddingValue;
 	OptionButton resolutionOption;
 	OptionButton languageOption;
 	OptionButton frameRateOption;
@@ -41,6 +46,9 @@ public partial class OptionWindow : Control
 	Label quickFlipLabel;
 	Label quickFloatingLabel;
 	Label maxLinesTextLabel;
+	Label gameViewLeftPaddingLabel;
+	Label gameViewRightPaddingLabel;
+	Label gameViewPaddingHintLabel;
 	Label resLabel;
 	Label fpsLabel;
 	Label vsyncLabel;
@@ -137,6 +145,57 @@ public partial class OptionWindow : Control
 		maxVisibleLinesLabel = CreateValueLabel();
 		maxVisibleLinesLabel.Text = ((int)maxVisibleLinesSlider.Value).ToString();
 		maxLinesRow.AddChild(maxVisibleLinesLabel);
+
+		// 全面屏/曲面屏安全区左右留白微调（仅移动端生效；桌面端禁用并显示说明）。
+		// 背景：部分设备 DisplayServer 报告的左侧安全区在视觉上不可用/被曲面裁切，
+		// 导致内容左侧留白异常；允许用户以像素为单位微调，立即重排游戏内容区。
+		bool paddingAdjustAvailable = OS.HasFeature("mobile");
+		string paddingHint = MultiLanguage.Get(
+			"OptionWindow.GameViewPaddingHint",
+			"仅移动端生效：正值增加留白、负值减少留白，用于修正全面屏/曲面屏左右安全区显示异常。");
+
+		var leftPaddingRow = CreateRow(displayGroup, out gameViewLeftPaddingLabel);
+		gameViewLeftPaddingSlider = new HSlider();
+		gameViewLeftPaddingSlider.MinValue = EmueraContent.MinGameViewHorizontalPadding;
+		gameViewLeftPaddingSlider.MaxValue = EmueraContent.MaxGameViewHorizontalPadding;
+		gameViewLeftPaddingSlider.Step = 2;
+		gameViewLeftPaddingSlider.Value = EmueraContent.GameViewLeftPadding;
+		gameViewLeftPaddingSlider.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		gameViewLeftPaddingSlider.CustomMinimumSize = new Vector2(120, 44);
+		gameViewLeftPaddingSlider.Editable = paddingAdjustAvailable;
+		gameViewLeftPaddingSlider.TooltipText = paddingHint;
+		gameViewLeftPaddingSlider.ValueChanged += OnGameViewLeftPaddingChanged;
+		leftPaddingRow.AddChild(gameViewLeftPaddingSlider);
+		gameViewLeftPaddingValue = CreateValueLabel();
+		gameViewLeftPaddingValue.Text = FormatGameViewPadding(EmueraContent.GameViewLeftPadding);
+		gameViewLeftPaddingValue.TooltipText = paddingHint;
+		leftPaddingRow.AddChild(gameViewLeftPaddingValue);
+		gameViewLeftPaddingLabel.TooltipText = paddingHint;
+
+		var rightPaddingRow = CreateRow(displayGroup, out gameViewRightPaddingLabel);
+		gameViewRightPaddingSlider = new HSlider();
+		gameViewRightPaddingSlider.MinValue = EmueraContent.MinGameViewHorizontalPadding;
+		gameViewRightPaddingSlider.MaxValue = EmueraContent.MaxGameViewHorizontalPadding;
+		gameViewRightPaddingSlider.Step = 2;
+		gameViewRightPaddingSlider.Value = EmueraContent.GameViewRightPadding;
+		gameViewRightPaddingSlider.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		gameViewRightPaddingSlider.CustomMinimumSize = new Vector2(120, 44);
+		gameViewRightPaddingSlider.Editable = paddingAdjustAvailable;
+		gameViewRightPaddingSlider.TooltipText = paddingHint;
+		gameViewRightPaddingSlider.ValueChanged += OnGameViewRightPaddingChanged;
+		rightPaddingRow.AddChild(gameViewRightPaddingSlider);
+		gameViewRightPaddingValue = CreateValueLabel();
+		gameViewRightPaddingValue.Text = FormatGameViewPadding(EmueraContent.GameViewRightPadding);
+		gameViewRightPaddingValue.TooltipText = paddingHint;
+		rightPaddingRow.AddChild(gameViewRightPaddingValue);
+		gameViewRightPaddingLabel.TooltipText = paddingHint;
+
+		gameViewPaddingHintLabel = new Label();
+		gameViewPaddingHintLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+		gameViewPaddingHintLabel.AddThemeFontSizeOverride("font_size", 12);
+		gameViewPaddingHintLabel.AddThemeColorOverride("font_color", GEmueraTheme.TextDim);
+		gameViewPaddingHintLabel.Text = paddingHint;
+		displayGroup.AddChild(gameViewPaddingHintLabel);
 
 		var resRow = CreateRow(displayGroup, out resLabel);
 		resolutionOption = new OptionButton();
@@ -420,6 +479,14 @@ public partial class OptionWindow : Control
 			quickFloatingLabel.Text = MultiLanguage.Get("OptionWindow.QuickFloating", "Quick Floating Window");
 		if (maxLinesTextLabel != null)
 			maxLinesTextLabel.Text = MultiLanguage.Get("OptionWindow.MaxVisibleLines", "Max Lines");
+		if (gameViewLeftPaddingLabel != null)
+			gameViewLeftPaddingLabel.Text = MultiLanguage.Get("OptionWindow.GameViewLeftPadding", "Left Padding");
+		if (gameViewRightPaddingLabel != null)
+			gameViewRightPaddingLabel.Text = MultiLanguage.Get("OptionWindow.GameViewRightPadding", "Right Padding");
+		if (gameViewPaddingHintLabel != null)
+			gameViewPaddingHintLabel.Text = MultiLanguage.Get(
+				"OptionWindow.GameViewPaddingHint",
+				"仅移动端生效：正值增加留白、负值减少留白，用于修正全面屏/曲面屏左右安全区显示异常。");
 		if (resLabel != null)
 			resLabel.Text = MultiLanguage.Get("OptionWindow.Resolution", "Resolution");
 		if (fpsLabel != null)
@@ -565,6 +632,26 @@ public partial class OptionWindow : Control
 		int lines = (int)value;
 		maxVisibleLinesLabel.Text = lines.ToString();
 		EmueraContent.ConfiguredMaxVisibleLines = lines;
+	}
+
+	// 左右留白：拖动即写入 user://settings.cfg 并触发内容区重排（仅移动端生效）。
+	void OnGameViewLeftPaddingChanged(double value)
+	{
+		int padding = (int)value;
+		gameViewLeftPaddingValue.Text = FormatGameViewPadding(padding);
+		EmueraContent.GameViewLeftPadding = padding;
+	}
+
+	void OnGameViewRightPaddingChanged(double value)
+	{
+		int padding = (int)value;
+		gameViewRightPaddingValue.Text = FormatGameViewPadding(padding);
+		EmueraContent.GameViewRightPadding = padding;
+	}
+
+	static string FormatGameViewPadding(int value)
+	{
+		return (value > 0 ? "+" : "") + value.ToString() + " px";
 	}
 
 	void OnResolutionSelected(long index)
