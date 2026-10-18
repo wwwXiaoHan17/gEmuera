@@ -119,3 +119,5 @@ OptionWindow.VirtualMouseScale=仮想マウス倍率
 OptionWindow.VirtualMouseOpacity=マウス不透明度
 QuickFloatingWindow.Title=クイック
 QuickFloatingWindow.HideHint=浮遊ウィンドウを非表示（システムメニューのクイックで再表示）
+OptionWindow.VSync=垂直同期
+OptionWindow.VSyncHint=垂直同期をオフにするとフレームレートが上がる場合がありますが、Godot の Compatibility レンダラーでは有効に戻される可能性があります。

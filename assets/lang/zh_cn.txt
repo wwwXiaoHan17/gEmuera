@@ -118,3 +118,5 @@ OptionWindow.VirtualMouseScale=虚拟鼠标缩放
 OptionWindow.VirtualMouseOpacity=鼠标不透明度
 QuickFloatingWindow.Title=Quick悬浮窗
 QuickFloatingWindow.HideHint=隐藏悬浮窗（可从系统菜单 Quick 按钮重新打开）
+OptionWindow.VSync=垂直同步
+OptionWindow.VSyncHint=关闭垂直同步可能提升帧率，但 Godot Compatibility 渲染器下可能被强制回退为开启。

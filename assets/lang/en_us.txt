@@ -119,3 +119,5 @@ OptionWindow.VirtualMouseScale=Virtual Mouse Scale
 OptionWindow.VirtualMouseOpacity=Mouse Opacity
 QuickFloatingWindow.Title=Quick Panel
 QuickFloatingWindow.HideHint=Hide the floating window (reopen from the system menu Quick button)
+OptionWindow.VSync=V-Sync
+OptionWindow.VSyncHint=Godot Compatibility renderer may force V-Sync on; turning it off can fall back to Enabled.

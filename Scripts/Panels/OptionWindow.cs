@@ -21,6 +21,7 @@ public partial class OptionWindow : Control
 	CheckButton pinchZoomToggle;
 	CheckButton quickFlipToggle;
 	CheckButton quickFloatingToggle;
+	CheckButton vsyncToggle;
 	Slider maxVisibleLinesSlider;
 	Label maxVisibleLinesLabel;
 	OptionButton resolutionOption;
@@ -42,6 +43,8 @@ public partial class OptionWindow : Control
 	Label maxLinesTextLabel;
 	Label resLabel;
 	Label fpsLabel;
+	Label vsyncLabel;
+	Label vsyncHintLabel;
 	Label langLabel;
 	Button closeBtn;
 
@@ -158,6 +161,24 @@ public partial class OptionWindow : Control
 		frameRateOption.ItemSelected += OnFrameRateSelected;
 		frameRateOption.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 		fpsRow.AddChild(frameRateOption);
+
+		// 垂直同步：Godot 仅 Forward+/Mobile 渲染方法支持关闭；Compatibility 下关闭
+		// 会被回退为 Enabled。提示行按实际条件显示，不承诺关闭一定生效。
+		var vsyncRow = CreateRow(displayGroup, out vsyncLabel);
+		vsyncToggle = new CheckButton();
+		vsyncToggle.ButtonPressed = VSyncHelper.Enabled;
+		vsyncToggle.CustomMinimumSize = new Vector2(120, 44);
+		vsyncToggle.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		vsyncToggle.Toggled += OnVSyncToggled;
+		vsyncRow.AddChild(vsyncToggle);
+
+		vsyncHintLabel = new Label();
+		vsyncHintLabel.AddThemeFontSizeOverride("font_size", 12);
+		vsyncHintLabel.AddThemeColorOverride("font_color", GEmueraTheme.TextSecondary);
+		vsyncHintLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+		displayGroup.AddChild(vsyncHintLabel);
+		// 初始文案与可见性（ApplyLanguageTexts 在 _Ready 末尾还会再刷新一次，幂等）。
+		RefreshVSyncHint();
 
 		// ---- Quick: 快捷按钮宽度 / 快捷字体 ----
 		var quickGroup = CreateGroup(content, out quickGroupTitle);
@@ -399,6 +420,11 @@ public partial class OptionWindow : Control
 			resLabel.Text = MultiLanguage.Get("OptionWindow.Resolution", "Resolution");
 		if (fpsLabel != null)
 			fpsLabel.Text = MultiLanguage.Get("OptionWindow.FrameRate", "Frame Rate");
+		if (vsyncLabel != null)
+			vsyncLabel.Text = MultiLanguage.Get("OptionWindow.VSync", "V-Sync");
+		// 提示文案与可见性统一由 RefreshVSyncHint 刷新（语言切换时也走这里）。
+		if (vsyncHintLabel != null)
+			RefreshVSyncHint();
 		if (langLabel != null)
 			langLabel.Text = MultiLanguage.Get("OptionWindow.Language", "Language");
 		if (closeBtn != null)
@@ -545,6 +571,31 @@ public partial class OptionWindow : Control
 	{
 		FrameRateHelper.frame_rate_index = (int)index;
 		FrameRateHelper.Apply();
+	}
+
+	// 垂直同步：先持久化期望值再应用；Apply 会读回实际模式，失败时由提示行说明。
+	void OnVSyncToggled(bool enabled)
+	{
+		VSyncHelper.Enabled = enabled;
+		VSyncHelper.Apply();
+		RefreshVSyncHint();
+	}
+
+	// 提示仅在"请求关闭、但可能被回退"时显示：关闭后（含 Godot Compatibility 渲染器
+	// 只支持 Enabled 的情况）才需要解释，默认开启时不占用一行设置说明。
+	void RefreshVSyncHint()
+	{
+		if (vsyncHintLabel == null)
+			return;
+		vsyncHintLabel.Text = MultiLanguage.Get(
+			"OptionWindow.VSyncHint",
+			"Godot Compatibility renderer may force V-Sync on; turning it off can fall back to Enabled.");
+		vsyncHintLabel.Visible = ShouldShowVSyncHint();
+	}
+
+	static bool ShouldShowVSyncHint()
+	{
+		return !VSyncHelper.Enabled || VSyncHelper.LastRequestUnsupported;
 	}
 
 	void OnLanguageSelected(long index)
