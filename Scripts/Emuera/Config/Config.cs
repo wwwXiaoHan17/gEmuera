@@ -627,7 +627,8 @@ namespace MinorShift.Emuera
 		public static bool CheckDuplicateIdentifier { get; private set; }
 		public static bool PluginAvailableWarn { get; private set; }
 		public static bool DisableBeforeErrorThrow { get; private set; }
-		public static bool UseScopedVariableInstruction { get; private set; } = true;
+		/// <summary>VARI/VARS 指令开关；参考 v24 的 setting.json 缺省 false。</summary>
+		public static bool UseScopedVariableInstruction { get; private set; }
 		public static HashSet<string> LoadTextValidExtensions { get; private set; } =
 			new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "txt" };
 		public static bool UseButtonFocusBackgroundColor { get; private set; }

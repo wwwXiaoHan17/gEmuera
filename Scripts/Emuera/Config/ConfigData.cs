@@ -17,7 +17,7 @@ namespace MinorShift.Emuera
 	/// (という予定だったが今は違う)
 	/// 1756 Config → ConfigDataへ改名
 	/// </summary>
-	internal sealed class ConfigData
+	internal sealed partial class ConfigData
 	{
 		static string configPath
 		{ get { return Program.ExeDir + "emuera.config"; } }
@@ -238,7 +238,9 @@ static ConfigData() { }
 			configArray[i++] = new ConfigItem<bool>(ConfigCode.AutoSave, "オートセーブを行なう", true);
 			configArray[i++] = new ConfigItem<bool>(ConfigCode.UseKeyMacro, "キーボードマクロを使用する", true);
 			configArray[i++] = new ConfigItem<bool>(ConfigCode.SizableWindow, "ウィンドウの高さを可変にする", true);
-			configArray[i++] = new ConfigItem<TextDrawingMode>(ConfigCode.TextDrawingMode, "描画インターフェース", TextDrawingMode.SKIASHARP);
+			// 参考 v24（emuera.em-master）默认 TEXTRENDERER；gEmuera 的实际绘制走 Godot，
+			// 该值只影响 GETCONFIG("描画インターフェース") 的可见结果，默认与参考对齐。
+			configArray[i++] = new ConfigItem<TextDrawingMode>(ConfigCode.TextDrawingMode, "描画インターフェース", TextDrawingMode.TEXTRENDERER);
 			//configArray[i++] = new ConfigItem<bool>(ConfigCode.UseImageBuffer, "イメージバッファを使用する", true);
 			configArray[i++] = new ConfigItem<int>(ConfigCode.WindowX, "ウィンドウ幅", 760);
 			configArray[i++] = new ConfigItem<int>(ConfigCode.WindowY, "ウィンドウ高さ", 480);
@@ -270,7 +272,8 @@ static ConfigData() { }
 			//configArray[i++] = new ConfigItem<List<string>>(ConfigCode.IgnoreWarningFiles, "指定したファイル中の警告を無視する", new List<string>());
 			configArray[i++] = new ConfigItem<bool>(ConfigCode.ChangeMasterNameIfDebug, "デバッグコマンドを使用した時にMASTERの名前を変更する", true);
 			configArray[i++] = new ConfigItem<bool>(ConfigCode.ButtonWrap, "ボタンの途中で行を折りかえさない", false);
-			configArray[i++] = new ConfigItem<bool>(ConfigCode.SearchSubdirectory, "サブディレクトリを検索する", true);
+			// 参考 v24 与 snake 参考均为 false（v24 语义偏差修复：gEmuera 曾缺省 true）。
+			configArray[i++] = new ConfigItem<bool>(ConfigCode.SearchSubdirectory, "サブディレクトリを検索する", false);
 			configArray[i++] = new ConfigItem<bool>(ConfigCode.SortWithFilename, "読み込み順をファイル名順にソートする", false);
 			configArray[i++] = new ConfigItem<long>(ConfigCode.LastKey, "最終更新コード", 0);
 			configArray[i++] = new ConfigItem<int>(ConfigCode.SaveDataNos, "表示するセーブデータ数", 20);
@@ -295,7 +298,8 @@ static ConfigData() { }
 			configArray[i++] = new ConfigItem<bool>(ConfigCode.CompatiCallEvent, "イベント関数のCALLを許可する", false);
 			configArray[i++] = new ConfigItem<bool>(ConfigCode.CompatiSPChara, "SPキャラを使用する", false);
 			
-			configArray[i++] = new ConfigItem<bool>(ConfigCode.SystemSaveInBinary, "セーブデータをバイナリ形式で保存する", true);
+			// 参考 v24 与 snake 参考均为 false（v24 语义偏差修复：gEmuera 曾缺省 true）。
+			configArray[i++] = new ConfigItem<bool>(ConfigCode.SystemSaveInBinary, "セーブデータをバイナリ形式で保存する", false);
 			configArray[i++] = new ConfigItem<bool>(ConfigCode.ZipSaveData, "セーブデータを圧縮して保存する", false);
 			configArray[i++] = new ConfigItem<bool>(ConfigCode.CompatiFuncArgOptional, "ユーザー関数の全ての引数の省略を許可する", false);
 			configArray[i++] = new ConfigItem<bool>(ConfigCode.CompatiFuncArgAutoConvert, "ユーザー関数の引数に自動的にTOSTRを補完する", false);
@@ -312,7 +316,8 @@ static ConfigData() { }
 			configArray[i++] = new ConfigItem<bool>(ConfigCode.ForbidUpdateCheck, "UPDATECHECKを許可しない", false);
 			configArray[i++] = new ConfigItem<bool>(ConfigCode.PluginAvailableWarn, "外部プラグインが有効時に警告を表示する", true);
 			configArray[i++] = new ConfigItem<bool>(ConfigCode.DisableBeforeErrorThrow, "BEFORE_ERROR/THROWイベントを無効化する", false);
-			configArray[i++] = new ConfigItem<bool>(ConfigCode.UseScopedVariableInstruction, "VARI/VARS命令を利用する", true);
+			// 参考 v24 的 setting.json 缺省 false（v24 语义偏差修复：gEmuera 曾两处缺省 true）。
+			configArray[i++] = new ConfigItem<bool>(ConfigCode.UseScopedVariableInstruction, "VARI/VARS命令を利用する", false);
 			configArray[i++] = new ConfigItem<string>(ConfigCode.LoadTextValidExtensions, "LOADTEXTとSAVETEXTで使える拡張子", "txt");
 
 			i = 0;
