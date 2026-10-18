@@ -565,7 +565,7 @@ namespace MinorShift.Emuera.Compatibility
 				"ACOS", "ARGLEN", "ASIN", "ATAN", "BGMCONTROL", "BITGET", "BITINDEXOFFIRST",
 				"BITSET", "BITTOGGLE", "CBGSETCIMG", "CEIL", "COS", "DISABLE_INPUT_MACRO",
 				"DT_CELL_GETF", "DT_CELL_SETF", "ENABLE_INPUT_MACRO", "EVAL", "EVALF", "EVALS",
-				"EXISTSIMAGELAYER", "FLOOR", "GCLEARLOWALPHA", "GDRAWPOLYGON", "GDRAWPOLYGONADDPOINT",
+				"EXISTSIMAGELAYER", "EXIST_IN_CSV", "EXIST_IN_ERD", "FLOOR", "GCLEARLOWALPHA", "GDRAWPOLYGON", "GDRAWPOLYGONADDPOINT",
 				"GDRAWPOLYGONCLEARPOINT", "GDRAWSTRING", "GET_SKIA_QUALITY", "GET_TEXT_DRAWING_MODE",
 				"GETANIMETIMER", "GETARGCOUNT", "GETCSVNOBYCALLNAME", "GETCSVNOBYMASTERNAME",
 				"GETCSVNOBYNAME", "GETCSVNOBYNICKNAME", "GETLINEY", "GETMETHF", "GETPLATFORM",
@@ -755,6 +755,7 @@ namespace MinorShift.Emuera.Compatibility
 		public bool UsesBeforeErrorEvent => false;
 		public bool UsesRandomizeReseed => false;
 		public bool UsesRelationWithoutMastername => false;
+		public bool MergesPresetErdFromErbDir => false;
 		public bool AllowsOutKeyword => false;
 		public bool UsesVariadicStrip => false;
 		public bool UsesFloatTypeSystem => false;
@@ -801,6 +802,7 @@ namespace MinorShift.Emuera.Compatibility
 		public bool UsesBeforeErrorEvent => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.BeforeErrorEvent);
 		public bool UsesRandomizeReseed => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.RandomizeReseed);
 		public bool UsesRelationWithoutMastername => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.RelationWithoutMastername);
+		public bool MergesPresetErdFromErbDir => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.PresetErdMerge);
 		public bool AllowsOutKeyword => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.OutKeyword);
 		public bool UsesVariadicStrip => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.VariadicStrip);
 		public bool UsesFloatTypeSystem => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.FloatTypeSystem);

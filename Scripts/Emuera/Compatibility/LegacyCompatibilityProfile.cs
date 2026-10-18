@@ -28,6 +28,8 @@ namespace MinorShift.Emuera.Compatibility
 		bool UsesBeforeErrorEvent { get; }
 		bool UsesRandomizeReseed { get; }
 		bool UsesRelationWithoutMastername { get; }
+		/// <summary>预设变量同名 ERD 合并在 CSV 之后、逆引字典之前生效（Skiav13.0）。</summary>
+		bool MergesPresetErdFromErbDir { get; }
 		bool AllowsOutKeyword { get; }
 		bool UsesVariadicStrip { get; }
 		bool UsesFloatTypeSystem { get; }

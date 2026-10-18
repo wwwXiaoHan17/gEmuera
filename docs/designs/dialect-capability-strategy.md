@@ -70,13 +70,23 @@ gEmuera 的方言（dialect/profile）体系当前无法达成"兼容全部 Era 
 - **降级策略**：未知插件/加载失败时警告继续，不阻断；常用插件保 shim 回退。
 - eraFL 的 LLM 集成（CALL_GEMINI/CALL_OLLAMA/CALL_GENERIC_LLM_API）默认关闭（FLconfig.xml `use_service` 全 false），作为可选能力验证。
 
-### 4. snake 同步（Skiav12.1 基线）
+### 4. snake 同步（Skiav12.1 → Skiav16 基线）
 
 - ERB 语义层全量同步（跳过 DEBUG/桌面 UI）：CHKDATA 存档版本、多语言编码往返回退（对 GBK 关键）、用户变量 .als、PLAYSE，以及后续 diff 盘点出的其余语义差异。
 
 **2026-09-04 编码往返项对照结论（Phase B 执行时定案）**：snake Skiav12.1 修复的是"ANSI 代码页（如 GBK）下逐字符字节计数的往返错乱"——其 `LangManager.GetByteCountLang` 以当前代码页编码计长并用 932 回退。gemuera 的对应实现（`Scripts/uEmuera/Utils.cs` GetByteCount，`Scripts/Emuera/_Library/LangManager.cs`）是**显示宽度模型**：零宽字符跳过、半角计 1、其余计 2，完全不依赖代码页。snake 所修的缺陷类（编码不可往返字符的长度错乱）在 gemuera 模型中结构性不存在，故**不移植**该修复。两模型的已知差异点（零宽字符、代理对、既非当前代码页亦非 932 可表示字符的计量）属 gemuera 自有显示语义而非 snake 缺陷；后续若实测 PRINTC/PRINTLC 对齐或 SUBSTR 出问题，按个案对照处理。
 - 同步基线记录：本次 CHANGELOG 12.1 盘点结论作为新基线写入治理文档；AGENTS.md/工具脚本的参考路径更新到新源码目录。
 - snake 语义对齐继续走既有流程：改 `Scripts/Emuera/` 前对照 develop 源码 + dialect-inventory 门禁。
+
+**2026-10-18 增量同步（参考 `E:\MyCode\eraCode\...-main-skiasharp`，Skiav16 稳定版）**：
+- 已落地（均走 snake capability/模块表面门控，v24pure 加载路径零额外分配、零表面增减）：
+  - RAND 伪变量钳制补齐（上游 Skiav12.2；复用 `math.rand-clamp.v1`，函数侧此前已对齐）；
+  - CHKDATA `RESULT:1` 版本写回：经参考源码核对，v24（emuera.em-master）与 snake v16 都**无条件写**，
+    不是方言差异；本批曾误按 `save.chkdata-version.v1` 门控，已在同一 PR 内撤销（详见 evolution-log 勘误）；
+  - 预设变量同名 ERD 合并（上游 Skiav13.0；`csv.preset-erd-merge.v1`，CSV 优先、ITEM 第三列价格来源追踪、跨槽重名跳过）；
+  - `EXIST_IN_CSV` / `EXIST_IN_ERD`（上游 Skiav13.0）进入 snake 表面，v24pure/eraFL 不可见；
+  - snake 模块版本 `1.0.0 → 1.1.0`，capability 账本 18 → 19 项（仅新增 ERD 合并；CHKDATA 门控已撤销）；生成清单 snake 函数 349 → 351（METHOD 投影指令 668 → 670）。
+- 本批不追：v14–v15 变量写入/打印监视与 CLI 调试（非目标，桌面调试工具链）、v16 插件加载健壮性（gEmuera 已有同源实现，差异单独立项）、v16 Skia 字体修复（Godot TextServer 路径不适用；私有字体控制台链已另有实现）。
 
 ### 5. 六游戏验收矩阵
 

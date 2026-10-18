@@ -630,9 +630,18 @@ check1break:
 				aliases[i] = null;
 			}
 			ItemPrice = new Int64[MaxDataList[itemIndex]];
+			// 来源追踪只为预设 ERD 合并服务：未声明 capability 的会话零额外分配
+			//（v24pure/erafl 的加载路径与分配面逐字节等价）。
+			if (Program.Compatibility.Snake.MergesPresetErdFromErbDir)
+				InitializePresetErdNameSources();
 			//N5: 名称/别名 CSV 每文件状态完全独立（各自的 names[i]/aliases[i]/ItemPrice），改为并行解析。
 			//警告/控制台输出等副作用按原文件顺序捕获，解析完成后统一串行重放，顺序语义与串行完全一致。
 			loadNameCsvsInParallel(csvDir, disp);
+			// Skiav13.0 snake 语义：预设变量同名 ERD 合并必须在全部 CSV 之后、
+			// 逆引字典之前执行（合并后的名字同样可被 GETNUM / ITEMNAME:n 使用）。
+			// 未声明该 capability 的会话（v24pure/erafl 等）保持原加载路径不变。
+			if (Config.UseERD && Program.Compatibility.Snake.MergesPresetErdFromErbDir)
+				MergePresetErdFromErbDir();
 			//逆引き辞書を作成
 			for (int i = 0; i < names.Length; i++)
 			{
@@ -1517,6 +1526,7 @@ check1break:
                     if (!defined.Add(index))
                         ctx.Warn(index.ToString() + "番目の要素はすでに定義されています（新しい値で上書きします）", position, 1);
 					target[index] = GetFieldString(source, fields[1]);
+					MarkPresetNameFromCsv(targetIndex, index);
 					if ((targetI != null) && (tokenCount >= 3))
 					{
 
@@ -1528,6 +1538,7 @@ check1break:
                         }
 
                         targetI[index] = price;
+                        MarkPresetPriceFromCsv(targetI, index);
 					}
 				}
 			}

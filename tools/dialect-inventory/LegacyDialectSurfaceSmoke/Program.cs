@@ -21,6 +21,7 @@ static class Program
         "ACOS", "ARGLEN", "ASIN", "ATAN", "BGMCONTROL", "BITGET", "BITINDEXOFFIRST",
         "BITSET", "BITTOGGLE", "CBGSETCIMG", "CEIL", "COS", "DISABLE_INPUT_MACRO",
         "DT_CELL_GETF", "DT_CELL_SETF", "ENABLE_INPUT_MACRO", "EVAL", "EVALF", "EVALS",
+        "EXIST_IN_CSV", "EXIST_IN_ERD",
         "EXISTSIMAGELAYER", "FLOOR", "GCLEARLOWALPHA", "GDRAWPOLYGON", "GDRAWPOLYGONADDPOINT",
         "GDRAWPOLYGONCLEARPOINT", "GDRAWSTRING", "GET_SKIA_QUALITY", "GET_TEXT_DRAWING_MODE",
         "GETANIMETIMER", "GETARGCOUNT", "GETCSVNOBYCALLNAME", "GETCSVNOBYMASTERNAME",
@@ -78,6 +79,9 @@ static class Program
                 Assert(!v24.IsFunctionVisible(key), $"Non-v24 expression function leaked into v24: {key}.");
 
             Assert(snake.IsFunctionVisible("ACOS"), "Snake lost a Snake expression function.");
+            // Skiav13.0 预设名来源探针：snake 表面必须可见（v24/erafl 不泄漏，见上方排除清单与隔离断言）。
+            Assert(snake.IsFunctionVisible("EXIST_IN_CSV") && snake.IsFunctionVisible("EXIST_IN_ERD"),
+                "snake 会话丢失了 Skiav13.0 的预设名来源探针（EXIST_IN_CSV/EXIST_IN_ERD）。");
             foreach (string key in SnakeExcludedFunctions)
                 Assert(!snake.IsFunctionVisible(key), $"Snake exposed a key absent from its reference registry: {key}.");
 
@@ -90,6 +94,8 @@ static class Program
                 "eraFL 接口必须提供 SETANIMETIMER 指令（eraFL 游戏启动依赖，グラフィック生成.ERB:356）。");
             // 隔离护栏：erafl 不得获得其他 snake 专属能力（函数层与指令层抽查）。
             Assert(!erafl.IsFunctionVisible("SQL_CONNECT"), "eraFL 接口泄漏了 snake 专属函数 SQL_CONNECT。");
+            Assert(!erafl.IsFunctionVisible("EXIST_IN_CSV") && !erafl.IsFunctionVisible("EXIST_IN_ERD"),
+                "eraFL 接口泄漏了 snake 专属探针函数 EXIST_IN_CSV/EXIST_IN_ERD。");
             Assert(!erafl.IsInstructionVisible("CALLSTR"), "eraFL 接口泄漏了 snake 专属指令 CALLSTR。");
             // v24pure 保持对 v24 参考的忠实：SETANIMETIMER 函数可见（v24 参考 Creator.cs:211）、指令不可见。
             Assert(v24.IsFunctionVisible("SETANIMETIMER"), "v24pure 丢失了 v24 参考的 SETANIMETIMER 表达式函数。");
@@ -127,7 +133,7 @@ static class Program
                 && timerErafl == LegacyInstructionVariant.SharedTable,
                 "erafl 的 SETANIMETIMER 必须显式绑定共享表 handler。");
 
-            // capability 账本（quirk ledger）：snake 声明 18 项解析/调用/显示 quirk，erafl 声明
+            // capability 账本（quirk ledger）：snake 声明 19 项解析/调用/显示 quirk，erafl 声明
             // markup 系 + 3 项布尔 policy quirk，v24pure 不声明任何 quirk。
             // [LOAD] 日志输出的能力清单即此账本的运行期消费。
             foreach (string quirkId in GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.RequiredCapabilityIds)

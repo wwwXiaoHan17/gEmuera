@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Text;
@@ -248,6 +248,10 @@ namespace MinorShift.Emuera.GameData.Function
                 ["陥落状態"] = new SnakeFallenStateMethod(),
                 ["陷落状态"] = new SnakeFallenStateMethod(),
                 ["GETPLATFORM"] = new GetPlatformMethod(),
+                // Skiav13.0 snake 语义：预设变量名来源探针（v24 参考无此函数，
+                // 可见性由 game.snake 模块表面差集控制，非 snake 会话不可见）。
+                ["EXIST_IN_CSV"] = new ExistPresetNameInCsvMethod(),
+                ["EXIST_IN_ERD"] = new ExistPresetNameInErdMethod(),
                 ["SIN"] = new V24TrigMethod("SIN", Math.Sin),
                 ["COS"] = new V24TrigMethod("COS", Math.Cos),
                 ["TAN"] = new V24TrigMethod("TAN", Math.Tan),
