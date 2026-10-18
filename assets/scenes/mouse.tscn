@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://ckgohvuub8ylk"]
 
 [ext_resource type="Script" uid="uid://dal4s6aip2blm" path="res://scripts/Panels/VirtualMouse.cs" id="1_haci1"]
-[ext_resource type="Texture2D" uid="uid://c87cnnj2bwusx" path="res://assets/icons/鼠标.png" id="2_dhnq4"]
+[ext_resource type="Texture2D" uid="uid://c87cnnj2bwusx" path="res://assets/icons/mouse.png" id="2_dhnq4"]
 
 [sub_resource type="CapsuleShape2D" id="CapsuleShape2D_ud1wd"]
 radius = 95.80859

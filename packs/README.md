@@ -14,9 +14,9 @@
 ```text
 packs/
 └── CommunityPackTemplate/           # manifest-only 数据包模板（推荐起点）
-    ├── CommunityPackTemplate.csproj # 类库工程，内嵌清单
-    ├── compatpack.manifest.json     # 清单（资源名必须恰为 compatpack.manifest.json）
-    └── CommunityPackTemplateMarker.cs  # 仅为定位程序集的 public 标记类（可选）
+	├── CommunityPackTemplate.csproj # 类库工程，内嵌清单
+	├── compatpack.manifest.json     # 清单（资源名必须恰为 compatpack.manifest.json）
+	└── CommunityPackTemplateMarker.cs  # 仅为定位程序集的 public 标记类（可选）
 ```
 
 - **manifest-only 数据包（推荐）**：程序集只有内嵌清单、不含任何 `ICompatPack`

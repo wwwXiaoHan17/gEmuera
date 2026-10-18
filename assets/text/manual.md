@@ -3,12 +3,13 @@
 > 这里是 gEmuera 的使用手册，由用户自行维护。
 > 本文件使用 Markdown 编写，位于 `assets/text/manual.md`（语言版本 `manual_zh_cn.md` / `manual_en_us.md` / `manual_jp.md` 会自动优先加载）。
 
-## 基本使用
+## 注意事项
 
-- 将 era 游戏文件夹放入 `emuera/`（v24 核心）或 `snake/`（snake 核心）目录后启动。
-- 手机端路径：`/storage/emulated/0/emuera/` 或 `/storage/emulated/0/emuera/snake/`。
+- 请注意：gEmuera只是一个模拟器，本身不提供游戏。需要自行去社区或者Git仓库寻找游戏
+
+## 启动游戏
+
+- 前提介绍：Era游戏是一个文件夹，其中包含Emuera.exe、csv数据文件夹、ERB脚本文件夹。
+
 
 ## 待补充
-
-请在此处手写 gEmuera 的详细使用方法。
-

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bsgpjlbyexx0m"
-path="res://.godot/imported/fenxiang.svg-a06fee5ea60e623085fa5ef5bfcbff5e.ctex"
+uid="uid://c87cnnj2bwusx"
+path="res://.godot/imported/mouse.png-d12eefb42fb819b9db5059e944bfaa55.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/icons/fenxiang.svg"
-dest_files=["res://.godot/imported/fenxiang.svg-a06fee5ea60e623085fa5ef5bfcbff5e.ctex"]
+source_file="res://assets/icons/mouse.png"
+dest_files=["res://.godot/imported/mouse.png-d12eefb42fb819b9db5059e944bfaa55.ctex"]
 
 [params]
 
@@ -38,6 +38,3 @@ process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
 detect_3d/compress_to=1
-svg/scale=1.0
-editor/scale_with_editor_scale=false
-editor/convert_colors_with_editor_theme=false

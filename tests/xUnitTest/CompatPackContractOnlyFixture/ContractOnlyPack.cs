@@ -10,28 +10,28 @@ namespace CompatPackContractOnlyFixture;
 /// </summary>
 public sealed class ContractOnlyPack : ICompatPack
 {
-    public ContractOnlyPack()
-    {
-        if (!CompatPackManifest.TryLoadFromAssembly(typeof(ContractOnlyPack).Assembly, out var manifest, out _))
-            throw new InvalidOperationException("契约夹具内嵌清单缺失。");
-        Manifest = manifest!;
-    }
+	public ContractOnlyPack()
+	{
+		if (!CompatPackManifest.TryLoadFromAssembly(typeof(ContractOnlyPack).Assembly, out var manifest, out _))
+			throw new InvalidOperationException("契约夹具内嵌清单缺失。");
+		Manifest = manifest!;
+	}
 
-    public CompatPackManifest Manifest { get; }
+	public CompatPackManifest Manifest { get; }
 
-    public IReadOnlyList<ICompatPackContribution> Contributions { get; } = new ICompatPackContribution[]
-    {
-        new ContractOnlySurfaceContribution(),
-    };
+	public IReadOnlyList<ICompatPackContribution> Contributions { get; } = new ICompatPackContribution[]
+	{
+		new ContractOnlySurfaceContribution(),
+	};
 }
 
 /// <summary>最小表面贡献：注册一个 v24 基线外指令，验证入口类贡献可经 ALC 加载并被表面收集。</summary>
 public sealed class ContractOnlySurfaceContribution : ISurfaceContribution
 {
-    public string ContributionId => "community.contract-fixture.surface";
+	public string ContributionId => "community.contract-fixture.surface";
 
-    public void Apply(IInstructionSurfaceRegistry instructions, IFunctionSurfaceRegistry functions)
-    {
-        instructions.RegisterInstruction("SETANIMETIMER");
-    }
+	public void Apply(IInstructionSurfaceRegistry instructions, IFunctionSurfaceRegistry functions)
+	{
+		instructions.RegisterInstruction("SETANIMETIMER");
+	}
 }

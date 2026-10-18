@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c87cnnj2bwusx"
-path="res://.godot/imported/鼠标.png-cd76b17908367433aec2e3fd25a5d786.ctex"
+uid="uid://drdadf4fbqo40"
+path="res://.godot/imported/auto_skip.svg-adec116284ebc63cbcb5e31c9bd1e857.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/icons/鼠标.png"
-dest_files=["res://.godot/imported/鼠标.png-cd76b17908367433aec2e3fd25a5d786.ctex"]
+source_file="res://assets/icons/auto_skip.svg"
+dest_files=["res://.godot/imported/auto_skip.svg-adec116284ebc63cbcb5e31c9bd1e857.ctex"]
 
 [params]
 
@@ -38,3 +38,6 @@ process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
 detect_3d/compress_to=1
+svg/scale=1.0
+editor/scale_with_editor_scale=false
+editor/convert_colors_with_editor_theme=false

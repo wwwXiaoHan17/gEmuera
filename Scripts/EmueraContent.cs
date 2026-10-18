@@ -445,10 +445,10 @@ public partial class EmueraContent : Control
 	// the same panel can be reused/mounted from any scene. Preloaded once and
 	// instantiated in _Ready, which replaces the previous `new X()` construction
 	// while keeping the exact same AddChild order and initialization contract.
-	static readonly PackedScene InputpadScene = GD.Load<PackedScene>("res://assets/scenes/Inputpad.tscn");
-	static readonly PackedScene ScalepadScene = GD.Load<PackedScene>("res://assets/scenes/Scalepad.tscn");
-	static readonly PackedScene QuickButtonsScene = GD.Load<PackedScene>("res://assets/scenes/QuickButtons.tscn");
-	static readonly PackedScene OptionWindowScene = GD.Load<PackedScene>("res://assets/scenes/OptionWindow.tscn");
+	static readonly PackedScene InputpadScene = GD.Load<PackedScene>("res://assets/scenes/input_pad.tscn");
+	static readonly PackedScene ScalepadScene = GD.Load<PackedScene>("res://assets/scenes/scale_pad.tscn");
+	static readonly PackedScene QuickButtonsScene = GD.Load<PackedScene>("res://assets/scenes/quick_buttons.tscn");
+	static readonly PackedScene OptionWindowScene = GD.Load<PackedScene>("res://assets/scenes/option_window.tscn");
 
 	public static int ContentWidth { get; private set; }
 	public static int ContentHeight { get; private set; }

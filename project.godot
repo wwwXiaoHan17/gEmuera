@@ -22,6 +22,7 @@ pixel_store=true
 
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
+window/handheld/orientation=6
 
 [dotnet]
 
