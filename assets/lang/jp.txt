@@ -119,3 +119,6 @@ OptionWindow.VirtualMouseScale=仮想マウス倍率
 OptionWindow.VirtualMouseOpacity=マウス不透明度
 QuickFloatingWindow.Title=クイック
 QuickFloatingWindow.HideHint=浮遊ウィンドウを非表示（システムメニューのクイックで再表示）
+OptionWindow.GameViewLeftPadding=画面左余白
+OptionWindow.GameViewRightPadding=画面右余白
+OptionWindow.GameViewPaddingHint=モバイルのみ有効：正の値で余白を増やし、負の値で減らします。フルスクリーン/曲面エッジ端末で左右のセーフエリア余白が正しく表示されない場合に使用します。
