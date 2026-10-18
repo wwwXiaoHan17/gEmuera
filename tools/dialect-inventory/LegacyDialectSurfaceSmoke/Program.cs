@@ -148,6 +148,10 @@ static class Program
                 && erafl.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.EraFlCompatibilityModule.SafeArithmeticGuardBehavior)
                 && erafl.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.EraFlCompatibilityModule.ExtendedHtmlAttributesBehavior),
                 "erafl 计划必须声明四项蛇系血继承 quirk（type.float-literals / declare.out-keyword / arith.safe-arithmetic-guard / markup.font-extended-attributes）。");
+            Assert(erafl.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.EraFlCompatibilityModule.DataTableXmlLeadingBomBehavior),
+                "erafl 计划必须声明 DT_FROMXML 前导 BOM 剥离 quirk（datatable.xml-leading-bom.v1）。");
+            Assert(!v24.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.EraFlCompatibilityModule.DataTableXmlLeadingBomBehavior),
+                "v24pure 不得声明 erafl 的前导 BOM 剥离 quirk（DT_FROMXML 共享路径必须保持零变化）。");
             Assert(!v24.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.EraFlCompatibilityModule.FloatLiteralsBehavior),
                 "v24pure 不得声明 erafl 浮点字面量 quirk。");
             Assert(v24.Plan.CapabilityIds.Count == 0, "v24pure 不应声明任何 capability。");
@@ -180,13 +184,15 @@ static class Program
                 && erafl.EraFl.ShouldSubmitBlankPointerStringInput(2, true),
                 "erafl 会话的三项布尔 quirk 必须由 capability 账本派生为真。");
             Assert(erafl.EraFl.AllowsFloatLiterals && erafl.EraFl.AllowsOutKeyword
-                && erafl.EraFl.UsesSafeArithmeticGuard && erafl.EraFl.AllowsExtendedHtmlAttributes,
-                "erafl 会话的四项蛇系血继承 quirk 必须由 capability 账本派生为真。");
+                && erafl.EraFl.UsesSafeArithmeticGuard && erafl.EraFl.AllowsExtendedHtmlAttributes
+                && erafl.EraFl.StripsLeadingBomFromDataTableXml,
+                "erafl 会话的四项蛇系血继承 quirk 与前导 BOM 剥离必须由 capability 账本派生为真。");
             Assert(!v24.EraFl.UsesExtendedDisplayHistory && !v24.EraFl.IsOmittedDefaultArgument(','),
                 "v24pure 会话不得激活 erafl quirk。");
             Assert(!v24.EraFl.AllowsFloatLiterals && !v24.EraFl.AllowsOutKeyword
-                && !v24.EraFl.UsesSafeArithmeticGuard && !v24.EraFl.AllowsExtendedHtmlAttributes,
-                "v24pure 会话不得激活 erafl 蛇系血继承 quirk。");
+                && !v24.EraFl.UsesSafeArithmeticGuard && !v24.EraFl.AllowsExtendedHtmlAttributes
+                && !v24.EraFl.StripsLeadingBomFromDataTableXml,
+                "v24pure 会话不得激活 erafl 蛇系血继承 quirk 与前导 BOM 剥离。");
 
             // 描述符通道（生成清单）：plan.Dialect.Instructions/Functions 必须非空且与
             // LegacyDialectInventories 生成数据逐量一致——这是描述符路由激活的前置契约。

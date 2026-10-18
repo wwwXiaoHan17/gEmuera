@@ -870,6 +870,7 @@ namespace MinorShift.Emuera.Compatibility
     public bool AllowsOutKeyword => false;
     public bool UsesSafeArithmeticGuard => false;
     public bool AllowsExtendedHtmlAttributes => false;
+    public bool StripsLeadingBomFromDataTableXml => false;
     public string TaskStartRoomLookupFunction => string.Empty;
     public string GMapQuestType => string.Empty;
     public bool IsOmittedDefaultArgument(char currentToken) => false;
@@ -922,6 +923,7 @@ internal sealed class LegacyEraFlCompatibilityPolicy : IEraFlCompatibilityPolicy
     public bool AllowsOutKeyword => capabilities.Contains(EraFlCompatibilityModule.OutKeywordBehavior);
     public bool UsesSafeArithmeticGuard => capabilities.Contains(EraFlCompatibilityModule.SafeArithmeticGuardBehavior);
     public bool AllowsExtendedHtmlAttributes => capabilities.Contains(EraFlCompatibilityModule.ExtendedHtmlAttributesBehavior);
+    public bool StripsLeadingBomFromDataTableXml => capabilities.Contains(EraFlCompatibilityModule.DataTableXmlLeadingBomBehavior);
     public string TaskStartRoomLookupFunction => HasDynamicMap ? EraFlCompatibilityModule.TaskStartRoomLookupFunction : string.Empty;
     public string GMapQuestType => HasDynamicMap ? EraFlCompatibilityModule.GMapQuestType : string.Empty;
     public bool IsOmittedDefaultArgument(char currentToken) =>

@@ -71,13 +71,16 @@ internal static class Program
             AssertParserInstruction(legacyAssembly, instructionType, profileType, snake, "GETARGCOUNT", expected: false);
             AssertParserInstruction(legacyAssembly, instructionType, profileType, snake, "GROTATE", expected: false);
 
-            AssertV24ScopedVariableParser(legacyAssembly, instructionType, profileType, v24);
+            AssertV24ScopedVariableParser(legacyAssembly, instructionType, profileType, v24, "v24pure");
             AssertPluginFloatParameter(legacyAssembly);
 
             // 描述符通道漂移门禁：plan 清单（LegacyDialectInventories 生成镜像）必须覆盖
             // 引擎真实投影的每个名字。v24pure/snake/erafl 三闭包逐名核对——引擎注册表或
             // 方言桥层名单变化而未重新生成清单时，这里必须失败。
             object erafl = CreateProfile(profileType, "erafl", scopedVariableInstructionsEnabled: true);
+            // eraFL 的 VARI/VARS 在注册表上是 snake 指令，但脚本风格是 v24 系（声明后可
+            // 立即使用），所以解析期登记契约与 v24pure 一致（eraFL0.49 QUEST_57 实证）。
+            AssertV24ScopedVariableParser(legacyAssembly, instructionType, profileType, erafl, "erafl");
             var eraflInstructions = GetRegistryKeys(instructionType, "GetInstructionNameDic", profileType, erafl);
             var eraflFunctions = GetRegistryKeys(functionType, "GetMethodList", profileType, erafl);
             object v18 = CreateProfile(profileType, "v18", scopedVariableInstructionsEnabled: true);
@@ -335,7 +338,8 @@ internal static class Program
         Assembly legacyAssembly,
         Type instructionType,
         Type profileType,
-        object profile)
+        object profile,
+        string profileName)
     {
         Type globalsType = RequiredType(legacyAssembly, "MinorShift.Emuera.GlobalStatic");
         Type programType = RequiredType(legacyAssembly, "MinorShift.Emuera.Program");
@@ -388,6 +392,9 @@ internal static class Program
             AssertScopedVariable("VARI SCORE = 42", "SCORE", expectedString: false, expectedLengths: new[] { 1 }, expectedInitialValue: "42");
             AssertScopedVariable("VARS NAME = \"Ada\"", "NAME", expectedString: true, expectedLengths: new[] { 1 }, expectedInitialValue: "Ada");
             AssertScopedVariable("VARI GRID, 2, 3", "GRID", expectedString: false, expectedLengths: new[] { 2, 3 }, expectedInitialValue: "0");
+            // IGNORE CASE:YES 下声明名必须归一为大写登记，否则 FOR nLoop 这类按大写查找的
+            // 使用点会误报未定义（eraFL0.49 QUEST_57 的 nLOOP 实证）。
+            AssertScopedVariable("VARI loopIdx = 7", "LOOPIDX", expectedString: false, expectedLengths: new[] { 1 }, expectedInitialValue: "7");
         }
         finally
         {
@@ -414,28 +421,28 @@ internal static class Program
             object stream = Activator.CreateInstance(streamType, source)
                 ?? throw new InvalidOperationException("StringStream construction failed.");
             object? line = parseLine.Invoke(null, new[] { stream, Activator.CreateInstance(positionType), null, label });
-            Assert(line?.GetType().FullName == "MinorShift.Emuera.GameProc.InstructionLine", $"v24 did not parse '{source}' as an instruction.");
+            Assert(line?.GetType().FullName == "MinorShift.Emuera.GameProc.InstructionLine", $"{profileName} did not parse '{source}' as an instruction.");
 
             object privateVariable = getPrivateVariable.Invoke(label, new object[] { name })
-                ?? throw new InvalidOperationException($"v24 did not register private variable '{name}'.");
+                ?? throw new InvalidOperationException($"{profileName} did not register private variable '{name}'.");
             PropertyInfo isString = privateVariable.GetType().GetProperty("IsString", BindingFlags.Instance | BindingFlags.Public)
                 ?? throw new InvalidOperationException("UserDefinedVariableToken.IsString was not found.");
             if (isString.GetValue(privateVariable) is not bool actualString)
                 throw new InvalidOperationException("UserDefinedVariableToken.IsString did not return a Boolean value.");
-            Assert(actualString == expectedString, $"v24 private variable '{name}' has the wrong string type.");
+            Assert(actualString == expectedString, $"{profileName} private variable '{name}' has the wrong string type.");
             MethodInfo getLength = privateVariable.GetType().GetMethod("GetLength", BindingFlags.Instance | BindingFlags.Public, binder: null, types: new[] { typeof(int) }, modifiers: null)
                 ?? throw new InvalidOperationException("UserDefinedVariableToken.GetLength(int) was not found.");
             for (int index = 0; index < expectedLengths.Length; index++)
             {
                 if (getLength.Invoke(privateVariable, new object[] { index }) is not int actualLength)
                     throw new InvalidOperationException($"v24 private variable '{name}' did not return a length at dimension {index}.");
-                Assert(actualLength == expectedLengths[index], $"v24 private variable '{name}' has the wrong length at dimension {index}.");
+                Assert(actualLength == expectedLengths[index], $"{profileName} private variable '{name}' has the wrong length at dimension {index}.");
             }
 
             PropertyInfo argument = line!.GetType().GetProperty("Argument", BindingFlags.Instance | BindingFlags.Public)
                 ?? throw new InvalidOperationException("InstructionLine.Argument was not found.");
             object parsedArgument = argument.GetValue(line)
-                ?? throw new InvalidOperationException($"v24 '{source}' did not create an instruction argument.");
+                ?? throw new InvalidOperationException($"{profileName} '{source}' did not create an instruction argument.");
             string expectedArgumentType = expectedString ? "SnakeVarsArgument" : "SnakeVariArgument";
             Assert(parsedArgument.GetType().Name == expectedArgumentType, $"v24 '{source}' created '{parsedArgument.GetType().Name}', expected '{expectedArgumentType}'.");
             FieldInfo initialValue = parsedArgument.GetType().GetField("InitialValue", BindingFlags.Instance | BindingFlags.Public)
