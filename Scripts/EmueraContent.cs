@@ -396,6 +396,13 @@ public partial class EmueraContent : Control
 	const string MaxVisibleLinesKey = "MaxVisibleLines";
 	const string ContentPinchZoomEnabledKey = "ContentPinchZoomEnabled";
 	const string ConsoleRenderBackendKey = "ConsoleRenderBackend";
+	// 游戏界面左右额外留白（移动端安全区微调）：正值增加留白、负值减少留白，单位=视口像素。
+	// 部分全面屏/曲面屏的 DisplayServer 安全区在左侧报告过大或过小，导致左侧留白区域
+	// 显示异常；该值在安全区矩形上再做一次水平修正，并把修正后的宽度同步给 legacy 布局宽度。
+	public const int MinGameViewHorizontalPadding = -240;
+	public const int MaxGameViewHorizontalPadding = 240;
+	const string GameViewLeftPaddingKey = "GameViewLeftPadding";
+	const string GameViewRightPaddingKey = "GameViewRightPadding";
 	// Legacy runner 专用的显示后端覆盖值，不写入用户设置，避免影响正常启动。
 	static string m0RunnerDisplayBackendOverride;
 	const ulong QuickInputGateFallbackMs = 500;
@@ -403,6 +410,8 @@ public partial class EmueraContent : Control
 	static int configuredMaxVisibleLines = -1;
 	static bool contentPinchZoomEnabled = false;
 	static bool contentPinchZoomEnabledLoaded = false;
+	static int gameViewLeftPadding = int.MinValue;
+	static int gameViewRightPadding = int.MinValue;
 
 	// Processing label shown while the emuera worker is busy.
 	Label inProcessLabel;
@@ -535,33 +544,60 @@ public partial class EmueraContent : Control
 		}
 
 		var fullRect = new Rect2(Vector2.Zero, viewportSize);
+		Rect2 safeRect = fullRect;
+		if (OS.HasFeature("mobile"))
+		{
+			try
+			{
+				Rect2I displaySafeArea = DisplayServer.GetDisplaySafeArea();
+				if (displaySafeArea.Size.X > 0 && displaySafeArea.Size.Y > 0)
+				{
+					Vector2I window = DisplayServer.WindowGetSize();
+					Vector2 sourceSize = new Vector2(window.X, window.Y);
+					if (sourceSize.X <= 0 || sourceSize.Y <= 0)
+						sourceSize = viewportSize;
+
+					float scaleX = viewportSize.X / sourceSize.X;
+					float scaleY = viewportSize.Y / sourceSize.Y;
+					var safe = new Rect2(
+						new Vector2(displaySafeArea.Position.X * scaleX, displaySafeArea.Position.Y * scaleY),
+						new Vector2(displaySafeArea.Size.X * scaleX, displaySafeArea.Size.Y * scaleY));
+					safeRect = ClampRectToViewport(safe, viewportSize, fullRect);
+				}
+			}
+			catch
+			{
+				safeRect = fullRect;
+			}
+		}
+		return ApplyGameViewHorizontalPadding(safeRect, viewportSize);
+	}
+
+	/// <summary>
+	/// 在系统安全区矩形上叠加用户水平留白微调（仅移动端）。正 left/right = 增加对应侧留白；
+	/// 负值 = 减少（最多收回到视口边缘）。宽度下限与 Android 动态宽度策略一致（320px），
+	/// 避免根内容比 legacy 布局宽度更窄造成错位。
+	/// </summary>
+	static Rect2 ApplyGameViewHorizontalPadding(Rect2 safeRect, Vector2 viewportSize)
+	{
 		if (!OS.HasFeature("mobile"))
-			return fullRect;
+			return safeRect;
+		int left = GameViewLeftPadding;
+		int right = GameViewRightPadding;
+		if (left == 0 && right == 0)
+			return safeRect;
 
-		Rect2I displaySafeArea;
-		try
+		float x0 = Mathf.Clamp(safeRect.Position.X + left, 0f, viewportSize.X);
+		float x1 = Mathf.Clamp(safeRect.Position.X + safeRect.Size.X - right, 0f, viewportSize.X);
+		// 与 Android 动态宽度策略保持一致：留白再大也不能把内容区压到 MinDynamicContentWidth 以下，
+		// 否则 legacy 布局宽度会被钳到 320 而根内容更窄，产生左右错位。
+		float minWidth = Mathf.Min(MinDynamicContentWidth, viewportSize.X);
+		if (x1 - x0 < minWidth)
 		{
-			displaySafeArea = DisplayServer.GetDisplaySafeArea();
+			x1 = Mathf.Min(viewportSize.X, x0 + minWidth);
+			x0 = Mathf.Max(0f, x1 - minWidth);
 		}
-		catch
-		{
-			return fullRect;
-		}
-
-		if (displaySafeArea.Size.X <= 0 || displaySafeArea.Size.Y <= 0)
-			return fullRect;
-
-		Vector2I window = DisplayServer.WindowGetSize();
-		Vector2 sourceSize = new Vector2(window.X, window.Y);
-		if (sourceSize.X <= 0 || sourceSize.Y <= 0)
-			sourceSize = viewportSize;
-
-		float scaleX = viewportSize.X / sourceSize.X;
-		float scaleY = viewportSize.Y / sourceSize.Y;
-		var safe = new Rect2(
-			new Vector2(displaySafeArea.Position.X * scaleX, displaySafeArea.Position.Y * scaleY),
-			new Vector2(displaySafeArea.Size.X * scaleX, displaySafeArea.Size.Y * scaleY));
-		return ClampRectToViewport(safe, viewportSize, fullRect);
+		return new Rect2(x0, safeRect.Position.Y, x1 - x0, safeRect.Size.Y);
 	}
 
 	static Rect2 ClampRectToViewport(Rect2 rect, Vector2 viewportSize, Rect2 fallback)
@@ -708,6 +744,68 @@ public partial class EmueraContent : Control
 		cfg.Load(SettingsPath);
 		contentPinchZoomEnabled = (bool)cfg.GetValue(SettingsSection, ContentPinchZoomEnabledKey, false);
 		contentPinchZoomEnabledLoaded = true;
+	}
+
+	/// <summary>
+	/// 游戏界面左侧额外留白（px，正值增加、负值减少）。仅移动端生效：
+	/// 用于修正部分全面屏/曲面屏上 DisplayServer 安全区左侧留白显示异常。
+	/// 修改后立即重新套用安全区布局并同步 legacy 布局宽度（含 Android 动态宽度）。
+	/// </summary>
+	public static int GameViewLeftPadding
+	{
+		get
+		{
+			if (gameViewLeftPadding == int.MinValue)
+				gameViewLeftPadding = LoadGameViewHorizontalPadding(GameViewLeftPaddingKey);
+			return gameViewLeftPadding;
+		}
+		set
+		{
+			int clamped = Mathf.Clamp(value, MinGameViewHorizontalPadding, MaxGameViewHorizontalPadding);
+			if (gameViewLeftPadding == clamped)
+				return;
+			gameViewLeftPadding = clamped;
+			SaveGameViewHorizontalPadding(GameViewLeftPaddingKey, clamped);
+			instance?.ApplySafeAreaLayout(true);
+		}
+	}
+
+	/// <summary>游戏界面右侧额外留白（px，正值增加、负值减少）。语义同 <see cref="GameViewLeftPadding"/>。</summary>
+	public static int GameViewRightPadding
+	{
+		get
+		{
+			if (gameViewRightPadding == int.MinValue)
+				gameViewRightPadding = LoadGameViewHorizontalPadding(GameViewRightPaddingKey);
+			return gameViewRightPadding;
+		}
+		set
+		{
+			int clamped = Mathf.Clamp(value, MinGameViewHorizontalPadding, MaxGameViewHorizontalPadding);
+			if (gameViewRightPadding == clamped)
+				return;
+			gameViewRightPadding = clamped;
+			SaveGameViewHorizontalPadding(GameViewRightPaddingKey, clamped);
+			instance?.ApplySafeAreaLayout(true);
+		}
+	}
+
+	static int LoadGameViewHorizontalPadding(string key)
+	{
+		var cfg = new ConfigFile();
+		cfg.Load(SettingsPath);
+		return Mathf.Clamp(
+			(int)cfg.GetValue(SettingsSection, key, 0),
+			MinGameViewHorizontalPadding,
+			MaxGameViewHorizontalPadding);
+	}
+
+	static void SaveGameViewHorizontalPadding(string key, int value)
+	{
+		var cfg = new ConfigFile();
+		cfg.Load(SettingsPath);
+		cfg.SetValue(SettingsSection, key, value);
+		cfg.Save(SettingsPath);
 	}
 
 	public static bool ConfigureLegacyRunnerDisplayBackend(string value, out string errorMessage)
