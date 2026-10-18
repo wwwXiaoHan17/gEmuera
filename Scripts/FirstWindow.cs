@@ -513,10 +513,24 @@ public partial class FirstWindow : Control
 
 	Control CreateGameContent()
 	{
+		// Why（布局回归修复 2026-10-18）：展开「兼容设置」后（高级模式 + profile +
+		// 兼容包勾选列表 + 手动路径，最多再叠加 64 个包候选行）内容最小高度会超过
+		// 648p 窗口的可用内容区；VBox 在子项最小高度之和超出自身高度时不会收缩，
+		// 会把 ItemList/浏览按钮/Start 依次挤出 contentStack 底边并与状态行重叠
+		//（用户截图：展开后整块内容盖住游戏列表与底部按钮）。整块游戏页放进
+		// ScrollContainer 后：内容装得下时仍按窗口高度铺满（VBox 拿到视口高度），
+		// 装不下时出现滚动条，任何窗口高度都不会把控件渲染到 panel 之外。
+		var scroll = new ScrollContainer();
+		scroll.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		scroll.SizeFlagsVertical = SizeFlags.ExpandFill;
+		scroll.HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled;
+		ApplyWideVerticalScrollbar(scroll.GetVScrollBar());
+
 		var content = new VBoxContainer();
 		content.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 		content.SizeFlagsVertical = SizeFlags.ExpandFill;
 		content.AddThemeConstantOverride("separation", 12);
+		scroll.AddChild(content);
 
 		// 兼容设置默认折叠（移动端优先：游戏列表第一眼可见），折叠开关在
 		// CreateCompatibilitySettings 内部构建。
@@ -524,7 +538,10 @@ public partial class FirstWindow : Control
 
 		gameList = new ItemList();
 		gameList.SizeFlagsVertical = SizeFlags.ExpandFill;
-		gameList.CustomMinimumSize = new Vector2(0, 260);
+		// 120 而非 260：展开兼容设置时（648p 窗口）让「高级模式/profile/兼容包/手动路径」
+		// 与列表、浏览行、Start 在可用高度内全部可见；窗口更高时 ExpandFill 会把列表
+		// 重新拉满。窗口更小或兼容包候选很多时由外层 ScrollContainer 兜底滚动。
+		gameList.CustomMinimumSize = new Vector2(0, 120);
 		gameList.AddThemeFontSizeOverride("font_size", 20);
 		gameList.AddThemeConstantOverride("v_separation", 12);
 		gameList.AddThemeConstantOverride("line_separation", 8);
@@ -547,7 +564,7 @@ public partial class FirstWindow : Control
 		startButton.Pressed += OnStartPressed;
 		content.AddChild(startButton);
 
-		return content;
+		return scroll;
 	}
 
 	Control CreateCompatibilitySettings()
