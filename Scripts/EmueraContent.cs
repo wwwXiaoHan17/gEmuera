@@ -359,6 +359,13 @@ public partial class EmueraContent : Control
 	float contentPinchStartScale = 1.0f;
 	int contentPinchTouchCount = 0;
 	bool contentPinchFocusValid = false;
+	// 双指缩放锚点：手势开始时捏合中心下的内容点（内容坐标）。整个手势期间保持
+	// 该点跟随当前捏合中心，避免每帧从“上一帧滚动位置”反推焦点形成的反馈/取整抖动。
+	Vector2 contentPinchFocusContent = Vector2.Zero;
+	// 原始触摸抖动低通滤波（spread/center 每帧向原始值收敛）；消除双指缩放时
+	// 触摸采样噪声导致的屏幕抽搐（scale 在小数点后反复抖动）。
+	Vector2 contentPinchFilteredCenter = Vector2.Zero;
+	float contentPinchFilteredSpread = 0.0f;
 	Vector2 scaleFocusContentPoint = Vector2.Zero;
 	Vector2 scaleFocusLocalPoint = Vector2.Zero;
 
@@ -5983,31 +5990,43 @@ public partial class EmueraContent : Control
 		quickButtons?.RefreshSizing();
 	}
 
-	// 悬浮窗仅桌面端可用：Android 上嵌入 Window（内部依赖 SubViewport 合成）在
-	// gl_compatibility 下内容不渲染（与日志/DEBUG 面板同因），保持画布内嵌。
-	static bool IsQuickFloatingSupported => !OS.HasFeature("mobile");
+	// 悬浮仅表示“面板可脱离右下角自由摆放”，不再等于“需要原生 OS 窗口”：
+	// 桌面端用 Godot Window 原生宿主；移动端用画布内拖拽浮层（QuickButtons
+	// FloatingOverlayMode），不依赖 Windows/嵌入 Window 组件，Android 同样可用。
+	static bool IsQuickFloatingSupported => true;
 
-	// 按配置挂载 quick 面板宿主：悬浮模式（桌面端）用 Godot Window 组件承载，
-	// 否则直接挂主节点。挂载/迁移后 quickButtons 自身布局按锚点配置重排。
+	// 按配置挂载 quick 面板宿主：桌面悬浮模式用 Godot Window 组件承载；移动端
+	// 悬浮模式留在主画布内由 QuickButtons 自行摆放（顶部拖动条移动）；非悬浮
+	// 模式直接挂主节点。挂载/迁移后 quickButtons 自身布局按锚点配置重排。
 	void MountQuickButtonsHost()
 	{
 		if (quickButtons == null)
 			return;
-		if (QuickButtons.FloatingEnabled && IsQuickFloatingSupported)
+		if (QuickButtons.FloatingEnabled)
 		{
+			if (OS.HasFeature("mobile"))
+			{
+				quickFloatingWindow = null;
+				quickButtons.FloatingOverlayMode = true;
+				quickButtons.FloatingHosted = true;
+				quickButtons.WindowDragEnabled = false;
+				AddChild(quickButtons);
+				return;
+			}
+			quickButtons.FloatingOverlayMode = false;
 			quickFloatingWindow = new QuickFloatingWindow();
 			quickFloatingWindow.AttachQuick(quickButtons);
 			AddChild(quickFloatingWindow);
+			return;
 		}
-		else
-		{
-			quickFloatingWindow = null;
-			// 内嵌模式复位悬浮宿主状态：移动端即使同步到悬浮设置，锚点也回到
-			// 常规位置（右下角），面板拖动恢复为滚动语义。
-			quickButtons.FloatingHosted = false;
-			quickButtons.WindowDragEnabled = false;
-			AddChild(quickButtons);
-		}
+
+		quickFloatingWindow = null;
+		quickButtons.ResetFloatingOverlayState();
+		// 内嵌模式复位悬浮宿主状态：移动端即使同步到悬浮设置，锚点也回到
+		// 常规位置（右下角），面板拖动恢复为滚动语义。
+		quickButtons.FloatingHosted = false;
+		quickButtons.WindowDragEnabled = false;
+		AddChild(quickButtons);
 	}
 
 	// 设置页切换"悬浮窗"开关后重建宿主（节点迁移保留面板状态，无重建成本）。
@@ -6015,9 +6034,12 @@ public partial class EmueraContent : Control
 	{
 		if (quickButtons == null)
 			return;
-		bool shouldFloat = QuickButtons.FloatingEnabled && IsQuickFloatingSupported;
-		bool isFloating = quickFloatingWindow != null && GodotObject.IsInstanceValid(quickFloatingWindow);
-		if (shouldFloat == isFloating)
+		bool wantsFloating = QuickButtons.FloatingEnabled;
+		bool wantsWindow = wantsFloating && !OS.HasFeature("mobile");
+		bool wantsOverlay = wantsFloating && OS.HasFeature("mobile");
+		bool isWindow = quickFloatingWindow != null && GodotObject.IsInstanceValid(quickFloatingWindow);
+		bool isOverlay = quickButtons.FloatingOverlayMode;
+		if (wantsWindow == isWindow && wantsOverlay == isOverlay)
 			return;
 
 		var oldParent = quickButtons.GetParent();
@@ -6031,6 +6053,7 @@ public partial class EmueraContent : Control
 			quickFloatingWindow.QueueFree();
 			quickFloatingWindow = null;
 		}
+		quickButtons.ResetFloatingOverlayState();
 		MountQuickButtonsHost();
 		quickButtons.RefreshSizing();
 	}
@@ -7260,11 +7283,19 @@ public partial class EmueraContent : Control
 		if (contentPinchTouchCount != ContentPinchTouchCount)
 			return;
 
-		if (!TryGetContentTouchMetrics(out _, out _, out var spread) || spread < ContentPinchMinSpread)
+		if (!TryGetContentTouchMetrics(out _, out var center, out var spread) || spread < ContentPinchMinSpread)
 			return;
 
 		contentPinchStartSpread = spread;
 		contentPinchStartScale = contentScale;
+		contentPinchFilteredSpread = spread;
+		contentPinchFilteredCenter = center;
+		var rect = scrollContainer.GetGlobalRect();
+		var localFocus = center - rect.Position;
+		localFocus.X = Mathf.Clamp(localFocus.X, 0.0f, rect.Size.X);
+		localFocus.Y = Mathf.Clamp(localFocus.Y, 0.0f, rect.Size.Y);
+		float scale = Mathf.Max(contentScale, 0.001f);
+		contentPinchFocusContent = (GetCurrentContentScrollVector() + localFocus) / scale;
 		contentPinchActive = true;
 	}
 
@@ -7278,7 +7309,10 @@ public partial class EmueraContent : Control
 	}
 
 	// Convert pinch spread ratio into a scale value while keeping the pinch center
-	// visually anchored.
+	// visually anchored. Uses a fixed content anchor captured at gesture start and
+	// a low-pass filter on raw touch samples; recomputing the anchor every frame
+	// from the previous scroll (old behavior) fed integer scroll rounding back
+	// into the next frame and made the screen visibly jitter/twitch.
 	void UpdateContentPinchZoom()
 	{
 		if (!contentPinchActive)
@@ -7298,24 +7332,53 @@ public partial class EmueraContent : Control
 		if (spread < ContentPinchMinSpread || contentPinchStartSpread < ContentPinchMinSpread)
 			return;
 
-		float ratio = spread / contentPinchStartSpread;
-		if (Mathf.Abs(ratio - 1.0f) < ContentPinchScaleDeadZone)
-			return;
+		// Touch noise filter: converge toward raw samples instead of snapping to
+		// them. Pinch spread noise maps directly to scale noise, which is the
+		// "screen twitch" users see even when fingers are held still.
+		const float pinchSampleSmoothing = 0.35f;
+		contentPinchFilteredSpread = Mathf.Lerp(contentPinchFilteredSpread, spread, pinchSampleSmoothing);
+		contentPinchFilteredCenter = contentPinchFilteredCenter.Lerp(center, pinchSampleSmoothing);
 
-		float targetScale = ClampContentScale(contentPinchStartScale * ratio);
+		float ratio = contentPinchFilteredSpread / contentPinchStartSpread;
+		float targetScale = contentScale;
+		if (Mathf.Abs(ratio - 1.0f) >= ContentPinchScaleDeadZone)
+			targetScale = ClampContentScale(contentPinchStartScale * ratio);
+		bool scaleChanged = Mathf.Abs(targetScale - contentScale) >= ContentScaleEpsilon;
 		bool atLowerLimit = targetScale <= ContentScaleMin + ContentScaleEpsilon && ratio < 1.0f;
 		bool atUpperLimit = targetScale >= ContentScaleMax - ContentScaleEpsilon && ratio > 1.0f;
-		if (Mathf.Abs(targetScale - contentScale) < ContentScaleEpsilon)
+
+		if (scaleChanged)
 		{
-			if (atLowerLimit || atUpperLimit)
-				RebaseContentPinch(spread);
-			return;
+			ApplyContentScaleValue(targetScale);
+			UpdateScaleBounds(false);
+			ApplyContentScaleTransform();
 		}
 
-		SetContentScaleKeepingFocus(targetScale, center);
+		// Apply both zoom and two-finger pan from the fixed anchor each update, so
+		// the content point under the pinch center is stable frame to frame.
+		var rect = scrollContainer.GetGlobalRect();
+		var localFocus = contentPinchFilteredCenter - rect.Position;
+		localFocus.X = Mathf.Clamp(localFocus.X, 0.0f, rect.Size.X);
+		localFocus.Y = Mathf.Clamp(localFocus.Y, 0.0f, rect.Size.Y);
+		RestoreContentScaleFocus(contentPinchFocusContent, localFocus);
+		scaleFocusContentPoint = contentPinchFocusContent;
+		scaleFocusLocalPoint = localFocus;
+		contentPinchFocusValid = true;
+		UpdatePointerPosition(contentPinchFilteredCenter);
+
 		if (atLowerLimit || atUpperLimit)
-			RebaseContentPinch(spread);
-		UpdatePointerPosition(center);
+			RebaseContentPinch(contentPinchFilteredSpread);
+	}
+
+	Vector2 GetCurrentContentScrollVector()
+	{
+		// 锚点必须以“用户当前看到的滚动位置”为准；desiredContentScroll 可能尚未
+		// 应用到 ScrollContainer，用它会让手势第一帧出现跳变。
+		if (scrollContainer == null)
+			return Vector2.Zero;
+		return new Vector2(
+			NormalizeContentHorizontalScroll(scrollContainer.ScrollHorizontal),
+			scrollContainer.ScrollVertical);
 	}
 
 	// Clamp requested zoom to the supported mobile range.
@@ -7324,11 +7387,16 @@ public partial class EmueraContent : Control
 		return Mathf.Clamp(scale, ContentScaleMin, ContentScaleMax);
 	}
 
-	// Reset pinch baseline when the gesture hits a zoom limit.
+	// Reset pinch baseline when the gesture hits a zoom limit. The content anchor
+	// must be recomputed from the current scroll, because the old anchor may now
+	// point outside the clamped scroll range.
 	void RebaseContentPinch(float spread)
 	{
 		contentPinchStartSpread = Mathf.Max(spread, ContentPinchMinSpread);
 		contentPinchStartScale = contentScale;
+		contentPinchFilteredSpread = contentPinchStartSpread;
+		float scale = Mathf.Max(contentScale, 0.001f);
+		contentPinchFocusContent = (GetCurrentContentScrollVector() + scaleFocusLocalPoint) / scale;
 	}
 
 	// Return center/spread for the active two-finger gesture.
@@ -7428,6 +7496,9 @@ public partial class EmueraContent : Control
 		contentPinchFocusValid = false;
 		contentPinchStartSpread = 0.0f;
 		contentPinchStartScale = contentScale;
+		contentPinchFilteredSpread = 0.0f;
+		contentPinchFilteredCenter = Vector2.Zero;
+		contentPinchFocusContent = Vector2.Zero;
 		contentPinchTouchCount = 0;
 		contentTouchPositions.Clear();
 	}

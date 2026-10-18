@@ -26,7 +26,13 @@ public partial class QuickButtons : CanvasLayer
 	bool dragMoved;
 	bool floatingHosted;
 	bool windowDragEnabled;
+	bool floatingOverlayMode;
 	bool draggingWindow;
+	bool floatingDragActive;
+	Vector2 floatingDragLastPosition;
+	Vector2 floatingPanelPosition = new Vector2(-1, -1);
+	Control floatingDragBar;
+	Label floatingDragGrip;
 	bool quickInputEnabled = true;
 	bool scrollToBottomAfterLayout = true;
 	bool quickInertiaActive;
@@ -51,6 +57,9 @@ public partial class QuickButtons : CanvasLayer
 	const string QuickButtonFontSizeKey = "QuickButtonFontSize";
 	const string QuickFlipKey = "QuickFlip";
 	const string QuickFloatingKey = "QuickFloating";
+	const string QuickFloatingXKey = "QuickFloatingX";
+	const string QuickFloatingYKey = "QuickFloatingY";
+	const int FloatingDragBarHeight = 26;
 	const int DefaultQuickButtonFontSize = 12;
 	const int DefaultQuickButtonWidth = 90;
 	public const int MinQuickButtonFontSize = 8;
@@ -76,6 +85,8 @@ public partial class QuickButtons : CanvasLayer
 	static int configuredFontSize = -1;
 	static bool configuredFlip;
 	static bool configuredFloating;
+	static int configuredFloatingX = -1;
+	static int configuredFloatingY = -1;
 
 	// Component interface: the panel advertises its own show/hide state changes
 	// so host scenes can react without polling. Emitted purely additively;
@@ -163,8 +174,48 @@ public partial class QuickButtons : CanvasLayer
 		set => windowDragEnabled = value;
 	}
 
-	/// <summary>面板拖动位移（逻辑像素；1:1 内容下即物理像素），由悬浮宿主订阅以移动窗口。</summary>
+	/// <summary>面板拖动位移（逻辑像素；1:1 内容下即物理像素），由桌面原生窗口宿主订阅以移动窗口。</summary>
 	public event Action<Vector2> WindowDragRequested;
+
+	/// <summary>
+	/// 移动端/无原生窗口环境的悬浮模式：面板不放进 Window，而是留在主画布内由
+	/// 本类自行摆放位置；顶部提供专用拖动条（不依赖 OS 标题栏，也不使用任何
+	/// Windows 原生窗口组件）。桌面端仍走 QuickFloatingWindow 原生窗口。
+	/// </summary>
+	public bool FloatingOverlayMode
+	{
+		get => floatingOverlayMode;
+		set
+		{
+			if (floatingOverlayMode == value)
+				return;
+			floatingOverlayMode = value;
+			if (floatingDragBar != null)
+				floatingDragBar.Visible = value;
+			RequestPanelSizeUpdate(false);
+		}
+	}
+
+	/// <summary>当前悬浮面板左上角（画布坐标）；仅在 <see cref="FloatingOverlayMode"/> 下有效。</summary>
+	public Vector2 FloatingPanelPosition => floatingPanelPosition;
+
+	/// <summary>拖动条位移：限制在安全区内并立即重排（供拖动条自身的输入处理调用）。</summary>
+	public void MoveFloatingPanelBy(Vector2 delta)
+	{
+		if (!floatingOverlayMode || delta == Vector2.Zero)
+			return;
+		floatingPanelPosition += delta;
+		RequestPanelSizeUpdate(false);
+	}
+
+	/// <summary>宿主丢失/迁移时复位悬浮层状态，避免旧位置影响常规锚点布局。</summary>
+	public void ResetFloatingOverlayState()
+	{
+		floatingOverlayMode = false;
+		floatingDragActive = false;
+		if (floatingDragBar != null)
+			floatingDragBar.Visible = false;
+	}
 
 	// 布局锚点派生：翻转 → 面板靠左；悬浮且真正被 Window 承载 → 贴左贴顶。
 	bool AnchoredLeft => configuredFlip || (configuredFloating && floatingHosted);
@@ -181,6 +232,9 @@ public partial class QuickButtons : CanvasLayer
 		EnsureSettingsLoaded();
 		Visible = false;
 		Layer = 90;
+		floatingPanelPosition = configuredFloatingX >= 0 && configuredFloatingY >= 0
+			? new Vector2(configuredFloatingX, configuredFloatingY)
+			: new Vector2(-1, -1);
 		// _Process 只服务惯性滚动；空闲时关闭，避免 Android 上每帧一次
 		// native→managed 调用（面板隐藏是常态，StartQuickInertia 会按需重开）。
 		SetProcess(false);
@@ -233,6 +287,28 @@ public partial class QuickButtons : CanvasLayer
 		resizeStripe.MouseFilter = Control.MouseFilterEnum.Ignore;
 		resizeHandle.AddChild(resizeStripe);
 
+		// 移动端悬浮拖动条：不依赖原生标题栏；只有 overlay 悬浮模式可见。
+		// 拖动条位于面板上方（不遮挡按钮），拖动时移动整个面板并持久化位置。
+		floatingDragBar = new Control();
+		floatingDragBar.MouseFilter = Control.MouseFilterEnum.Stop;
+		floatingDragBar.MouseDefaultCursorShape = Control.CursorShape.Move;
+		floatingDragBar.Visible = false;
+		floatingDragBar.GuiInput += OnFloatingDragBarGuiInput;
+		layerRoot.AddChild(floatingDragBar);
+		var dragBarBg = new ColorRect();
+		dragBarBg.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+		dragBarBg.Color = new Color(0.12f, 0.13f, 0.16f, 0.72f);
+		dragBarBg.MouseFilter = Control.MouseFilterEnum.Ignore;
+		floatingDragBar.AddChild(dragBarBg);
+		floatingDragGrip = new Label();
+		floatingDragGrip.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+		floatingDragGrip.HorizontalAlignment = HorizontalAlignment.Center;
+		floatingDragGrip.VerticalAlignment = VerticalAlignment.Center;
+		floatingDragGrip.Text = "⋮⋮";
+		floatingDragGrip.MouseFilter = Control.MouseFilterEnum.Ignore;
+		floatingDragGrip.AddThemeFontSizeOverride("font_size", 12);
+		floatingDragGrip.AddThemeColorOverride("font_color", new Color(1, 1, 1, 0.7f));
+		floatingDragBar.AddChild(floatingDragGrip);
 		scroll = new ScrollContainer();
 		ConfigureQuickScrollContainer();
 		scroll.MouseFilter = Control.MouseFilterEnum.Pass;
@@ -1051,6 +1127,11 @@ public partial class QuickButtons : CanvasLayer
 	{
 		if (!IsControlAlive(panel) || !IsControlAlive(resizeHandle))
 			return;
+		if (floatingOverlayMode)
+		{
+			ApplyFloatingOverlayPanelSize(width, height);
+			return;
+		}
 		var safeRect = GetSafeRect();
 		float rightMargin = 20 + GetSafeRightInset(safeRect);
 		float bottomMargin = 20 + GetSafeBottomInset(safeRect);
@@ -1105,6 +1186,105 @@ public partial class QuickButtons : CanvasLayer
 			resizeHandle.OffsetTop = -bottomMargin - height;
 			resizeHandle.OffsetBottom = -bottomMargin;
 		}
+	}
+
+	// 移动端悬浮层布局：面板位置完全由 floatingPanelPosition 决定（安全区内钳制），
+	// 面板上方保留专用拖动条；不使用 Window/OS 标题栏，因此 Android 同样可用。
+	void ApplyFloatingOverlayPanelSize(float width, float height)
+	{
+		var safeRect = GetSafeRect();
+		float barHeight = FloatingDragBarHeight;
+		Vector2 pos = floatingPanelPosition;
+		if (pos.X < 0 || pos.Y < 0)
+		{
+			pos = new Vector2(
+				safeRect.Position.X + safeRect.Size.X - width - 20,
+				safeRect.Position.Y + safeRect.Size.Y - height - barHeight - 20);
+		}
+		float maxX = Mathf.Max(safeRect.Position.X, safeRect.Position.X + safeRect.Size.X - width);
+		float maxY = Mathf.Max(safeRect.Position.Y, safeRect.Position.Y + safeRect.Size.Y - height - barHeight);
+		pos.X = Mathf.Clamp(pos.X, safeRect.Position.X, maxX);
+		pos.Y = Mathf.Clamp(pos.Y, safeRect.Position.Y, maxY);
+		floatingPanelPosition = pos;
+
+		SetTopLeftLayout(panel, pos.X, pos.Y + barHeight, width, height);
+		SetTopLeftLayout(resizeHandle, pos.X + width, pos.Y + barHeight, ResizeHandleWidth, height);
+		if (floatingDragBar != null)
+		{
+			floatingDragBar.Visible = true;
+			SetTopLeftLayout(floatingDragBar, pos.X, pos.Y, width, barHeight);
+		}
+	}
+
+	static void SetTopLeftLayout(Control control, float x, float y, float width, float height)
+	{
+		if (!IsControlAlive(control))
+			return;
+		control.AnchorLeft = 0;
+		control.AnchorTop = 0;
+		control.AnchorRight = 0;
+		control.AnchorBottom = 0;
+		control.OffsetLeft = x;
+		control.OffsetTop = y;
+		control.OffsetRight = x + width;
+		control.OffsetBottom = y + height;
+	}
+
+	void OnFloatingDragBarGuiInput(InputEvent @event)
+	{
+		if (!floatingOverlayMode)
+			return;
+		if (@event is InputEventScreenTouch touch)
+		{
+			if (touch.Pressed)
+			{
+				floatingDragActive = true;
+				floatingDragLastPosition = touch.Position;
+			}
+			else if (floatingDragActive)
+			{
+				floatingDragActive = false;
+				SaveFloatingPosition();
+			}
+			GetViewport().SetInputAsHandled();
+			return;
+		}
+		if (@event is InputEventScreenDrag drag && floatingDragActive)
+		{
+			MoveFloatingPanelBy(drag.Position - floatingDragLastPosition);
+			floatingDragLastPosition = drag.Position;
+			GetViewport().SetInputAsHandled();
+			return;
+		}
+		if (@event is InputEventMouseButton mouseButton && mouseButton.ButtonIndex == MouseButton.Left)
+		{
+			if (mouseButton.Pressed)
+			{
+				floatingDragActive = true;
+				floatingDragLastPosition = mouseButton.GlobalPosition;
+			}
+			else if (floatingDragActive)
+			{
+				floatingDragActive = false;
+				SaveFloatingPosition();
+			}
+			GetViewport().SetInputAsHandled();
+			return;
+		}
+		if (@event is InputEventMouseMotion mouseMotion && floatingDragActive)
+		{
+			MoveFloatingPanelBy(mouseMotion.GlobalPosition - floatingDragLastPosition);
+			floatingDragLastPosition = mouseMotion.GlobalPosition;
+			GetViewport().SetInputAsHandled();
+		}
+	}
+
+	void SaveFloatingPosition()
+	{
+		if (!floatingOverlayMode)
+			return;
+		SaveSetting(QuickFloatingXKey, Mathf.RoundToInt(floatingPanelPosition.X));
+		SaveSetting(QuickFloatingYKey, Mathf.RoundToInt(floatingPanelPosition.Y));
 	}
 
 	Vector2 ScrollQuickBy(Vector2 delta)
@@ -1278,6 +1458,8 @@ public partial class QuickButtons : CanvasLayer
 			MaxQuickButtonFontSize);
 		configuredFlip = cfg.GetValue(SettingsSection, QuickFlipKey, false).AsBool();
 		configuredFloating = cfg.GetValue(SettingsSection, QuickFloatingKey, false).AsBool();
+		configuredFloatingX = Mathf.RoundToInt((float)(double)cfg.GetValue(SettingsSection, QuickFloatingXKey, -1));
+		configuredFloatingY = Mathf.RoundToInt((float)(double)cfg.GetValue(SettingsSection, QuickFloatingYKey, -1));
 	}
 
 	static void SaveSetting(string key, int value)

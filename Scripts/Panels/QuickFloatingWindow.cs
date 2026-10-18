@@ -21,9 +21,15 @@ public partial class QuickFloatingWindow : Window
 	const int ScreenMargin = 32;
 	const int MinWindowWidth = 180;
 	const int MinWindowHeight = 96;
+	const string SettingsPath = "user://settings.cfg";
+	const string SettingsSection = "Display";
+	const string WindowXKey = "QuickFloatingWindowX";
+	const string WindowYKey = "QuickFloatingWindowY";
 
 	QuickButtons quick;
 	bool positionInitialized;
+	int savedX = -1;
+	int savedY = -1;
 
 	/// <summary>把 QuickButtons 内容挂进本窗口；只允许在 _Ready 前调用一次。</summary>
 	public void AttachQuick(QuickButtons content)
@@ -56,6 +62,7 @@ public partial class QuickFloatingWindow : Window
 
 	public override void _Ready()
 	{
+		LoadSavedPosition();
 		// 原生窗口组件：OS 标题栏（拖动/关闭），Transient 保证盖在主窗口之上。
 		Title = MultiLanguage.Get("QuickFloatingWindow.Title", "Quick");
 		Borderless = false;
@@ -80,6 +87,7 @@ public partial class QuickFloatingWindow : Window
 
 	public override void _ExitTree()
 	{
+		SavePosition();
 		// 兜底退订（DetachQuick 之外的销毁路径，如场景卸载）。
 		CloseRequested -= OnCloseRequested;
 		if (quick != null)
@@ -98,16 +106,14 @@ public partial class QuickFloatingWindow : Window
 	void OnPadShown()
 	{
 		SyncWindowSize();
-		// 首次显示定位到主窗口右下角；之后保持用户拖动的位置。
+		// 首次显示优先恢复上次保存的位置；没有保存或已越界时落到主窗口右下角。
 		if (!positionInitialized)
 		{
-			var root = GetTree()?.Root;
-			if (root != null && GodotObject.IsInstanceValid(root))
-			{
-				Position = new Vector2I(
-					Mathf.Max(root.Position.X, root.Position.X + root.Size.X - Size.X - ScreenMargin),
-					Mathf.Max(root.Position.Y, root.Position.Y + root.Size.Y - Size.Y - ScreenMargin));
-			}
+			if (savedX >= 0 && savedY >= 0)
+				Position = new Vector2I(savedX, savedY);
+			else
+				Position = GetDefaultPosition();
+			ClampToRoot();
 			positionInitialized = true;
 		}
 		SetProcess(true);
@@ -118,8 +124,19 @@ public partial class QuickFloatingWindow : Window
 		global::gEmuera.GodotHost.EmueraDebugDialogPanel.KickEmbeddedComposite(this, contentChild);
 	}
 
+	Vector2I GetDefaultPosition()
+	{
+		var root = GetTree()?.Root;
+		if (root == null || !GodotObject.IsInstanceValid(root))
+			return new Vector2I(ScreenMargin, ScreenMargin);
+		return new Vector2I(
+			Mathf.Max(root.Position.X, root.Position.X + root.Size.X - Size.X - ScreenMargin),
+			Mathf.Max(root.Position.Y, root.Position.Y + root.Size.Y - Size.Y - ScreenMargin));
+	}
+
 	void OnPadHidden()
 	{
+		SavePosition();
 		SetProcess(false);
 		Hide();
 	}
@@ -150,6 +167,26 @@ public partial class QuickFloatingWindow : Window
 		pos.X = Mathf.Clamp(pos.X, minX, Mathf.Max(minX, minX + root.Size.X - Size.X));
 		pos.Y = Mathf.Clamp(pos.Y, minY, Mathf.Max(minY, minY + root.Size.Y - Size.Y));
 		Position = pos;
+	}
+
+	void LoadSavedPosition()
+	{
+		var cfg = new ConfigFile();
+		if (cfg.Load(SettingsPath) != Error.Ok)
+			return;
+		savedX = Mathf.RoundToInt((float)(double)cfg.GetValue(SettingsSection, WindowXKey, -1));
+		savedY = Mathf.RoundToInt((float)(double)cfg.GetValue(SettingsSection, WindowYKey, -1));
+	}
+
+	void SavePosition()
+	{
+		if (!positionInitialized)
+			return;
+		var cfg = new ConfigFile();
+		cfg.Load(SettingsPath);
+		cfg.SetValue(SettingsSection, WindowXKey, Position.X);
+		cfg.SetValue(SettingsSection, WindowYKey, Position.Y);
+		cfg.Save(SettingsPath);
 	}
 
 	// 窗口内容区 = 面板尺寸 + 四周留白（1:1 无缩放；标题栏高度由 OS 管理，

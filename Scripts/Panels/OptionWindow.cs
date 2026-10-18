@@ -281,15 +281,14 @@ public partial class OptionWindow : Control
 		quickFlipRow.AddChild(quickFlipToggle);
 
 		// 面板悬浮：桌面端用 Godot Window 组件承载（原生标题栏拖动/关闭）；
-		// Android 上嵌入 Window 在 gl_compatibility 下不渲染，故禁用。
+		// 移动端用画布内浮层 + 顶部拖动条（不依赖嵌入 Window，Android 同样可用）。
 		var quickFloatingRow = CreateRow(quickGroup, out quickFloatingLabel);
 		quickFloatingToggle = new CheckButton();
 		quickFloatingToggle.ButtonPressed = QuickButtons.FloatingEnabled;
 		quickFloatingToggle.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 		quickFloatingToggle.CustomMinimumSize = new Vector2(120, 44);
-		quickFloatingToggle.TooltipText = MultiLanguage.Get("OptionWindow.QuickFloatingHint", "Show the quick button panel as a floating window (desktop only; Android does not render embedded windows).");
+		quickFloatingToggle.TooltipText = MultiLanguage.Get("OptionWindow.QuickFloatingHint", "Show the quick button panel as a floating panel: a native window on desktop, a draggable in-canvas overlay on mobile.");
 		quickFloatingToggle.Toggled += OnQuickFloatingToggled;
-		quickFloatingToggle.Disabled = OS.HasFeature("mobile");
 		quickFloatingRow.AddChild(quickFloatingToggle);
 
 		// ---- Input: 滚动灵敏度 / 双指缩放 ----
@@ -477,6 +476,10 @@ public partial class OptionWindow : Control
 			quickFlipLabel.Text = MultiLanguage.Get("OptionWindow.QuickFlip", "Quick Panel Flip");
 		if (quickFloatingLabel != null)
 			quickFloatingLabel.Text = MultiLanguage.Get("OptionWindow.QuickFloating", "Quick Floating Window");
+		if (quickFloatingToggle != null)
+			quickFloatingToggle.TooltipText = MultiLanguage.Get(
+				"OptionWindow.QuickFloatingHint",
+				"Show the quick button panel as a floating panel: a native window with a standard title bar on desktop, or a draggable in-canvas overlay with a top drag bar on mobile (position is remembered). Button sizing stays as configured.");
 		if (maxLinesTextLabel != null)
 			maxLinesTextLabel.Text = MultiLanguage.Get("OptionWindow.MaxVisibleLines", "Max Lines");
 		if (gameViewLeftPaddingLabel != null)
