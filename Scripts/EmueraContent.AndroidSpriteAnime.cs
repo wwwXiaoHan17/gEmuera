@@ -53,9 +53,13 @@ public partial class EmueraContent
 		return GetOrCreateAndroidCroppedAtlasTexture(anime, ti, sourceImage, srcRect);
 	}
 
-	// 静态 CSV sprite 的源矩形仍使用原始图集坐标。若先让 TextureInfo 把 8192px 图集
-	// 缩成 4096px，再用原坐标构造 AtlasTexture，就会越界采样成横条。因此必须在访问
-	// ti.texture 之前先裁出小图块。返回 true 表示调用方不能再回退到整图 AtlasTexture 路径。
+	// 静态 CSV sprite 的源矩形使用**原始图集坐标**（CSV 即以源文件像素尺寸书写）。
+	// Android 的 GPU 尺寸上限会让上传副本缩小（如 8000x2000 -> 4096x1024），
+	// 但 CSV 坐标不会随之改变；若直接拿原始坐标去裁「已缩小的位图」必然越界，
+	// 表现为立绘空白或被裁掉一块。这里先把坐标按缩放比换算到当前位图空间再裁剪，
+	// 裁出的小图块再放大回原尺寸，使下游（AtlasTexture 命中判定、DrawSize 计算）
+	// 与桌面端走完全相同的几何，只是源像素分辨率受 4096 上限约束。
+	// 返回 true 表示调用方不能再回退到整图 AtlasTexture 路径。
 	bool TryGetAndroidStaticAtlasRegionTexture(ASpriteSingle sprite,
 		uEmuera.Drawing.BitmapTexture bitmap, uEmuera.Drawing.Rectangle srcRect, out Texture2D texture)
 	{
@@ -115,16 +119,38 @@ public partial class EmueraContent
 			return null;
 		}
 
+		// CSV 坐标以源文件原始尺寸为准，而 sourceImage 受 GPU 上限约束可能已缩小
+		// （8000x2000 -> 4096x1024）。先换算坐标空间再裁剪，否则必然越界。
+		int srcPixelW = srcRect.Width;
+		int srcPixelH = srcRect.Height;
+		float scaleX = 1f;
+		float scaleY = 1f;
+		var scaledRect = srcRect;
+		// 未超过 GPU 上限的图集（桌面端全部、Android 上 <=4096px 的图）不会换算，
+		// scale 保持 1，下面的裁剪与改动前逐位等价。
+		ti.ScaleSourceRectToImageSpace(ref scaledRect, out scaleX, out scaleY);
+		if (scaledRect.Width <= 0 || scaledRect.Height <= 0
+			|| scaledRect.X + scaledRect.Width > sourceImage.GetWidth()
+			|| scaledRect.Y + scaledRect.Height > sourceImage.GetHeight())
+		{
+			if (GenericUtils.IsImageDebugEnabled("texture"))
+			{
+				GenericUtils.ImageTrace("IMAGE.ATLAS.CROP_FAIL", () => "atlas crop source rectangle is invalid after scale mapping",
+					() => $"name={ti.imagename} region={srcRect.X},{srcRect.Y},{srcRect.Width},{srcRect.Height} mapped={scaledRect.X},{scaledRect.Y},{scaledRect.Width},{scaledRect.Height} source={sourceImage.GetWidth()}x{sourceImage.GetHeight()} scale={scaleX:0.####},{scaleY:0.####} failure_kind=invalid_region_scaled");
+			}
+			return null;
+		}
+
 		TrackTexturePin(ti);
-		var region = new Rect2I(srcRect.X, srcRect.Y, srcRect.Width, srcRect.Height);
+		var region = new Rect2I(scaledRect.X, scaledRect.Y, scaledRect.Width, scaledRect.Height);
 		Image.Format format = sourceImage.GetFormat();
 		bool recreate = !androidCroppedAtlasTextures.TryGetValue(cacheKey, out var entry)
 			|| entry == null
 			|| !ReferenceEquals(entry.SourceInfo, ti)
 			|| entry.FrameImage == null
 			|| entry.Texture == null
-			|| entry.FrameImage.GetWidth() != srcRect.Width
-			|| entry.FrameImage.GetHeight() != srcRect.Height
+			|| entry.FrameImage.GetWidth() != srcPixelW
+			|| entry.FrameImage.GetHeight() != srcPixelH
 			|| entry.FrameImage.GetFormat() != format;
 
 		if (recreate)
@@ -133,13 +159,13 @@ public partial class EmueraContent
 			entry = new AndroidCroppedAtlasTextureEntry
 			{
 				SourceInfo = ti,
-				FrameImage = Image.CreateEmpty(srcRect.Width, srcRect.Height, false, format),
+				FrameImage = Image.CreateEmpty(srcPixelW, srcPixelH, false, format),
 				SourceRegion = region,
-				EstimatedBytes = (long)srcRect.Width * srcRect.Height * 4L,
+				EstimatedBytes = (long)srcPixelW * srcPixelH * 4L,
 			};
 			try
 			{
-				entry.FrameImage.BlitRect(sourceImage, region, Vector2I.Zero);
+				BlitScaledAtlasRegion(entry.FrameImage, sourceImage, region, srcPixelW, srcPixelH);
 				entry.Texture = ImageTexture.CreateFromImage(entry.FrameImage);
 				androidCroppedAtlasTextures[cacheKey] = entry;
 			}
@@ -149,7 +175,7 @@ public partial class EmueraContent
 				if (GenericUtils.IsImageDebugEnabled("texture"))
 				{
 					GenericUtils.ImageTrace("IMAGE.ATLAS.CROP_FAIL", () => "atlas crop texture creation failed",
-						() => $"name={ti.imagename} region={srcRect.X},{srcRect.Y},{srcRect.Width},{srcRect.Height} failure_kind=texture_create_fail error={ex.GetType().Name}");
+						() => $"name={ti.imagename} region={srcRect.X},{srcRect.Y},{srcRect.Width},{srcRect.Height} mapped={scaledRect.X},{scaledRect.Y},{scaledRect.Width},{scaledRect.Height} failure_kind=texture_create_fail error={ex.GetType().Name}");
 				}
 				return null;
 			}
@@ -158,7 +184,7 @@ public partial class EmueraContent
 		{
 			try
 			{
-				entry.FrameImage.BlitRect(sourceImage, region, Vector2I.Zero);
+				BlitScaledAtlasRegion(entry.FrameImage, sourceImage, region, srcPixelW, srcPixelH);
 				entry.Texture.Update(entry.FrameImage);
 				entry.SourceRegion = region;
 			}
@@ -167,7 +193,7 @@ public partial class EmueraContent
 				if (GenericUtils.IsImageDebugEnabled("texture"))
 				{
 					GenericUtils.ImageTrace("IMAGE.ATLAS.CROP_FAIL", () => "atlas crop texture update failed",
-						() => $"name={ti.imagename} region={srcRect.X},{srcRect.Y},{srcRect.Width},{srcRect.Height} failure_kind=texture_update_fail error={ex.GetType().Name}");
+						() => $"name={ti.imagename} region={srcRect.X},{srcRect.Y},{srcRect.Width},{srcRect.Height} mapped={scaledRect.X},{scaledRect.Y},{scaledRect.Width},{scaledRect.Height} failure_kind=texture_update_fail error={ex.GetType().Name}");
 				}
 				return null;
 			}
@@ -175,6 +201,21 @@ public partial class EmueraContent
 
 		entry.LastUsedMs = Time.GetTicksMsec();
 		return entry.Texture;
+	}
+
+	// 从（可能已缩小的）CPU 位图裁出 region，并把结果还原成 targetW x targetH。
+	// 尺寸一致时是纯 BlitRect（与改动前逐位等价，桌面端与未超上限的图不受影响）；
+	// 尺寸不一致时（Android 大图集）多做一次放大，使纹理仍是 CSV 记录的物理尺寸，
+	// 从而让下游几何计算与桌面端完全一致，只损失源像素分辨率。
+	static void BlitScaledAtlasRegion(Image target, Image source, Rect2I region, int targetW, int targetH)
+	{
+		if (region.Size.X == targetW && region.Size.Y == targetH)
+		{
+			target.BlitRect(source, region, Vector2I.Zero);
+			return;
+		}
+		target.BlitRect(source, region, Vector2I.Zero);
+		target.Resize(targetW, targetH, Image.Interpolation.Bilinear);
 	}
 
 	// 仅在缓存超过常用规模后清理长时间未触达的动画或静态图块。可见 Canvas 动画每 50ms

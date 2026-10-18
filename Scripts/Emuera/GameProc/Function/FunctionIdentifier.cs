@@ -40,6 +40,13 @@ namespace MinorShift.Emuera.GameProc.Function
 		readonly static Dictionary<string, FunctionIdentifier> funcDic =
 			new Dictionary<string, FunctionIdentifier>(Config.ICVariable ? System.StringComparer.OrdinalIgnoreCase : System.StringComparer.Ordinal);
 		readonly static Dictionary<FunctionCode, string> funcMatch = new Dictionary<FunctionCode, string>();
+
+		/// <summary>
+		/// funcDic 构造时使用的比较器（由 Config.ICVariable 决定 Ordinal/IgnoreCase——
+		/// ICVariable 管的正是"命令名"的大小写）。注册表面经 ReadOnlyDictionary 暴露后
+		/// 比较器无法从接口取出，调用方必须显式索取，不能再靠类型嗅探推断。
+		/// </summary>
+		public static IEqualityComparer<string> InstructionComparer { get { return funcDic.Comparer; } }
 		readonly static Dictionary<FunctionCode, FunctionCode> funcParent = new Dictionary<FunctionCode, FunctionCode>();
 		readonly static ArgumentBuilder methodArgumentBuilder = null;
 		readonly static AbstractInstruction methodInstruction = null;

@@ -21,6 +21,7 @@ static class Program
         "ACOS", "ARGLEN", "ASIN", "ATAN", "BGMCONTROL", "BITGET", "BITINDEXOFFIRST",
         "BITSET", "BITTOGGLE", "CBGSETCIMG", "CEIL", "COS", "DISABLE_INPUT_MACRO",
         "DT_CELL_GETF", "DT_CELL_SETF", "ENABLE_INPUT_MACRO", "EVAL", "EVALF", "EVALS",
+        "EXIST_IN_CSV", "EXIST_IN_ERD",
         "EXISTSIMAGELAYER", "FLOOR", "GCLEARLOWALPHA", "GDRAWPOLYGON", "GDRAWPOLYGONADDPOINT",
         "GDRAWPOLYGONCLEARPOINT", "GDRAWSTRING", "GET_SKIA_QUALITY", "GET_TEXT_DRAWING_MODE",
         "GETANIMETIMER", "GETARGCOUNT", "GETCSVNOBYCALLNAME", "GETCSVNOBYMASTERNAME",
@@ -78,6 +79,9 @@ static class Program
                 Assert(!v24.IsFunctionVisible(key), $"Non-v24 expression function leaked into v24: {key}.");
 
             Assert(snake.IsFunctionVisible("ACOS"), "Snake lost a Snake expression function.");
+            // Skiav13.0 预设名来源探针：snake 表面必须可见（v24/erafl 不泄漏，见上方排除清单与隔离断言）。
+            Assert(snake.IsFunctionVisible("EXIST_IN_CSV") && snake.IsFunctionVisible("EXIST_IN_ERD"),
+                "snake 会话丢失了 Skiav13.0 的预设名来源探针（EXIST_IN_CSV/EXIST_IN_ERD）。");
             foreach (string key in SnakeExcludedFunctions)
                 Assert(!snake.IsFunctionVisible(key), $"Snake exposed a key absent from its reference registry: {key}.");
 
@@ -90,6 +94,8 @@ static class Program
                 "eraFL 接口必须提供 SETANIMETIMER 指令（eraFL 游戏启动依赖，グラフィック生成.ERB:356）。");
             // 隔离护栏：erafl 不得获得其他 snake 专属能力（函数层与指令层抽查）。
             Assert(!erafl.IsFunctionVisible("SQL_CONNECT"), "eraFL 接口泄漏了 snake 专属函数 SQL_CONNECT。");
+            Assert(!erafl.IsFunctionVisible("EXIST_IN_CSV") && !erafl.IsFunctionVisible("EXIST_IN_ERD"),
+                "eraFL 接口泄漏了 snake 专属探针函数 EXIST_IN_CSV/EXIST_IN_ERD。");
             Assert(!erafl.IsInstructionVisible("CALLSTR"), "eraFL 接口泄漏了 snake 专属指令 CALLSTR。");
             // v24pure 保持对 v24 参考的忠实：SETANIMETIMER 函数可见（v24 参考 Creator.cs:211）、指令不可见。
             Assert(v24.IsFunctionVisible("SETANIMETIMER"), "v24pure 丢失了 v24 参考的 SETANIMETIMER 表达式函数。");
@@ -127,7 +133,7 @@ static class Program
                 && timerErafl == LegacyInstructionVariant.SharedTable,
                 "erafl 的 SETANIMETIMER 必须显式绑定共享表 handler。");
 
-            // capability 账本（quirk ledger）：snake 声明 18 项解析/调用/显示 quirk，erafl 声明
+            // capability 账本（quirk ledger）：snake 声明 19 项解析/调用/显示 quirk，erafl 声明
             // markup 系 + 3 项布尔 policy quirk，v24pure 不声明任何 quirk。
             // [LOAD] 日志输出的能力清单即此账本的运行期消费。
             foreach (string quirkId in GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.RequiredCapabilityIds)
@@ -148,6 +154,10 @@ static class Program
                 && erafl.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.EraFlCompatibilityModule.SafeArithmeticGuardBehavior)
                 && erafl.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.EraFlCompatibilityModule.ExtendedHtmlAttributesBehavior),
                 "erafl 计划必须声明四项蛇系血继承 quirk（type.float-literals / declare.out-keyword / arith.safe-arithmetic-guard / markup.font-extended-attributes）。");
+            Assert(erafl.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.EraFlCompatibilityModule.DataTableXmlLeadingBomBehavior),
+                "erafl 计划必须声明 DT_FROMXML 前导 BOM 剥离 quirk（datatable.xml-leading-bom.v1）。");
+            Assert(!v24.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.EraFlCompatibilityModule.DataTableXmlLeadingBomBehavior),
+                "v24pure 不得声明 erafl 的前导 BOM 剥离 quirk（DT_FROMXML 共享路径必须保持零变化）。");
             Assert(!v24.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.EraFlCompatibilityModule.FloatLiteralsBehavior),
                 "v24pure 不得声明 erafl 浮点字面量 quirk。");
             Assert(v24.Plan.CapabilityIds.Count == 0, "v24pure 不应声明任何 capability。");
@@ -180,13 +190,15 @@ static class Program
                 && erafl.EraFl.ShouldSubmitBlankPointerStringInput(2, true),
                 "erafl 会话的三项布尔 quirk 必须由 capability 账本派生为真。");
             Assert(erafl.EraFl.AllowsFloatLiterals && erafl.EraFl.AllowsOutKeyword
-                && erafl.EraFl.UsesSafeArithmeticGuard && erafl.EraFl.AllowsExtendedHtmlAttributes,
-                "erafl 会话的四项蛇系血继承 quirk 必须由 capability 账本派生为真。");
+                && erafl.EraFl.UsesSafeArithmeticGuard && erafl.EraFl.AllowsExtendedHtmlAttributes
+                && erafl.EraFl.StripsLeadingBomFromDataTableXml,
+                "erafl 会话的四项蛇系血继承 quirk 与前导 BOM 剥离必须由 capability 账本派生为真。");
             Assert(!v24.EraFl.UsesExtendedDisplayHistory && !v24.EraFl.IsOmittedDefaultArgument(','),
                 "v24pure 会话不得激活 erafl quirk。");
             Assert(!v24.EraFl.AllowsFloatLiterals && !v24.EraFl.AllowsOutKeyword
-                && !v24.EraFl.UsesSafeArithmeticGuard && !v24.EraFl.AllowsExtendedHtmlAttributes,
-                "v24pure 会话不得激活 erafl 蛇系血继承 quirk。");
+                && !v24.EraFl.UsesSafeArithmeticGuard && !v24.EraFl.AllowsExtendedHtmlAttributes
+                && !v24.EraFl.StripsLeadingBomFromDataTableXml,
+                "v24pure 会话不得激活 erafl 蛇系血继承 quirk 与前导 BOM 剥离。");
 
             // 描述符通道（生成清单）：plan.Dialect.Instructions/Functions 必须非空且与
             // LegacyDialectInventories 生成数据逐量一致——这是描述符路由激活的前置契约。
@@ -257,16 +269,20 @@ static class Program
             // 实测证据：VELVET_ROOM.ERB:2860 的 DITEMTYPE:ARG:Persona(LOCALS)（私改文法）
             // 在严格 v24 下致命退出，原生启动器容错继续。
             LegacyCompatibilityProfile megaten = LegacyCompatibilityProfile.CreateForProfile("megaten", true);
-            Assert(megaten.ContinuesAfterStartupFault
-                && megaten.Plan.CapabilityIds.Count == 4
+			Assert(megaten.ContinuesAfterStartupFault
+				&& megaten.Plan.CapabilityIds.Count == 6
                 && megaten.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.MegatenCompatibilityModule.ContinueAfterStartupFaultCapability)
                 && megaten.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.MegatenCompatibilityModule.LabelLookupCaseBehavior)
                 && megaten.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.MegatenCompatibilityModule.RefOutNameBehavior)
-                && megaten.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.MegatenCompatibilityModule.PrivateSystemShadowBehavior)
+				&& megaten.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.MegatenCompatibilityModule.PrivateSystemShadowBehavior)
+				&& megaten.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.MegatenCompatibilityModule.StandardColorNameBehavior)
+				&& megaten.Plan.CapabilityIds.Contains(GEmuera.Core.Compatibility.MegatenCompatibilityModule.HtmlRgbZeroAlphaBehavior)
                 && megaten.Megaten.UsesVariableCaseForFunctionLabelLookup
-                && megaten.Megaten.AllowsOutAsVariableNameAfterRefKeyword
-                && megaten.Megaten.AllowsPrivateSystemVariableShadowing,
-                "megaten 计划必须声明启动容错 + 三个 behavior capability，并激活对应 policy flag。");
+				&& megaten.Megaten.AllowsOutAsVariableNameAfterRefKeyword
+				&& megaten.Megaten.AllowsPrivateSystemVariableShadowing
+				&& megaten.Megaten.UsesStandardColorNameTable
+				&& megaten.Megaten.TreatZeroAlphaRgbHexAsOpaque,
+				"megaten 计划必须声明启动容错 + 五个 behavior capability，并激活对应 policy flag。");
             Assert(megaten.IsInstructionVisible("PRINT") && megaten.IsInstructionVisible("CALLSHARP"),
                 "megaten 保持 v24 基座指令面。");
             Assert(!megaten.IsInstructionVisible("SETANIMETIMER") && !megaten.IsInstructionVisible("CALLSTR")

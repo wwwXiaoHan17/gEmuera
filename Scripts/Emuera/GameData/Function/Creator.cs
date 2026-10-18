@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Text;
@@ -248,6 +248,10 @@ namespace MinorShift.Emuera.GameData.Function
                 ["陥落状態"] = new SnakeFallenStateMethod(),
                 ["陷落状态"] = new SnakeFallenStateMethod(),
                 ["GETPLATFORM"] = new GetPlatformMethod(),
+                // Skiav13.0 snake 语义：预设变量名来源探针（v24 参考无此函数，
+                // 可见性由 game.snake 模块表面差集控制，非 snake 会话不可见）。
+                ["EXIST_IN_CSV"] = new ExistPresetNameInCsvMethod(),
+                ["EXIST_IN_ERD"] = new ExistPresetNameInErdMethod(),
                 ["SIN"] = new V24TrigMethod("SIN", Math.Sin),
                 ["COS"] = new V24TrigMethod("COS", Math.Cos),
                 ["TAN"] = new V24TrigMethod("TAN", Math.Tan),
@@ -410,6 +414,13 @@ namespace MinorShift.Emuera.GameData.Function
 		// registries must use the profile-scoped surface below.
 		private static readonly Dictionary<string, FunctionMethod> methodList;
 
+		/// <summary>
+		/// 函数（式中函数）注册表的比较器。methodList 使用默认比较器（Ordinal），与上游
+		/// 一致——表达式函数查询侧自行归一化大小写，字典本身不承担该职责。此处由
+		/// methodList.Comparer 统一给出，避免投影面另写一遍导致两处策略分叉。
+		/// </summary>
+		internal static IEqualityComparer<string> MethodComparer { get { return methodList.Comparer; } }
+
 		internal static IReadOnlyDictionary<string, FunctionMethod> GetLegacyHandlerMethodList()
 		{
 			return methodList;
@@ -427,7 +438,7 @@ namespace MinorShift.Emuera.GameData.Function
 				if (registrySurfaces.TryGetValue(cacheKey, out var existing))
 					return existing;
 
-				var selected = new Dictionary<string, FunctionMethod>(StringComparer.Ordinal);
+				var selected = new Dictionary<string, FunctionMethod>(methodList.Comparer);
 				foreach (KeyValuePair<string, FunctionMethod> pair in methodList)
 				{
 					if (!compatibility.IsFunctionVisible(pair.Key))

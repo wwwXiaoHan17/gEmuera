@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 using MinorShift.Emuera.Sub;
@@ -1705,6 +1705,9 @@ namespace MinorShift.Emuera.GameData.Variable
 
 		private sealed class RandToken : PseudoVariableToken
 		{
+			// 上游 Skiav12.2：钳制告警只打一次（static，跨调用保持；与函数侧 RAND 的
+			// clampedWarned 标志分离，两者语义不同：伪变量返回 0，函数返回下界）。
+			private static bool clampedWarned;
 			public RandToken(VariableCode varCode, VariableData varData)
 				: base(varCode, varData)
 			{
@@ -1713,7 +1716,20 @@ namespace MinorShift.Emuera.GameData.Variable
 			{
 				Int64 i = arguments[0];
 				if (i <= 0)
+				{
+					// snake 参考（Skiav12.2）：参数 <= 0 不再抛 CodeEE 中断，钳制为返回 0；
+					// v24 参考保持致命错误语义。
+					if (Program.Compatibility.Snake.UsesRandClamp)
+					{
+						if (!clampedWarned)
+						{
+							clampedWarned = true;
+							exm.Console.PrintError("RANDの引数に0以下の値(" + i.ToString() + ")が指定されました（已钳制为 0，不再中断运行）");
+						}
+						return 0L;
+					}
 					throw new CodeEE("RANDの引数に0以下の値(" + i.ToString() + ")が指定されました");
+				}
 				return exm.VEvaluator.GetNextRand(i);
 			}
 		}

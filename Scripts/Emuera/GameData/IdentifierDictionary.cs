@@ -643,7 +643,9 @@ namespace MinorShift.Emuera
 			if (!CompatibilityDescriptorRoute<FunctionIdentifier, FunctionMethod>.TryCreateSessionView(
 				plan,
 				instructionDic,
+				FunctionIdentifier.InstructionComparer,
 				methodDic,
+				FunctionMethodCreator.MethodComparer,
 				out CompatibilityDescriptorRoute<FunctionIdentifier, FunctionMethod> route))
 			{
 				GenericUtils.Error("[DIALECT] CompatibilityPlan descriptor surface does not cover the projected legacy registry; falling back to the projected registry.");

@@ -21,8 +21,14 @@ public partial class OptionWindow : Control
 	CheckButton pinchZoomToggle;
 	CheckButton quickFlipToggle;
 	CheckButton quickFloatingToggle;
+	CheckButton vsyncToggle;
 	Slider maxVisibleLinesSlider;
 	Label maxVisibleLinesLabel;
+	// 游戏界面左右额外留白（仅移动端生效）：全面屏/曲面屏安全区显示异常时手动修正。
+	Slider gameViewLeftPaddingSlider;
+	Label gameViewLeftPaddingValue;
+	Slider gameViewRightPaddingSlider;
+	Label gameViewRightPaddingValue;
 	OptionButton resolutionOption;
 	OptionButton languageOption;
 	OptionButton frameRateOption;
@@ -40,8 +46,13 @@ public partial class OptionWindow : Control
 	Label quickFlipLabel;
 	Label quickFloatingLabel;
 	Label maxLinesTextLabel;
+	Label gameViewLeftPaddingLabel;
+	Label gameViewRightPaddingLabel;
+	Label gameViewPaddingHintLabel;
 	Label resLabel;
 	Label fpsLabel;
+	Label vsyncLabel;
+	Label vsyncHintLabel;
 	Label langLabel;
 	Button closeBtn;
 
@@ -135,6 +146,57 @@ public partial class OptionWindow : Control
 		maxVisibleLinesLabel.Text = ((int)maxVisibleLinesSlider.Value).ToString();
 		maxLinesRow.AddChild(maxVisibleLinesLabel);
 
+		// 全面屏/曲面屏安全区左右留白微调（仅移动端生效；桌面端禁用并显示说明）。
+		// 背景：部分设备 DisplayServer 报告的左侧安全区在视觉上不可用/被曲面裁切，
+		// 导致内容左侧留白异常；允许用户以像素为单位微调，立即重排游戏内容区。
+		bool paddingAdjustAvailable = OS.HasFeature("mobile");
+		string paddingHint = MultiLanguage.Get(
+			"OptionWindow.GameViewPaddingHint",
+			"仅移动端生效：正值增加留白、负值减少留白，用于修正全面屏/曲面屏左右安全区显示异常。");
+
+		var leftPaddingRow = CreateRow(displayGroup, out gameViewLeftPaddingLabel);
+		gameViewLeftPaddingSlider = new HSlider();
+		gameViewLeftPaddingSlider.MinValue = EmueraContent.MinGameViewHorizontalPadding;
+		gameViewLeftPaddingSlider.MaxValue = EmueraContent.MaxGameViewHorizontalPadding;
+		gameViewLeftPaddingSlider.Step = 2;
+		gameViewLeftPaddingSlider.Value = EmueraContent.GameViewLeftPadding;
+		gameViewLeftPaddingSlider.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		gameViewLeftPaddingSlider.CustomMinimumSize = new Vector2(120, 44);
+		gameViewLeftPaddingSlider.Editable = paddingAdjustAvailable;
+		gameViewLeftPaddingSlider.TooltipText = paddingHint;
+		gameViewLeftPaddingSlider.ValueChanged += OnGameViewLeftPaddingChanged;
+		leftPaddingRow.AddChild(gameViewLeftPaddingSlider);
+		gameViewLeftPaddingValue = CreateValueLabel();
+		gameViewLeftPaddingValue.Text = FormatGameViewPadding(EmueraContent.GameViewLeftPadding);
+		gameViewLeftPaddingValue.TooltipText = paddingHint;
+		leftPaddingRow.AddChild(gameViewLeftPaddingValue);
+		gameViewLeftPaddingLabel.TooltipText = paddingHint;
+
+		var rightPaddingRow = CreateRow(displayGroup, out gameViewRightPaddingLabel);
+		gameViewRightPaddingSlider = new HSlider();
+		gameViewRightPaddingSlider.MinValue = EmueraContent.MinGameViewHorizontalPadding;
+		gameViewRightPaddingSlider.MaxValue = EmueraContent.MaxGameViewHorizontalPadding;
+		gameViewRightPaddingSlider.Step = 2;
+		gameViewRightPaddingSlider.Value = EmueraContent.GameViewRightPadding;
+		gameViewRightPaddingSlider.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		gameViewRightPaddingSlider.CustomMinimumSize = new Vector2(120, 44);
+		gameViewRightPaddingSlider.Editable = paddingAdjustAvailable;
+		gameViewRightPaddingSlider.TooltipText = paddingHint;
+		gameViewRightPaddingSlider.ValueChanged += OnGameViewRightPaddingChanged;
+		rightPaddingRow.AddChild(gameViewRightPaddingSlider);
+		gameViewRightPaddingValue = CreateValueLabel();
+		gameViewRightPaddingValue.Text = FormatGameViewPadding(EmueraContent.GameViewRightPadding);
+		gameViewRightPaddingValue.TooltipText = paddingHint;
+		rightPaddingRow.AddChild(gameViewRightPaddingValue);
+		gameViewRightPaddingLabel.TooltipText = paddingHint;
+
+		gameViewPaddingHintLabel = new Label();
+		gameViewPaddingHintLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+		gameViewPaddingHintLabel.AddThemeFontSizeOverride("font_size", 12);
+		gameViewPaddingHintLabel.AddThemeColorOverride("font_color", GEmueraTheme.TextDim);
+		gameViewPaddingHintLabel.Text = paddingHint;
+		displayGroup.AddChild(gameViewPaddingHintLabel);
+
 		var resRow = CreateRow(displayGroup, out resLabel);
 		resolutionOption = new OptionButton();
 		ResolutionHelper.RefreshResolutions();
@@ -158,6 +220,24 @@ public partial class OptionWindow : Control
 		frameRateOption.ItemSelected += OnFrameRateSelected;
 		frameRateOption.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 		fpsRow.AddChild(frameRateOption);
+
+		// 垂直同步：Godot 仅 Forward+/Mobile 渲染方法支持关闭；Compatibility 下关闭
+		// 会被回退为 Enabled。提示行按实际条件显示，不承诺关闭一定生效。
+		var vsyncRow = CreateRow(displayGroup, out vsyncLabel);
+		vsyncToggle = new CheckButton();
+		vsyncToggle.ButtonPressed = VSyncHelper.Enabled;
+		vsyncToggle.CustomMinimumSize = new Vector2(120, 44);
+		vsyncToggle.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		vsyncToggle.Toggled += OnVSyncToggled;
+		vsyncRow.AddChild(vsyncToggle);
+
+		vsyncHintLabel = new Label();
+		vsyncHintLabel.AddThemeFontSizeOverride("font_size", 12);
+		vsyncHintLabel.AddThemeColorOverride("font_color", GEmueraTheme.TextSecondary);
+		vsyncHintLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+		displayGroup.AddChild(vsyncHintLabel);
+		// 初始文案与可见性（ApplyLanguageTexts 在 _Ready 末尾还会再刷新一次，幂等）。
+		RefreshVSyncHint();
 
 		// ---- Quick: 快捷按钮宽度 / 快捷字体 ----
 		var quickGroup = CreateGroup(content, out quickGroupTitle);
@@ -296,6 +376,10 @@ public partial class OptionWindow : Control
 		languageOption.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 		langRow.AddChild(languageOption);
 
+		// 高级调试区：emuera.config 查看/编辑（默认折叠、内容懒构建；
+		// 实现见 OptionWindow.EmueraConfig.cs，放在 System 组之后、Close 之前）。
+		BuildEmueraConfigSection(content);
+
 		// Close button: pinned footer outside the scroll area.
 		closeBtn = new Button();
 		EmueraContent.StyleButton(closeBtn);
@@ -395,10 +479,23 @@ public partial class OptionWindow : Control
 			quickFloatingLabel.Text = MultiLanguage.Get("OptionWindow.QuickFloating", "Quick Floating Window");
 		if (maxLinesTextLabel != null)
 			maxLinesTextLabel.Text = MultiLanguage.Get("OptionWindow.MaxVisibleLines", "Max Lines");
+		if (gameViewLeftPaddingLabel != null)
+			gameViewLeftPaddingLabel.Text = MultiLanguage.Get("OptionWindow.GameViewLeftPadding", "Left Padding");
+		if (gameViewRightPaddingLabel != null)
+			gameViewRightPaddingLabel.Text = MultiLanguage.Get("OptionWindow.GameViewRightPadding", "Right Padding");
+		if (gameViewPaddingHintLabel != null)
+			gameViewPaddingHintLabel.Text = MultiLanguage.Get(
+				"OptionWindow.GameViewPaddingHint",
+				"仅移动端生效：正值增加留白、负值减少留白，用于修正全面屏/曲面屏左右安全区显示异常。");
 		if (resLabel != null)
 			resLabel.Text = MultiLanguage.Get("OptionWindow.Resolution", "Resolution");
 		if (fpsLabel != null)
 			fpsLabel.Text = MultiLanguage.Get("OptionWindow.FrameRate", "Frame Rate");
+		if (vsyncLabel != null)
+			vsyncLabel.Text = MultiLanguage.Get("OptionWindow.VSync", "V-Sync");
+		// 提示文案与可见性统一由 RefreshVSyncHint 刷新（语言切换时也走这里）。
+		if (vsyncHintLabel != null)
+			RefreshVSyncHint();
 		if (langLabel != null)
 			langLabel.Text = MultiLanguage.Get("OptionWindow.Language", "Language");
 		if (closeBtn != null)
@@ -411,6 +508,8 @@ public partial class OptionWindow : Control
 			inputGroupTitle.Text = MultiLanguage.Get("OptionWindow.GroupInput", "Input");
 		if (systemGroupTitle != null)
 			systemGroupTitle.Text = MultiLanguage.Get("OptionWindow.GroupSystem", "System");
+		// 「高级：emuera.config」调试区（折叠未构建时只刷新标题；见 OptionWindow.EmueraConfig.cs）。
+		ApplyEmueraConfigLanguageTexts();
 	}
 
 	public void ShowPopup()
@@ -535,6 +634,26 @@ public partial class OptionWindow : Control
 		EmueraContent.ConfiguredMaxVisibleLines = lines;
 	}
 
+	// 左右留白：拖动即写入 user://settings.cfg 并触发内容区重排（仅移动端生效）。
+	void OnGameViewLeftPaddingChanged(double value)
+	{
+		int padding = (int)value;
+		gameViewLeftPaddingValue.Text = FormatGameViewPadding(padding);
+		EmueraContent.GameViewLeftPadding = padding;
+	}
+
+	void OnGameViewRightPaddingChanged(double value)
+	{
+		int padding = (int)value;
+		gameViewRightPaddingValue.Text = FormatGameViewPadding(padding);
+		EmueraContent.GameViewRightPadding = padding;
+	}
+
+	static string FormatGameViewPadding(int value)
+	{
+		return (value > 0 ? "+" : "") + value.ToString() + " px";
+	}
+
 	void OnResolutionSelected(long index)
 	{
 		ResolutionHelper.resolution_index = (int)index;
@@ -545,6 +664,31 @@ public partial class OptionWindow : Control
 	{
 		FrameRateHelper.frame_rate_index = (int)index;
 		FrameRateHelper.Apply();
+	}
+
+	// 垂直同步：先持久化期望值再应用；Apply 会读回实际模式，失败时由提示行说明。
+	void OnVSyncToggled(bool enabled)
+	{
+		VSyncHelper.Enabled = enabled;
+		VSyncHelper.Apply();
+		RefreshVSyncHint();
+	}
+
+	// 提示仅在"请求关闭、但可能被回退"时显示：关闭后（含 Godot Compatibility 渲染器
+	// 只支持 Enabled 的情况）才需要解释，默认开启时不占用一行设置说明。
+	void RefreshVSyncHint()
+	{
+		if (vsyncHintLabel == null)
+			return;
+		vsyncHintLabel.Text = MultiLanguage.Get(
+			"OptionWindow.VSyncHint",
+			"Godot Compatibility renderer may force V-Sync on; turning it off can fall back to Enabled.");
+		vsyncHintLabel.Visible = ShouldShowVSyncHint();
+	}
+
+	static bool ShouldShowVSyncHint()
+	{
+		return !VSyncHelper.Enabled || VSyncHelper.LastRequestUnsupported;
 	}
 
 	void OnLanguageSelected(long index)

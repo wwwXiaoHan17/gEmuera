@@ -565,7 +565,7 @@ namespace MinorShift.Emuera.Compatibility
 				"ACOS", "ARGLEN", "ASIN", "ATAN", "BGMCONTROL", "BITGET", "BITINDEXOFFIRST",
 				"BITSET", "BITTOGGLE", "CBGSETCIMG", "CEIL", "COS", "DISABLE_INPUT_MACRO",
 				"DT_CELL_GETF", "DT_CELL_SETF", "ENABLE_INPUT_MACRO", "EVAL", "EVALF", "EVALS",
-				"EXISTSIMAGELAYER", "FLOOR", "GCLEARLOWALPHA", "GDRAWPOLYGON", "GDRAWPOLYGONADDPOINT",
+				"EXISTSIMAGELAYER", "EXIST_IN_CSV", "EXIST_IN_ERD", "FLOOR", "GCLEARLOWALPHA", "GDRAWPOLYGON", "GDRAWPOLYGONADDPOINT",
 				"GDRAWPOLYGONCLEARPOINT", "GDRAWSTRING", "GET_SKIA_QUALITY", "GET_TEXT_DRAWING_MODE",
 				"GETANIMETIMER", "GETARGCOUNT", "GETCSVNOBYCALLNAME", "GETCSVNOBYMASTERNAME",
 				"GETCSVNOBYNAME", "GETCSVNOBYNICKNAME", "GETLINEY", "GETMETHF", "GETPLATFORM",
@@ -755,6 +755,7 @@ namespace MinorShift.Emuera.Compatibility
 		public bool UsesBeforeErrorEvent => false;
 		public bool UsesRandomizeReseed => false;
 		public bool UsesRelationWithoutMastername => false;
+		public bool MergesPresetErdFromErbDir => false;
 		public bool AllowsOutKeyword => false;
 		public bool UsesVariadicStrip => false;
 		public bool UsesFloatTypeSystem => false;
@@ -801,6 +802,7 @@ namespace MinorShift.Emuera.Compatibility
 		public bool UsesBeforeErrorEvent => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.BeforeErrorEvent);
 		public bool UsesRandomizeReseed => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.RandomizeReseed);
 		public bool UsesRelationWithoutMastername => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.RelationWithoutMastername);
+		public bool MergesPresetErdFromErbDir => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.PresetErdMerge);
 		public bool AllowsOutKeyword => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.OutKeyword);
 		public bool UsesVariadicStrip => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.VariadicStrip);
 		public bool UsesFloatTypeSystem => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.FloatTypeSystem);
@@ -815,6 +817,8 @@ namespace MinorShift.Emuera.Compatibility
 		public bool UsesVariableCaseForFunctionLabelLookup => false;
 		public bool AllowsOutAsVariableNameAfterRefKeyword => false;
 		public bool AllowsPrivateSystemVariableShadowing => false;
+		public bool UsesStandardColorNameTable => false;
+		public bool TreatZeroAlphaRgbHexAsOpaque => false;
 	}
 
 	// megaten 策略：moduleSelected 保持内置 profile 语义；三个 flag 由 plan capability 派生，
@@ -853,6 +857,10 @@ namespace MinorShift.Emuera.Compatibility
 			capabilities.Contains(MegatenCompatibilityModule.RefOutNameBehavior);
 		public bool AllowsPrivateSystemVariableShadowing =>
 			capabilities.Contains(MegatenCompatibilityModule.PrivateSystemShadowBehavior);
+		public bool UsesStandardColorNameTable =>
+			capabilities.Contains(MegatenCompatibilityModule.StandardColorNameBehavior);
+		public bool TreatZeroAlphaRgbHexAsOpaque =>
+			capabilities.Contains(MegatenCompatibilityModule.HtmlRgbZeroAlphaBehavior);
 	}
 
 	internal sealed class DisabledEraFlCompatibilityPolicy : IEraFlCompatibilityPolicy
@@ -864,6 +872,7 @@ namespace MinorShift.Emuera.Compatibility
     public bool AllowsOutKeyword => false;
     public bool UsesSafeArithmeticGuard => false;
     public bool AllowsExtendedHtmlAttributes => false;
+    public bool StripsLeadingBomFromDataTableXml => false;
     public string TaskStartRoomLookupFunction => string.Empty;
     public string GMapQuestType => string.Empty;
     public bool IsOmittedDefaultArgument(char currentToken) => false;
@@ -916,6 +925,7 @@ internal sealed class LegacyEraFlCompatibilityPolicy : IEraFlCompatibilityPolicy
     public bool AllowsOutKeyword => capabilities.Contains(EraFlCompatibilityModule.OutKeywordBehavior);
     public bool UsesSafeArithmeticGuard => capabilities.Contains(EraFlCompatibilityModule.SafeArithmeticGuardBehavior);
     public bool AllowsExtendedHtmlAttributes => capabilities.Contains(EraFlCompatibilityModule.ExtendedHtmlAttributesBehavior);
+    public bool StripsLeadingBomFromDataTableXml => capabilities.Contains(EraFlCompatibilityModule.DataTableXmlLeadingBomBehavior);
     public string TaskStartRoomLookupFunction => HasDynamicMap ? EraFlCompatibilityModule.TaskStartRoomLookupFunction : string.Empty;
     public string GMapQuestType => HasDynamicMap ? EraFlCompatibilityModule.GMapQuestType : string.Empty;
     public bool IsOmittedDefaultArgument(char currentToken) =>

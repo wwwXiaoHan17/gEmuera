@@ -23,16 +23,21 @@ public sealed class CompatibilityDescriptorRoute<TInstruction, TFunction>
     public static CompatibilityDescriptorRoute<TInstruction, TFunction> Create(
         CompatibilityPlan plan,
         IReadOnlyDictionary<string, TInstruction> legacyInstructions,
-        IReadOnlyDictionary<string, TFunction> legacyFunctions)
+        IEqualityComparer<string> instructionComparer,
+        IReadOnlyDictionary<string, TFunction> legacyFunctions,
+        IEqualityComparer<string> functionComparer)
     {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(legacyInstructions);
+        ArgumentNullException.ThrowIfNull(instructionComparer);
         ArgumentNullException.ThrowIfNull(legacyFunctions);
+        ArgumentNullException.ThrowIfNull(functionComparer);
 
-        // Keep the comparer of the legacy handler registry so mixed-case
-        // instruction spellings resolve exactly as the upstream engine does.
-        var instructions = new Dictionary<string, TInstruction>(
-            GetLegacyComparer(legacyInstructions));
+        // 比较器由调用方显式给出。旧注册表常被包装成 ReadOnlyDictionary，其比较器
+        // 无法从接口取出；此前靠运行时类型嗅探（registry is Dictionary<,>）回退到
+        // Ordinal，方言路由因此把 PRINTFORMw / ENDSELECt / call 这类混合大小写拼写
+        // 变成不可解析——与上游引擎行为不一致。比较器是解析面契约的一部分，不能猜。
+        var instructions = new Dictionary<string, TInstruction>(instructionComparer);
         foreach (var descriptor in plan.Dialect.Instructions.Values)
         {
             if (!legacyInstructions.TryGetValue(descriptor.Name, out var handler))
@@ -43,8 +48,7 @@ public sealed class CompatibilityDescriptorRoute<TInstruction, TFunction>
             instructions.Add(descriptor.Name, handler);
         }
 
-        var functions = new Dictionary<string, TFunction>(
-            GetLegacyComparer(legacyFunctions));
+        var functions = new Dictionary<string, TFunction>(functionComparer);
         foreach (var descriptor in plan.Dialect.Functions.Values)
         {
             if (!legacyFunctions.TryGetValue(descriptor.Name, out var handler))
@@ -70,12 +74,16 @@ public sealed class CompatibilityDescriptorRoute<TInstruction, TFunction>
     public static bool TryCreateSessionView(
         CompatibilityPlan plan,
         IReadOnlyDictionary<string, TInstruction> legacyInstructions,
+        IEqualityComparer<string> instructionComparer,
         IReadOnlyDictionary<string, TFunction> legacyFunctions,
+        IEqualityComparer<string> functionComparer,
         out CompatibilityDescriptorRoute<TInstruction, TFunction> route)
     {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(legacyInstructions);
+        ArgumentNullException.ThrowIfNull(instructionComparer);
         ArgumentNullException.ThrowIfNull(legacyFunctions);
+        ArgumentNullException.ThrowIfNull(functionComparer);
 
         foreach (var name in legacyInstructions.Keys)
         {
@@ -90,9 +98,9 @@ public sealed class CompatibilityDescriptorRoute<TInstruction, TFunction>
 
         route = new CompatibilityDescriptorRoute<TInstruction, TFunction>(
             new ReadOnlyDictionary<string, TInstruction>(
-                new Dictionary<string, TInstruction>(legacyInstructions, GetLegacyComparer(legacyInstructions))),
+                new Dictionary<string, TInstruction>(legacyInstructions, instructionComparer)),
             new ReadOnlyDictionary<string, TFunction>(
-                new Dictionary<string, TFunction>(legacyFunctions, GetLegacyComparer(legacyFunctions))));
+                new Dictionary<string, TFunction>(legacyFunctions, functionComparer)));
         return true;
 
         bool Missing(string name, string kind, out CompatibilityDescriptorRoute<TInstruction, TFunction> missing)
@@ -103,10 +111,4 @@ public sealed class CompatibilityDescriptorRoute<TInstruction, TFunction>
         }
     }
 
-    private static IEqualityComparer<string> GetLegacyComparer<TValue>(IReadOnlyDictionary<string, TValue> registry)
-    {
-        return registry is Dictionary<string, TValue> dictionary
-            ? dictionary.Comparer
-            : StringComparer.Ordinal;
-    }
 }

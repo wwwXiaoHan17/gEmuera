@@ -28,6 +28,8 @@ namespace MinorShift.Emuera.Compatibility
 		bool UsesBeforeErrorEvent { get; }
 		bool UsesRandomizeReseed { get; }
 		bool UsesRelationWithoutMastername { get; }
+		/// <summary>预设变量同名 ERD 合并在 CSV 之后、逆引字典之前生效（Skiav13.0）。</summary>
+		bool MergesPresetErdFromErbDir { get; }
 		bool AllowsOutKeyword { get; }
 		bool UsesVariadicStrip { get; }
 		bool UsesFloatTypeSystem { get; }
@@ -50,6 +52,8 @@ namespace MinorShift.Emuera.Compatibility
 		bool UsesSafeArithmeticGuard { get; }
 		/// <summary>HTML font 扩展属性（markup.font-extended-attributes.v1）。</summary>
 		bool AllowsExtendedHtmlAttributes { get; }
+		/// <summary>DT_FROMXML 装载前去除 LOADTEXT 遗留的前导 BOM（datatable.xml-leading-bom.v1）。</summary>
+		bool StripsLeadingBomFromDataTableXml { get; }
 		string TaskStartRoomLookupFunction { get; }
 		string GMapQuestType { get; }
 		bool IsOmittedDefaultArgument(char currentToken);
@@ -84,6 +88,13 @@ namespace MinorShift.Emuera.Compatibility
 		bool UsesVariableCaseForFunctionLabelLookup { get; }
 		bool AllowsOutAsVariableNameAfterRefKeyword { get; }
 		bool AllowsPrivateSystemVariableShadowing { get; }
+		/// <summary>
+		/// HTML &lt;font color&gt; 的颜色名解析是否使用 System.Drawing 标准调色板（141 名）。
+		/// false = 垫片自带的 32 名表，未命中回退 Black（基线行为）。
+		/// </summary>
+		bool UsesStandardColorNameTable { get; }
+		/// <summary>将 eraMegaten 的 #00RRGGBB 视为不透明 RGB。</summary>
+		bool TreatZeroAlphaRgbHexAsOpaque { get; }
 	}
 
 	/// <summary>
