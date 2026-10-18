@@ -317,6 +317,10 @@ public partial class OptionWindow : Control
 		languageOption.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 		langRow.AddChild(languageOption);
 
+		// 高级调试区：emuera.config 查看/编辑（默认折叠、内容懒构建；
+		// 实现见 OptionWindow.EmueraConfig.cs，放在 System 组之后、Close 之前）。
+		BuildEmueraConfigSection(content);
+
 		// Close button: pinned footer outside the scroll area.
 		closeBtn = new Button();
 		EmueraContent.StyleButton(closeBtn);
@@ -437,6 +441,8 @@ public partial class OptionWindow : Control
 			inputGroupTitle.Text = MultiLanguage.Get("OptionWindow.GroupInput", "Input");
 		if (systemGroupTitle != null)
 			systemGroupTitle.Text = MultiLanguage.Get("OptionWindow.GroupSystem", "System");
+		// 「高级：emuera.config」调试区（折叠未构建时只刷新标题；见 OptionWindow.EmueraConfig.cs）。
+		ApplyEmueraConfigLanguageTexts();
 	}
 
 	public void ShowPopup()

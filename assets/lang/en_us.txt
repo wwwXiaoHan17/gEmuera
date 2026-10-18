@@ -121,3 +121,7 @@ QuickFloatingWindow.Title=Quick Panel
 QuickFloatingWindow.HideHint=Hide the floating window (reopen from the system menu Quick button)
 OptionWindow.VSync=V-Sync
 OptionWindow.VSyncHint=Godot Compatibility renderer may force V-Sync on; turning it off can fall back to Enabled.
+OptionWindow.EmueraConfigGroup=Advanced: emuera.config
+OptionWindow.EmueraConfigHint=Edits are written to emuera.config in the game folder; some options take effect only after restarting the game.
+OptionWindow.EmueraConfigReload=Reload Config
+OptionWindow.EmueraConfigOpenDir=Open Config Folder

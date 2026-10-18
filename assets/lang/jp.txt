@@ -121,3 +121,7 @@ QuickFloatingWindow.Title=クイック
 QuickFloatingWindow.HideHint=浮遊ウィンドウを非表示（システムメニューのクイックで再表示）
 OptionWindow.VSync=垂直同期
 OptionWindow.VSyncHint=垂直同期をオフにするとフレームレートが上がる場合がありますが、Godot の Compatibility レンダラーでは有効に戻される可能性があります。
+OptionWindow.EmueraConfigGroup=詳細：emuera.config
+OptionWindow.EmueraConfigHint=変更はゲームフォルダの emuera.config に書き込まれます。一部の項目はゲームを再起動しないと反映されません。
+OptionWindow.EmueraConfigReload=設定を再読み込み
+OptionWindow.EmueraConfigOpenDir=設定フォルダを開く
