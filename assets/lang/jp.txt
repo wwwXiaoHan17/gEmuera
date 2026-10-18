@@ -124,3 +124,7 @@ OptionWindow.GameViewRightPadding=画面右余白
 OptionWindow.GameViewPaddingHint=モバイルのみ有効：正の値で余白を増やし、負の値で減らします。フルスクリーン/曲面エッジ端末で左右のセーフエリア余白が正しく表示されない場合に使用します。
 OptionWindow.VSync=垂直同期
 OptionWindow.VSyncHint=垂直同期をオフにするとフレームレートが上がる場合がありますが、Godot の Compatibility レンダラーでは有効に戻される可能性があります。
+OptionWindow.EmueraConfigGroup=詳細：emuera.config
+OptionWindow.EmueraConfigHint=変更はゲームフォルダの emuera.config に書き込まれます。一部の項目はゲームを再起動しないと反映されません。
+OptionWindow.EmueraConfigReload=設定を再読み込み
+OptionWindow.EmueraConfigOpenDir=設定フォルダを開く
