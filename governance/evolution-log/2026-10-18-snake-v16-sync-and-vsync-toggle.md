@@ -26,11 +26,13 @@
    snake Apply 暴露 ⇒ v24pure/eraFL 表面逐字节不变）。
 3. **RAND 伪变量钳制补齐**（上游 12.2 余项）：`VariableToken.cs` 的 `RandToken` 在 `UsesRandClamp`
    下钳制为 0 并只告警一次；v24pure 保持原 CodeEE 语义。复用既有 `math.rand-clamp.v1`，无新增 capability。
-4. **CHKDATA 版本号门控修正**（上游 12.1 泄漏）：`Creator.Method.cs` 的 `RESULT_ARRAY[1] = result.Version`
-   改由新 capability `save.chkdata-version.v1`（policy `ReturnsChkdataVersion`）门控；
-   v24pure 回到"不触碰 RESULT:1"的参考语义（不写 0，避免与 GETTIME 等既有写入产生新分叉）。
-5. **账本与表面**：`SnakeCompatibilityCapabilities` 18 → 20 项（+`csv.preset-erd-merge.v1`、
-   +`save.chkdata-version.v1`）；`SnakeCompatibilityModule.ModuleVersion` 1.0.0 → 1.1.0 并更新血统注释；
+4. **CHKDATA 版本写回（勘误：本批曾误门控后撤销）**：最初按"v24 参考不写 RESULT:1"的审计结论，
+   把 `RESULT_ARRAY[1] = result.Version` 改为 `save.chkdata-version.v1` 门控；后续对参考源码复核
+   （`emuera.em-master Creator.Method.cs` CheckdataMethod、`main-skiasharp Creator.Method.cs` 同名方法）
+   确认**两侧参考都无条件写**，门控反而制造了 v24pure 回归。已撤销门控、删除该 capability/policy 属性，
+   恢复无条件写并留注释说明。capability 账本 18 → 19（仅 ERD 合并一项）。
+5. **账本与表面**：`SnakeCompatibilityCapabilities` 18 → 19 项（+`csv.preset-erd-merge.v1`）；
+   `SnakeCompatibilityModule.ModuleVersion` 1.0.0 → 1.1.0 并更新血统注释；
    生成清单 `LegacyDialectInventories.Generated.cs` / `tools/legacy-runner/profiles.generated.json`
    经 `LegacyDialectInventoryGenerator` 再生（snake 函数 349 → 351，METHOD 投影指令 668 → 670）。
 
@@ -50,7 +52,7 @@
 - `dotnet build gemuera-c#.csproj -nodeReuse:false -m:1`：0 error / 4 warning（均为既有）。
 - `dotnet test tests/xUnitTest/GEmuera.Core.Tests -c Release`：**131/131**（新增 `PresetErdMergeTests` 19 例）。
 - `LegacyDialectSurfaceSmoke`：通过（含新增 EXIST_IN_CSV/ERD 的 v24 不可见、snake 可见、eraFL 隔离断言；
-  capability↔policy 映射穷尽性由既有反射断言覆盖 20 项）。
+  capability↔policy 映射穷尽性由既有反射断言覆盖 19 项）。
 - `LegacyDialectRuntimeSmoke`：通过（`v24Functions=266; snakeFunctions=351`）。
 - `LegacyDialectInventoryGenerator`：再生零意外漂移（仅 snake delta 增 2 函数/2 投影指令）。
 - `CoreContractSmoke`：通过（需 `DOTNET_ROLL_FORWARD=LatestMajor`，与基线同）。

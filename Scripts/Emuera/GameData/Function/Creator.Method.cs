@@ -152,11 +152,10 @@ namespace MinorShift.Emuera.GameData.Function
                     throw new CodeEE(Name + "の引数(" + target.ToString() + ")が大きすぎます");
                 EraDataResult result = exm.VEvaluator.CheckData((int)target, type);
                 exm.VEvaluator.RESULTS = result.DataMes;
-                // Skiav12.1（snake）：RESULT:1 にセーブデータのバージョンを返す。
-                // v24 参考は RESULT_ARRAY[1] を書かないため、snake capability でのみ書く
-                //（v24pure は「直前の値を保持」= 参考と同一の可観測挙動）。
-                if (Program.Compatibility.Snake.ReturnsChkdataVersion)
-                    exm.VEvaluator.RESULT_ARRAY[1] = result.Version;
+                // CHKDATA 的 RESULT:1 写回存档版本：v24 参考（emuera.em-master
+                // Creator.Method.cs CheckdataMethod）与 snake v16 参考均为无条件写，
+                // 两侧行为一致，不是方言差异，因此不加任何门控。
+                exm.VEvaluator.RESULT_ARRAY[1] = result.Version;
                 return ((long)result.State);
             }
         }

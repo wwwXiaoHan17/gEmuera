@@ -30,8 +30,6 @@ namespace MinorShift.Emuera.Compatibility
 		bool UsesRelationWithoutMastername { get; }
 		/// <summary>预设变量同名 ERD 合并在 CSV 之后、逆引字典之前生效（Skiav13.0）。</summary>
 		bool MergesPresetErdFromErbDir { get; }
-		/// <summary>CHKDATA 的 RESULT:1 写入存档版本号（Skiav12.1）；v24 参考不写。</summary>
-		bool ReturnsChkdataVersion { get; }
 		bool AllowsOutKeyword { get; }
 		bool UsesVariadicStrip { get; }
 		bool UsesFloatTypeSystem { get; }

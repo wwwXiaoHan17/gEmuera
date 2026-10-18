@@ -756,7 +756,6 @@ namespace MinorShift.Emuera.Compatibility
 		public bool UsesRandomizeReseed => false;
 		public bool UsesRelationWithoutMastername => false;
 		public bool MergesPresetErdFromErbDir => false;
-		public bool ReturnsChkdataVersion => false;
 		public bool AllowsOutKeyword => false;
 		public bool UsesVariadicStrip => false;
 		public bool UsesFloatTypeSystem => false;
@@ -804,7 +803,6 @@ namespace MinorShift.Emuera.Compatibility
 		public bool UsesRandomizeReseed => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.RandomizeReseed);
 		public bool UsesRelationWithoutMastername => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.RelationWithoutMastername);
 		public bool MergesPresetErdFromErbDir => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.PresetErdMerge);
-		public bool ReturnsChkdataVersion => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.ChkdataVersion);
 		public bool AllowsOutKeyword => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.OutKeyword);
 		public bool UsesVariadicStrip => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.VariadicStrip);
 		public bool UsesFloatTypeSystem => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.FloatTypeSystem);

@@ -63,10 +63,6 @@ public static class SnakeCompatibilityCapabilities
     /// </summary>
     public const string PresetErdMerge = "csv.preset-erd-merge.v1";
 
-    /// <summary>CHKDATA 的 RESULT:1 返回存档版本号（Skiav12.1）；
-    /// v24 参考不写 RESULT_ARRAY[1]（保持原值），因此按本 capability 门控。</summary>
-    public const string ChkdataVersion = "save.chkdata-version.v1";
-
     /// <summary>#DIM 声明支持 OUT 关键字。与 eraFL 模块同名共享 id（declare.out-keyword.v1）：
     /// erafl 会话经自身 AllowsOutKeyword 派生放行（EraFlCompatibilityModule.OutKeywordBehavior）。</summary>
     public const string OutKeyword = "declare.out-keyword.v1";
@@ -107,7 +103,6 @@ public static class SnakeCompatibilityCapabilities
                 [RandomizeReseed] = "UsesRandomizeReseed",
                 [RelationWithoutMastername] = "UsesRelationWithoutMastername",
                 [PresetErdMerge] = "MergesPresetErdFromErbDir",
-                [ChkdataVersion] = "ReturnsChkdataVersion",
                 [OutKeyword] = "AllowsOutKeyword",
                 [VariadicStrip] = "UsesVariadicStrip",
                 [FloatTypeSystem] = "UsesFloatTypeSystem",
@@ -135,6 +130,5 @@ public static class SnakeCompatibilityCapabilities
             VariadicStrip,
             FloatTypeSystem,
             PresetErdMerge,
-            ChkdataVersion,
         });
 }
