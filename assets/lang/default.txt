@@ -144,3 +144,6 @@ OptionWindow.VirtualMouseScale=Virtual Mouse Scale
 OptionWindow.VirtualMouseOpacity=Mouse Opacity
 QuickFloatingWindow.Title=Quick Panel
 QuickFloatingWindow.HideHint=Hide the floating window (reopen from the system menu Quick button)
+OptionWindow.GameViewLeftPadding=Left Padding
+OptionWindow.GameViewRightPadding=Right Padding
+OptionWindow.GameViewPaddingHint=Mobile only: positive values add padding and negative values remove it; use when the safe-area padding on full-screen or curved-edge phones displays incorrectly.
