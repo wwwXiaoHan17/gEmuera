@@ -1,9 +1,11 @@
 namespace GEmuera.Core.Compatibility;
 
 /// <summary>
-/// 内置 snake 兼容模块（lazy loading fork，Skiav12.1 血统）。
+/// 内置 snake 兼容模块（lazy loading fork，Skiav16 血统；2026-10-18 对齐上游
+/// main-skiasharp v16 的 ERB 语义增量：CHKDATA 存档版本、预设变量同名 ERD 合并、
+/// EXIST_IN_CSV/EXIST_IN_ERD、RAND 伪变量钳制）。
 /// 会话闭包 = v24 基座 + 本模块：指令/函数表面差集由生成清单镜像（见
-/// LegacyDialectInventories.SnakeDelta*），18 项 quirk capability 账本驱动
+/// LegacyDialectInventories.SnakeDelta*），20 项 quirk capability 账本驱动
 /// legacy 桥的 ISnakeCompatibilityPolicy 逐属性派生（映射穷尽性由 SurfaceSmoke
 /// 反射断言把关）。文法族选择（VARI/VARS 动态路径、FOR 共享表内核、PRINTC 像素
 /// 分栏算法）属模块选择语义（IsEnabled），不在 capability 账本内。
@@ -11,7 +13,7 @@ namespace GEmuera.Core.Compatibility;
 public static class SnakeCompatibilityModule
 {
     public const string ModuleId = "game.snake";
-    public const string ModuleVersion = "1.0.0";
+    public const string ModuleVersion = "1.1.0";
     public const string BaseModuleId = "gemuera.v24";
 
     // 迁移外观的声明专用端口类型 id：不提供 policy 值，也不绑定 legacy Parser/VM；

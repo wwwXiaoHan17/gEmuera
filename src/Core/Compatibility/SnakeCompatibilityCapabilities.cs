@@ -56,6 +56,17 @@ public static class SnakeCompatibilityCapabilities
     /// <summary>relationDic 不注册 Mastername（snake 参考走独立映射；v24 参考同时注册）。</summary>
     public const string RelationWithoutMastername = "csv.relation-without-mastername.v1";
 
+    /// <summary>
+    /// 预设变量同名 ERD 合并（Skiav13.0）：全部 CSV 加载后、逆引字典建立前，把 ERB 目录下
+    /// 与预设变量同名的 .erd（如 ITEM.erd）合并进名字槽；CSV 优先，ERD 只填空槽。
+    /// v24 参考无此加载阶段，因此仅在声明本 capability 的会话激活（且 Config.UseERD 为真）。
+    /// </summary>
+    public const string PresetErdMerge = "csv.preset-erd-merge.v1";
+
+    /// <summary>CHKDATA 的 RESULT:1 返回存档版本号（Skiav12.1）；
+    /// v24 参考不写 RESULT_ARRAY[1]（保持原值），因此按本 capability 门控。</summary>
+    public const string ChkdataVersion = "save.chkdata-version.v1";
+
     /// <summary>#DIM 声明支持 OUT 关键字。与 eraFL 模块同名共享 id（declare.out-keyword.v1）：
     /// erafl 会话经自身 AllowsOutKeyword 派生放行（EraFlCompatibilityModule.OutKeywordBehavior）。</summary>
     public const string OutKeyword = "declare.out-keyword.v1";
@@ -95,6 +106,8 @@ public static class SnakeCompatibilityCapabilities
                 [BeforeErrorEvent] = "UsesBeforeErrorEvent",
                 [RandomizeReseed] = "UsesRandomizeReseed",
                 [RelationWithoutMastername] = "UsesRelationWithoutMastername",
+                [PresetErdMerge] = "MergesPresetErdFromErbDir",
+                [ChkdataVersion] = "ReturnsChkdataVersion",
                 [OutKeyword] = "AllowsOutKeyword",
                 [VariadicStrip] = "UsesVariadicStrip",
                 [FloatTypeSystem] = "UsesFloatTypeSystem",
@@ -121,5 +134,7 @@ public static class SnakeCompatibilityCapabilities
             OutKeyword,
             VariadicStrip,
             FloatTypeSystem,
+            PresetErdMerge,
+            ChkdataVersion,
         });
 }

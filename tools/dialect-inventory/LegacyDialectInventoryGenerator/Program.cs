@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
@@ -80,6 +80,11 @@ internal static class Program
                 $"erafl function delta must be empty, got: {string.Join(',', eraflDeltaFunctions)}.");
             Assert(!v24Functions.ContainsKeySafe("SQL_CONNECT") && Keys(snakeFunctions).Contains("SQL_CONNECT"),
                 "snake-only function SQL_CONNECT visibility drifted.");
+            // Skiav13.0 预设名来源探针：snake 专属，v24 表面必须不可见。
+            Assert(!Keys(v24Functions).ContainsKeySafe("EXIST_IN_CSV") && Keys(snakeFunctions).Contains("EXIST_IN_CSV"),
+                "snake-only function EXIST_IN_CSV visibility drifted.");
+            Assert(!Keys(v24Functions).ContainsKeySafe("EXIST_IN_ERD") && Keys(snakeFunctions).Contains("EXIST_IN_ERD"),
+                "snake-only function EXIST_IN_ERD visibility drifted.");
             Assert(Keys(v24Functions).Contains("陥落状態") || Keys(snakeFunctions).Contains("陥落状態"),
                 "CJK built-in function 陥落状態 vanished from every surface.");
             // v18 哨兵：独立基线面 = v24 引擎投影减 v24 后增差集（双源取证 2026-09-12）。
