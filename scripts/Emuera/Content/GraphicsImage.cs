@@ -1138,7 +1138,10 @@ namespace MinorShift.Emuera.Content
 					renderWidth = Math.Max(1, (int)uEmuera.Utils.GetDisplayLength(text, font));
 				int renderHeight = Math.Max(1, Fontsize + 6);
 				var item = EmueraMain.SubmitTextRender(text, Fontname, Fontsize, Fontstyle, brushColor, renderWidth, renderHeight);
-				if (item == null || item.ResultImage == null)
+				// 排队渲染的 item 在 Submit 返回时 ResultImage 还是 null（主线程尚未消费队列）。
+				// 这里必须先等 Completed 再检查 ResultImage；提前判 null 会让所有首次
+				// GDRAWSTRING 静默失败——eraBEMANI 的 MODE 选择界面文字正是这样整片消失。
+				if (item == null)
 					return false;
 				// 原实现 Wait(500) 超时即 return false——主线程一次 >500ms 的抖动就会
 				// 静默丢弃本次 GDRAWSTRING 文本（可观测差异）。ERB 语义要求同步完成；
