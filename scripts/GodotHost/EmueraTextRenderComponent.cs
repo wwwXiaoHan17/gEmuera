@@ -14,9 +14,10 @@ using System.Threading;
 public sealed partial class EmueraTextRenderComponent : Node
 {
 	// 渲染槽数量：每槽一个 SubViewport，多个槽在同一帧内并行渲染不同 item。
-	const int RenderSlotCount = 4;
-	// 与旧实现一致的 2 帧渲染完成启发式（StartRender 后第 2 帧读取纹理）。
-	const int RenderCompleteFrameCount = 2;
+	const int RenderSlotCount = 8;
+	// 1 帧完成：StartRender 设置 Label 后，下一帧即可安全读取 SubViewport 纹理；
+	// 2 帧模式会把批量 flush 的尾延迟拉长一倍（eraBEMANI 模式界面 113 条文本实测）。
+	const int RenderCompleteFrameCount = 1;
 	// LRU 容量上限；文本图尺寸小（几十 KB 级），128 项上限避免 Android 内存膨胀。
 	const int TextCacheCapacity = 128;
 

@@ -1601,6 +1601,11 @@ namespace MinorShift.Emuera.GameData.Function
 		/// </summary>
 		private static GraphicsImage ReadGraphics(string Name, ExpressionMediator exm, IOperandTerm[] arguments, int argNo)
 		{
+			// 文本绘制采用“先排队、观察前批量 flush”策略：除继续修改字体/画刷状态以及
+			// 继续追加 GDRAWTEXT 外，任何读取/创建/绘制/销毁 graphics 的操作都必须先
+			// 把已排队的文本真正写入图像，才能保持与逐条同步绘制逐像素一致。
+			if (Name != "GDRAWTEXT" && Name != "GSETFONT" && Name != "GSETBRUSH")
+				GraphicsImage.FlushAllPendingText();
 			Int64 target = arguments[argNo].GetIntValue(exm);
 			if (target < 0)//funcname + "関数:GraphicsIDに負の値(" + target.ToString() + ")が指定されました"
 				throw new CodeEE(string.Format(Properties.Resources.RuntimeErrMesMethodGraphicsID0, Name, target));

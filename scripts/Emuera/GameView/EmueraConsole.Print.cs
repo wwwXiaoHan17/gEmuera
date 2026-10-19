@@ -483,6 +483,9 @@ namespace MinorShift.Emuera.GameView
 				return;
 			if (!this.Enabled)
 				return;
+			// HTML 可能引用尚未 flush 的 GDRAWTEXT 结果（<img src=...> 读 sprite 纹理），
+			// 与其它观察操作同一时机批量完成延迟文本绘制。
+			MinorShift.Emuera.Content.GraphicsImage.FlushAllPendingText();
 			if (toPrintBuffer)
 			{
 				foreach (ConsoleButtonString button in HtmlManager.Html2ButtonList(str, stringMeasure, this))

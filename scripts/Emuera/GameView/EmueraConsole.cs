@@ -678,6 +678,8 @@ namespace MinorShift.Emuera.GameView
 
 		public void WaitInput(InputRequest req)
 		{
+			// 等待输入前把延迟 GDRAWTEXT 批量落盘，保证玩家看到的是完整画面。
+			MinorShift.Emuera.Content.GraphicsImage.FlushAllPendingText();
 			// SEQUENCEINPUT schedules a synthetic input on the next wait; consume it once.
 			if (emuera != null && emuera.HasSequenceInput)
 			{
@@ -713,6 +715,8 @@ namespace MinorShift.Emuera.GameView
 
 		public void ReadAnyKey(bool anykey = false, bool stopMesskip = false)
 		{
+			// WAIT/WAITANYKEY 同样属于“会观察当前画面”的等待点。
+			MinorShift.Emuera.Content.GraphicsImage.FlushAllPendingText();
 			InputRequest req = new InputRequest();
 			if (!anykey)
 				req.InputType = InputType.EnterKey;

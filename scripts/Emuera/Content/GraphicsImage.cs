@@ -21,6 +21,25 @@ namespace MinorShift.Emuera.Content
 		}
 		public readonly int ID;
 		public Godot.Image godotImage;
+		// GDRAWTEXT 是同步语义，但逐条等待 Godot 主线程离屏渲染会把一次界面构建变成
+		// N×2 帧（eraBEMANI 模式界面 113 条文本实测 5.6s）。这里把文本绘制请求先入队，
+		// 在下一个“会观察该图像”的操作（SPRITECREATE / GDRAW* / HTML_PRINT / GCREATE 等）
+		// 之前批量提交并等待，一次主线程批次最多消费 8 个渲染槽。绘制顺序、字体/画刷快照、
+		// 最终像素都与逐条同步绘制一致；只把等待点推迟到图像真正被读取之前。
+		sealed class PendingTextDraw
+		{
+			public string Text;
+			public int X;
+			public int Y;
+			public string FontName;
+			public int FontSize;
+			public FontStyle FontStyle;
+			public uEmuera.Drawing.Color Color;
+		}
+		readonly List<PendingTextDraw> pendingTextDraws = new List<PendingTextDraw>();
+		static readonly object pendingTextLock = new object();
+		static readonly HashSet<GraphicsImage> pendingTextImages = new HashSet<GraphicsImage>();
+		static bool flushingPendingText;
 		// GraphicsImage 由 ERB 后台线程持续改写，而 Godot 主线程会把它转成显示贴图。
 		// 这里用轻量互斥和版本号保证 UI 只拿到完整稳定帧，避免角色差分重绘中的半成品闪白。
 		readonly object imageSync = new object();
@@ -1133,28 +1152,90 @@ namespace MinorShift.Emuera.Content
 				if (godotImage == null)
 					return false;
 				text ??= "";
-				int renderWidth;
-				using (var font = new Font(Fontname, Math.Max(1, Fontsize), fontStyle, GraphicsUnit.Pixel))
-					renderWidth = Math.Max(1, (int)uEmuera.Utils.GetDisplayLength(text, font));
-				int renderHeight = Math.Max(1, Fontsize + 6);
-				var item = EmueraMain.SubmitTextRender(text, Fontname, Fontsize, Fontstyle, brushColor, renderWidth, renderHeight);
-				// 排队渲染的 item 在 Submit 返回时 ResultImage 还是 null（主线程尚未消费队列）。
-				// 这里必须先等 Completed 再检查 ResultImage；提前判 null 会让所有首次
-				// GDRAWSTRING 静默失败——eraBEMANI 的 MODE 选择界面文字正是这样整片消失。
-				if (item == null)
-					return false;
-				// 原实现 Wait(500) 超时即 return false——主线程一次 >500ms 的抖动就会
-				// 静默丢弃本次 GDRAWSTRING 文本（可观测差异）。ERB 语义要求同步完成；
-				// 文本渲染组件随场景每帧消费队列，完成只受应用生命期约束（后台线程
-				// 随进程退出终止），因此无界等待才是忠实语义，超时兜底反而制造缺陷。
-				item.Completed.Wait(Timeout.Infinite);
-				if (item.ResultImage == null)
-					return false;
-				BlendRect(godotImage, item.ResultImage,
-					new Godot.Rect2I(0, 0, item.ResultImage.GetWidth(), item.ResultImage.GetHeight()),
-					new Godot.Vector2I(x, y));
-				MarkImageMutated();
-				return true;
+				// 绘制时刻的字体/画刷/颜色必须快照；之后 ERB 可以继续 GSETFONT/GSETBRUSH，
+				// 只能影响后续绘制，不能回写已入队的这一次（与逐条同步绘制一致）。
+				pendingTextDraws.Add(new PendingTextDraw
+				{
+					Text = text,
+					X = x,
+					Y = y,
+					FontName = Fontname,
+					FontSize = Fontsize,
+					FontStyle = fontStyle,
+					Color = brushColor
+				});
+			}
+			lock (pendingTextLock)
+				pendingTextImages.Add(this);
+			return true;
+		}
+
+		/// <summary>
+		/// 在图像将要被其它操作观察/消费之前，批量提交并等待所有延迟文本绘制。
+		/// 一次提交所有请求后统一等待，主线程的 4 个渲染槽可在同一轮里并行完成。
+		/// </summary>
+		internal static void FlushAllPendingText()
+		{
+			if (flushingPendingText)
+				return;
+			List<(GraphicsImage Image, List<PendingTextDraw> Draws)> batches;
+			lock (pendingTextLock)
+			{
+				if (pendingTextImages.Count == 0)
+					return;
+				batches = new List<(GraphicsImage, List<PendingTextDraw>)>(pendingTextImages.Count);
+				foreach (GraphicsImage image in pendingTextImages)
+				{
+					if (image.pendingTextDraws.Count == 0)
+						continue;
+					batches.Add((image, new List<PendingTextDraw>(image.pendingTextDraws)));
+					image.pendingTextDraws.Clear();
+				}
+				pendingTextImages.Clear();
+			}
+			if (batches.Count == 0)
+				return;
+
+			flushingPendingText = true;
+			try
+			{
+				var renders = new List<(GraphicsImage Image, PendingTextDraw Draw, EmueraMain.TextRenderItem Item)>();
+				foreach (var batch in batches)
+				{
+					foreach (PendingTextDraw draw in batch.Draws)
+					{
+						int renderWidth;
+						using (var font = new Font(draw.FontName, Math.Max(1, draw.FontSize), draw.FontStyle, GraphicsUnit.Pixel))
+							renderWidth = Math.Max(1, (int)uEmuera.Utils.GetDisplayLength(draw.Text, font));
+						int renderHeight = Math.Max(1, draw.FontSize + 6);
+						var item = EmueraMain.SubmitTextRender(draw.Text, draw.FontName, draw.FontSize,
+							FontStyleToInt(draw.FontStyle), draw.Color, renderWidth, renderHeight);
+						if (item != null)
+							renders.Add((batch.Image, draw, item));
+					}
+				}
+				foreach (var render in renders)
+					render.Item.Completed.Wait(Timeout.Infinite);
+				foreach (var render in renders)
+				{
+					Godot.Image result = render.Item.ResultImage;
+					if (result == null)
+						continue;
+					GraphicsImage image = render.Image;
+					lock (image.imageSync)
+					{
+						if (image.godotImage == null)
+							continue;
+						BlendRect(image.godotImage, result,
+							new Godot.Rect2I(0, 0, result.GetWidth(), result.GetHeight()),
+							new Godot.Vector2I(render.Draw.X, render.Draw.Y));
+						image.MarkImageMutated();
+					}
+				}
+			}
+			finally
+			{
+				flushingPendingText = false;
 			}
 		}
 
