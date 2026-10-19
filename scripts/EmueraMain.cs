@@ -211,6 +211,7 @@ public partial class EmueraMain : Node
 			return;
 		}
 		working = true;
+		EmueraContent.instance?.ApplyMobileViewportPolicy();
 
 		await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
 		HideStartupOverlay();

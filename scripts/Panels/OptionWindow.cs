@@ -125,7 +125,11 @@ public partial class OptionWindow : Control
 		fontSizeSlider.Value = MinorShift.Emuera.Config.FontSize > 0 ? MinorShift.Emuera.Config.FontSize : 18;
 		fontSizeSlider.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 		fontSizeSlider.CustomMinimumSize = new Vector2(120, 44);
-		fontSizeSlider.Editable = false;
+		// 自绘画布下字体大小由内容缩放实现：不再锁死在 emuera.config 的
+		// FontSize，也不改写游戏的 emuera.config（配置严格只读）。
+		fontSizeSlider.Editable = true;
+		fontSizeSlider.TooltipText = MultiLanguage.Get("OptionWindow.FontSizeHint",
+			"Adjust rendered font size without changing the game's emuera.config.");
 		fontSizeSlider.ValueChanged += OnFontSizeChanged;
 		fontRow.AddChild(fontSizeSlider);
 		fontSizeLabel = CreateValueLabel();
@@ -517,9 +521,25 @@ public partial class OptionWindow : Control
 
 	public void ShowPopup()
 	{
+		SyncFontSizeFromContentScale();
 		popup.PopupCentered();
 		CallDeferred(nameof(ClampPopupToSafeArea));
 		EmitSignal(SignalName.PopupOpened);
+	}
+
+	// 字体滑杆展示的是“渲染后字号”：核心字号 × 当前内容缩放。
+	// 这样自动 fit 后打开选项也能看到实际大小。
+	void SyncFontSizeFromContentScale()
+	{
+		if (fontSizeSlider == null || fontSizeLabel == null)
+			return;
+		int coreSize = MinorShift.Emuera.Config.FontSize > 0 ? MinorShift.Emuera.Config.FontSize : 18;
+		float scale = EmueraContent.instance?.ContentScale ?? 1.0f;
+		int rendered = Mathf.Clamp(Mathf.RoundToInt(coreSize * scale), 8, 48);
+		fontSizeSlider.SetBlockSignals(true);
+		fontSizeSlider.Value = rendered;
+		fontSizeSlider.SetBlockSignals(false);
+		fontSizeLabel.Text = rendered.ToString();
 	}
 
 	void ClampPopupToSafeArea()
@@ -553,13 +573,10 @@ public partial class OptionWindow : Control
 	void OnFontSizeChanged(double value)
 	{
 		int coreSize = MinorShift.Emuera.Config.FontSize > 0 ? MinorShift.Emuera.Config.FontSize : 18;
-		fontSizeLabel.Text = coreSize.ToString();
-		if (fontSizeSlider != null && (int)fontSizeSlider.Value != coreSize)
-		{
-			fontSizeSlider.SetBlockSignals(true);
-			fontSizeSlider.Value = coreSize;
-			fontSizeSlider.SetBlockSignals(false);
-		}
+		int requested = Mathf.Clamp((int)System.Math.Round(value), 8, 48);
+		fontSizeLabel.Text = requested.ToString();
+		float scale = Mathf.Clamp(requested / (float)coreSize, 0.5f, 3.0f);
+		EmueraContent.instance?.SetContentScale(scale);
 	}
 
 	void OnQuickButtonWidthChanged(double value)

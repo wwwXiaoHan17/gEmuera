@@ -351,6 +351,7 @@ public partial class EmueraContent : Control
 	// Scale and pinch gesture state. Pinch zoom is opt-in because accidental
 	// two-finger input is common on phones while tapping dense command buttons.
 	float contentScale = 1.0f;
+	bool contentScaleUserAdjusted;
 	Dictionary<int, Vector2> contentTouchPositions = new Dictionary<int, Vector2>();
 	bool contentTouchGestureActive = false;
 	bool contentPinchActive = false;
@@ -669,19 +670,42 @@ public partial class EmueraContent : Control
 
 	bool ApplyAndroidDynamicWindowWidth(bool requestRefresh)
 	{
-		if (OS.GetName() != "Android" || Config.WindowX <= 0 || ContentSafeWidth <= 0)
-			return false;
+		// 宽度策略已上移到 Program.ApplyAndroidWindowWidthPolicy：它读取游戏自己的
+		// emuera.config，并把画布长短边归一化成竖屏逻辑尺寸。这里不能再按物理屏幕
+		// 安全宽度改写 Config.WindowX，否则横竖屏切换会重排文本、也会覆盖游戏配置。
+		return false;
+	}
 
-		int targetWidth = System.Math.Max(MinDynamicContentWidth, ContentSafeWidth);
-		if (System.Math.Abs(Config.WindowX - targetWidth) <= 1)
-			return false;
+	// 手机端竖屏逻辑画布：始终以 Config 的长短边作为宽高，物理屏幕只做等比
+	// 适配。旋转时只重算 fit scale，不改变行宽/行高，因此不会出现回横屏错位。
+	public void ApplyMobileViewportPolicy()
+	{
+		if (OS.GetName() != "Android" && !OS.HasFeature("mobile"))
+			return;
+		if (Config.WindowX <= 0 || Config.WindowY <= 0)
+			return;
 
-		int previousWidth = Config.WindowX;
-		Config.UpdateWindowWidth(targetWidth);
-		GenericUtils.Info($"[UI] Android dynamic content width: {previousWidth} -> {targetWidth}, safe={ContentSafeWidth}x{ContentSafeHeight}, viewport={ContentWidth}x{ContentHeight}");
-		if (requestRefresh)
-			GlobalStatic.MainWindow?.Refresh();
-		return true;
+		int portraitWidth = System.Math.Min(Config.WindowX, Config.WindowY);
+		int portraitHeight = System.Math.Max(Config.WindowX, Config.WindowY);
+		if (Config.WindowX != portraitWidth || Config.WindowY != portraitHeight)
+			Config.UpdateWindowSize(portraitWidth, portraitHeight);
+
+		ApplySafeAreaLayout();
+
+		// 只缩小、不放大：物理宽度小于竖屏逻辑宽度时 fit；横屏时保持 1x，
+		// 画布按竖屏宽度居中留黑，绝不拉伸到横屏宽度。
+		if (!contentScaleUserAdjusted && ContentSafeWidth > 0 && Config.DrawableWidth > 0)
+		{
+			float fit = Mathf.Clamp(ContentSafeWidth / (float)Config.DrawableWidth, 0.5f, 1.0f);
+			if (Mathf.Abs(fit - contentScale) > 0.001f)
+			{
+				ApplyContentScaleValue(fit);
+				UpdateScaleBounds();
+				ApplyContentScaleTransform();
+			}
+		}
+		QueueScaleBoundsUpdate();
+		consoleRenderSurface?.MarkDirty();
 	}
 
 	// Drag sensitivity shared by the main console and quick-button panel. It is
@@ -1457,6 +1481,14 @@ public partial class EmueraContent : Control
 			// eraFL 的 UI 容器通常先用 HTML_PRINT ...,1 输出相对定位 div，
 			// 再用 NEWLINE(n) 显式保留窗口高度。这里不能再按 div.Bottom
 			// 撑高逻辑行，否则会把游戏脚本自己预留的高度重复计算一遍。
+			return baseLineHeight;
+		}
+		if (part is ConsoleShapePart)
+		{
+			// 参考实现中 <shape> 是 escaped part：矩形可以越过本行向下绘制，
+			// 但逻辑行高仍是 Config.FontSize。若这里按 part.Bottom 撑高行高，
+			// 后续 PRINTL 文本会被推到 shape 下方（黑字黑底不可见）——eraBEMANI
+			// 许可协议页的白色底框+黑字正是这样丢字的。
 			return baseLineHeight;
 		}
 		return System.Math.Max(baseLineHeight, part.Bottom);
@@ -6482,20 +6514,25 @@ public partial class EmueraContent : Control
 	// system UI or rotation changes.
 	void OnViewportSizeChanged()
 	{
+		ApplyMobileViewportPolicy();
 		ApplySafeAreaLayout();
 		VirtualMouse.Active?.RefreshViewportBounds();
 		QueueScaleBoundsUpdate();
+		consoleRenderSurface?.MarkDirty();
 	}
 
 	// Public scale entry point used by Scalepad. It keeps the viewport center
 	// anchored so zooming does not jump to the top-left.
 	public void SetContentScale(float scale)
 	{
+		contentScaleUserAdjusted = true;
 		if (scrollContainer != null)
 			SetContentScaleKeepingFocus(scale, scrollContainer.GetGlobalRect().GetCenter(), false, true);
 		else
 			SetContentScale(scale, false, true);
 	}
+
+	public float ContentScale => contentScale;
 
 	// Internal scale setter used by fallback paths where focus preservation is
 	// not possible.
@@ -7204,12 +7241,60 @@ public partial class EmueraContent : Control
 			EndContentTouchGesture();
 		else
 		{
-			contentPinchActive = false;
-			contentPinchDirty = false;
+			// 双指缩放后只松开一根手指：如果继续停留在“手势模式”，剩下这根
+			// 手指的拖动会被 pinch 状态机吞掉，表现为“缩放后屏幕拖不动”。这里
+			// 立即结束捏合并把剩余手指转成普通内容拖动，用户可直接接着上下拖。
+			EndPinchAsSingleFingerDrag(touch.Index);
 		}
 
 		ConsumeContentPointerEvent(acceptEvent);
 		return true;
+	}
+
+	// 松开一根手指后从 pinch 状态切回普通单指拖动。
+	void EndPinchAsSingleFingerDrag(int releasedIndex)
+	{
+		if (contentPinchFocusValid)
+		{
+			UpdateScaleBounds(true);
+			RestoreContentScaleFocus(scaleFocusContentPoint, scaleFocusLocalPoint);
+		}
+
+		int remainingIndex = int.MinValue;
+		Vector2 remainingPosition = Vector2.Zero;
+		foreach (var pair in contentTouchPositions)
+		{
+			if (pair.Key == releasedIndex)
+				continue;
+			remainingIndex = pair.Key;
+			remainingPosition = pair.Value;
+			break;
+		}
+
+		ResetContentTouchGestureState();
+		if (remainingIndex == int.MinValue)
+			return;
+
+		// 保留剩余手指的跟踪，确保它随后的 release 仍能走普通点击/拖动收尾；
+		// motion 由 HandleContentScreenDrag 返回 false 后落到普通指针拖拽路径。
+		contentTouchPositions[remainingIndex] = remainingPosition;
+		StopContentInertia();
+		contentDragActive = true;
+		contentDragMoved = false;
+		contentDragStartedOnButton = false;
+		contentDragButton = null;
+		contentDragButtonInput = null;
+		contentDragButtonGeneration = 0;
+		contentDragButtonContentCenterValid = false;
+		contentDragMouseVk = 0x01;
+		contentDragStartPosition = remainingPosition;
+		contentDragLastPosition = remainingPosition;
+		contentLastDragTick = Time.GetTicksMsec();
+		lastScrollTraceDragTick = contentLastDragTick;
+		contentScrollInteractionSerial++;
+		ClearCanvasVisualButton();
+		if (GenericUtils.IsScrollTraceActive)
+			TraceScroll("pinch_to_drag", () => $"remaining={remainingIndex} pos=({Mathf.RoundToInt(remainingPosition.X)},{Mathf.RoundToInt(remainingPosition.Y)})");
 	}
 
 	// Update multi-touch positions during pinch gestures.
@@ -7297,6 +7382,8 @@ public partial class EmueraContent : Control
 		float scale = Mathf.Max(contentScale, 0.001f);
 		contentPinchFocusContent = (GetCurrentContentScrollVector() + localFocus) / scale;
 		contentPinchActive = true;
+		// 用户主动双指缩放后，旋转屏幕不再用 fit scale 覆盖用户选择。
+		contentScaleUserAdjusted = true;
 	}
 
 	// Apply deferred pinch zoom once per frame instead of on every raw drag event.

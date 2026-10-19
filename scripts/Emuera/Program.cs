@@ -468,23 +468,25 @@ namespace MinorShift.Emuera
 			if (Godot.OS.GetName() != "Android")
 				return;
 
-			int safeWidth = global::EmueraContent.ContentSafeWidth;
-			int viewportWidth = global::EmueraContent.ContentWidth;
-			if (safeWidth <= 0)
-				safeWidth = viewportWidth;
-			if (safeWidth <= 0)
+			// 严格使用游戏自己的 emuera.config，不再用 gEmuera 的屏幕安全宽度覆盖
+			// 配置。手机端只把配置的画布做“长短边归一化”：始终以竖屏宽高作为逻辑
+			// 画布，横屏也沿用同一尺寸，由 EmueraContent 的 fit scale 适配物理屏幕。
+			// 这样旋转不会重排 ERB 文本，也不会把 gEmuera 的默认宽度写进游戏配置。
+			int configuredWidth = Config.WindowX;
+			int configuredHeight = Config.WindowY;
+			if (configuredWidth <= 0 || configuredHeight <= 0)
+				return;
+			int portraitWidth = System.Math.Min(configuredWidth, configuredHeight);
+			int portraitHeight = System.Math.Max(configuredWidth, configuredHeight);
+			if (configuredWidth != portraitWidth || configuredHeight != portraitHeight)
 			{
-				viewportWidth = Godot.DisplayServer.WindowGetSize().X;
-				safeWidth = viewportWidth;
-			}
-			if (safeWidth > 0 && System.Math.Abs(Config.WindowX - safeWidth) > 1)
-			{
-				int previousWidth = Config.WindowX;
-				Config.UpdateWindowWidth(System.Math.Max(320, safeWidth));
-				GenericUtils.Info($"[LOAD] Android dynamic window width: {previousWidth} -> {Config.WindowX}, safe={safeWidth}, viewport={viewportWidth}");
+				Config.UpdateWindowSize(portraitWidth, portraitHeight);
+				GenericUtils.Info($"[LOAD] Android portrait canvas from game emuera.config: "
+					+ $"{configuredWidth}x{configuredHeight} -> {portraitWidth}x{portraitHeight}");
 				return;
 			}
-			GenericUtils.Info($"[LOAD] Android keeps configured window width: {Config.WindowX}, safe={safeWidth}, viewport={viewportWidth}");
+			GenericUtils.Info($"[LOAD] Android keeps configured portrait canvas: "
+				+ $"{Config.WindowX}x{Config.WindowY}");
 		}
 
 		internal static void ConfigureLegacyRunnerStartupErrorLogPath(string path)

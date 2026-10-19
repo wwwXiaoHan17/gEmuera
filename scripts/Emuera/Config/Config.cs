@@ -561,6 +561,17 @@ namespace MinorShift.Emuera
 			WindowX = width;
 			DrawableWidth = width - DrawingParam_ShapePositionShift;
 		}
+		/// <summary>
+		/// 运行时改写逻辑窗口尺寸（不写回游戏的 emuera.config）。
+		/// 手机竖屏固定用竖屏逻辑尺寸：宽高取自游戏配置本身，只做长短边归一化，
+		/// 旋转时不再改行宽/字体，避免回到横屏后整屏错位。
+		/// </summary>
+		public static void UpdateWindowSize(int width, int height)
+		{
+			WindowX = width;
+			WindowY = height;
+			DrawableWidth = width - DrawingParam_ShapePositionShift;
+		}
 		public static int WindowY { get; private set; }
 		public static int WindowPosX { get; private set; }
 		public static int WindowPosY { get; private set; }

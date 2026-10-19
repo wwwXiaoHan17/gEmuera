@@ -712,6 +712,13 @@ static ConfigData() { }
 
 			Config.SetConfig(this);
 
+			// 证据日志：确认始终读取“当前游戏根目录”的 emuera.config /
+			// _default.config，而不是 gEmuera 自带默认值或其他游戏残留。
+			GenericUtils.Info($"[CONFIG] root={Program.ExeDir} emuera={configPath} "
+				+ $"exists={uEmuera.Utils.FileExists(configPath)} default={defaultConfigPath} "
+				+ $"fixed={fixedConfigPath} font={Config.FontSize} line={Config.LineHeight} "
+				+ $"window={Config.WindowX}x{Config.WindowY}");
+
 			if (Program.DebugMode)
 			{
 				try
