@@ -915,6 +915,11 @@ namespace uEmuera
 			// 原核心的 STRLEN 以 Shift-JIS/代码页字节数为基准，绘制宽度则依赖日文字体测量。
 			// Godot/Android 侧改用固定网格后，必须先排除这些在脚本中常作全角符号使用的字符，
 			// 否则 ×、±、°、全角数字等会被当成半角，地图和 GDRAWTEXT 的列推进会错位。
+			// U+2022 BULLET（•）在 CP932/CP936 中不可映射：参考 LangManager.GetStrlenLang
+			// 的编码字节回退会把它计为 1 字节；eraBEMANI 的模式菜单项「角色•物品购买」
+			// 正是靠这个宽度对齐边框，若按 fullwidth(2) 计算会少一个填充空格（错位一行）。
+			if (c == '\u2022')
+				return true;
 			if(CheckFullSize(c))
 				return false;
 			if (IsSingleCellUnicodeArt(c))
