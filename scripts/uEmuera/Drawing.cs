@@ -755,11 +755,11 @@ namespace uEmuera.Drawing
 			case "tomato":
 				return new Color(0xFF, 0x63, 0x47);
 			}
-			// megaten 门控（P4）：会话声明 ui.standard-color-name.v1 时，颜色名解析改用
-			// System.Drawing 标准调色板（参考实现用 Color.FromName，认识全部 141 个标准名）。
-			// 未声明的会话保持上面的 32 名表与 Black 回退，逐点等价于基线。
-			if (MinorShift.Emuera.Program.Compatibility.Megaten.UsesStandardColorNameTable
-				&& StandardColorNames.TryGet(key, out Color standard))
+			// 参考实现使用 System.Drawing.Color.FromName，认识全部 141 个标准颜色名。
+			// 32 名表只是本兼容层的旧子集；未命中时必须继续查标准表，否则
+			// lightskyblue / lightcoral 等合法颜色会回退 Black，在黑底上变成“丢行”
+			// （eraBEMANI 角色创建界面的 名字/性别/体格/兽耳 等行即由此消失）。
+			if (StandardColorNames.TryGet(key, out Color standard))
 				return standard;
 			uEmuera.Logger.Warn(EmueraLogCategory.UI, () => "Not Match Color '" + name + "'");
 			return Black;
