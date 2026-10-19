@@ -85,8 +85,11 @@ namespace MinorShift.Emuera.GameProc
 						long value = term.GetIntValue(null);
 						if (table.intTable.ContainsKey(value))
 						{
-							// 重复 CASE 值：与 snake 一致给警告并跳过，不建立跳转表（避免歧义）。
-							ParserMediator.Warn("CASEの値(" + value + ")が重複しています", caseLine, 1, false, false);
+							// v24 参考实现顺序扫描 CASE，重复值静默取第一个匹配；只有
+							// snake 参考会给出该 Lv1 警告。这里按会话门控，避免 v24pure
+							// 启动时刷出参考 Emuera 根本不显示的警告。
+							if (Program.Compatibility.Snake.IsEnabled)
+								ParserMediator.Warn("CASEの値(" + value + ")が重複しています", caseLine, 1, false, false);
 							continue;
 						}
 						table.intTable.Add(value, caseLine);
@@ -97,7 +100,8 @@ namespace MinorShift.Emuera.GameProc
 						double value = term.GetFloatValue(null);
 						if (table.floatTable.ContainsKey(value))
 						{
-							ParserMediator.Warn("CASEの値(" + value + ")が重複しています", caseLine, 1, false, false);
+							if (Program.Compatibility.Snake.IsEnabled)
+								ParserMediator.Warn("CASEの値(" + value + ")が重複しています", caseLine, 1, false, false);
 							continue;
 						}
 						table.floatTable.Add(value, caseLine);
@@ -107,7 +111,8 @@ namespace MinorShift.Emuera.GameProc
 						string value = term.GetStrValue(null);
 						if (table.strTable.ContainsKey(value))
 						{
-							ParserMediator.Warn("CASEの値(" + value + ")が重複しています", caseLine, 1, false, false);
+							if (Program.Compatibility.Snake.IsEnabled)
+								ParserMediator.Warn("CASEの値(" + value + ")が重複しています", caseLine, 1, false, false);
 							continue;
 						}
 						table.strTable.Add(value, caseLine);
