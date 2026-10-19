@@ -417,6 +417,15 @@ public partial class EmueraContent
 		bool isSelecting = IsCanvasButtonVisuallySelected(overlay.Button);
 			if (!TryResolveCanvasImage(overlay.Image, overlay.RelX, isSelecting, out var info))
 			{
+				// SPRITEDISPOSE / SPRITEDISPOSEALL 会把动态 sprite 从 AppContents
+				// 移除，但 ConsoleImagePart 仍持有创建时的 ASprite 引用。参考实现
+				// 在 DrawTo 时检查 img.IsCreated，sprite 已销毁就不绘制；Canvas
+				// overlay 不能继续复用旧纹理，否则教程/商店切换后旧 <img> 会残留。
+				if (IsCanvasImageSourceDisposed(overlay.Image, isSelecting))
+				{
+					node.Visible = false;
+					return;
+				}
 				// XRay/HTML 差分图刷新时，新帧可能还在异步解码。已有节点继续显示旧纹理，
 				// 等新纹理解析成功后再替换，避免刷新瞬间露出空白或白色图块。
 				node.Visible = node.SourceTexture != null && IsCanvasOverlayRectVisible(GetCanvasImageOverlayRect(node), visible);
@@ -477,6 +486,21 @@ public partial class EmueraContent
 	bool TryResolveCanvasImage(ConsoleImagePart image, int relX, out CanvasImageRenderInfo info)
 	{
 		return TryResolveCanvasImage(image, relX, false, out info);
+	}
+
+	bool IsCanvasImageSourceDisposed(ConsoleImagePart image, bool isSelecting)
+	{
+		if (image == null)
+			return true;
+		ASprite sprite = isSelecting && image.ImageBackground != null
+			? image.ImageBackground
+			: image.Image;
+		if (sprite != null)
+			return !sprite.IsCreated;
+		string resourceName = isSelecting && !string.IsNullOrEmpty(image.ButtonResourceName)
+			? image.ButtonResourceName
+			: image.ResourceName;
+		return !string.IsNullOrEmpty(resourceName) && AppContents.GetSprite(resourceName) == null;
 	}
 
 	bool TryResolveCanvasImage(ConsoleImagePart image, int relX, bool isSelecting, out CanvasImageRenderInfo info)
@@ -814,6 +838,11 @@ public partial class EmueraContent
 				var node = overlay.Node;
 				if (node == null || !GodotObject.IsInstanceValid(node))
 					continue;
+				if (IsCanvasImageSourceDisposed(overlay.Image, IsCanvasButtonVisuallySelected(overlay.Button)))
+				{
+					node.Visible = false;
+					continue;
+				}
 				// 越界 overlay 常驻索引表后会脱离普通可见行刷新；若只用
 				// 上次的 node.Position 做可见性判断，旧行图片会永远停在
 				// 最后一次可见的位置。先按当前 layout 的 lineY 重新定位。
