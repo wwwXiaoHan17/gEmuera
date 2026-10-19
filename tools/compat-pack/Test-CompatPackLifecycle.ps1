@@ -8,11 +8,11 @@
 #   同进程下一次启动在 hash 防御处失败。
 #
 # 检查项（exit 0 = 全部通过；exit 1 = 任一失败）：
-#   1. Scripts/EmueraMain.cs 的 StopLegacySession 方法体内不得出现
+#   1. scripts/EmueraMain.cs 的 StopLegacySession 方法体内不得出现
 #      `IsRunning` 条件早退（if 条件含 IsRunning 且守卫语句 return）。
-#   2. Scripts/GodotHost/LegacySessionBackend.cs 的 StopLegacyBaselineAsync
+#   2. scripts/GodotHost/LegacySessionBackend.cs 的 StopLegacyBaselineAsync
 #      方法体必须调用 ClearCompatibilityPlan。
-#   3. Scripts/Emuera/Compatibility/CompatPackHost.cs 不得再出现
+#   3. scripts/Emuera/Compatibility/CompatPackHost.cs 不得再出现
 #      ActivePackModuleIds / ActiveVariantSelections / ResetActiveSessionProjection
 #      （投影数据已内聚进 DialectPlan，禁止 process-wide 静态回潮）。
 #   4. src/Core/Compatibility/DialectRuntime.cs 的 DialectPlan 类必须声明
@@ -188,15 +188,15 @@ Write-Output "=== CompatPack 会话生命周期 P0 静态回归守卫 ==="
 Write-Output ("项目根: {0}" -f $rootDisplay)
 Write-Output ""
 
-$emueraMainText = Read-SourceText 'Scripts/EmueraMain.cs'
-$backendText    = Read-SourceText 'Scripts/GodotHost/LegacySessionBackend.cs'
-$hostText       = Read-SourceText 'Scripts/Emuera/Compatibility/CompatPackHost.cs'
+$emueraMainText = Read-SourceText 'scripts/EmueraMain.cs'
+$backendText    = Read-SourceText 'scripts/GodotHost/LegacySessionBackend.cs'
+$hostText       = Read-SourceText 'scripts/Emuera/Compatibility/CompatPackHost.cs'
 $dialectText    = Read-SourceText 'src/Core/Compatibility/DialectRuntime.cs'
 
 # ---- 检查 1：StopLegacySession 不得出现 IsRunning 条件早退 -------------------
-$check1Name = '检查1/4: StopLegacySession 方法体不得包含 IsRunning 条件早退（Scripts/EmueraMain.cs）'
+$check1Name = '检查1/4: StopLegacySession 方法体不得包含 IsRunning 条件早退（scripts/EmueraMain.cs）'
 if ($null -eq $emueraMainText) {
-    Write-CheckResult -Name $check1Name -Passed $false -Detail '文件缺失: Scripts/EmueraMain.cs'
+    Write-CheckResult -Name $check1Name -Passed $false -Detail '文件缺失: scripts/EmueraMain.cs'
 }
 else {
     $stripped = Remove-CsCommentsAndLiterals -Text $emueraMainText
@@ -217,9 +217,9 @@ else {
 }
 
 # ---- 检查 2：StopLegacyBaselineAsync 必须调用 ClearCompatibilityPlan ---------
-$check2Name = '检查2/4: StopLegacyBaselineAsync 必须调用 ClearCompatibilityPlan（Scripts/GodotHost/LegacySessionBackend.cs）'
+$check2Name = '检查2/4: StopLegacyBaselineAsync 必须调用 ClearCompatibilityPlan（scripts/GodotHost/LegacySessionBackend.cs）'
 if ($null -eq $backendText) {
-    Write-CheckResult -Name $check2Name -Passed $false -Detail '文件缺失: Scripts/GodotHost/LegacySessionBackend.cs'
+    Write-CheckResult -Name $check2Name -Passed $false -Detail '文件缺失: scripts/GodotHost/LegacySessionBackend.cs'
 }
 else {
     $stripped = Remove-CsCommentsAndLiterals -Text $backendText
@@ -236,9 +236,9 @@ else {
 }
 
 # ---- 检查 3：CompatPackHost 不得再现投影静态 --------------------------------
-$check3Name = '检查3/4: CompatPackHost 不得再现 ActivePackModuleIds / ActiveVariantSelections / ResetActiveSessionProjection（Scripts/Emuera/Compatibility/CompatPackHost.cs）'
+$check3Name = '检查3/4: CompatPackHost 不得再现 ActivePackModuleIds / ActiveVariantSelections / ResetActiveSessionProjection（scripts/Emuera/Compatibility/CompatPackHost.cs）'
 if ($null -eq $hostText) {
-    Write-CheckResult -Name $check3Name -Passed $false -Detail '文件缺失: Scripts/Emuera/Compatibility/CompatPackHost.cs'
+    Write-CheckResult -Name $check3Name -Passed $false -Detail '文件缺失: scripts/Emuera/Compatibility/CompatPackHost.cs'
 }
 else {
     $stripped = Remove-CsCommentsAndLiterals -Text $hostText

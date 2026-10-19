@@ -29,7 +29,7 @@ try {
         schemaVersion = '1.0.0'; workPackageId = 'M3-CORE-01'; phase = 'M3'
         executionStatus = 'InProgress'; gateStatus = 'Blocked'; blockerCode = 'PreviousGate:M2'
         predecessors = @('M2 gate decision: missing'); identity = [ordered]@{source='tree';toolchain='dotnet';runtime='none';fixture='none';profile='v24pure';flags=@('core.extracted=false')}
-        allowedPaths = @('src/Core'); forbiddenPaths = @('Scripts/Emuera'); owner = [ordered]@{core='core';bridge='bridge';app='app';tests='tests'}
+        allowedPaths = @('src/Core'); forbiddenPaths = @('scripts/Emuera'); owner = [ordered]@{core='core';bridge='bridge';app='app';tests='tests'}
         commands = @('dotnet build src/Core/GEmuera.Core.csproj -c Release --no-restore'); fixtures = @(); comparators = @(); reports = @('core-build.json'); uncovered = @('Godot and device evidence')
         rollback = [ordered]@{flag='core.extracted';artifact='legacy';restoreCommand='set core.extracted=false';verified=$false}
         decision = [ordered]@{preparedBy='local';reviewedBy='unassigned';approvedBy='unassigned';conclusion='NeedsEvidence';reportHashes=@()}

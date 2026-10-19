@@ -93,7 +93,7 @@ namespace gEmuera.Diagnostics
 				message ?? "",
 				data ?? "",
 				nameof(WriteInfrastructureRecord),
-				"Scripts/Diagnostics/DiagnosticLogExporter.cs",
+				"scripts/Diagnostics/DiagnosticLogExporter.cs",
 				0);
 			DiagnosticLogSinks.Write(record);
 			if (level >= EmueraLogLevel.Error)

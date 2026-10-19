@@ -7,17 +7,17 @@
   "sourceFiles": [
     {
       "id": "FirstWindow",
-      "path": "Scripts/FirstWindow.cs",
+      "path": "scripts/FirstWindow.cs",
       "sha256": "0191454ae346eeb2386fb73b8d64483306ee9512c37df91fac99b6351b174f18"
     },
     {
       "id": "Program",
-      "path": "Scripts/Emuera/Program.cs",
+      "path": "scripts/Emuera/Program.cs",
       "sha256": "c9a5a226f5b9ba4faa8972fe42188967d27d1dec35d9757b407e703adac19c02"
     },
     {
       "id": "LegacyRunnerConfig",
-      "path": "Scripts/LegacyRunner/LegacyRunnerConfig.cs",
+      "path": "scripts/LegacyRunner/LegacyRunnerConfig.cs",
       "sha256": "82237dfb99ce92637a1c612b8213f493927c7ad42f20e328be231081ea3f7a0a"
     }
   ],

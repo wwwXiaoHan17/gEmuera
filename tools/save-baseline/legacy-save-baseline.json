@@ -5,11 +5,11 @@
   "sourceWorkPackage": "M0-SAV-01",
   "expectedSourceFileCount": 5,
   "sources": [
-    {"relativePath":"Scripts/Emuera/Sub/EraBinaryDataReader.cs","sha256":"72d4d8041799d61e7c1379bdc7af18071054e56601709a027e98353d46018014","byteLength":31720},
-    {"relativePath":"Scripts/Emuera/Sub/EraBinaryDataWriter.cs","sha256":"bb963bce35f50f0a8d60c3d461aef4b4ce509e5de4d318383315fc2f27f1cf53","byteLength":13666},
-    {"relativePath":"Scripts/Emuera/GameData/Variable/VariableEvaluator.cs","sha256":"920fab29e87cdb00ab73be41ef051fadf13e078537e2921a29fafdcbf2450e42","byteLength":118924},
-    {"relativePath":"Scripts/Emuera/GameData/Variable/VariableData.cs","sha256":"4d83f6f6946301968e0268771e26fc564fd56e80869d5ebc0c907ef9bf047f7c","byteLength":66269},
-    {"relativePath":"Scripts/Emuera/GameData/Variable/CharacterData.cs","sha256":"970bc419bd65e1633e57837faced3b80f914abfbb0c82c87f8f9697996d0211c","byteLength":39537}
+    {"relativePath":"scripts/Emuera/Sub/EraBinaryDataReader.cs","sha256":"72d4d8041799d61e7c1379bdc7af18071054e56601709a027e98353d46018014","byteLength":31720},
+    {"relativePath":"scripts/Emuera/Sub/EraBinaryDataWriter.cs","sha256":"bb963bce35f50f0a8d60c3d461aef4b4ce509e5de4d318383315fc2f27f1cf53","byteLength":13666},
+    {"relativePath":"scripts/Emuera/GameData/Variable/VariableEvaluator.cs","sha256":"920fab29e87cdb00ab73be41ef051fadf13e078537e2921a29fafdcbf2450e42","byteLength":118924},
+    {"relativePath":"scripts/Emuera/GameData/Variable/VariableData.cs","sha256":"4d83f6f6946301968e0268771e26fc564fd56e80869d5ebc0c907ef9bf047f7c","byteLength":66269},
+    {"relativePath":"scripts/Emuera/GameData/Variable/CharacterData.cs","sha256":"970bc419bd65e1633e57837faced3b80f914abfbb0c82c87f8f9697996d0211c","byteLength":39537}
   ],
   "header": {"headerHex":"0x0A1A0A0D41524589","zipHeaderHex":"0x0A50495A41524589","formatVersion":1808,"dataCount":0,"minimumBytes":16,"encoding":"Encoding.Unicode"},
   "expectedFileTypes": [
@@ -31,7 +31,7 @@
   ],
   "profileConflict": {"candidateSaveProfileIds":["Upstream1808","GEmueraSnake"],"legacyFloatCodes":["0x20","0x21","0x22","0x23"],"upstreamConflictingCodes":["0x20","0x21","0x22"],"automaticSelectionStatus":"Unbound"},
   "legacyMutationEvidence": [
-    {"id":"normal-load-resets-variable-state","relativePath":"Scripts/Emuera/GameData/Variable/VariableEvaluator.cs","requiredLiterals":["varData.SetDefaultValue(constant);","varData.CharacterList.Clear();"]},
-    {"id":"normal-load-clears-save-runtime-data-before-parse","relativePath":"Scripts/Emuera/GameData/Variable/VariableEvaluator.cs","requiredLiterals":["RuntimeDataStore.ClearSaveData(constant);"]}
+    {"id":"normal-load-resets-variable-state","relativePath":"scripts/Emuera/GameData/Variable/VariableEvaluator.cs","requiredLiterals":["varData.SetDefaultValue(constant);","varData.CharacterList.Clear();"]},
+    {"id":"normal-load-clears-save-runtime-data-before-parse","relativePath":"scripts/Emuera/GameData/Variable/VariableEvaluator.cs","requiredLiterals":["RuntimeDataStore.ClearSaveData(constant);"]}
   ]
 }

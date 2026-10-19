@@ -1,11 +1,11 @@
 extends GdUnitTestSuite
 
-const RUNTIME_SCRIPT := preload("res://Scripts/GodotHost/PrototypeRuntimeNode.cs")
-const STATUS_VIEW_SCRIPT := preload("res://Scripts/GodotHost/PrototypeStatusView.cs")
-const INPUT_BRIDGE_SCRIPT := preload("res://Scripts/GodotHost/PrototypeInputBridge.cs")
-const AUDIO_BRIDGE_SCRIPT := preload("res://Scripts/GodotHost/PrototypeAudioBridge.cs")
-const RESOURCE_BRIDGE_SCRIPT := preload("res://Scripts/GodotHost/PrototypeResourceBridge.cs")
-const COMMAND_PANEL_SCRIPT := preload("res://Scripts/GodotHost/PrototypeCommandPanel.cs")
+const RUNTIME_SCRIPT := preload("res://scripts/GodotHost/PrototypeRuntimeNode.cs")
+const STATUS_VIEW_SCRIPT := preload("res://scripts/GodotHost/PrototypeStatusView.cs")
+const INPUT_BRIDGE_SCRIPT := preload("res://scripts/GodotHost/PrototypeInputBridge.cs")
+const AUDIO_BRIDGE_SCRIPT := preload("res://scripts/GodotHost/PrototypeAudioBridge.cs")
+const RESOURCE_BRIDGE_SCRIPT := preload("res://scripts/GodotHost/PrototypeResourceBridge.cs")
+const COMMAND_PANEL_SCRIPT := preload("res://scripts/GodotHost/PrototypeCommandPanel.cs")
 
 const COMMAND_TIMEOUT_FRAMES := 120
 

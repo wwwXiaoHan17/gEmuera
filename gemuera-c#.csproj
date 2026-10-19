@@ -87,13 +87,13 @@
 	     bundle_e_sqlite3 的 android 传递依赖（含 libe_sqlite3.so 的 .aar）永远拉不进缓存。
 	     用 PackageDownload 强制下载，供 RestoreAndroidSqliteNativeLibrary 自愈提取（2026-09-07 实证）。 -->
 	<PackageDownload Include="SQLitePCLRaw.lib.e_sqlite3.android" Version="[2.1.12]" />
-    <None Include="export\NativeLibs\android\arm64-v8a\libe_sqlite3.so" CopyToOutputDirectory="PreserveNewest" TargetPath="libe_sqlite3.so" />
+	<None Include="export\NativeLibs\android\arm64-v8a\libe_sqlite3.so" CopyToOutputDirectory="PreserveNewest" TargetPath="libe_sqlite3.so" />
 	<None Include="$(NuGetPackageRoot)skiasharp.nativeassets.android\2.88.8\runtimes\android-arm64\native\libSkiaSharp.so" CopyToOutputDirectory="PreserveNewest" TargetPath="libSkiaSharp.so" />
   </ItemGroup>
 
   <!-- export/NativeLibs/ 已被 gitignore（编译产物不入库）。Android 构建前如缺失，
        从 SQLitePCLRaw 的 NuGet 缓存 .aar 中自愈提取 jni/arm64-v8a/libe_sqlite3.so。 -->
-  <Target Name="RestoreAndroidSqliteNativeLibrary" BeforeTargets="Build" Condition=" '$(GodotTargetPlatform)' == 'android' And !Exists('export\NativeLibs\android\arm64-v8a\libe_sqlite3.so') ">
+  <Target Name="RestoreAndroidSqliteNativeLibrary" BeforeTargets="Build;_CopyFilesMarkedCopyLocal;_CopyOutOfDateSourceItemsToOutputDirectory" Condition=" '$(GodotTargetPlatform)' == 'android' And !Exists('export\NativeLibs\android\arm64-v8a\libe_sqlite3.so') ">
     <ItemGroup>
       <!-- 版本与上方 PackageDownload 的 [2.1.12] 保持一致：通配 ** 会匹配缓存中的多个历史版本，
            拼成 ';' 连接的多路径后 File.Copy 静默失败（2026-09-28 实证：2.1.12 与 2.1.6 并存）。 -->

@@ -40,7 +40,7 @@
       "additionalProperties": false,
       "required": ["sourceFile", "sha256", "bytes"],
       "properties": {
-        "sourceFile": { "type": "string", "pattern": "^Scripts/" },
+        "sourceFile": { "type": "string", "pattern": "^scripts/" },
         "sha256": { "$ref": "#/$defs/sha256" },
         "bytes": { "type": "integer", "minimum": 0 }
       }
@@ -51,7 +51,7 @@
       "required": ["markerId", "sourceFile", "sourceLine", "sourceText", "classificationId", "category", "currentOwner", "intendedOwner", "targetModule", "behaviorKey", "capabilityId", "fixtureId", "notes"],
       "properties": {
         "markerId": { "type": "string", "minLength": 1 },
-        "sourceFile": { "type": "string", "pattern": "^Scripts/" },
+        "sourceFile": { "type": "string", "pattern": "^scripts/" },
         "sourceLine": { "type": "integer", "minimum": 1 },
         "sourceText": { "type": "string" },
         "classificationId": { "type": "string", "minLength": 1 },
@@ -76,7 +76,7 @@
       "properties": {
         "publicKey": { "type": "string", "minLength": 1 },
         "registryKind": { "enum": ["instruction", "expression-function"] },
-        "sourceFile": { "type": "string", "pattern": "^Scripts/" },
+        "sourceFile": { "type": "string", "pattern": "^scripts/" },
         "sourceLine": { "type": "integer", "minimum": 1 },
         "currentContribution": { "type": "string", "minLength": 1 },
         "currentGuard": { "type": "string", "minLength": 1 },

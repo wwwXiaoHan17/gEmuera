@@ -105,7 +105,7 @@ try {
     {
       "id": "synthetic-program-profile",
       "markerId": "profile.core-state",
-      "fileRegex": "^Scripts/Emuera/Program\\.cs$",
+      "fileRegex": "^scripts/Emuera/Program\\.cs$",
       "category": "profile-selection",
       "currentOwner": "Program",
       "intendedOwner": "candidate compatibility plan adapter",
@@ -118,7 +118,7 @@ try {
     {
       "id": "synthetic-program-snake",
       "markerId": "profile.is-snake",
-      "fileRegex": "^Scripts/Emuera/Program\\.cs$",
+      "fileRegex": "^scripts/Emuera/Program\\.cs$",
       "category": "profile-projection",
       "currentOwner": "Program",
       "intendedOwner": "candidate compatibility plan adapter",
@@ -131,7 +131,7 @@ try {
     {
       "id": "synthetic-v24-registry",
       "markerId": "registry.v24-method",
-      "fileRegex": "^Scripts/Emuera/GameProc/Function/FunctionIdentifier\\.cs$",
+      "fileRegex": "^scripts/Emuera/GameProc/Function/FunctionIdentifier\\.cs$",
       "category": "instruction-registration",
       "currentOwner": "FunctionIdentifier",
       "intendedOwner": "DialectPlan instruction catalog",
@@ -144,7 +144,7 @@ try {
     {
       "id": "synthetic-snake-registry",
       "markerId": "registry.snake-method",
-      "fileRegex": "^Scripts/Emuera/GameProc/Function/FunctionIdentifier\\.cs$",
+      "fileRegex": "^scripts/Emuera/GameProc/Function/FunctionIdentifier\\.cs$",
       "category": "instruction-registration",
       "currentOwner": "FunctionIdentifier",
       "intendedOwner": "DialectPlan instruction catalog",

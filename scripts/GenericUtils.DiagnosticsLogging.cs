@@ -734,7 +734,7 @@ internal static partial class GenericUtils
         if (string.IsNullOrEmpty(file))
             return "<unknown>";
         string normalized = file.Replace('\\', '/');
-        int scripts = normalized.LastIndexOf("/Scripts/", StringComparison.OrdinalIgnoreCase);
+        int scripts = normalized.LastIndexOf("/scripts/", StringComparison.OrdinalIgnoreCase);
         if (scripts >= 0)
             return normalized.Substring(scripts + 1);
         return Path.GetFileName(normalized);

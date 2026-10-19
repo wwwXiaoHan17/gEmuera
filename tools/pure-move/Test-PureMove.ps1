@@ -28,7 +28,7 @@ WHY / 用途
     · 括号深度按行统计，统计时跳过普通字符串 / 逐字字符串 @"..." / 字符字面量 / 行尾 // 注释里的括号。
     · 已知残余误差：插值字符串 $"..." 的 {} 洞、跨行 /* */ 块注释里的括号会被计入。它只会让剥离
       "少剥一层"（保守方向），不会造成假通过。
-    · 已知覆盖边界：一个文件里有多个顶层类型时（例：Scripts/GenericUtils.cs 以 public enum 开头，
+    · 已知覆盖边界：一个文件里有多个顶层类型时（例：scripts/GenericUtils.cs 以 public enum 开头，
       类声明不在文件最外层），最外层并不包住整个文件，剥壳会整份跳过 —— 该文件的顶层声明行因此
       会留在正文里参与比对（两侧对称，不会产生假通过；只有真的改了那几行才会报差异）。
   · 类型声明行上的 partial 修饰符单独归一化（-creplace '\bpartial\s+' -> ''）：模式 A 拆分必然要给
@@ -59,11 +59,11 @@ BaseRef 与退化保护
 本工具**只读**源码：除 <Repo>\artifacts\pure-move-tmp\ 这个临时落地目录外不写任何文件。
 
 用法
-  powershell -NoProfile -File tools\pure-move\Test-PureMove.ps1 -Family Scripts/EmueraContent.cs
-  powershell -NoProfile -File tools\pure-move\Test-PureMove.ps1 -Family Scripts/GenericUtils.cs -ShowDetail
+  powershell -NoProfile -File tools\pure-move\Test-PureMove.ps1 -Family scripts/EmueraContent.cs
+  powershell -NoProfile -File tools\pure-move\Test-PureMove.ps1 -Family scripts/GenericUtils.cs -ShowDetail
   powershell -NoProfile -File tools\pure-move\Test-PureMove.ps1 `
-      -Family Scripts/Emuera/GameData/Variable/VariableToken.cs `
-      -Include Scripts/Emuera/GameData/Variable/VariableData.ReferenceTokens.cs
+      -Family scripts/Emuera/GameData/Variable/VariableToken.cs `
+      -Include scripts/Emuera/GameData/Variable/VariableData.ReferenceTokens.cs
 #>
 [CmdletBinding()]
 param(

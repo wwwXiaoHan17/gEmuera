@@ -58,7 +58,7 @@ internal static partial class GenericUtils
     {
         int seq = Interlocked.Increment(ref scrollTraceSequence);
         string formatted = $"{ScrollTracePrefix} #{seq} t={GetTickMs()} {category}: {message}";
-        LogInternal(EmueraLogLevel.Debug, EmueraLogCategory.Script, formatted, null, nameof(ScrollTrace), "Scripts/GenericUtils.cs", 0);
+        LogInternal(EmueraLogLevel.Debug, EmueraLogCategory.Script, formatted, null, nameof(ScrollTrace), "scripts/GenericUtils.cs", 0);
     }
 
     public static void StartScrollTraceCoreWindow(string reason)

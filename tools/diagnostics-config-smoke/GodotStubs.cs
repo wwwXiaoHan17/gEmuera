@@ -36,7 +36,7 @@ namespace Godot
     }
 }
 
-// 宿主 GenericUtils.cs 中的全局枚举（Scripts/GenericUtils.cs:14/24）；
+// 宿主 GenericUtils.cs 中的全局枚举（scripts/GenericUtils.cs:14/24）；
 // 值域必须与宿主一致，Loader/Config 的等级比较依赖其数值顺序。
 namespace gEmuera.Diagnostics
 {

@@ -8,42 +8,42 @@
     "sourceFiles":  [
                         {
                             "id":  "ExpressionParser",
-                            "path":  "Scripts/Emuera/GameData/Expression/ExpressionParser.cs",
+                            "path":  "scripts/Emuera/GameData/Expression/ExpressionParser.cs",
                             "sha256":  "61ed594b798329fb45b5051b7b3e78fd6b580536ce47a421eb833411ff03b9c1"
                         },
                         {
                             "id":  "FunctionMethodCreator",
-                            "path":  "Scripts/Emuera/GameData/Function/Creator.cs",
+                            "path":  "scripts/Emuera/GameData/Function/Creator.cs",
                             "sha256":  "4b34218719ec72ea097765e41059729d26169aafd22df85a5b51f63602f11001"
                         },
                         {
                             "id":  "IdentifierDictionary",
-                            "path":  "Scripts/Emuera/GameData/IdentifierDictionary.cs",
+                            "path":  "scripts/Emuera/GameData/IdentifierDictionary.cs",
                             "sha256":  "6117bbb072b2db36ebcfc4bdc91d7af8bd56c00d9d3ed71d17bce30fee04e583"
                         },
                         {
                             "id":  "ParserMediator",
-                            "path":  "Scripts/Emuera/GameData/ParserMediator.cs",
+                            "path":  "scripts/Emuera/GameData/ParserMediator.cs",
                             "sha256":  "77ee5b6822bc00ec4b6c1af20d3c1aea22a7ef7e5d5abb4a2dfd1dfbba0f7379"
                         },
                         {
                             "id":  "FunctionIdentifier",
-                            "path":  "Scripts/Emuera/GameProc/Function/FunctionIdentifier.cs",
+                            "path":  "scripts/Emuera/GameProc/Function/FunctionIdentifier.cs",
                             "sha256":  "b11063503a316fc27ebb0167c56cac08907c10901f58c58083280e699062d1db"
                         },
                         {
                             "id":  "LogicalLineParser",
-                            "path":  "Scripts/Emuera/GameProc/LogicalLineParser.cs",
+                            "path":  "scripts/Emuera/GameProc/LogicalLineParser.cs",
                             "sha256":  "8d48e9a145782efd2b757fae8a1462bbad1c6ee4bc59298826ae3ab08aa913a2"
                         },
                         {
                             "id":  "EraStreamReader",
-                            "path":  "Scripts/Emuera/Sub/EraStreamReader.cs",
+                            "path":  "scripts/Emuera/Sub/EraStreamReader.cs",
                             "sha256":  "c3eeb4ce869e7ebde8fc11bcb124af6a7720db47283b4678cac290b89e9948a1"
                         },
                         {
                             "id":  "LexicalAnalyzer",
-                            "path":  "Scripts/Emuera/Sub/LexicalAnalyzer.cs",
+                            "path":  "scripts/Emuera/Sub/LexicalAnalyzer.cs",
                             "sha256":  "e82ab64dfe514f9223149edba6039f18b0b098b8e44ad41ced20da93a2a21365"
                         }
                     ],

@@ -33,7 +33,7 @@ public static class ColorMatrixGPU
 		{
 			if (_shader == null)
 			{
-				_shader = GD.Load<Shader>("res://Scripts/Shaders/color_matrix.gdshader");
+				_shader = GD.Load<Shader>("res://scripts/Shaders/color_matrix.gdshader");
 			}
 			return _shader;
 		}
@@ -45,7 +45,7 @@ public static class ColorMatrixGPU
 		{
 			if (_compositShader == null)
 			{
-				_compositShader = GD.Load<Shader>("res://Scripts/Shaders/color_matrix_composit.gdshader");
+				_compositShader = GD.Load<Shader>("res://scripts/Shaders/color_matrix_composit.gdshader");
 			}
 			return _compositShader;
 		}

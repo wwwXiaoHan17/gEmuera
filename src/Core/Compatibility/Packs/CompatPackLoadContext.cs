@@ -6,7 +6,7 @@ namespace GEmuera.Core.Compatibility.Packs;
 /// <summary>
 /// 每包一个的可回收加载上下文（isCollectible，会话边界 Unload）。契约-only 允许清单
 /// （fail-closed，docs/designs/compat-pack-interface.md §5.2；与宿主 PluginLoadContext
-/// （Scripts/Emuera/Runtime/Utils/PluginSystem）同源的姊妹实现，规则更严）：
+/// （scripts/Emuera/Runtime/Utils/PluginSystem）同源的姊妹实现，规则更严）：
 ///   1a. Emuera.CompatPack（2026-10-03 拆分后的契约程序集，src/EmueraCompatPack）→ 契约
 ///       程序集（宿主已加载实例，与包共享同一类型标识）；
 ///   1b. Emuera/emuera（拆分前的历史契约名）→ 宿主 Default 上下文里已加载的 facade 实例，

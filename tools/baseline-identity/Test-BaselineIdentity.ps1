@@ -26,7 +26,7 @@ try {
     Write-Utf8File -Path (Join-Path $projectRoot 'project.godot') -Value '[application]'
     Write-Utf8File -Path (Join-Path $projectRoot 'gemuera-c#.csproj') -Value '<Project Sdk="Godot.NET.Sdk/4.7.0"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>'
     Write-Utf8File -Path (Join-Path $projectRoot 'config.toml') -Value '[logging]'
-    Write-Utf8File -Path (Join-Path $projectRoot 'Scripts/main.cs') -Value 'class Main {}'
+    Write-Utf8File -Path (Join-Path $projectRoot 'scripts/main.cs') -Value 'class Main {}'
     Write-Utf8File -Path (Join-Path $projectRoot 'Resources/sample.txt') -Value 'resource'
     Write-Utf8File -Path (Join-Path $projectRoot 'Fonts/sample.ttf') -Value 'font'
     Write-Utf8File -Path (Join-Path $projectRoot '.godot/cache.bin') -Value 'ignored-a'
@@ -49,7 +49,7 @@ try {
     Assert-True ($identityA.source.manifest.canonicalSha256 -eq $identityB.source.manifest.canonicalSha256) 'Excluded cache changed the source tree identity.'
     Assert-True ($identityA.game.fileCount -eq 2) 'Game identity must not apply source-tree exclusions.'
 
-    Write-Utf8File -Path (Join-Path $projectRoot 'Scripts/main.cs') -Value 'class Main { int Version = 2; }'
+    Write-Utf8File -Path (Join-Path $projectRoot 'scripts/main.cs') -Value 'class Main { int Version = 2; }'
     $reportC = Join-Path $reportsRoot 'c'
     & powershell -NoProfile -ExecutionPolicy Bypass -File $runner -ProjectRoot $projectRoot -OutputDirectory $reportC -GameRoot $gameRoot | Out-Null
     Assert-True ($LASTEXITCODE -eq 0) 'Third identity run failed.'

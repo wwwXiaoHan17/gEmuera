@@ -5,7 +5,7 @@
     {
       "id": "program-core-profile-state",
       "markerId": "profile.core-state",
-      "fileRegex": "^Scripts/Emuera/Program\\.cs$",
+      "fileRegex": "^scripts/Emuera/Program\\.cs$",
       "category": "profile-selection",
       "currentOwner": "Program",
       "intendedOwner": "candidate CompatibilityPlan selection adapter",
@@ -18,7 +18,7 @@
     {
       "id": "diagnostic-profile-identity",
       "markerId": "profile.core-state",
-      "fileRegex": "^Scripts/Diagnostics/DiagnosticLogExporter\\.cs$",
+      "fileRegex": "^scripts/Diagnostics/DiagnosticLogExporter\\.cs$",
       "category": "observability",
       "currentOwner": "DiagnosticLogExporter",
       "intendedOwner": "session report projection",
@@ -31,7 +31,7 @@
     {
       "id": "program-is-snake-projection",
       "markerId": "profile.is-snake",
-      "fileRegex": "^Scripts/Emuera/Program\\.cs$",
+      "fileRegex": "^scripts/Emuera/Program\\.cs$",
       "category": "profile-projection",
       "currentOwner": "Program",
       "intendedOwner": "candidate CompatibilityPlan selection adapter",
@@ -44,7 +44,7 @@
     {
       "id": "resource-lazy-index-policy",
       "markerId": "profile.is-snake",
-      "fileRegex": "^Scripts/Emuera/Content/AppContents\\.cs$",
+      "fileRegex": "^scripts/Emuera/Content/AppContents\\.cs$",
       "category": "resource-policy",
       "currentOwner": "AppContents",
       "intendedOwner": "resource behavior consumer",
@@ -57,7 +57,7 @@
     {
       "id": "expression-user-variable-policy",
       "markerId": "profile.is-snake",
-      "fileRegex": "^Scripts/Emuera/GameData/Expression/ExpressionParser\\.cs$",
+      "fileRegex": "^scripts/Emuera/GameData/Expression/ExpressionParser\\.cs$",
       "category": "parser-policy",
       "currentOwner": "ExpressionParser",
       "intendedOwner": "IUserVariableResolutionPolicy",
@@ -70,7 +70,7 @@
     {
       "id": "snake-fallen-function-policy",
       "markerId": "profile.is-snake",
-      "fileRegex": "^Scripts/Emuera/GameData/Function/Creator\\.Method\\.cs$",
+      "fileRegex": "^scripts/Emuera/GameData/Function/Creator\\.Method\\.cs$",
       "category": "function-availability",
       "currentOwner": "SnakeFallenStateMethod",
       "intendedOwner": "frozen expression function catalog",
@@ -83,7 +83,7 @@
     {
       "id": "parser-warning-routing-policy",
       "markerId": "profile.is-snake",
-      "fileRegex": "^Scripts/Emuera/GameData/ParserMediator\\.cs$",
+      "fileRegex": "^scripts/Emuera/GameData/ParserMediator\\.cs$",
       "category": "parser-diagnostics-policy",
       "currentOwner": "ParserMediator",
       "intendedOwner": "parser diagnostics sink policy",
@@ -96,7 +96,7 @@
     {
       "id": "private-argument-shape-policy",
       "markerId": "profile.is-snake",
-      "fileRegex": "^Scripts/Emuera/GameProc/ErbLoader\\.cs$",
+      "fileRegex": "^scripts/Emuera/GameProc/ErbLoader\\.cs$",
       "category": "call-binding-policy",
       "currentOwner": "ErbLoader",
       "intendedOwner": "IPrivateArgumentShapePolicy",
@@ -109,7 +109,7 @@
     {
       "id": "header-user-variable-policy",
       "markerId": "profile.is-snake",
-      "fileRegex": "^Scripts/Emuera/GameProc/HeaderFileLoader\\.cs$",
+      "fileRegex": "^scripts/Emuera/GameProc/HeaderFileLoader\\.cs$",
       "category": "parser-policy",
       "currentOwner": "HeaderFileLoader",
       "intendedOwner": "IUserVariableResolutionPolicy",
@@ -122,7 +122,7 @@
     {
       "id": "call-extra-arguments-policy",
       "markerId": "profile.is-snake",
-      "fileRegex": "^Scripts/Emuera/GameProc/Process\\.CalledFunction\\.cs$",
+      "fileRegex": "^scripts/Emuera/GameProc/Process\\.CalledFunction\\.cs$",
       "category": "call-binding-policy",
       "currentOwner": "CalledFunction.ConvertArg",
       "intendedOwner": "IExtraArgumentPolicy",
@@ -135,7 +135,7 @@
     {
       "id": "startup-fault-policy",
       "markerId": "profile.is-snake",
-      "fileRegex": "^Scripts/Emuera/GameProc/Process\\.SystemProc\\.cs$",
+      "fileRegex": "^scripts/Emuera/GameProc/Process\\.SystemProc\\.cs$",
       "category": "startup-fault-policy",
       "currentOwner": "Process.SystemProc",
       "intendedOwner": "IStartupFaultPolicy",
@@ -148,7 +148,7 @@
     {
       "id": "console-refresh-timing-policy",
       "markerId": "profile.is-snake",
-      "fileRegex": "^Scripts/Emuera/GameView/EmueraConsole\\.cs$",
+      "fileRegex": "^scripts/Emuera/GameView/EmueraConsole\\.cs$",
       "category": "display-timing-policy",
       "currentOwner": "EmueraConsole",
       "intendedOwner": "display timing policy consumed by Bridge",
@@ -161,7 +161,7 @@
     {
       "id": "view-history-capacity-policy",
       "markerId": "profile.is-snake",
-      "fileRegex": "^Scripts/EmueraContent\\.cs$",
+      "fileRegex": "^scripts/EmueraContent\\.cs$",
       "category": "display-history-policy",
       "currentOwner": "EmueraContent",
       "intendedOwner": "effective display configuration projection",
@@ -174,7 +174,7 @@
     {
       "id": "modern-mobile-profile-projection",
       "markerId": "profile.is-snake-modern-mobile",
-      "fileRegex": "^Scripts/Emuera/Program\\.cs$",
+      "fileRegex": "^scripts/Emuera/Program\\.cs$",
       "category": "profile-selection",
       "currentOwner": "Program",
       "intendedOwner": "CompatibilityPlan selection adapter",
@@ -187,7 +187,7 @@
     {
       "id": "program-selected-profile-input",
       "markerId": "profile.selected-name",
-      "fileRegex": "^Scripts/Emuera/Program\\.cs$",
+      "fileRegex": "^scripts/Emuera/Program\\.cs$",
       "category": "profile-selection",
       "currentOwner": "Program.DetectCoreProfile",
       "intendedOwner": "candidate CompatibilityPlan builder input",
@@ -200,7 +200,7 @@
     {
       "id": "content-selected-profile-fallback",
       "markerId": "profile.selected-name",
-      "fileRegex": "^Scripts/EmueraContent\\.cs$",
+      "fileRegex": "^scripts/EmueraContent\\.cs$",
       "category": "display-history-policy",
       "currentOwner": "EmueraContent",
       "intendedOwner": "effective display configuration projection",
@@ -213,7 +213,7 @@
     {
       "id": "main-profile-observation",
       "markerId": "profile.selected-name",
-      "fileRegex": "^Scripts/EmueraMain\\.cs$",
+      "fileRegex": "^scripts/EmueraMain\\.cs$",
       "category": "startup-observability",
       "currentOwner": "EmueraMain",
       "intendedOwner": "Godot session orchestrator",
@@ -226,7 +226,7 @@
     {
       "id": "launcher-profile-selection",
       "markerId": "profile.selected-name",
-      "fileRegex": "^Scripts/FirstWindow\\.cs$",
+      "fileRegex": "^scripts/FirstWindow\\.cs$",
       "category": "profile-selection",
       "currentOwner": "FirstWindow",
       "intendedOwner": "launcher selection request DTO",
@@ -239,7 +239,7 @@
     {
       "id": "startup-component-profile-observation",
       "markerId": "profile.selected-name",
-      "fileRegex": "^Scripts/GodotHost/EmueraStartupComponent\\.cs$",
+      "fileRegex": "^scripts/GodotHost/EmueraStartupComponent\\.cs$",
       "category": "startup-observability",
       "currentOwner": "EmueraStartupComponent",
       "intendedOwner": "Godot session orchestrator",
@@ -252,7 +252,7 @@
     {
       "id": "prototype-runtime-profile-selection",
       "markerId": "profile.selected-name",
-      "fileRegex": "^Scripts/GodotHost/PrototypeRuntimeNode\\.cs$",
+      "fileRegex": "^scripts/GodotHost/PrototypeRuntimeNode\\.cs$",
       "category": "profile-selection",
       "currentOwner": "PrototypeRuntimeNode",
       "intendedOwner": "Core application session selection request",
@@ -265,7 +265,7 @@
     {
       "id": "launcher-v24-profile-id",
       "markerId": "profile.v24-id",
-      "fileRegex": "^Scripts/FirstWindow\\.cs$",
+      "fileRegex": "^scripts/FirstWindow\\.cs$",
       "category": "profile-selection",
       "currentOwner": "FirstWindow",
       "intendedOwner": "launcher selection request DTO",
@@ -278,7 +278,7 @@
     {
       "id": "runner-v24-profile-id",
       "markerId": "profile.v24-id",
-      "fileRegex": "^Scripts/LegacyRunner/LegacyRunnerConfig\\.cs$",
+      "fileRegex": "^scripts/LegacyRunner/LegacyRunnerConfig\\.cs$",
       "category": "test-fixture-selection",
       "currentOwner": "LegacyRunnerConfig",
       "intendedOwner": "LegacyRunner fixture",
@@ -291,7 +291,7 @@
     {
       "id": "program-v24-profile-id",
       "markerId": "profile.v24-id",
-      "fileRegex": "^Scripts/Emuera/Program\\.cs$",
+      "fileRegex": "^scripts/Emuera/Program\\.cs$",
       "category": "profile-selection",
       "currentOwner": "Program.DetectCoreProfile",
       "intendedOwner": "candidate CompatibilityPlan builder input",
@@ -304,7 +304,7 @@
     {
       "id": "prototype-runtime-v24-profile-id",
       "markerId": "profile.v24-id",
-      "fileRegex": "^Scripts/GodotHost/PrototypeRuntimeNode\\.cs$",
+      "fileRegex": "^scripts/GodotHost/PrototypeRuntimeNode\\.cs$",
       "category": "profile-selection",
       "currentOwner": "PrototypeRuntimeNode",
       "intendedOwner": "Core application session selection request",
@@ -317,7 +317,7 @@
     {
       "id": "program-snake-profile-id",
       "markerId": "profile.snake-id",
-      "fileRegex": "^Scripts/Emuera/Program\\.cs$",
+      "fileRegex": "^scripts/Emuera/Program\\.cs$",
       "category": "profile-selection",
       "currentOwner": "Program.DetectCoreProfile",
       "intendedOwner": "candidate CompatibilityPlan builder input",
@@ -330,7 +330,7 @@
     {
       "id": "prototype-runtime-snake-profile-id",
       "markerId": "profile.snake-id",
-      "fileRegex": "^Scripts/GodotHost/PrototypeRuntimeNode\\.cs$",
+      "fileRegex": "^scripts/GodotHost/PrototypeRuntimeNode\\.cs$",
       "category": "profile-selection",
       "currentOwner": "PrototypeRuntimeNode",
       "intendedOwner": "Core application session selection request",
@@ -343,7 +343,7 @@
     {
       "id": "content-snake-profile-id",
       "markerId": "profile.snake-id",
-      "fileRegex": "^Scripts/EmueraContent\\.cs$",
+      "fileRegex": "^scripts/EmueraContent\\.cs$",
       "category": "display-history-policy",
       "currentOwner": "EmueraContent",
       "intendedOwner": "effective display configuration projection",
@@ -356,7 +356,7 @@
     {
       "id": "launcher-snake-profile-id",
       "markerId": "profile.snake-id",
-      "fileRegex": "^Scripts/FirstWindow\\.cs$",
+      "fileRegex": "^scripts/FirstWindow\\.cs$",
       "category": "profile-selection",
       "currentOwner": "FirstWindow",
       "intendedOwner": "launcher selection request DTO",
@@ -369,7 +369,7 @@
     {
       "id": "runner-snake-profile-id",
       "markerId": "profile.snake-id",
-      "fileRegex": "^Scripts/LegacyRunner/LegacyRunnerConfig\\.cs$",
+      "fileRegex": "^scripts/LegacyRunner/LegacyRunnerConfig\\.cs$",
       "category": "test-fixture-selection",
       "currentOwner": "LegacyRunnerConfig",
       "intendedOwner": "LegacyRunner fixture",
@@ -382,7 +382,7 @@
     {
       "id": "program-profile-detection",
       "markerId": "profile.detect",
-      "fileRegex": "^Scripts/Emuera/Program\\.cs$",
+      "fileRegex": "^scripts/Emuera/Program\\.cs$",
       "category": "profile-selection",
       "currentOwner": "Program",
       "intendedOwner": "candidate CompatibilityPlan builder",
@@ -395,7 +395,7 @@
     {
       "id": "v24-instruction-registration",
       "markerId": "registry.v24-method",
-      "fileRegex": "^Scripts/Emuera/GameProc/Function/FunctionIdentifier\\.cs$",
+      "fileRegex": "^scripts/Emuera/GameProc/Function/FunctionIdentifier\\.cs$",
       "category": "instruction-registration",
       "currentOwner": "FunctionIdentifier",
       "intendedOwner": "frozen DialectPlan instruction catalog",
@@ -408,7 +408,7 @@
     {
       "id": "snake-instruction-registration",
       "markerId": "registry.snake-method",
-      "fileRegex": "^Scripts/Emuera/GameProc/Function/FunctionIdentifier\\.cs$",
+      "fileRegex": "^scripts/Emuera/GameProc/Function/FunctionIdentifier\\.cs$",
       "category": "instruction-registration",
       "currentOwner": "FunctionIdentifier",
       "intendedOwner": "frozen DialectPlan instruction catalog",
@@ -421,7 +421,7 @@
     {
       "id": "scoped-variable-config-schema",
       "markerId": "setting.scoped-variable-instruction",
-      "fileRegex": "^Scripts/Emuera/Config/(?:Config|ConfigCode|ConfigData|JSONConfig|JSONConfigData)\\.cs$",
+      "fileRegex": "^scripts/Emuera/Config/(?:Config|ConfigCode|ConfigData|JSONConfig|JSONConfigData)\\.cs$",
       "category": "configuration-schema",
       "currentOwner": "Config/JSONConfig",
       "intendedOwner": "candidate configuration snapshot",
@@ -434,7 +434,7 @@
     {
       "id": "program-scoped-variable-profile-binding",
       "markerId": "setting.scoped-variable-instruction",
-      "fileRegex": "^Scripts/Emuera/Program\\.cs$",
+      "fileRegex": "^scripts/Emuera/Program\\.cs$",
       "category": "configuration-projection",
       "currentOwner": "Program.ConfigureCompatibilityPlan",
       "intendedOwner": "frozen LegacyCompatibilityProfile",
@@ -447,7 +447,7 @@
     {
       "id": "scoped-variable-registration-guard",
       "markerId": "setting.scoped-variable-instruction",
-      "fileRegex": "^Scripts/Emuera/GameProc/Function/FunctionIdentifier\\.cs$",
+      "fileRegex": "^scripts/Emuera/GameProc/Function/FunctionIdentifier\\.cs$",
       "category": "conditional-registration",
       "currentOwner": "FunctionIdentifier",
       "intendedOwner": "frozen DialectPlan instruction catalog builder",

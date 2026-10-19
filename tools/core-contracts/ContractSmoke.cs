@@ -141,7 +141,7 @@ internal static class ContractSmoke
     private static void GovernanceContract()
     {
         var hash = new string('a', 64);
-        var entry = new RemovalInventoryEntry("legacy.renderer", "Scripts/LegacyRenderer.cs", RemovalLifecycleStatus.ZeroTrafficObserved, new[] { "M7-REL-03" }, 0);
+        var entry = new RemovalInventoryEntry("legacy.renderer", "scripts/LegacyRenderer.cs", RemovalLifecycleStatus.ZeroTrafficObserved, new[] { "M7-REL-03" }, 0);
         var now = DateTimeOffset.UtcNow;
         var cycles = new[] { new ReleaseCycle("release-a", now.AddDays(-2), now.AddDays(-1), 0, 0, hash), new ReleaseCycle("release-b", now.AddHours(-12), now, 0, 0, hash) };
         var packet = new RemovalPacket("M7-REL-03-smoke", new[] { entry }, cycles, new RollbackDrill("stable", "restore stable", true, hash), new RemovalApproval("prepare", "review", "approve", now, "Approved", new[] { hash }));

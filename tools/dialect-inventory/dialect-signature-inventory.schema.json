@@ -33,7 +33,7 @@
       "additionalProperties": false,
       "required": ["sourceFile", "sha256", "bytes"],
       "properties": {
-        "sourceFile": { "type": "string", "pattern": "^Scripts/" },
+        "sourceFile": { "type": "string", "pattern": "^scripts/" },
         "sha256": { "$ref": "#/$defs/sha256" },
         "bytes": { "type": "integer", "minimum": 0 }
       }

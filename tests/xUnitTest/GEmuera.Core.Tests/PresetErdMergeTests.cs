@@ -7,7 +7,7 @@ namespace GEmuera.Core.Tests;
 /// <summary>
 /// 预设变量同名 ERD 合并规则（上游 Emuera-SKIA Skiav13.0，snake 语义）：
 /// 纯规则层测试——CSV 优先、ERD 只填空槽、跨槽重名跳过、ITEM 第三列价格来源追踪。
-/// 引擎侧扫描/IO 见 Scripts/Emuera/GameData/ConstantData.PresetErd.cs（xUnit 覆盖不到）。
+/// 引擎侧扫描/IO 见 scripts/Emuera/GameData/ConstantData.PresetErd.cs（xUnit 覆盖不到）。
 /// </summary>
 public class PresetErdMergeTests
 {

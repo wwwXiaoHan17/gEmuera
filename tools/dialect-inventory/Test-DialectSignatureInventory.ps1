@@ -109,8 +109,8 @@ namespace MinorShift.Emuera.GameData.Function {
     $syntheticInventory = [pscustomobject]@{
         canonicalHash = ('c' * 64)
         instructionRegistrations = @(
-            [pscustomobject]@{ publicKey='DIRECT'; sourceFile='Scripts/Emuera/GameProc/Function/FunctionIdentifier.cs'; sourceLine=(Find-TestLine $identifierText 'FunctionCode.DIRECT'); handler='argb[FunctionArgType.INT_EXPRESSION], METHOD_SAFE'; targetModule='gemuera.v24'; currentGuard='none'; currentContribution='test'; provenanceWarning='' },
-            [pscustomobject]@{ publicKey='HANDLER'; sourceFile='Scripts/Emuera/GameProc/Function/FunctionIdentifier.cs'; sourceLine=(Find-TestLine $identifierText 'FunctionCode.HANDLER'); handler='HandlerInstruction'; targetModule='game.snake'; currentGuard='none'; currentContribution='test'; provenanceWarning='' }
+            [pscustomobject]@{ publicKey='DIRECT'; sourceFile='scripts/Emuera/GameProc/Function/FunctionIdentifier.cs'; sourceLine=(Find-TestLine $identifierText 'FunctionCode.DIRECT'); handler='argb[FunctionArgType.INT_EXPRESSION], METHOD_SAFE'; targetModule='gemuera.v24'; currentGuard='none'; currentContribution='test'; provenanceWarning='' },
+            [pscustomobject]@{ publicKey='HANDLER'; sourceFile='scripts/Emuera/GameProc/Function/FunctionIdentifier.cs'; sourceLine=(Find-TestLine $identifierText 'FunctionCode.HANDLER'); handler='HandlerInstruction'; targetModule='game.snake'; currentGuard='none'; currentContribution='test'; provenanceWarning='' }
         )
         expressionRegistrations = @(
             [pscustomobject]@{ publicKey='COMPLETE'; handler='CompleteMethod'; targetModule='gemuera.v24'; currentGuard='none'; currentContribution='test'; provenanceWarning='' },
