@@ -313,8 +313,12 @@ namespace MinorShift.Emuera.GameProc.Function
 			addFunction(FunctionCode.PRINTBUTTONC, argb[FunctionArgType.SP_BUTTON], METHOD_SAFE | EXTENDED);
 			addFunction(FunctionCode.PRINTBUTTONLC, argb[FunctionArgType.SP_BUTTON], METHOD_SAFE | EXTENDED);
 
-			addFunction(FunctionCode.PRINTPLAIN, argb[FunctionArgType.STR_NULLABLE], METHOD_SAFE | EXTENDED);
-			addFunction(FunctionCode.PRINTPLAINFORM, argb[FunctionArgType.FORM_STR_NULLABLE], METHOD_SAFE | EXTENDED);
+			// PRINTPLAIN/PRINTPLAINFORM 与 PRINT 系一样保留命令后第一个分隔符之后的
+			// 原始空白。eraBEMANI 教程用 "PRINTPLAINFORM 　　　　　┃..." 的五个全角
+			// 空格把框线排到图片右侧；若解析器再 SkipWhiteSpace，图片会盖住框线/首字。
+			// 参考 v24 LogicalLineParser 只 ShiftNext() 一个分隔符，不跳过后续空白。
+			addFunction(FunctionCode.PRINTPLAIN, argb[FunctionArgType.STR_NULLABLE], METHOD_SAFE | EXTENDED | IS_PRINT);
+			addFunction(FunctionCode.PRINTPLAINFORM, argb[FunctionArgType.FORM_STR_NULLABLE], METHOD_SAFE | EXTENDED | IS_PRINT);
 
 			addFunction(FunctionCode.PRINT_ABL, argb[FunctionArgType.INT_EXPRESSION], METHOD_SAFE);//能力。引数は登録番号
 			addFunction(FunctionCode.PRINT_TALENT, argb[FunctionArgType.INT_EXPRESSION], METHOD_SAFE);//素質
