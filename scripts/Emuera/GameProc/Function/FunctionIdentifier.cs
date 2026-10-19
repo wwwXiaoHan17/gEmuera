@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using MinorShift.Emuera.GameData.Function;
 using MinorShift.Emuera.Compatibility;
@@ -664,6 +664,18 @@ namespace MinorShift.Emuera.GameProc.Function
 			this.method = method;
 			Name = methodName;
 			Instruction = instruction;
+		}
+
+		/// <summary>
+		/// 参考 v24/EE 的 FunctionIdentifier 静态构造会把“未与指令重名的式中関数”统一
+		/// 注册为 METHOD_Instruction，因此 `OUTPUTLOG "file"` 这类独立调用行可以解析。
+		/// gEmuera 的指令表面由方言清单钉扎（OUTPUTLOG 等只在函数清单里），不能在
+		/// GetInstructionNameDic 里塞入；这里提供一个 parser-only 的构造入口，由
+		/// IdentifierDictionary 在 plan 绑定后按“计划 Functions 可见”动态补齐。
+		/// </summary>
+		internal static FunctionIdentifier CreateMethodStatement(string name, FunctionMethod method)
+		{
+			return new FunctionIdentifier(name, method, methodInstruction);
 		}
 		public readonly AbstractInstruction Instruction;
 		private FunctionCode code;

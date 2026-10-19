@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.Text;
 using MinorShift.Emuera.Sub;
 using MinorShift.Emuera.GameData;
@@ -174,7 +175,10 @@ namespace MinorShift.Emuera
 			localvarTokenDic = varData.GetLocalvarTokenDic();
 			methodDic = FunctionMethodCreator.GetMethodList(compatibility);
 			legacyInstructionNames = new ReadOnlyCollection<string>(
-				new List<string>(instructionDic.Keys));
+				instructionDic
+					.Where(pair => pair.Value.Method == null)
+					.Select(pair => pair.Key)
+					.ToList());
 			legacyFunctionNames = new ReadOnlyCollection<string>(
 				new List<string>(methodDic.Keys));
 			refmethodDic = new Dictionary<string, UserDefinedRefMethod>();
@@ -653,7 +657,21 @@ namespace MinorShift.Emuera
 				compatibilityMethodDic = null;
 				return;
 			}
-			compatibilityInstructionDic = route.Instructions;
+			// 参考 v24/EE 的 FunctionIdentifier 静态构造会把“未与指令重名的式中関数”
+			// 统一注册为 METHOD_Instruction，所以 `OUTPUTLOG "file"` 这类独立语句行
+			// 可以解析。gEmuera 的方言表面由清单钉扎，不能把这些函数塞进
+			// GetInstructionNameDic；这里在 plan 绑定后做 parser-only 补齐：
+			// 计划 Functions 里可见、且尚无同名指令标识符的函数，补一个 METHOD 语句入口。
+			// 这些条目只进入解析查找，不参与 legacyInstructionNames / 表面清单校验。
+			var routedInstructions = new Dictionary<string, FunctionIdentifier>(
+				route.Instructions, FunctionIdentifier.InstructionComparer);
+			foreach (var pair in methodDic)
+			{
+				if (routedInstructions.ContainsKey(pair.Key) || !plan.Dialect.Functions.ContainsKey(pair.Key))
+					continue;
+				routedInstructions[pair.Key] = FunctionIdentifier.CreateMethodStatement(pair.Key, pair.Value);
+			}
+			compatibilityInstructionDic = new ReadOnlyDictionary<string, FunctionIdentifier>(routedInstructions);
 			compatibilityMethodDic = route.Functions;
 		}
 
