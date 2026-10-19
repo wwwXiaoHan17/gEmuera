@@ -677,9 +677,18 @@ public partial class EmueraContent
 		if (!UseCanvasRenderBackend || lineContainer == null)
 			return;
 		EnsureLineLayout();
+		ReleaseStaleCanvasOverlayRows();
 		var visible = GetVisibleCanvasContentRange();
 		foreach (int lineNo in canvasRowsWithPositionedNodes)
 		{
+			if (!lineNumbers.Contains(lineNo))
+			{
+				// 行已被 CLEARLINE/重绘删除，但 overlay 还没有被释放时，不能让
+				// 旧图片继续按最后一次可见位置飘在屏幕上。
+				ReleaseCanvasImageOverlays(lineNo);
+				ReleaseCanvasDivOverlays(lineNo);
+				continue;
+			}
 			float y = GetLineTopByLayout(lineNo);
 			if (lineControls.TryGetValue(lineNo, out var control)
 				&& control != null
@@ -711,6 +720,32 @@ public partial class EmueraContent
 			}
 		}
 		canvasOverlayRowsDirty = false;
+	}
+
+	// 图片 overlay 是 lineContainer 下的独立 Node，不随 ConsoleDisplayLine
+	// 自动销毁。删除/重绘历史行后若索引未同步，旧 <img> 会停留在最后一次
+	// 可见的屏幕坐标上（eraBEMANI 教程图标盖在商店界面上即此现象）。
+	void ReleaseStaleCanvasOverlayRows()
+	{
+		if (canvasImageOverlayNodes.Count == 0 && canvasDivOverlayNodes.Count == 0)
+			return;
+		var staleLineNos = new List<int>();
+		foreach (int lineNo in canvasImageOverlayNodes.Keys)
+		{
+			if (!lineNumbers.Contains(lineNo) && !staleLineNos.Contains(lineNo))
+				staleLineNos.Add(lineNo);
+		}
+		foreach (int lineNo in canvasDivOverlayNodes.Keys)
+		{
+			if (!lineNumbers.Contains(lineNo) && !staleLineNos.Contains(lineNo))
+				staleLineNos.Add(lineNo);
+		}
+		for (int i = 0; i < staleLineNos.Count; i++)
+		{
+			ReleaseCanvasImageOverlays(staleLineNos[i]);
+			ReleaseCanvasDivOverlays(staleLineNos[i]);
+			canvasRowsWithPositionedNodes.Remove(staleLineNos[i]);
+		}
 	}
 
 	void RefreshCanvasOverlayVisibility()
@@ -764,13 +799,31 @@ public partial class EmueraContent
 
 	void RefreshCanvasOverlayVisibilityForLine(int lineNo, Rect2 visible)
 	{
+		if (!lineNumbers.Contains(lineNo))
+		{
+			ReleaseCanvasImageOverlays(lineNo);
+			ReleaseCanvasDivOverlays(lineNo);
+			return;
+		}
+		float lineY = GetLineTopByLayout(lineNo);
 		if (canvasImageOverlayNodes.TryGetValue(lineNo, out var imageOverlays) && imageOverlays != null)
 		{
 			for (int i = 0; i < imageOverlays.Count; i++)
 			{
-				var node = imageOverlays[i].Node;
+				var overlay = imageOverlays[i];
+				var node = overlay.Node;
 				if (node == null || !GodotObject.IsInstanceValid(node))
 					continue;
+				// 越界 overlay 常驻索引表后会脱离普通可见行刷新；若只用
+				// 上次的 node.Position 做可见性判断，旧行图片会永远停在
+				// 最后一次可见的位置。先按当前 layout 的 lineY 重新定位。
+				if (!Mathf.IsEqualApprox(overlay.LineY, lineY))
+				{
+					overlay.LineY = lineY;
+					UpdateCanvasImageOverlay(overlay, lineY, visible);
+					imageOverlays[i] = overlay;
+					continue;
+				}
 				if (node.SourceTexture == null && !node.HasAnimatedWebpSource)
 				{
 					node.Visible = false;
