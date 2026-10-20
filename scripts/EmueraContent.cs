@@ -509,7 +509,7 @@ public partial class EmueraContent : Control
 
 	static int GetDefaultMaxVisibleLines()
 	{
-		if (OS.HasFeature("mobile"))
+		if (IsMobilePlatform)
 			return IsExtendedDisplayProfile() ? DefaultSnakeMobileMaxVisibleLines : DefaultMobileMaxVisibleLines;
 		if (IsExtendedDisplayProfile())
 			return DefaultSnakeDesktopMaxVisibleLines;
@@ -522,9 +522,9 @@ public partial class EmueraContent : Control
 		// 因此把旧默认视为未显式调过；Android 只做保守提升，避免手机端内存压力过大。
 		if (!IsExtendedDisplayProfile())
 			return value;
-		if (OS.HasFeature("mobile") && value == DefaultMobileMaxVisibleLines)
+		if (IsMobilePlatform && value == DefaultMobileMaxVisibleLines)
 			return DefaultSnakeMobileMaxVisibleLines;
-		if (!OS.HasFeature("mobile") && value == DefaultMaxVisibleLines)
+		if (!IsMobilePlatform && value == DefaultMaxVisibleLines)
 			return DefaultSnakeDesktopMaxVisibleLines;
 		return value;
 	}
@@ -542,6 +542,8 @@ public partial class EmueraContent : Control
 		return Config.WindowY;
 	}
 
+	public static bool IsMobilePlatform => OS.HasFeature("mobile") || OS.GetName() == "Android";
+
 	public static Rect2 GetSafeViewportRect(Viewport viewport)
 	{
 		Vector2 viewportSize = viewport?.GetVisibleRect().Size ?? Vector2.Zero;
@@ -553,7 +555,7 @@ public partial class EmueraContent : Control
 
 		var fullRect = new Rect2(Vector2.Zero, viewportSize);
 		Rect2 safeRect = fullRect;
-		if (OS.HasFeature("mobile"))
+		if (IsMobilePlatform)
 		{
 			try
 			{
@@ -588,7 +590,7 @@ public partial class EmueraContent : Control
 	/// </summary>
 	static Rect2 ApplyGameViewHorizontalPadding(Rect2 safeRect, Vector2 viewportSize)
 	{
-		if (!OS.HasFeature("mobile"))
+		if (!IsMobilePlatform)
 			return safeRect;
 		int left = GameViewLeftPadding;
 		int right = GameViewRightPadding;
@@ -676,27 +678,29 @@ public partial class EmueraContent : Control
 		return false;
 	}
 
-	// 手机端竖屏逻辑画布：始终以 Config 的长短边作为宽高，物理屏幕只做等比
-	// 适配。旋转时只重算 fit scale，不改变行宽/行高，因此不会出现回横屏错位。
+	// 移动端画布：沿用游戏 emuera.config 的逻辑宽高，物理屏幕只做等比
+	// fit（宽度和高度同时约束）。旋转只重算缩放，不改变逻辑行宽/行高。
 	public void ApplyMobileViewportPolicy()
 	{
-		if (OS.GetName() != "Android" && !OS.HasFeature("mobile"))
+		if (!IsMobilePlatform)
 			return;
 		if (Config.WindowX <= 0 || Config.WindowY <= 0)
 			return;
 
-		int portraitWidth = System.Math.Min(Config.WindowX, Config.WindowY);
-		int portraitHeight = System.Math.Max(Config.WindowX, Config.WindowY);
-		if (Config.WindowX != portraitWidth || Config.WindowY != portraitHeight)
-			Config.UpdateWindowSize(portraitWidth, portraitHeight);
-
 		ApplySafeAreaLayout();
 
-		// 只缩小、不放大：物理宽度小于竖屏逻辑宽度时 fit；横屏时保持 1x，
-		// 画布按竖屏宽度居中留黑，绝不拉伸到横屏宽度。
-		if (!contentScaleUserAdjusted && ContentSafeWidth > 0 && Config.DrawableWidth > 0)
+		// 移动端沿用游戏 emuera.config 的逻辑画布尺寸，只按当前物理屏幕做
+		// 等比 fit（宽度和高度同时约束），不再把逻辑画布强制改成竖屏宽高。
+		// 这样桌面/手机的界面比例一致，横屏也不会被压成一条竖屏画布。
+		if (!contentScaleUserAdjusted
+			&& ContentSafeWidth > 0
+			&& ContentSafeHeight > 0
+			&& Config.DrawableWidth > 0
+			&& Config.WindowY > 0)
 		{
-			float fit = Mathf.Clamp(ContentSafeWidth / (float)Config.DrawableWidth, 0.5f, 1.0f);
+			float fitWidth = ContentSafeWidth / (float)Config.DrawableWidth;
+			float fitHeight = ContentSafeHeight / (float)Config.WindowY;
+			float fit = Mathf.Clamp(Mathf.Min(fitWidth, fitHeight), 0.35f, 1.0f);
 			if (Mathf.Abs(fit - contentScale) > 0.001f)
 			{
 				ApplyContentScaleValue(fit);
@@ -6036,7 +6040,7 @@ public partial class EmueraContent : Control
 			return;
 		if (QuickButtons.FloatingEnabled)
 		{
-			if (OS.HasFeature("mobile"))
+			if (IsMobilePlatform)
 			{
 				quickFloatingWindow = null;
 				quickButtons.FloatingOverlayMode = true;
@@ -6067,8 +6071,8 @@ public partial class EmueraContent : Control
 		if (quickButtons == null)
 			return;
 		bool wantsFloating = QuickButtons.FloatingEnabled;
-		bool wantsWindow = wantsFloating && !OS.HasFeature("mobile");
-		bool wantsOverlay = wantsFloating && OS.HasFeature("mobile");
+		bool wantsWindow = wantsFloating && !IsMobilePlatform;
+		bool wantsOverlay = wantsFloating && IsMobilePlatform;
 		bool isWindow = quickFloatingWindow != null && GodotObject.IsInstanceValid(quickFloatingWindow);
 		bool isOverlay = quickButtons.FloatingOverlayMode;
 		if (wantsWindow == isWindow && wantsOverlay == isOverlay)
