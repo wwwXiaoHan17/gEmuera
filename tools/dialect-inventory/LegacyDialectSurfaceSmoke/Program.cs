@@ -309,13 +309,21 @@ static class Program
             AssertMethodProjectionInventoryMatchesRuntime();
             AssertPackProjection();
             AssertV18PackEquivalence();
+            // 末尾：进程内 fallback 降级探针（会改写 Program 的全局计划绑定，必须在所有
+            // 基于独立 profile 对象的断言之后执行）。
+            AssertFallbackRebindStateEquivalence();
 
             Console.WriteLine("Legacy dialect surface smoke passed.");
             return 0;
         }
         catch (Exception exception)
         {
-            Console.Error.WriteLine(exception.Message);
+            // 反射调用的诊断：解出 TargetInvocationException 的真实内因，否则只剩
+            // "Exception has been thrown by the target of an invocation." 无法定位。
+            Exception actual = exception;
+            while (actual is System.Reflection.TargetInvocationException && actual.InnerException != null)
+                actual = actual.InnerException;
+            Console.Error.WriteLine(actual);
             return 1;
         }
     }
@@ -492,6 +500,20 @@ static class Program
         Type profileType,
         object profile)
     {
+        object registry = RuntimeRegistryObject(engine, typeName, methodName, profileType, profile);
+        var keys = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (string name in RegistryNames(registry))
+            keys[name] = "handler";
+        return keys;
+    }
+
+    private static object RuntimeRegistryObject(
+        System.Reflection.Assembly engine,
+        string typeName,
+        string methodName,
+        Type profileType,
+        object profile)
+    {
         Type registryType = engine.GetType(typeName)
             ?? throw new InvalidOperationException(typeName + " not found in engine assembly.");
         System.Reflection.MethodInfo method = registryType.GetMethod(
@@ -501,19 +523,26 @@ static class Program
             types: new[] { profileType },
             modifiers: null)
             ?? throw new InvalidOperationException(typeName + "." + methodName + " not found.");
-        object registry = method.Invoke(null, new[] { profile })
+        return method.Invoke(null, new[] { profile })
             ?? throw new InvalidOperationException(typeName + "." + methodName + " returned null.");
-        var keys = new Dictionary<string, string>(StringComparer.Ordinal);
+    }
+
+    private static List<string> RegistryNames(object registry)
+    {
+        var names = new List<string>();
         foreach (object entry in (System.Collections.IEnumerable)registry)
         {
             string? name = entry.GetType().GetProperty("Key")?.GetValue(entry) as string;
             if (!string.IsNullOrEmpty(name))
-                keys[name!] = "handler";
+                names.Add(name!);
         }
-        return keys;
+        return names;
     }
 
-    private static void AssertPackProjection()
+    // —— 冒烟包夹具（包组装门禁与 fallback 降级探针共用）：snake 全部 capability +
+    //    erafl display.extended-history + 表面贡献（注册 SETANIMETIMER/SQL_CONNECT、
+    //    隐藏 CALLSHARP/EXISTVAR）+ SETBGIMAGE=builtin:snake 变体选择。 ——
+    private static CompatPackHandle CreateSmokePackHandle()
     {
         string snakeCapabilities = string.Join(
             ",",
@@ -524,17 +553,27 @@ static class Program
             + "\"variantSelections\":{\"SETBGIMAGE\":\"builtin:snake\"}}";
         var manifest = CompatPackManifest.TryParse(smokeJson, out var parsed, out var manifestErrors)
             ? parsed! : throw new InvalidOperationException(string.Join("; ", manifestErrors));
-        var handle = new CompatPackHandle(
+        return new CompatPackHandle(
             manifest, null!, "Z:/smoke-pack.dll", new string('a', 64), new string('a', 64),
             new ISurfaceContribution[] { new SmokeSurfaceContribution() },
             Array.Empty<ICapabilityContribution>(),
             Array.Empty<IInstructionVariantContribution>(),
             Array.Empty<IPolicyContribution>(),
             new CompatPackLoadContext("Z:/smoke-pack.dll"));
+    }
 
+    private static CompatibilityPlan AssembleSmokePackPlan()
+    {
         CompatibilityPlan baseline = BuiltInDialectCatalog.CreateLegacySessionPlan("v24pure");
-        if (!CompatPackPlanAssembler.TryAssemble(baseline, new[] { handle }, out CompatibilityPlan assembled, out var assemblyErrors))
-            throw new InvalidOperationException("pack assembly failed: " + string.Join("; ", assemblyErrors));
+        if (!CompatPackPlanAssembler.TryAssemble(
+                baseline, new[] { CreateSmokePackHandle() }, out CompatibilityPlan assembled, out var assemblyErrors))
+            throw new InvalidOperationException("smoke.pack assembly failed: " + string.Join("; ", assemblyErrors));
+        return assembled;
+    }
+
+    private static void AssertPackProjection()
+    {
+        CompatibilityPlan assembled = AssembleSmokePackPlan();
 
         LegacyCompatibilityProfile packed = LegacyCompatibilityProfile.Create(assembled, true);
         AssertRuntimePlanClosure(assembled, "smoke.pack（手工句柄）");
@@ -738,6 +777,212 @@ static class Program
         // 多包隐藏差量不记录 owner（宁缺毋错）；包归属名恒不提示（包模块必在闭包内）。
         Assert(!multi.TryGetUnselectedModuleHint("CALLSHARP", out _),
             "多包会话的包隐藏名不应给出归属提示。");
+    }
+
+    // —— fallback 降级探针（Task 4 fix I1 + I3，进程内）：绑定 "v24pure + smoke.pack" 的
+    //    组装计划后，用引擎真实 registry（FunctionIdentifier/FunctionMethodCreator）填充一个
+    //    IdentifierDictionary 实例（RuntimeHelpers.GetUninitializedObject + 反射设字段），再反射
+    //    调用 Program.TryFallbackToNoPackBaseline("v24pure", out plan) 与生产方法
+    //    RebindProfileRegistries()，最后与"直接按无包基线重绑"的派生项逐键逐类型比较。
+    //    覆盖 I1 三条症状（包函数残留 / 基线恢复名缺席 / snake 保留字残留）与 I3（返回 true、
+    //    plan 身份与无包基线一致）。不构造 VariableData（依赖 CSV 装载）：varTokenDic/
+    //    localvarTokenDic 用空字典，变量名用固定合成输入（两侧同输入）。
+    //    放在冒烟末尾：会改写 Program 的全局计划绑定，不能污染前面基于独立 profile 的断言。 ——
+    private static readonly string[] ProfileIndependentReservedNames =
+    {
+        "IS", "TO", "INT", "STR", "REFFUNC", "STATIC", "DYNAMIC", "GLOBAL", "PRIVATE",
+        "SAVEDATA", "CHARADATA", "REF", "__DEBUG__", "__SKIP__", "_",
+    };
+
+    private static void AssertFallbackRebindStateEquivalence()
+    {
+        System.Reflection.Assembly engine = typeof(MinorShift.Emuera.Program).Assembly;
+        Type programType = engine.GetType("MinorShift.Emuera.Program")
+            ?? throw new InvalidOperationException("MinorShift.Emuera.Program type not found.");
+        Type identifierType = engine.GetType("MinorShift.Emuera.IdentifierDictionary")
+            ?? throw new InvalidOperationException("IdentifierDictionary type not found.");
+        Type profileType = engine.GetType("MinorShift.Emuera.Compatibility.LegacyCompatibilityProfile")
+            ?? throw new InvalidOperationException("LegacyCompatibilityProfile type not found.");
+
+        const System.Reflection.BindingFlags anyStatic = System.Reflection.BindingFlags.Static
+            | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+        const System.Reflection.BindingFlags anyInstance = System.Reflection.BindingFlags.Instance
+            | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+        // IdentifierDictionary.DefinedNameType 的私有枚举序数（Reserved=1、SystemMethod=3）。
+        const int reservedNameType = 1;
+        const int systemMethodNameType = 3;
+
+        System.Reflection.MethodInfo configure = programType.GetMethod(
+            "ConfigureCompatibilityPlan",
+            anyStatic,
+            binder: null,
+            types: new[] { typeof(CompatibilityPlan), typeof(bool) },
+            modifiers: null)
+            ?? throw new InvalidOperationException("Program.ConfigureCompatibilityPlan(CompatibilityPlan, bool) not found.");
+        System.Reflection.MethodInfo fallback = programType.GetMethod(
+            "TryFallbackToNoPackBaseline",
+            anyStatic,
+            binder: null,
+            types: new[] { typeof(string), typeof(CompatibilityPlan).MakeByRefType() },
+            modifiers: null)
+            ?? throw new InvalidOperationException("Program.TryFallbackToNoPackBaseline not found.");
+        System.Reflection.PropertyInfo currentProfileProperty = programType.GetProperty("Compatibility", anyStatic)
+            ?? throw new InvalidOperationException("Program.Compatibility property not found.");
+        System.Reflection.MethodInfo rebind = identifierType.GetMethod("RebindProfileRegistries", anyInstance)
+            ?? throw new InvalidOperationException("IdentifierDictionary.RebindProfileRegistries not found.");
+        System.Reflection.MethodInfo recompute = identifierType.GetMethod(
+            "RecomputeProfileDerivedNames", anyInstance, binder: null, types: Type.EmptyTypes, modifiers: null)
+            ?? throw new InvalidOperationException("IdentifierDictionary.RecomputeProfileDerivedNames() not found.");
+
+        Type definedNameType = identifierType.GetNestedType(
+                "DefinedNameType", System.Reflection.BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("IdentifierDictionary.DefinedNameType not found.");
+        Type nameDictionaryType = typeof(Dictionary<,>).MakeGenericType(typeof(string), definedNameType);
+
+        // 1) 绑定带包计划，按包 profile 的真实注册表派生 nameDic（fallback 前状态）。
+        CompatibilityPlan packedPlan = AssembleSmokePackPlan();
+        configure.Invoke(null, new object[] { packedPlan, true });
+        object packedProfile = currentProfileProperty.GetValue(null)
+            ?? throw new InvalidOperationException("Program.Compatibility returned null after packed-plan bind.");
+        object packedInstructions = RuntimeRegistryObject(
+            engine, "MinorShift.Emuera.GameProc.Function.FunctionIdentifier", "GetInstructionNameDic", profileType, packedProfile);
+        object packedFunctions = RuntimeRegistryObject(
+            engine, "MinorShift.Emuera.GameData.Function.FunctionMethodCreator", "GetMethodList", profileType, packedProfile);
+
+        object packedDictionary = NewIdentifierDictionaryProbe(
+            identifierType, nameDictionaryType, definedNameType, packedInstructions, packedFunctions);
+        // 构造期等价路径：按包 profile 派生一次（Rebind 之前的 nameDic 状态）。
+        recompute.Invoke(packedDictionary, null);
+        SortedDictionary<string, int> before = ReadNamedTypes(GetNameDictionary(identifierType, packedDictionary));
+
+        // 探针前提 = 旧实现的失败面：包函数在表、包隐藏函数缺席、snake 保留字在场。
+        Assert(before.TryGetValue("SQL_CONNECT", out int sqlNameType) && sqlNameType == systemMethodNameType,
+            "探针前提失败：带包 profile 的 nameDic 未包含包新增函数 SQL_CONNECT（SystemMethod）。");
+        Assert(!before.ContainsKey("EXISTVAR"),
+            "探针前提失败：包隐藏函数 EXISTVAR 仍在带包 nameDic 中（smoke.pack 本应隐藏它）。");
+        Assert(before.TryGetValue("REFF", out int reffNameType) && reffNameType == reservedNameType
+                && before.ContainsKey("VARIADIC"),
+            "探针前提失败：带包 profile 未登记 snake 保留字 REFF/VARIADIC（capability 未激活？）。");
+
+        // 2) 生产降级路径：Program.TryFallbackToNoPackBaseline("v24pure", out plan)。
+        object?[] fallbackArguments = { "v24pure", null };
+        bool fellBack = (bool)(fallback.Invoke(null, fallbackArguments) ?? false);
+        Assert(fellBack, "Program.TryFallbackToNoPackBaseline(\"v24pure\") 返回 false。");
+        CompatibilityPlan baselinePlan = fallbackArguments[1] as CompatibilityPlan
+            ?? throw new InvalidOperationException("TryFallbackToNoPackBaseline 未产出 out plan。");
+        Assert(baselinePlan.ProfileId == "v24pure",
+            "fallback 产出的 plan profile 不是 v24pure：" + baselinePlan.ProfileId);
+        CompatibilityPlan expectedBaseline = BuiltInDialectCatalog.CreateLegacySessionPlan("v24pure");
+        Assert(baselinePlan.CanonicalHash == expectedBaseline.CanonicalHash,
+            "fallback 产出的 plan 与 BuiltInDialectCatalog.CreateLegacySessionPlan(\"v24pure\") 哈希不一致。");
+        Assert(baselinePlan.Dialect.Instructions.Keys.Order(StringComparer.Ordinal)
+                    .SequenceEqual(expectedBaseline.Dialect.Instructions.Keys.Order(StringComparer.Ordinal))
+                && baselinePlan.Dialect.Functions.Keys.Order(StringComparer.Ordinal)
+                    .SequenceEqual(expectedBaseline.Dialect.Functions.Keys.Order(StringComparer.Ordinal)),
+            "fallback 产出的 plan 表面键集与无包基线不一致。");
+
+        // 3) 生产方法 RebindProfileRegistries()：按新 profile 重建注册表并重算 nameDic 派生项。
+        rebind.Invoke(packedDictionary, null);
+        SortedDictionary<string, int> after = ReadNamedTypes(GetNameDictionary(identifierType, packedDictionary));
+
+        // 显式症状回归放在全量比较之前：失败信息直指 review 三条，而不是只报字典差异。
+        Assert(!after.ContainsKey("SQL_CONNECT"), "fallback 后 nameDic 仍残留包新增函数 SQL_CONNECT。");
+        Assert(after.TryGetValue("EXISTVAR", out int existvarNameType) && existvarNameType == systemMethodNameType,
+            "fallback 后 nameDic 未恢复基线可见函数 EXISTVAR（SystemMethod）。");
+        Assert(!after.ContainsKey("REFF") && !after.ContainsKey("VARIADIC"),
+            "fallback 后 nameDic 仍残留 snake 保留字 REFF/VARIADIC。");
+
+        // 对照：空字典实例直接按基线重绑（同一 Program.Compatibility / 同一空 varToken 输入）。
+        object freshDictionary = NewIdentifierDictionaryProbe(
+            identifierType, nameDictionaryType, definedNameType, packedInstructions, packedFunctions);
+        rebind.Invoke(freshDictionary, null);
+        SortedDictionary<string, int> fresh = ReadNamedTypes(GetNameDictionary(identifierType, freshDictionary));
+
+        Assert(after.Count == fresh.Count,
+            "fallback 后 nameDic 派生项键数(" + after.Count + ") != 直接按无包基线重绑(" + fresh.Count + ")。");
+        foreach (KeyValuePair<string, int> pair in fresh)
+        {
+            bool present = after.TryGetValue(pair.Key, out int actual);
+            Assert(present && actual == pair.Value,
+                "fallback 后 nameDic 派生项与直接按无包基线重绑不一致：" + pair.Key
+                + " 期望类型=" + pair.Value + " 实际=" + (present ? actual.ToString() : "<missing>"));
+        }
+    }
+
+    // 反射填充一个 IdentifierDictionary 实例（不跑构造器：VariableData 依赖 CSV 装载）。
+    // 只设置 RebindProfileRegistries / RecomputeProfileDerivedNames 真正读取的字段。
+    private static object NewIdentifierDictionaryProbe(
+        Type identifierType,
+        Type nameDictionaryType,
+        Type definedNameType,
+        object instructionRegistry,
+        object functionRegistry)
+    {
+        object instance = System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(identifierType);
+        SetInstanceField(identifierType, instance, "nameDic",
+            NewSeededNameDictionary(nameDictionaryType, definedNameType));
+        SetInstanceField(identifierType, instance, "profileDerivedNames",
+            Activator.CreateInstance(nameDictionaryType)
+                ?? throw new InvalidOperationException("profileDerivedNames dictionary construction failed."));
+        SetInstanceField(identifierType, instance, "varTokenDic",
+            NewEmptyInstanceDictionary(identifierType, "varTokenDic"));
+        SetInstanceField(identifierType, instance, "localvarTokenDic",
+            NewEmptyInstanceDictionary(identifierType, "localvarTokenDic"));
+        SetInstanceField(identifierType, instance, "instructionDic", instructionRegistry);
+        SetInstanceField(identifierType, instance, "methodDic", functionRegistry);
+        return instance;
+    }
+
+    private static void SetInstanceField(Type type, object instance, string fieldName, object value)
+    {
+        System.Reflection.FieldInfo field = type.GetField(
+                fieldName,
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException(type.Name + "." + fieldName + " not found.");
+        field.SetValue(instance, value);
+    }
+
+    private static object NewEmptyInstanceDictionary(Type type, string fieldName)
+    {
+        System.Reflection.FieldInfo field = type.GetField(
+                fieldName,
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException(type.Name + "." + fieldName + " not found.");
+        return Activator.CreateInstance(field.FieldType)
+            ?? throw new InvalidOperationException(type.Name + "." + fieldName + " dictionary construction failed.");
+    }
+
+    private static object GetNameDictionary(Type identifierType, object identifierDictionary)
+    {
+        System.Reflection.FieldInfo field = identifierType.GetField(
+                "nameDic",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("IdentifierDictionary.nameDic not found.");
+        return field.GetValue(identifierDictionary)
+            ?? throw new InvalidOperationException("IdentifierDictionary.nameDic is null.");
+    }
+
+    private static object NewSeededNameDictionary(Type nameDictionaryType, Type definedNameType)
+    {
+        object dictionary = Activator.CreateInstance(nameDictionaryType)
+            ?? throw new InvalidOperationException("nameDic dictionary construction failed.");
+        System.Reflection.MethodInfo add = nameDictionaryType.GetMethod(
+                "Add", new[] { typeof(string), definedNameType })
+            ?? throw new InvalidOperationException("Dictionary<string, DefinedNameType>.Add not found.");
+        object reserved = Enum.ToObject(definedNameType, 1);
+        foreach (string name in ProfileIndependentReservedNames)
+            add.Invoke(dictionary, new[] { (object)name, reserved });
+        return dictionary;
+    }
+
+    private static SortedDictionary<string, int> ReadNamedTypes(object nameDictionary)
+    {
+        var source = nameDictionary as System.Collections.IDictionary
+            ?? throw new InvalidOperationException("nameDic is not a non-generic IDictionary.");
+        var result = new SortedDictionary<string, int>(StringComparer.Ordinal);
+        foreach (System.Collections.DictionaryEntry entry in source)
+            result[(string)entry.Key] = Convert.ToInt32(entry.Value);
+        return result;
     }
 
     private static void Assert(bool condition, string message)

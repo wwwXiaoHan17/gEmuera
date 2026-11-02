@@ -8,7 +8,8 @@ namespace GEmuera.Core.Tests;
 /// <summary>
 /// 会话驱动路由视图（运行时精确闭包，设计 §6.7）的直测：registry 必须被 final plan
 /// 完整声明；发现未声明名字时返回 false 且不产出可用 route（调用方据 symbol 诊断降级）。
-/// 反方向——计划多出的条件符号——由 LegacyCompatibilityPlanConsumption 的消费测试覆盖。
+/// 反方向（plan 的非条件项 ⊆ registry、条件符号与 METHOD 投影指令豁免）由
+/// <c>LegacyCompatibilityPlanConsumptionTests</c> 直测覆盖。
 /// </summary>
 public class CompatibilityDescriptorRouteTests
 {

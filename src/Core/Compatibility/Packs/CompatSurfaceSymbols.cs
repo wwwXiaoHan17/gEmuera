@@ -48,8 +48,16 @@ public readonly record struct CompatSymbolKey
 
         string prefix = text.Substring(0, separator).Trim();
         string name = text.Substring(separator + 1).Trim();
-        if (name.Length == 0)
+        // 契约字符串只有 kind:name 两段：名字里的 ':' 会让 ToContractString 产生歧义
+        //（"instruction:A:B" 无法区分名字 A:B 与三段契约）；内部空白/全角空白同理不可解析，
+        // 一律拒绝而不是静默猜测。
+        if (name.Length == 0 || name.IndexOf(':') >= 0)
             return false;
+        foreach (char c in name)
+        {
+            if (char.IsWhiteSpace(c))
+                return false;
+        }
 
         CompatSymbolKind kind;
         if (string.Equals(prefix, "instruction", StringComparison.OrdinalIgnoreCase))

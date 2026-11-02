@@ -51,6 +51,14 @@ public class CompatSurfaceSymbolTests
     [InlineData("instruction:")]
     [InlineData("instruction:   ")]
     [InlineData("macro:ABS")]
+    // 契约字符串只有 kind:name 两段：名字含 ':' 会让 ToContractString 歧义（M2）。
+    [InlineData("instruction:A:B")]
+    [InlineData("function:instruction:ABS")]
+    [InlineData("variant:SETBGIMAGE:extra")]
+    // 名字内空白/全角空白不可解析（Trim 只处理两端）。
+    [InlineData("function:A B")]
+    [InlineData("instruction:ABS\tX")]
+    [InlineData("function:AB\u3000S")]
     public void TryParse_RejectsMalformedText(string? text)
     {
         Assert.False(CompatSymbolKey.TryParse(text, out _));

@@ -125,6 +125,11 @@ namespace MinorShift.Emuera
 
 
 		Dictionary<string, DefinedNameType> nameDic = new Dictionary<string, DefinedNameType>();
+		// nameDic 的 profile 派生项（snake 保留字 + 注册表面三态）。fallback 重绑时必须先按
+		// 旧 profile 剔除、再按新 profile 重算；用户项（UserGlobalVariable/UserMacro/
+		// UserRefMethod）不登记在此，重算不会触碰用户标签加载后的条目。
+		readonly Dictionary<string, DefinedNameType> profileDerivedNames =
+			new Dictionary<string, DefinedNameType>(StringComparer.Ordinal);
 
 		List<string> privateDimList = new List<string>();
 		List<string> disableList = new List<string>();
@@ -160,12 +165,6 @@ namespace MinorShift.Emuera
 			nameDic.Add("SAVEDATA", DefinedNameType.Reserved);
 			nameDic.Add("CHARADATA", DefinedNameType.Reserved);//CHARDATAから変更
 			nameDic.Add("REF", DefinedNameType.Reserved);
-			// REFF（float 类型系统）与 VARIADIC（变长参数标记）为 snake 独有保留字；
-			// v24 参考均无，非蛇会话不注册（v24 游戏可将其用作普通标识符）
-			if (Program.Compatibility.Snake.UsesFloatTypeSystem)
-				nameDic.Add("REFF", DefinedNameType.Reserved);
-			if (Program.Compatibility.Snake.UsesVariadicStrip)
-				nameDic.Add("VARIADIC", DefinedNameType.Reserved);
 			nameDic.Add("__DEBUG__", DefinedNameType.Reserved);
 			nameDic.Add("__SKIP__", DefinedNameType.Reserved);
 			nameDic.Add("_", DefinedNameType.Reserved);
@@ -184,31 +183,70 @@ namespace MinorShift.Emuera
 				new List<string>(methodDic.Keys));
 			refmethodDic = new Dictionary<string, UserDefinedRefMethod>();
 
-			foreach(KeyValuePair<string, FunctionMethod> pair in methodDic)
+			// 注册表面（含 REFF/VARIADIC 保留字）按当前 profile 派生；包投影失败降级后
+			// 由 RecomputeProfileDerivedNames 整体重算（见 RebindProfileRegistries）。
+			RecomputeProfileDerivedNames();
+		}
+
+		/// <summary>
+		/// 重算 nameDic 的 profile 派生项：snake 保留字 REFF（float 类型系统）/ VARIADIC
+		/// （变长参数标记，v24 参考均无）、SystemMethod（methodDic 可见函数）、
+		/// SystemVariable（全局/局部变量）与 SystemInstrument（instructionDic 可见指令）。
+		/// 构造期调用一次；包投影失败降级到无包基线（Process.Initialize）后必须再调用一次，
+		/// 否则 nameDic 仍带着旧包的投影面：
+		/// 1. 包新增函数名以 SystemMethod 残留（用户同名 global/macro/refmethod 误报冲突）；
+		/// 2. 基线恢复可见的名字（如被包隐藏的 EXISTVAR）不在表里（漏报冲突）；
+		/// 3. 包激活 snake capability 时加入的 REFF/VARIADIC 保留字不会随会话消失。
+		/// 只操作本方法登记过的派生键（<see cref="profileDerivedNames"/>）；fallback 发生在
+		/// 用户标签加载之前，用户项不会被误删。规则与构造期逐条一致：方法名/局部变量名
+		/// 无条件 Add（与既有键冲突即抛，保持构造期的 fail-fast），全局变量/指令仅在名字
+		/// 缺席时登记（方法名优先于同名变量、变量优先于同名指令）。
+		/// </summary>
+		internal void RecomputeProfileDerivedNames()
+		{
+			foreach (KeyValuePair<string, DefinedNameType> pair in profileDerivedNames)
 			{
-				nameDic.Add(pair.Key, DefinedNameType.SystemMethod);
+				// 同名用户项不可能存在（注册路径用 Add 而非覆盖），按类型核对只是防御。
+				if (nameDic.TryGetValue(pair.Key, out DefinedNameType current) && current == pair.Value)
+					nameDic.Remove(pair.Key);
 			}
+			profileDerivedNames.Clear();
+
+			void AddDerived(string name, DefinedNameType type)
+			{
+				nameDic.Add(name, type);
+				profileDerivedNames[name] = type;
+			}
+
+			var compatibility = Program.Compatibility;
+			// REFF（float 类型系统）与 VARIADIC（变长参数标记）为 snake 独有保留字；
+			// v24 参考均无，非蛇会话不注册（v24 游戏可将其用作普通标识符）。
+			if (compatibility.Snake.UsesFloatTypeSystem)
+				AddDerived("REFF", DefinedNameType.Reserved);
+			if (compatibility.Snake.UsesVariadicStrip)
+				AddDerived("VARIADIC", DefinedNameType.Reserved);
+
+			foreach (KeyValuePair<string, FunctionMethod> pair in methodDic)
+				AddDerived(pair.Key, DefinedNameType.SystemMethod);
 
 			foreach (KeyValuePair<string, VariableToken> pair in varTokenDic)
 			{
 				//RANDが衝突している
 				//1808a3 GLOBAL、PRIVATEも
 				//1808beta009 REFも
-				if (!nameDic.ContainsKey(pair.Key)) 
-					nameDic.Add(pair.Key, DefinedNameType.SystemVariable);
+				if (!nameDic.ContainsKey(pair.Key))
+					AddDerived(pair.Key, DefinedNameType.SystemVariable);
 			}
 
 			foreach (KeyValuePair<string, VariableLocal> pair in localvarTokenDic)
-			{
-				nameDic.Add(pair.Key, DefinedNameType.SystemVariable);
-			}
+				AddDerived(pair.Key, DefinedNameType.SystemVariable);
 
 			foreach (KeyValuePair<string, FunctionIdentifier> pair in instructionDic)
 			{
 				//Methodと被る
 				//1808a3 SAVEDATAも
 				if (!nameDic.ContainsKey(pair.Key))
-					nameDic.Add(pair.Key, DefinedNameType.SystemInstrument);
+					AddDerived(pair.Key, DefinedNameType.SystemInstrument);
 			}
 		}
 		
@@ -695,7 +733,10 @@ namespace MinorShift.Emuera
 		/// 包投影失败降级到无包基线后的注册表重建：<see cref="instructionDic"/> /
 		/// <see cref="methodDic"/> 来自构造期的 profile 投影（包计划已收窄），fallback 后
 		/// 必须按当前会话 profile（无包基线）重新投影，否则重绑会把旧包的注册名当成
-		/// "registry 超出 plan"再次拒绝。名称清单同步重算，供消费校验使用。
+		/// "registry 超出 plan"再次拒绝。名称清单同步重算，供消费校验使用；<b>nameDic 的
+		/// profile 派生项也必须重算</b>（否则旧包的函数名以 SystemMethod 残留、基线恢复可见的
+		/// 名字缺席、snake 保留字不随 capability 关闭而消失——见
+		/// <see cref="RecomputeProfileDerivedNames"/>）。
 		/// </summary>
 		internal void RebindProfileRegistries()
 		{
@@ -709,6 +750,7 @@ namespace MinorShift.Emuera
 					.ToList());
 			legacyFunctionNames = new ReadOnlyCollection<string>(
 				new List<string>(methodDic.Keys));
+			RecomputeProfileDerivedNames();
 		}
 
 		public List<string> GetOverloadedList(LabelDictionary labelDic)
