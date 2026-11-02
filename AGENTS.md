@@ -50,7 +50,7 @@ Emuera 核心编译器以 C# 编写，为减少开发成本、方便 AI 对接�
 
 任务结束后，删除冗余的临时测试文件，避免造成垃圾文件。
 
-## 构建与验证（实测经验，2026-08；2026-09-13 补充）
+## 构建与验证（实测经验，2026-08；2026-09-13、2026-11-03 补充）
 
 - **C# 编译/构建首选 Godot mono**：`Godot_v4.7-stable_mono_win64_console.exe --headless
   --path <项目根> --build-solutions --quit`。
@@ -72,6 +72,14 @@ Emuera 核心编译器以 C# 编写，为减少开发成本、方便 AI 对接�
   `IsRunning` 条件早退、StopLegacyBaselineAsync 必须调用 `ClearCompatibilityPlan`、
   CompatPackHost 无投影静态残留、DialectPlan 保留 `PackModuleIds`/`VariantSelections`）。
   该守卫只防静态文本回归，**真机 e2e 仍是最终验收**。
+- **CompatPack 发布门禁**（2026-11）：桌面档汇总 Core/Facade/ABI xUnit、三冒烟与 lifecycle
+  守卫，入口
+  `powershell -NoProfile -ExecutionPolicy Bypass -File tools/compat-pack/Test-CompatPackReleaseGate.ps1 -ProjectRoot <项目根>`
+  （已接入 `tools/governance/Test-Governance.ps1`）。P-D 与社区包发布必须额外带
+  `-RequireAndroid -RequireSixGame` 并提供 `reports/compatpack/android-evidence.json` /
+  `reports/compatpack/six-game-evidence.json`（字段、采集步骤与归档见
+  [docs/compat-pack-release-gates.md](docs/compat-pack-release-gates.md)）；证据缺失即 exit 1，
+  桌面档通过不能替代真机证据。**真机 e2e 仍是最终验收**。
 - **Godot 构建回调不可用时的逃生通道**（个别安装缺 MSBuild 程序集时）：
   `dotnet build <项目根>/gemuera-c#.csproj -nodeReuse:false -m:1`，判定口径同为
   `error CS/MSB` 计 0 且输出 DLL 时间戳更新。两个通用陷阱：必须带 `-nodeReuse:false -m:1`

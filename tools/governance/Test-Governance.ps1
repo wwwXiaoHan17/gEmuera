@@ -60,4 +60,13 @@ Assert-Governance (Test-Path -LiteralPath $lifecycleGuard -PathType Leaf) 'Compa
 & powershell -NoProfile -ExecutionPolicy Bypass -File $lifecycleGuard -ProjectRoot $ProjectRoot
 Assert-Governance ($LASTEXITCODE -eq 0) 'CompatPack lifecycle guard failed.'
 
+# CompatPack v1 发布门禁桌面档（2026-11，Task 9）：
+# 汇总 Core/Facade/ABI xUnit、Surface/Runtime/CoreContract 三冒烟与 lifecycle 守卫；
+# 日常 CI 只跑桌面档。P-D/社区包发布任务必须另行以 -RequireAndroid -RequireSixGame
+# 调用同一脚本，校验真实设备与六游戏证据（见 docs/compat-pack-release-gates.md）。
+$releaseGate = Join-Path $ProjectRoot 'tools\compat-pack\Test-CompatPackReleaseGate.ps1'
+Assert-Governance (Test-Path -LiteralPath $releaseGate -PathType Leaf) 'CompatPack release gate script is missing.'
+& powershell -NoProfile -ExecutionPolicy Bypass -File $releaseGate -ProjectRoot $ProjectRoot
+Assert-Governance ($LASTEXITCODE -eq 0) 'CompatPack release gate failed (desktop gate).'
+
 Write-Output 'M3-M7 governance contract passed.'
