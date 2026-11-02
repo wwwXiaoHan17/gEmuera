@@ -15,7 +15,8 @@ namespace GEmuera.Core.Tests;
 public class V18PackManifestTests
 {
     static CompatPackValidationContext V18PackContext() => new(
-        engineModuleApiVersion: 1,
+        currentContractAbi: new CompatVersion(1, 0),
+        currentEngineApi: new CompatVersion(1, 0),
         knownCapabilityIds: new HashSet<string>(StringComparer.Ordinal),
         knownBuiltinVariantNames: new HashSet<string>(StringComparer.Ordinal),
         baselineInstructions: new HashSet<string>(LegacyDialectInventories.V24InstructionNames, StringComparer.Ordinal),

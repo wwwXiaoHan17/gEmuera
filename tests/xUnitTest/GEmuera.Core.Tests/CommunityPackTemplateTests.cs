@@ -1,3 +1,4 @@
+using Emuera.Compatibility.Packs;
 using GEmuera.Core.Compatibility;
 using GEmuera.Core.Compatibility.Packs;
 using Xunit;
@@ -13,7 +14,8 @@ namespace GEmuera.Core.Tests;
 public class CommunityPackTemplateTests
 {
     static CompatPackValidationContext CommunityContext() => new(
-        engineModuleApiVersion: 1,
+        currentContractAbi: new CompatVersion(1, 0),
+        currentEngineApi: new CompatVersion(1, 0),
         knownCapabilityIds: new HashSet<string>(StringComparer.Ordinal)
         {
             "math.times-clamp.v1",

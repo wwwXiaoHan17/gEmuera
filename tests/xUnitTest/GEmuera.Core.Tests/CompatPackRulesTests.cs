@@ -22,7 +22,8 @@ public class CompatPackRulesTests
             : throw new InvalidOperationException(string.Join("; ", errors));
 
     static CompatPackValidationContext Context() => new(
-        1,
+        new CompatVersion(1, 0),
+        new CompatVersion(1, 0),
         new HashSet<string>(StringComparer.Ordinal) { "parse.diagnostics.v1", "markup.div-v2.v1" },
         new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
         new HashSet<string>(StringComparer.Ordinal) { "CALLSHARP", "SETBGIMAGE", "PRINT" },
@@ -69,7 +70,8 @@ public class CompatPackRulesTests
         var manifest = CompatPackManifest.TryParse(json, out var m, out _)
             ? m! : throw new InvalidOperationException();
         var context = new CompatPackValidationContext(
-            1,
+            new CompatVersion(1, 0),
+            new CompatVersion(1, 0),
             new HashSet<string>(StringComparer.Ordinal) { "parse.diagnostics.v1" },
             new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
             new HashSet<string>(StringComparer.Ordinal) { "CALLSHARP" },
@@ -149,7 +151,8 @@ public class CompatPackRulesTests
         var manifest = CompatPackManifest.TryParse(json, out var m, out var errors)
             ? m! : throw new InvalidOperationException(string.Join("; ", errors));
         var context = new CompatPackValidationContext(
-            1,
+            new CompatVersion(1, 0),
+            new CompatVersion(1, 0),
             new HashSet<string>(StringComparer.Ordinal) { "markup.div-v2.v1", "parse.diagnostics.v1" },
             new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
             new HashSet<string>(GEmuera.Core.Compatibility.LegacyDialectInventories.V24InstructionNames, StringComparer.Ordinal),
@@ -218,7 +221,8 @@ public class CompatPackRulesTests
             ["builtin:snake"] = new HashSet<string>(StringComparer.Ordinal) { "SETBGIMAGE", "FOR" },
         };
         return new CompatPackValidationContext(
-            1,
+            new CompatVersion(1, 0),
+            new CompatVersion(1, 0),
             new HashSet<string>(StringComparer.Ordinal) { "parse.diagnostics.v1" },
             new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
             new HashSet<string>(StringComparer.Ordinal) { "SETBGIMAGE", "CALLSHARP", "PRINT" },
@@ -255,7 +259,8 @@ public class CompatPackRulesTests
         var manifest = CompatPackManifest.TryParse(json, out var m, out _)
             ? m! : throw new InvalidOperationException();
         var stricter = new CompatPackValidationContext(
-            1,
+            new CompatVersion(1, 0),
+            new CompatVersion(1, 0),
             new HashSet<string>(StringComparer.Ordinal), // 空词汇表：策略绑定的 id 即未知
             new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
             new HashSet<string>(StringComparer.Ordinal) { "CALLSHARP" },
@@ -319,7 +324,8 @@ public class CompatPackRulesTests
     static CompatPackValidationContext ContextWithHandlers(
         IReadOnlySet<string> instructionHandlers,
         IReadOnlySet<string> functionHandlers) => new(
-        1,
+        new CompatVersion(1, 0),
+        new CompatVersion(1, 0),
         new HashSet<string>(StringComparer.Ordinal) { "parse.diagnostics.v1" },
         new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
         new HashSet<string>(StringComparer.Ordinal) { "CALLSHARP", "SETBGIMAGE", "PRINT" },
@@ -430,7 +436,8 @@ public class CompatPackRulesTests
         var manifest = CompatPackManifest.TryParse(json, out var parsed, out var parseErrors)
             ? parsed! : throw new InvalidOperationException(string.Join("; ", parseErrors));
         var context = new CompatPackValidationContext(
-            1,
+            new CompatVersion(1, 0),
+            new CompatVersion(1, 0),
             new HashSet<string>(StringComparer.Ordinal),
             new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
             new HashSet<string>(StringComparer.Ordinal) { "CALLSHARP", "SETBGIMAGE", "PRINT" },
@@ -470,7 +477,8 @@ public class CompatPackRulesTests
         var manifest = CompatPackManifest.TryParse(json, out var parsed, out var parseErrors)
             ? parsed! : throw new InvalidOperationException(string.Join("; ", parseErrors));
         var context = new CompatPackValidationContext(
-            1,
+            new CompatVersion(1, 0),
+            new CompatVersion(1, 0),
             new HashSet<string>(StringComparer.Ordinal),
             new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
             new HashSet<string>(StringComparer.Ordinal) { "CALLSHARP", "SETBGIMAGE", "PRINT" },
@@ -493,6 +501,87 @@ public class CompatPackRulesTests
 
         Assert.False(CompatPackRules.Validate(manifest, Array.Empty<ICompatPackContribution>(), Context(), out var errors));
         Assert.Contains(errors, e => e.Contains("saveProfileId") && e.Contains("v1"));
+    }
+
+    // —— 双轴版本模型（contractAbi / engineApi）：major 必须相等、包 minor <= 引擎 minor，
+    //    两轴独立判定，错误文案必须指明是哪一轴。——
+
+    static CompatPackValidationContext AxesContext(
+        CompatVersion currentContractAbi,
+        CompatVersion currentEngineApi,
+        string baselineProfileId = "v24pure") => new(
+        currentContractAbi,
+        currentEngineApi,
+        new HashSet<string>(StringComparer.Ordinal) { "parse.diagnostics.v1" },
+        new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
+        new HashSet<string>(StringComparer.Ordinal) { "CALLSHARP", "SETBGIMAGE", "PRINT" },
+        new HashSet<string>(StringComparer.Ordinal) { "EXISTVAR" },
+        baselineProfileId: baselineProfileId);
+
+    static CompatPackManifest AxesManifest(string contractAbi, string engineApi)
+    {
+        string json = "{\"packId\":\"test.axes\",\"packVersion\":\"1.0.0\","
+            + "\"contractAbi\":\"" + contractAbi + "\",\"engineApi\":\"" + engineApi + "\"}";
+        return CompatPackManifest.TryParse(json, out var manifest, out var errors)
+            ? manifest! : throw new InvalidOperationException(string.Join("; ", errors));
+    }
+
+    [Fact]
+    public void Validate_ContractMinorHigherThanEngine_Rejects()
+    {
+        // 包声明 contractAbi 1.2 意味着可能用到 1.2 新增契约；引擎 1.1 缺少该增量 → 拒载。
+        // engine 轴（包 1.0 <= 引擎 1.1）通过，错误文案必须只指向 contract 轴。
+        CompatPackManifest manifest = AxesManifest(contractAbi: "1.2", engineApi: "1.0");
+        var context = AxesContext(new CompatVersion(1, 1), new CompatVersion(1, 1));
+
+        Assert.False(CompatPackRules.Validate(manifest, Array.Empty<ICompatPackContribution>(), context, out var errors));
+        Assert.Contains(errors, e => e.Contains("contractAbi") && e.Contains("1.2"));
+        Assert.DoesNotContain(errors, e => e.Contains("engineApi"));
+    }
+
+    [Fact]
+    public void Validate_EngineMinorHigherThanEngine_Rejects()
+    {
+        // engine 轴方向同 contract：包声明引擎行为 1.3，引擎 1.2 缺少增量 → 拒载；
+        // contract 轴（包 1.0 <= 引擎 1.2）通过。
+        CompatPackManifest manifest = AxesManifest(contractAbi: "1.0", engineApi: "1.3");
+        var context = AxesContext(new CompatVersion(1, 2), new CompatVersion(1, 2));
+
+        Assert.False(CompatPackRules.Validate(manifest, Array.Empty<ICompatPackContribution>(), context, out var errors));
+        Assert.Contains(errors, e => e.Contains("engineApi") && e.Contains("1.3"));
+        Assert.DoesNotContain(errors, e => e.Contains("contractAbi"));
+    }
+
+    [Fact]
+    public void Validate_MajorMismatch_Rejects()
+    {
+        // contract major 不同：包 2.0 vs 引擎 1.5（minor 方向无法挽救 major 分裂）。
+        var contractContext = AxesContext(new CompatVersion(1, 5), new CompatVersion(1, 0));
+        CompatPackManifest contractManifest = AxesManifest(contractAbi: "2.0", engineApi: "1.0");
+        Assert.False(CompatPackRules.Validate(contractManifest, Array.Empty<ICompatPackContribution>(), contractContext, out var contractErrors));
+        Assert.Contains(contractErrors, e => e.Contains("contractAbi") && e.Contains("2.0"));
+
+        // engine major 不同：包 2.0 vs 引擎 1.5。
+        var engineContext = AxesContext(new CompatVersion(1, 0), new CompatVersion(1, 5));
+        CompatPackManifest engineManifest = AxesManifest(contractAbi: "1.0", engineApi: "2.0");
+        Assert.False(CompatPackRules.Validate(engineManifest, Array.Empty<ICompatPackContribution>(), engineContext, out var engineErrors));
+        Assert.Contains(engineErrors, e => e.Contains("engineApi") && e.Contains("2.0"));
+    }
+
+    [Fact]
+    public void Validate_BaseProfileNotV24Pure_Rejects()
+    {
+        // v1 契约面只允许叠加 v24pure。此处把宿主基线也设为 snake——既有的
+        // 「manifest vs 会话基线不一致」规则不会触发，从而证明 v1 的 v24pure 硬约束
+        // 是独立判定（不是被基线比对顺带挡下的）。
+        string json = "{\"packId\":\"test.profile\",\"packVersion\":\"1.0.0\","
+            + "\"contractAbi\":\"1.0\",\"engineApi\":\"1.0\",\"baseProfileId\":\"snake\"}";
+        CompatPackManifest manifest = CompatPackManifest.TryParse(json, out var parsed, out var parseErrors)
+            ? parsed! : throw new InvalidOperationException(string.Join("; ", parseErrors));
+        var context = AxesContext(new CompatVersion(1, 0), new CompatVersion(1, 0), baselineProfileId: "snake");
+
+        Assert.False(CompatPackRules.Validate(manifest, Array.Empty<ICompatPackContribution>(), context, out var errors));
+        Assert.Contains(errors, e => e.Contains("baseProfileId") && e.Contains("v24pure"));
     }
 
 }

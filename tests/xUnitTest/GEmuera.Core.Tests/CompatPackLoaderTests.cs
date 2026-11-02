@@ -22,7 +22,8 @@ public class CompatPackLoaderTests
     static string FixturePath => typeof(CompatPackContractOnlyFixture.ContractOnlyPack).Assembly.Location;
 
     static CompatPackValidationContext RealContext() => new(
-        engineModuleApiVersion: 1,
+        currentContractAbi: new CompatVersion(1, 0),
+        currentEngineApi: new CompatVersion(1, 0),
         knownCapabilityIds: new HashSet<string>(StringComparer.Ordinal)
         {
             "input.pointer-button.v1",
@@ -154,7 +155,8 @@ public class CompatPackLoaderTests
     public void TryLoad_UnknownCapability_Rejects()
     {
         var context = new CompatPackValidationContext(
-            1,
+            new CompatVersion(1, 0),
+            new CompatVersion(1, 0),
             new HashSet<string>(StringComparer.Ordinal) { "startup.continue-after-fault.v1", "markup.div-v2.v1", "parse.diagnostics.v1" },
             new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
             new HashSet<string>(LegacyDialectInventories.V24InstructionNames, StringComparer.Ordinal),
@@ -173,21 +175,24 @@ public class CompatPackLoaderTests
     public void TryLoad_EngineApiMismatch_Rejects()
     {
         var context = new CompatPackValidationContext(
-            2,
+            new CompatVersion(1, 0),
+            new CompatVersion(2, 0),
             new HashSet<string>(RealCaps(), StringComparer.Ordinal),
             new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
             new HashSet<string>(LegacyDialectInventories.V24InstructionNames, StringComparer.Ordinal),
             new HashSet<string>(LegacyDialectInventories.V24Functions.Select(entry => entry.Name), StringComparer.Ordinal));
 
         Assert.False(CompatPackLoader.TryLoad(PackPath, context, out _, out var errors));
-        Assert.Contains(errors, e => e.Contains("targetEngineApi"));
+        // 双轴模型：legacy 包映射为 1.0/1.0，引擎 2.0 的 major 分裂必须在 engine 轴被点名。
+        Assert.Contains(errors, e => e.Contains("engineApi") && e.Contains("2.0"));
     }
 
     [Fact]
     public void TryLoad_UnknownBuiltinVariant_Rejects()
     {
         var context = new CompatPackValidationContext(
-            1,
+            new CompatVersion(1, 0),
+            new CompatVersion(1, 0),
             new HashSet<string>(RealCaps(), StringComparer.Ordinal),
             new HashSet<string>(StringComparer.Ordinal),
             new HashSet<string>(LegacyDialectInventories.V24InstructionNames, StringComparer.Ordinal),
@@ -201,7 +206,8 @@ public class CompatPackLoaderTests
     public void TryLoad_HideOutsideBaseline_Rejects()
     {
         var context = new CompatPackValidationContext(
-            1,
+            new CompatVersion(1, 0),
+            new CompatVersion(1, 0),
             new HashSet<string>(RealCaps(), StringComparer.Ordinal),
             new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
             new HashSet<string>(StringComparer.Ordinal), // 空指令基线 → HideInstruction("CALLSHARP") 必然失配
@@ -215,7 +221,8 @@ public class CompatPackLoaderTests
     public void TryLoad_RegisterConflictsBaseline_Rejects()
     {
         var context = new CompatPackValidationContext(
-            1,
+            new CompatVersion(1, 0),
+            new CompatVersion(1, 0),
             new HashSet<string>(RealCaps(), StringComparer.Ordinal),
             new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
             new HashSet<string>(LegacyDialectInventories.V24InstructionNames.Append("SETANIMETIMER"), StringComparer.Ordinal),

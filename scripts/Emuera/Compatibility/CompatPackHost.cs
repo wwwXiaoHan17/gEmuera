@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using Emuera.Compatibility.Packs;
 using GEmuera.Core.Compatibility;
 using GEmuera.Core.Compatibility.Packs;
 
@@ -62,7 +63,8 @@ internal static CompatPackValidationContext BuildValidationContext(string baseli
                 foreach (string profileId in AllProfileIds)
                         capabilities.UnionWith(profiles.Resolve(profileId).RequiredCapabilityIds);
                 return new CompatPackValidationContext(
-                        EngineModuleApiVersion,
+                        CurrentContractAbi,
+                        CurrentEngineApi,
                         capabilities,
                         new HashSet<string>(BuiltinVariantNames, StringComparer.Ordinal),
                         new HashSet<string>(LegacyDialectInventories.V24InstructionNames, StringComparer.Ordinal),
@@ -148,8 +150,13 @@ internal static CompatPackValidationContext BuildValidationContext(string baseli
 		}
 
 
-		/// <summary>引擎包 API 版本（v1 = 1；破坏性变更时递增并拒载旧包）。</summary>
-		internal const int EngineModuleApiVersion = 1;
+		/// <summary>引擎当前契约 ABI 版本（Emuera.CompatPack 公开契约面；v1 = 1.0）。
+		/// manifest 声明必须 major 相等且 minor 不高于本值，否则加载期拒载。</summary>
+		internal static readonly CompatVersion CurrentContractAbi = new(1, 0);
+
+		/// <summary>引擎当前行为/能力契约版本（v1 = 1.0）。破坏性变更升 major，增量能力升 minor；
+		/// 不再复用 DialectModuleDefinition.ModuleApiVersion（两套版本语义不同源）。</summary>
+		internal static readonly CompatVersion CurrentEngineApi = new(1, 0);
 
 		/// <summary>
 		/// 是否显式启用了兼容包（存在启用路径）。Program.Main 早绑定路径的换绑预判：
@@ -210,9 +217,18 @@ internal static CompatPackLaunchResult ConfigureForLaunch(CompatibilityPlan base
 
                         foreach (CompatPackHandle handle in set!.Handles)
                         {
+                                // 迁移窗口可观测：legacy 清单（targetEngineApi:1）已映射为双轴 1.0/1.0，
+                                // 发布门禁据此识别未迁移的官方包（设计 §4.5 第 2 条）。
+                                if (handle.Manifest.UsedLegacyTargetEngineApi)
+                                {
+                                        global::GenericUtils.Info(
+                                                "[LOAD] CompatPack legacy targetEngineApi mapped: id=" + handle.Manifest.PackId
+                                                + " contractAbi=" + handle.Manifest.ContractAbi
+                                                + " engineApi=" + handle.Manifest.EngineApi);
+                                }
                                 global::GenericUtils.Info(
                                         $"[LOAD] CompatPack enabled: id={handle.Manifest.PackId} version={handle.Manifest.PackVersion} "
-                                        + $"engineApi={handle.Manifest.TargetEngineApi} sha256={handle.PackSha256}");
+                                        + $"contractAbi={handle.Manifest.ContractAbi} engineApi={handle.Manifest.EngineApi} sha256={handle.PackSha256}");
                         }
                         // 计划自身已携带 pack 模块白名单与 variantSelections；包程序集的存活
                         // 移交 CompatPackSession（随计划绑定会话，Stop/替换时确定性 UnloadAll）。

@@ -447,7 +447,8 @@ static class Program
         // 经包工程的 public 标记类取真实 DLL 路径（MSBuild 保证已构建并复制到本输出目录）。
         string packPath = typeof(GemueraV18Pack.GemueraV18PackMarker).Assembly.Location;
         var context = new CompatPackValidationContext(
-            engineModuleApiVersion: 1,
+            currentContractAbi: new CompatVersion(1, 0),
+            currentEngineApi: new CompatVersion(1, 0),
             knownCapabilityIds: new HashSet<string>(StringComparer.Ordinal),
             knownBuiltinVariantNames: new HashSet<string>(StringComparer.Ordinal),
             baselineInstructions: new HashSet<string>(

@@ -58,7 +58,9 @@ public static class CompatPackPlanAssembler
                 continue;
             }
 
-            packModules.Add(new DialectModuleSnapshot(pack.Manifest.PackId, pack.Manifest.PackVersion, pack.Manifest.TargetEngineApi));
+            // 合成模块快照的 ModuleApiVersion 取包的 engineApi major：双轴模型下 engineApi 取代
+            // 旧的 targetEngineApi（DialectModuleSnapshot 只有 int 字段；完整双轴版本由 manifest 承载）。
+            packModules.Add(new DialectModuleSnapshot(pack.Manifest.PackId, pack.Manifest.PackVersion, pack.Manifest.EngineApi.Major));
             packHashLines.Add((pack.Manifest.PackId, pack.PackSha256));
 
             foreach (string capability in pack.Manifest.Capabilities)

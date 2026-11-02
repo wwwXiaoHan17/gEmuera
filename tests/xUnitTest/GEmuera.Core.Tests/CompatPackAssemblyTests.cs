@@ -16,7 +16,8 @@ public class CompatPackAssemblyTests
     static string PackPath => typeof(CompatPackAssemblyTests).Assembly.Location;
 
     static CompatPackValidationContext Context() => new(
-        1,
+        new CompatVersion(1, 0),
+        new CompatVersion(1, 0),
         new HashSet<string>(StringComparer.Ordinal)
         {
             "input.pointer-button.v1", "startup.continue-after-fault.v1",

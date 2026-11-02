@@ -6,7 +6,7 @@ namespace GEmuera.Core.Compatibility.Packs;
 /// 兼容包语义校验的纯规则集（fail-closed，错误全量收集）。公开为静态方法便于直接单测：
 /// 加载器在程序集发现/清单解析之后调用；测试可用手工构造的清单与贡献直接驱动。
 /// 对应 docs/designs/compat-pack-interface.md §5.3 三原则中的（1）未知 capability 拒载、
-/// （3）targetEngineApi 不匹配拒载，以及 Core 数据可支撑的（2）表面对账子集；
+/// （3）contractAbi/engineApi 双轴版本不匹配拒载，以及 Core 数据可支撑的（2）表面对账子集；
 /// 引擎注册表级对账（add 名单须有真实 handler）在 DOD-3 宿主接线叠加。
 /// </summary>
 public static class CompatPackRules
@@ -28,8 +28,16 @@ public static class CompatPackRules
         if (context.ReservedModuleIds.Contains(manifest.PackId))
             collected.Add("packId 与内置方言模块保留名冲突：" + manifest.PackId);
 
-        // 包声明的是相对哪个基线 profile 的差量；v1 只支持 v24pure。
-        // 若与实际会话基线不一致，加载期拒载，避免在 v18/snake 等基线上静默错叠。
+        // v1 契约面硬约束：包只允许叠加 v24pure。即便宿主会话基线恰好同名，非 v24pure 的
+        // 声明也必须拒载——v1 没有承诺任何非 v24pure 基线的叠加语义。
+        if (!string.Equals(manifest.BaseProfileId, "v24pure", StringComparison.Ordinal))
+        {
+            collected.Add("包 " + manifest.PackId + " 声明 baseProfileId=" + manifest.BaseProfileId
+                + "，但 v1 只允许 v24pure（其他基线需 v2 契约面支持后开放）。");
+        }
+
+        // 包声明的是相对哪个基线 profile 的差量；若与实际会话基线不一致，加载期拒载，
+        // 避免在 v18/snake 等基线上静默错叠。
         if (!string.Equals(manifest.BaseProfileId, context.BaselineProfileId, StringComparison.Ordinal))
         {
             collected.Add("包声明 baseProfileId=" + manifest.BaseProfileId
@@ -48,11 +56,20 @@ public static class CompatPackRules
                 + "；包需按新表面快照重发布，或由维护方再生生成清单后更新声明）。");
         }
 
-        // 原则（3）：引擎包 API 主版本不匹配拒载（当前为整数版本，精确匹配即主版本匹配）。
-        if (manifest.TargetEngineApi != context.EngineModuleApiVersion)
+        // 原则（3）双轴版本比较：两轴都是 major 相等且包 minor <= 引擎 minor（缺 API 就是缺 API，
+        // 不能因"引擎更新向下兼容"放宽）。两轴独立判定、独立文案——包作者必须能看出是
+        // contract（公开契约面）还是 engine（引擎行为/能力契约）不满足。
+        if (!manifest.ContractAbi.CanRunOn(context.CurrentContractAbi))
         {
-            collected.Add("targetEngineApi=" + manifest.TargetEngineApi + " 与引擎包 API 版本 "
-                + context.EngineModuleApiVersion + " 不匹配，包需按新 API 重编译后分发。");
+            collected.Add("包 " + manifest.PackId + " 的 contractAbi=" + manifest.ContractAbi
+                + " 不能在引擎 contractAbi=" + context.CurrentContractAbi
+                + " 上运行（contract 轴要求 major 相等且包 minor <= 引擎 minor），包需按新契约面重编译后分发。");
+        }
+        if (!manifest.EngineApi.CanRunOn(context.CurrentEngineApi))
+        {
+            collected.Add("包 " + manifest.PackId + " 的 engineApi=" + manifest.EngineApi
+                + " 不能在引擎 engineApi=" + context.CurrentEngineApi
+                + " 上运行（engine 轴要求 major 相等且包 minor <= 引擎 minor），包需按新引擎能力重编译后分发。");
         }
 
         // saveProfileId v1 未接线：legacy 存档路径尚不消费 CompatibilityPlan.SaveProfileId，

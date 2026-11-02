@@ -80,7 +80,9 @@ namespace Emuera.Compatibility.Packs
 		internal CompatPackManifest(
 			string packId,
 			string packVersion,
-			int targetEngineApi,
+			CompatVersion contractAbi,
+			CompatVersion engineApi,
+			bool usedLegacyTargetEngineApi,
 			string baseProfileId,
 			CompatPackSurface surface,
 			string? baseSurfaceHash,
@@ -91,7 +93,9 @@ namespace Emuera.Compatibility.Packs
 		{
 			PackId = packId;
 			PackVersion = packVersion;
-			TargetEngineApi = targetEngineApi;
+			ContractAbi = contractAbi;
+			EngineApi = engineApi;
+			UsedLegacyTargetEngineApi = usedLegacyTargetEngineApi;
 			BaseProfileId = baseProfileId;
 			Surface = surface;
 			BaseSurfaceHash = baseSurfaceHash;
@@ -103,8 +107,16 @@ namespace Emuera.Compatibility.Packs
 
 		public string PackId { get; }
 		public string PackVersion { get; }
-		public int TargetEngineApi { get; }
-		/// <summary>包叠加的基线 profile。v1 固定为 v24pure；宿主会与当前会话基线核对，不匹配拒载。</summary>
+		/// <summary>包编译时依赖的公开契约面版本（Emuera.CompatPack ABI 线）：major 必须与引擎相等，
+		/// 包 minor 不得高于引擎 minor（包可能用到引擎缺失的契约增量）。</summary>
+		public CompatVersion ContractAbi { get; }
+		/// <summary>包依赖的引擎行为/能力契约版本（不再复用 DialectModuleDefinition.ModuleApiVersion）；
+		/// 比较规则与 <see cref="ContractAbi"/> 同：major 相等且包 minor &lt;= 引擎 minor。</summary>
+		public CompatVersion EngineApi { get; }
+		/// <summary>true = 清单使用 legacy 字段 <c>targetEngineApi: 1</c> 并已映射为双轴 1.0/1.0。
+		/// 迁移期标记：宿主可据此记 [LOAD] 日志，发布门禁可据此拒绝未迁移的官方包。</summary>
+		public bool UsedLegacyTargetEngineApi { get; }
+		/// <summary>包叠加的基线 profile。v1 固定为 v24pure（规则层显式拒载其他值）；宿主还会与当前会话基线核对。</summary>
 		public string BaseProfileId { get; }
 		/// <summary>manifest 静态表面（空 = 仅 capability/variant 声明）。</summary>
 		public CompatPackSurface Surface { get; }
@@ -161,7 +173,8 @@ namespace Emuera.Compatibility.Packs
 
 				string packId = RequireId(root, "packId", collected, required: true) ?? "";
 				string packVersion = Require(root, "packVersion", collected, SemverPattern, "语义化版本 x.y.z");
-				int targetEngineApi = RequirePositiveInt(root, "targetEngineApi", collected);
+				(CompatVersion ContractAbi, CompatVersion EngineApi, bool UsedLegacyTargetEngineApi) axes =
+					RequireVersionAxes(root, collected);
 				string baseProfileId = OptionalIdOrDefault(root, "baseProfileId", "v24pure", collected);
 				CompatPackSurface surface = RequireSurface(root, collected);
 				string? baseSurfaceHash = Optional(root, "baseSurfaceHash", collected, LowerHexPattern, "小写十六进制哈希（8-64 位）");
@@ -177,6 +190,8 @@ namespace Emuera.Compatibility.Packs
 					{
 						case "packId":
 						case "packVersion":
+						case "contractAbi":
+						case "engineApi":
 						case "targetEngineApi":
 						case "baseProfileId":
 						case "surface":
@@ -199,7 +214,9 @@ namespace Emuera.Compatibility.Packs
 				manifest = new CompatPackManifest(
 					packId,
 					packVersion,
-					targetEngineApi,
+					axes.ContractAbi,
+					axes.EngineApi,
+					axes.UsedLegacyTargetEngineApi,
 					baseProfileId,
 					surface,
 					baseSurfaceHash,
@@ -301,26 +318,93 @@ namespace Emuera.Compatibility.Packs
 			return text;
 		}
 
-		private static int RequirePositiveInt(JsonElement root, string field, List<string> errors)
+		/// <summary>
+		/// 双轴版本字段解析（迁移期兼容 legacy targetEngineApi）：
+		/// - 新格式：contractAbi 与 engineApi 必须同时声明，格式 major.minor；
+		/// - 旧格式：仅 targetEngineApi，只接受 1，映射为 contractAbi=engineApi=1.0；
+		/// - 新旧混用、其他 legacy 值一律拒绝（fail-closed，错误全量收集）。
+		/// 任一错误收集后返回 default 轴值；调用方在 collected.Count > 0 时不会构造清单。
+		/// </summary>
+		private static (CompatVersion ContractAbi, CompatVersion EngineApi, bool UsedLegacyTargetEngineApi)
+			RequireVersionAxes(JsonElement root, List<string> errors)
 		{
-			if (!root.TryGetProperty(field, out JsonElement value))
+			bool hasContractAbi = root.TryGetProperty("contractAbi", out _);
+			bool hasEngineApi = root.TryGetProperty("engineApi", out _);
+			bool hasLegacy = root.TryGetProperty("targetEngineApi", out JsonElement legacyValue);
+
+			if (hasContractAbi || hasEngineApi)
 			{
-				errors.Add("字段 '" + field + "' 缺失。");
-				return 0;
+				if (hasLegacy)
+				{
+					errors.Add("字段 'targetEngineApi' 不能与 'contractAbi'/'engineApi' 混用"
+						+ "（legacy 迁移字段只允许单独出现；混用会掩盖包作者的真实意图）。");
+				}
+				CompatVersion contractAbi = hasContractAbi ? RequireVersion(root, "contractAbi", errors) : default;
+				CompatVersion engineApi = hasEngineApi ? RequireVersion(root, "engineApi", errors) : default;
+				// "必须同时声明"必须报成独立错误：只声明一轴时另一轴缺失，不能静默取默认值。
+				if (!hasContractAbi)
+					errors.Add("字段 'contractAbi' 缺失：新格式清单必须同时声明 'contractAbi' 与 'engineApi'（格式 major.minor）。");
+				if (!hasEngineApi)
+					errors.Add("字段 'engineApi' 缺失：新格式清单必须同时声明 'contractAbi' 与 'engineApi'（格式 major.minor）。");
+				return (contractAbi, engineApi, false);
 			}
-			if (value.ValueKind == JsonValueKind.Number
-				&& value.TryGetInt32(out int number) && number > 0)
+
+			if (hasLegacy)
 			{
-				return number;
+				if (IsLegacyTargetEngineApiOne(legacyValue))
+					return (new CompatVersion(1, 0), new CompatVersion(1, 0), true);
+
+				errors.Add("legacy 字段 'targetEngineApi' 只接受值 1，当前为 "
+					+ DescribeVersionValue(legacyValue)
+					+ "；其他旧值不再生效，请迁移到 'contractAbi'/'engineApi'（格式 major.minor）。");
+				return (default, default, false);
 			}
-			// 兼容字符串形式（schema 定义为整数；两种编码都接受，避免包作者踩 JSON 数字精度坑）。
-			if (value.ValueKind == JsonValueKind.String
-				&& int.TryParse(value.GetString(), out number) && number > 0)
+
+			errors.Add("字段 'contractAbi' 缺失：清单必须声明 'contractAbi' 与 'engineApi'（格式 major.minor）；"
+				+ "legacy 字段 'targetEngineApi' 仅接受值 1，用于尚未迁移的包。");
+			return (default, default, false);
+		}
+
+		private static CompatVersion RequireVersion(JsonElement root, string field, List<string> errors)
+		{
+			if (!root.TryGetProperty(field, out JsonElement value) || value.ValueKind != JsonValueKind.String)
 			{
-				return number;
+				errors.Add("字段 '" + field + "' 缺失或不是字符串（格式 major.minor，如 \"1.0\"）。");
+				return default;
 			}
-			errors.Add("字段 '" + field + "' 必须是正整数。");
-			return 0;
+			string text = value.GetString() ?? "";
+			if (!CompatVersion.TryParse(text, out CompatVersion version))
+			{
+				errors.Add("字段 '" + field + "' 形式不合法（应为 major.minor，如 \"1.0\"）：" + text);
+				return default;
+			}
+			return version;
+		}
+
+		/// <summary>legacy targetEngineApi 值判定：只接受数字 1 或字符串 "1"（旧解析器的两种编码）。</summary>
+		private static bool IsLegacyTargetEngineApiOne(JsonElement value)
+		{
+			if (value.ValueKind == JsonValueKind.Number)
+				return value.TryGetInt32(out int number) && number == 1;
+			if (value.ValueKind == JsonValueKind.String)
+			{
+				return int.TryParse(value.GetString(), System.Globalization.NumberStyles.Integer,
+					System.Globalization.CultureInfo.InvariantCulture, out int parsed) && parsed == 1;
+			}
+			return false;
+		}
+
+		private static string DescribeVersionValue(JsonElement value)
+		{
+			switch (value.ValueKind)
+			{
+				case JsonValueKind.Null:
+					return "null";
+				case JsonValueKind.String:
+					return "'" + (value.GetString() ?? "") + "'";
+				default:
+					return value.GetRawText();
+			}
 		}
 
 		private static string? Optional(JsonElement root, string field, List<string> errors, Regex pattern, string form)

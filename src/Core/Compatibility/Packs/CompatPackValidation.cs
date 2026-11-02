@@ -1,3 +1,5 @@
+using Emuera.Compatibility.Packs;
+
 namespace GEmuera.Core.Compatibility.Packs;
 
 /// <summary>
@@ -15,7 +17,8 @@ public sealed class CompatPackValidationContext
         new Dictionary<string, string>(StringComparer.Ordinal);
 
     public CompatPackValidationContext(
-        int engineModuleApiVersion,
+        CompatVersion currentContractAbi,
+        CompatVersion currentEngineApi,
         IReadOnlySet<string> knownCapabilityIds,
         IReadOnlySet<string> knownBuiltinVariantNames,
         IReadOnlySet<string> baselineInstructions,
@@ -28,9 +31,13 @@ public sealed class CompatPackValidationContext
         string? baselineProfileId = null,
         string? baselineSurfaceHash = null)
     {
-        if (engineModuleApiVersion <= 0)
-            throw new ArgumentOutOfRangeException(nameof(engineModuleApiVersion));
-        EngineModuleApiVersion = engineModuleApiVersion;
+        // 引擎当前版本是宿主常量，0.x / 负 minor 只可能是接线错误：与旧 int 版本一样 fail-fast。
+        if (currentContractAbi.Major <= 0 || currentContractAbi.Minor < 0)
+            throw new ArgumentOutOfRangeException(nameof(currentContractAbi));
+        if (currentEngineApi.Major <= 0 || currentEngineApi.Minor < 0)
+            throw new ArgumentOutOfRangeException(nameof(currentEngineApi));
+        CurrentContractAbi = currentContractAbi;
+        CurrentEngineApi = currentEngineApi;
         KnownCapabilityIds = knownCapabilityIds ?? throw new ArgumentNullException(nameof(knownCapabilityIds));
         KnownBuiltinVariantNames = knownBuiltinVariantNames ?? throw new ArgumentNullException(nameof(knownBuiltinVariantNames));
         BaselineInstructions = baselineInstructions ?? throw new ArgumentNullException(nameof(baselineInstructions));
@@ -46,8 +53,11 @@ public sealed class CompatPackValidationContext
             : baselineSurfaceHash.Trim();
     }
 
-    /// <summary>引擎当前 ModuleApiVersion（与 DialectModuleDefinition.ModuleApiVersion 同源）。</summary>
-    public int EngineModuleApiVersion { get; }
+    /// <summary>引擎当前契约 ABI 版本（Emuera.CompatPack 公开契约面；v1 = 1.0）。</summary>
+    public CompatVersion CurrentContractAbi { get; }
+
+    /// <summary>引擎当前行为/能力契约版本（v1 = 1.0；破坏性变更升 major，增量升 minor）。</summary>
+    public CompatVersion CurrentEngineApi { get; }
 
     /// <summary>capability id 词汇表（引擎能力实现库已收录的 id）；包声明未知 id 即拒载。</summary>
     public IReadOnlySet<string> KnownCapabilityIds { get; }

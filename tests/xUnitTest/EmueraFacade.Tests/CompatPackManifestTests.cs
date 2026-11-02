@@ -13,7 +13,8 @@ public class CompatPackManifestTests
         "{\"packId\":\"test.hello-pack\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1}";
 
     private const string ValidFull =
-        "{\"packId\":\"test.hello-pack\",\"packVersion\":\"1.2.3\",\"targetEngineApi\":2,"
+        "{\"packId\":\"test.hello-pack\",\"packVersion\":\"1.2.3\","
+        + "\"contractAbi\":\"1.2\",\"engineApi\":\"1.3\","
         + "\"baseSurfaceHash\":\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\","
         + "\"capabilities\":[\"input.pointer-button.v1\",\"startup.continue-after-fault.v1\"],"
         + "\"saveProfileId\":\"gemuera.hello\","
@@ -30,7 +31,9 @@ public class CompatPackManifestTests
 
         Assert.Equal("test.hello-pack", manifest!.PackId);
         Assert.Equal("1.2.3", manifest.PackVersion);
-        Assert.Equal(2, manifest.TargetEngineApi);
+        Assert.Equal(new CompatVersion(1, 2), manifest.ContractAbi);
+        Assert.Equal(new CompatVersion(1, 3), manifest.EngineApi);
+        Assert.False(manifest.UsedLegacyTargetEngineApi);
         Assert.NotNull(manifest.BaseSurfaceHash);
         Assert.Equal(2, manifest.Capabilities.Count);
         Assert.Equal("gemuera.hello", manifest.SaveProfileId);
@@ -93,9 +96,13 @@ public class CompatPackManifestTests
     [InlineData("{\"packId\":\"test.pack\",\"targetEngineApi\":1}", "packVersion")]
     [InlineData("{\"packId\":\"test.pack\",\"packVersion\":\"1.0\",\"targetEngineApi\":1}", "packVersion")]
     [InlineData("{\"packId\":\"test.pack\",\"packVersion\":\"1.0.0.0\",\"targetEngineApi\":1}", "packVersion")]
-    [InlineData("{\"packId\":\"test.pack\",\"packVersion\":\"1.0.0\"}", "targetEngineApi")]
+    [InlineData("{\"packId\":\"test.pack\",\"packVersion\":\"1.0.0\"}", "contractAbi")]
     [InlineData("{\"packId\":\"test.pack\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":0}", "targetEngineApi")]
     [InlineData("{\"packId\":\"test.pack\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":-1}", "targetEngineApi")]
+    [InlineData("{\"packId\":\"test.pack\",\"packVersion\":\"1.0.0\",\"contractAbi\":\"1.0\"}", "engineApi")]
+    [InlineData("{\"packId\":\"test.pack\",\"packVersion\":\"1.0.0\",\"contractAbi\":\"1\",\"engineApi\":\"1.0\"}", "contractAbi")]
+    [InlineData("{\"packId\":\"test.pack\",\"packVersion\":\"1.0.0\",\"contractAbi\":\"01.0\",\"engineApi\":\"1.0\"}", "contractAbi")]
+    [InlineData("{\"packId\":\"test.pack\",\"packVersion\":\"1.0.0\",\"contractAbi\":\"1.0\",\"engineApi\":\"1.2.3\"}", "engineApi")]
     public void Parse_InvalidRequiredFields_FailWithFieldNamed(string json, string field)
     {
         Assert.False(CompatPackManifest.TryParse(json, out _, out var errors));
@@ -105,10 +112,70 @@ public class CompatPackManifestTests
     [Fact]
     public void Parse_TargetEngineApiAsString_Succeeds()
     {
-        // schema 接受字符串形式（避免包作者踩 JSON 数字精度坑），解析器同样接受。
-        string json = "{\"packId\":\"test.pack\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":\"3\"}";
+        // 旧解析器接受字符串形式（避免包作者踩 JSON 数字精度坑）；legacy 迁移窗口
+        // 只接受值 1，字符串形式同样映射为双轴 1.0/1.0。
+        string json = "{\"packId\":\"test.pack\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":\"1\"}";
         Assert.True(CompatPackManifest.TryParse(json, out var manifest, out _));
-        Assert.Equal(3, manifest!.TargetEngineApi);
+        Assert.Equal(new CompatVersion(1, 0), manifest!.ContractAbi);
+        Assert.Equal(new CompatVersion(1, 0), manifest.EngineApi);
+        Assert.True(manifest.UsedLegacyTargetEngineApi);
+    }
+
+    [Fact]
+    public void Parse_DualVersionAxes_AreRequiredTogether()
+    {
+        const string json = """
+        {
+          "packId": "test.dual",
+          "packVersion": "1.0.0",
+          "contractAbi": "1.2",
+          "engineApi": "1.3",
+          "baseProfileId": "v24pure"
+        }
+        """;
+
+        Assert.True(CompatPackManifest.TryParse(json, out var manifest, out var errors), string.Join("; ", errors));
+        Assert.Empty(errors);
+        Assert.Equal(new CompatVersion(1, 2), manifest!.ContractAbi);
+        Assert.Equal(new CompatVersion(1, 3), manifest.EngineApi);
+        Assert.False(manifest.UsedLegacyTargetEngineApi);
+    }
+
+    [Fact]
+    public void Parse_LegacyTargetEngineApiOnly1_MapsToDualAxes()
+    {
+        const string json = """
+        {
+          "packId": "test.legacy",
+          "packVersion": "1.0.0",
+          "targetEngineApi": 1
+        }
+        """;
+
+        Assert.True(CompatPackManifest.TryParse(json, out var manifest, out var errors), string.Join("; ", errors));
+        Assert.Empty(errors);
+        // legacy 迁移只映射到契约 1.0 / 引擎 1.0 这一条已知的已发布线。
+        Assert.Equal(new CompatVersion(1, 0), manifest!.ContractAbi);
+        Assert.Equal(new CompatVersion(1, 0), manifest.EngineApi);
+        Assert.True(manifest.UsedLegacyTargetEngineApi);
+    }
+
+    [Fact]
+    public void Parse_TargetEngineApiMixedWithDualAxes_Rejects()
+    {
+        const string json = """
+        {
+          "packId": "test.mixed",
+          "packVersion": "1.0.0",
+          "contractAbi": "1.0",
+          "engineApi": "1.0",
+          "targetEngineApi": 1
+        }
+        """;
+
+        Assert.False(CompatPackManifest.TryParse(json, out _, out var errors));
+        // 新旧字段混用无法判断作者意图（legacy 映射会覆盖/冲突双轴声明），整体拒载。
+        Assert.Contains(errors, e => e.Contains("targetEngineApi") && e.Contains("混用"));
     }
 
     [Fact]
