@@ -2,11 +2,13 @@
 
 本目录是社区兼容包的唯一入口。一个兼容包 = 一个 .NET 类库程序集（.dll）+ 内嵌的
 `compatpack.manifest.json` 清单，用于在不改动引擎的前提下声明对 v24 基线的差量
-（指令/函数表面名单、行为 capability、内置变体选择）。
+（指令/函数表面名单、行为 capability、内置变体选择）与组合约束。
 
-设计契约全文见 `docs/designs/compat-pack-interface.md`；清单 JSON Schema 见
-`src/EmueraCompatPack/compatpack.manifest.schema.json`（契约程序集 `Emuera.CompatPack`，
-2026-10-03 自 Emuera facade 拆分，旧包经 TypeForwardedTo 继续兼容）。
+设计契约全文见 `docs/designs/compat-pack-interface.md`；双轴版本、组合解析与语义级
+`baseSurfaceHash` 的规范见
+`docs/superpowers/specs/2026-11-02-compatpack-v1-contract-versioning-composition-design.md`。
+清单 JSON Schema 见 `src/EmueraCompatPack/compatpack.manifest.schema.json`（契约程序集
+`Emuera.CompatPack`，2026-10-03 自 Emuera facade 拆分，旧包经 TypeForwardedTo 继续兼容）。
 可直接复制的模板工程：[`CommunityPackTemplate/`](CommunityPackTemplate/)。
 
 ## 目录约定
@@ -27,6 +29,11 @@ packs/
   （只依赖契约程序集 `src/EmueraCompatPack/EmueraCompatPack.csproj` 即可实现入口，无需引擎核心）。
   入口类自报的 Manifest 必须与内嵌清单同源（packId/packVersion 一致），否则拒载。
 
+**部署单元 = 包目录（硬约束）**：加载器把主程序集所在目录**顶层**的全部 `*.dll`
+视为该包的**依赖闭包**——既是 ALC 私有依赖的唯一来源，也是 `PackSha256` 的哈希输入。
+因此一个包（含其私有依赖）必须独占一个目录，禁止把多个包的主 DLL 或无关 DLL 混放在
+同一目录；否则它们会被计入彼此的依赖闭包与 PackSha256，包隔离与内容哈希语义失真。
+
 ## 清单字段（compatpack.manifest.json）
 
 必填（缺一即拒载）：
@@ -35,21 +42,44 @@ packs/
 | ---- | ---- | ---- |
 | `packId` | `^[a-z0-9][a-z0-9.\-]*$` | 包唯一 id，全局冲突拒载；不得撞内置方言模块保留名 |
 | `packVersion` | `x.y.z` | 语义化版本 |
-| `targetEngineApi` | 正整数 | 目标引擎包 API 版本（当前为 1）；主版本不匹配拒载 |
+| `contractAbi` | `major.minor` | Emuera.CompatPack 公开契约面 ABI；major 必须相等，包 minor 不得高于引擎 minor |
+| `engineApi` | `major.minor` | 引擎行为/能力契约版本；major 必须相等，包 minor 不得高于引擎 minor |
+
+版本字段二选一：新格式必须同时提供 `contractAbi` 与 `engineApi`；迁移窗口内仍接受
+legacy `targetEngineApi: 1`（映射为 1.0/1.0），但官方包必须已完成迁移（不得再携带），
+新包应直接使用双轴字段，且不得与双轴字段混用。
 
 常用可选字段（未知字段一律整体拒载，防止拼写错误静默失效）：
 
 | 字段 | 说明 |
 | ---- | ---- |
 | `baseProfileId` | 包叠加的基线 profile，缺省 `v24pure`；v1 只支持 v24pure，与实际会话基线不一致拒载 |
+| `baseSurfaceHash` | 语义级基线表面快照（64 位小写十六进制，算法见设计 §12.9）；官方 v18 包与模板必填。声明非空且与当前引擎基线哈希不一致即拒载；带 surface/variant 的包建议一并声明 |
 | `surface.addInstructions` | 新增可见指令名（Trim+Upper；必须有真实引擎 handler，且不得与基线同名） |
 | `surface.hideInstructions` | 隐藏的 v24 基线指令名（基线没有的名字拒载） |
 | `surface.addFunctions` / `hideFunctions` | 表达式函数增删，规则同上；新增函数返回类型由引擎清单解析 |
 | `capabilities` | 行为 capability id 清单（如 `math.times-clamp.v1`），只接受引擎已收录 id，未知 id 拒载 |
 | `variantSelections` | 指令名 → `builtin:*` 内置变体；v1 不支持自带变体/策略贡献（携带即拒载） |
-| `gameIdentity` | 绑定特定游戏（与 GameBase.csv 的 コード/バージョン 比对），不匹配拒载 |
+| `gameIdentity` | 绑定特定游戏（与 GameBase.csv 的 コード/バージョン 比对），不匹配拒载；`versionAccept=minor` 比较 `major.minor` 前两段，单段值退化为全串相等 |
+| `requires.packs` | 依赖的其它包（`packId` + `versionRange`）；见下方组合语义 |
+| `conflicts.packs` | 冲突包 id 清单；见下方组合语义 |
+| `overrides` | 显式符号覆盖（`symbol` + `priority`）；见下方组合语义 |
 
 不要声明 `saveProfileId`：v1 存档路径尚不消费该字段，携带即拒载。
+
+### 组合语义（requires / conflicts / overrides）
+
+- **requires.packs**：依赖解析只发生在"本次显式启用的包路径集合 + 其传递依赖"内，不做
+  目录扫描或下载。缺失依赖、版本范围不满足、依赖环、重复 packId 均整组拒载；依赖先于
+  依赖者做拓扑排序，同层按 packId Ordinal。
+- **conflicts.packs**：清单声明的冲突包只要同时启用即整组拒载（`priority` 不能覆盖冲突）。
+- **overrides**：`symbol` 形如 `instruction:<name>` / `function:<name>` /
+  `variant:<name>`，`priority` 为非负整数。只有多个包对同一符号产生**不同最终状态**时
+  才需要 override；取 priority 唯一最高者，同 priority 并列拒载。override 目标必须是本次
+  组合真实存在的符号，且不得覆盖 v24 基线 instruction/function handler（改既有语义必须走
+  变体选择通道）；variant override 的目标指令必须已在 v24 基线内。
+- 多包最终状态一致（都 Hidden / 变体同值）按同态合并，无需 override；没有任何符号/
+  capability/变体贡献的包不得进入最终组合（v1 没有 bundle 概念）。
 
 ## 构建方式
 
@@ -63,24 +93,38 @@ dotnet build packs/CommunityPackTemplate/CommunityPackTemplate.csproj -c Release
 
 ## 放入位置
 
-把编译出的包 dll（含同目录依赖，若引用了第三方库）放到启动器扫描根的**顶层**：
+安装根（启动器扫描根）：
 
-- 桌面端：游戏根目录 `compat_packs/`（即 `<gameRoot>/compat_packs/<你的包>.dll`）。
+- 桌面端：**启动器 exe 同级的 `compat_packs/`**（编辑器模式额外扫描
+  `res://compat_packs` 调试根）。注意不是"每个游戏根目录下的 compat_packs"。
 - Android 端：`/storage/emulated/0/emuera/packs/`。
 
-启动器仅扫描该目录顶层的 `*.dll`（不递归、不联网下载）；在启动器中勾选后，
-所选路径经环境变量 `GEMUERA_COMPAT_PACKS`（分号分隔）传给引擎加载。
+启动器只扫描安装根**顶层**的 `*.dll`（不递归、不联网下载）；在启动器中勾选后，所选路径
+经环境变量 `GEMUERA_COMPAT_PACKS`（分号分隔）传给引擎加载。
 
-## 失败回退与日志
+**每包独立目录**：无私有依赖的单文件包可直接放在安装根顶层；带私有依赖、或多个包需要
+隔离时，把每个包放到安装根下的独立子目录（`<安装根>/<packId>/<你的包>.dll`），并通过
+启动器的"手动路径/浏览"（或直接编辑 launcher.cfg 的 `[compat_packs]` 节）指向该主 DLL。
+加载器按上述"包目录顶层全部 *.dll"规则计算依赖闭包与 `PackSha256`——把主 DLL 放在
+独立目录，才能保证包内容哈希与 ALC 依赖隔离不被同目录的其它包污染。
+
+## 版本、基线对账与失败回退
 
 加载遵循 fail-closed 降级不变量：**任何一环失败（清单缺失/字段非法、未知 capability、
-与基线对账冲突、gameIdentity 不匹配、targetEngineApi 不匹配……）= 整包拒载；一次
-会话启用多包时全有或全无**——任一包失败，本次会话回退到纯 v24 基线启动，绝不半加载。
+`contractAbi`/`engineApi` 不匹配、`baseSurfaceHash` 与当前基线不一致、依赖缺失/冲突、
+gameIdentity 不匹配……）= 整包拒载；一次会话启用多包时全有或全无**——任一包失败，
+本次会话回退到纯 v24 基线启动，绝不半加载。
+
+- `baseSurfaceHash` 由 `LegacySurfaceHash.BuildV24SurfaceHashInput` 的同一输入构造计算，
+  官方 v18 包由 `tools/compat-pack/Generate-V18PackManifest` 生成写入（禁止手写）；
+  禁止把名字-only 的旧哈希当作安全等价。
+- `PackSha256` 覆盖主程序集 + 内嵌清单原始字节 + 依赖闭包（文件名/长度/字节）；替换包
+  目录里的任一依赖 DLL 都会改变包内容哈希。
 
 排查方法：
 
 1. 启动器在包选择处会显示回退警告（选中包无效或基线非 v24pure）。
-2. 拒载原因写入 `[LOAD]` 错误日志（含包路径前缀与全量错误列表）。开启
+2. 拒载原因写入 `[LOAD]` 错误日志（含包基名与全量错误列表）。开启
    `[logging] file_sink` 后查看 `user://gemuera_runtime_*.log`；也可在诊断面板
    导出诊断日志（`gemuera_*.log`）查看完整 ring buffer。
 3. 自查清单合法性可对照 JSON Schema（见文首链接）；测试工程

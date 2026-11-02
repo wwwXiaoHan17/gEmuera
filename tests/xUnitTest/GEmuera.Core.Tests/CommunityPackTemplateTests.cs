@@ -42,6 +42,12 @@ public class CommunityPackTemplateTests
         Assert.Equal(new CompatVersion(1, 0), handle.Manifest.ContractAbi);
         Assert.Equal(new CompatVersion(1, 0), handle.Manifest.EngineApi);
         Assert.False(handle.Manifest.UsedLegacyTargetEngineApi);
+        // T7：模板必须携带与官方 v18 包相同的 v24 语义基线哈希（64 位小写十六进制）。
+        Assert.False(string.IsNullOrWhiteSpace(handle!.Manifest.BaseSurfaceHash));
+        Assert.Matches("^[0-9a-f]{64}$", handle.Manifest.BaseSurfaceHash);
+        Assert.Equal(
+            LegacySurfaceHash.ComputeV24SurfaceHash(LegacySurfaceHash.BuildV24SurfaceHashInput("v24pure")),
+            handle.Manifest.BaseSurfaceHash);
         Assert.IsType<ManifestOnlyCompatPack>(handle.Pack);
         Assert.NotEmpty(handle.ValidatedDelta.SurfaceStates);
         handle.Unload();

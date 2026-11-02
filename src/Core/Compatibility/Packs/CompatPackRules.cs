@@ -78,14 +78,15 @@ public static class CompatPackRules
                 + " 与当前会话基线 " + context.BaselineProfileId + " 不一致（v1 包只允许叠加 v24pure 基线）。");
         }
 
-        // baseSurfaceHash 精确对账（E2-R6）：manifest 声明非空 baseSurfaceHash 时必须等于
-        // 当前 v24 基线表面快照（<see cref="CompatPackValidationContext.BaselineSurfaceHash"/>，
-        // 生成清单的规范化 SHA256）——包声称"基于某表面"而引擎表面已漂移时，其 add/hide 差量
-        // 前提即失效，静默错叠比拒载更危险。不声明（null，可选字段）不触发本规则。
+        // baseSurfaceHash 精确对账（E2-R6 / T7 语义级）：manifest 声明非空 baseSurfaceHash
+        // 时必须等于当前基线表面快照（<see cref="CompatPackValidationContext.BaselineSurfaceHash"/>，
+        // profile/engineApi/指令与函数描述符/内置变体/capability 的规范化 SHA256）——
+        // 包声称"基于某表面"而引擎表面已漂移时，其 add/hide 差量前提即失效，
+        // 静默错叠比拒载更危险。不声明（null，可选字段）不触发本规则。
         if (manifest.BaseSurfaceHash is not null
             && !string.Equals(manifest.BaseSurfaceHash, context.BaselineSurfaceHash, StringComparison.Ordinal))
         {
-            collected.Add("包 " + manifest.PackId + " 的 baseSurfaceHash 与当前 v24 表面快照不一致（声明 "
+            collected.Add("包 " + manifest.PackId + " 的 baseSurfaceHash 与当前基线表面快照不一致（声明 "
                 + manifest.BaseSurfaceHash + "，当前基线 " + context.BaselineSurfaceHash
                 + "；包需按新表面快照重发布，或由维护方再生生成清单后更新声明）。");
         }

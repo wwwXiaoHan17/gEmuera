@@ -33,7 +33,7 @@ facade 新增 `src/EmueraFacade/CompatPackContractForwarding.cs`（工程根，�
 
 机制：拆分前编译的包（AssemblyRef = `Emuera`）在运行期把 `Emuera` 解析到宿主已加载的 facade 实例后，CLR 沿 TypeForwardedTo 链到 `Emuera.CompatPack`（宿主 Default ALC 已加载的同一实例），新旧两侧拿到**同一类型标识**。C# 编译器在编译期也会跟随 forward，所以引用 facade 的新代码自动产出 `Emuera.CompatPack` 的 AssemblyRef。
 
-**兼容窗口：数据包与 v1 入口类包无限期兼容**（TypeForwardedTo 是 CLR 元数据机制，无弃用时钟）；只有当未来某天契约类型改命名空间/删除时才需要重审。迁移期约定：新包一律直接引用 `Emuera.CompatPack`；`Emuera` 名下的契约类型面只作为历史加载面，不再新增。
+**兼容承诺：1.x 成员级二进制兼容**（TypeForwardedTo 是 CLR 元数据机制）——在 1.x 契约线内，拆分前编译的数据包与 v1 入口类包仍能加载并解析到原本使用的 public 类型/成员；不承诺行为兼容，也不承诺跨 major 兼容（语义见 `docs/superpowers/specs/2026-11-02-compatpack-v1-contract-versioning-composition-design.md` §4.2）。只有当契约线升 major、或未来改命名空间/删除类型时才需要重审。迁移期约定：新包一律直接引用 `Emuera.CompatPack`；`Emuera` 名下的契约类型面只作为历史加载面，不再新增。
 
 ### 2.4 ALC 绑定规则 ①（`GEmuera.Core.Compatibility.Packs.CompatPackLoadContext`）
 

@@ -33,7 +33,7 @@
 | --- | --- |
 | 1. `CreateInstruction()` 返回 `object` 如何收窄；`AbstractInstruction` 保持 internal 还是公开基类/适配器 | §3（推荐方案 B）+ §4.1 |
 | 2. 工厂生命周期；`CompatPackSession` 持 handle，`FunctionIdentifier` 投影如何拿 factory map | §5 |
-| 3. `EnginePolicyBinding(string CapabilityId)` 实现载体补全（策略工厂接口、生命周期、异常/失败语义） | §6 |
+| 3. 新增 `EnginePolicyBindingV2` 实现载体（v1 记录不动；策略工厂接口、生命周期、异常/失败语义） | §6 |
 | 4. v2 fail-closed 校验规则与版本门槛（`targetEngineApi` 递增策略） | §7 |
 | 5. 测试方案：legacy-runner fixture 证明自定义 handler 可被 ERB 调用 + 禁用包逐字节回退 | §8 |
 
@@ -389,7 +389,7 @@ Program.ConfigureCompatibilityPlan(plan, session, scoped)（Program.cs:368）
 
 ---
 
-## 6. 问题三：`EnginePolicyBinding` 实现载体补全（裁定）
+## 6. 问题三：`EnginePolicyBinding` 实现载体补全（裁定：v2 新增类型）
 
 ### 6.1 现状
 
@@ -403,26 +403,35 @@ Program.ConfigureCompatibilityPlan(plan, session, scoped)（Program.cs:368）
      （设计 §12.2 称"组装器侧 capability 折叠循环保留为现成挂接点"，
      `compat-pack-interface.md:210`）——即 v1 已把策略绑定当作"capability 账本输入"。
 
-### 6.2 载体补全（v2.0）
+### 6.2 载体补全（v2.0：新增类型/接口，不原地扩参）
 
-**记录演进（原地扩展，不做平行双轨类型）**：
+**v1 记录保持不动**：`EnginePolicyBinding(string CapabilityId)` 继续是 v1 成员面
+（1.x 成员级二进制兼容要求，见 `docs/superpowers/specs/2026-11-02-compatpack-v1-contract-versioning-composition-design.md`
+§4.2/§4.6）。v2 用**新类型 + 新贡献接口**承载实现载体：
 
 ```csharp
-/// <summary>策略绑定：capability id → 包提供的窄接口实现。
-/// v2 扩展实现载体（原 v1 记录仅 CapabilityId，见 v2 接线任务变更记录）。</summary>
-public sealed record EnginePolicyBinding(string CapabilityId, ICompatPolicyAdapter Implementation);
+/// <summary>v2 策略绑定：capability id → 包提供的窄接口实现。
+/// 不修改 v1 EnginePolicyBinding —— 两类记录分属 v1/v2 契约线，不是同一概念的重复。</summary>
+public sealed record EnginePolicyBindingV2(string CapabilityId, ICompatPolicyAdapter Implementation);
+
+/// <summary>v2 策略贡献：仅当 capability id 在引擎能力实现库中无内置实现时使用。</summary>
+public interface IPolicyContributionV2 : ICompatPackContribution
+{
+    IReadOnlyList<EnginePolicyBindingV2> Policies { get; }
+}
 ```
 
-- 位置参数新增 = 编译期破签，与 §7.1 的 `targetEngineApi` 主版本递增一次性结算（旧包按新
-  API 重编译后分发，文案既有，`CompatPackRules.cs:54-55`）。
-- 被否决的备选：新增平行记录 `EnginePolicyImplementation` 保留 v1 记录不动——避免
-  "同一概念两个记录长期并存"的契约面混淆；v1 记录的拒载向测试用例随接线任务一并改写。
+- **禁止原地扩参**：给 `EnginePolicyBinding` 新增位置参数会编译期破坏已编译的 v1 包
+  （record 的 primary constructor 参数列表属于 v1 冻结成员面）；v1 记录及其拒载/折叠路径
+  原样保留，v2 接线新增 `IPolicyContributionV2` 消费分支。
+- 被否决的备选：平行类型 `EnginePolicyImplementation`（不含 CapabilityId）——`...V2`
+  记录自包含 id + 载体，与 v1 语义一一对应、迁移路径明确，且不需要额外查找表。
 
 **`ICompatPolicyAdapter` 定义（契约程序集 `Emuera.Compatibility.Packs`，v2.0）**：
 
 ```csharp
 /// <summary>
-/// 策略适配器标记基接口：`EnginePolicyBinding.Implementation` 的统一收窄/校验目标。
+/// 策略适配器标记基接口：`EnginePolicyBindingV2.Implementation` 的统一收窄/校验目标。
 /// v2.0 无成员——各能力域的窄子接口携带成员并扩展本标记
 /// （首个试点：`ICompatFunctionContractPolicy : ICompatPolicyAdapter`，§6.4.4）。
 /// </summary>
@@ -495,7 +504,10 @@ public interface ICompatPolicyAdapter
 
 ### 7.1 版本门槛：`targetEngineApi` 升级为 major.minor 双段
 
-- v1 现状：单整数精确匹配（`CompatPackRules.cs:52-56`；`EngineModuleApiVersion = 1`，
+> 2026-11-03 更新：`contractAbi` + `engineApi` 双轴已在 v1.1（2026-11-02 spec / Task 1-7）
+> 落地；本节原 v2 门槛内容保留为设计记录，v2 接线沿用既有双轴比较，不再重复升级。
+
+- v1.0（历史）现状：单整数精确匹配（`CompatPackRules.cs:52-56`；`EngineModuleApiVersion = 1`，
   `CompatPackHost.cs:152`）。设计 §9 明说："原『次版本 = 只增不改』承诺推迟到 v2
   （需 schema 升级为 major.minor 双段后再兑现）"（`compat-pack-interface.md:187`）。
 - v2 规则：
@@ -509,8 +521,8 @@ public interface ICompatPolicyAdapter
      随之升级为 (Major, Minor) 双字段——Core 侧类型变更与规则改写在同一接线任务。
 - **主版本递增的破坏结算清单（v1 → v2 一次性）**：
   (a) 变体贡献放行 + adapter 必须实现（§3/§4）；
-  (b) `EnginePolicyBinding` 载体补全（§6.2）；
-  (c) manifest schema 双段化 + `baseSurfaceHash` 语义不变（沿 §12.9，不重算）。
+  (b) 新增 `EnginePolicyBindingV2` + `IPolicyContributionV2` 载体（§6.2；v1 `EnginePolicyBinding` 不动）；
+  (c) manifest schema 双段化 + `baseSurfaceHash` 语义沿 §12.9（T7 已升级为语义级，v2 不重算）。
   三项同批结算，避免反复破坏；v1 包被 v2 宿主拒载即本门槛的预期行为。
 - **契约程序集标识不变**：`Emuera` 简单名绑定规则（`CompatPackLoadContext.cs:35-36`）不动。
   ALC 简单名匹配下运行时版本仲裁不可行（2026-09-04 Phase C 实验结论，该文件头注释
@@ -630,7 +642,7 @@ DOTNET_ROLL_FORWARD=Major dotnet run --project tools/core-contracts/CoreContract
 - [ ] §4.1 v2.0 窄接口首批成员集（同文法换行为；Flag/文法沿用被替换指令）
 - [ ] §5.2 factory map 走 profile 构造参数（不引入 process-wide 静态）
 - [ ] §5.4 投影缓存驱逐为 v2 接线前置工作项
-- [ ] §6.2 `EnginePolicyBinding` 原地扩展载体（不做平行记录）；不引入策略工厂
+- [ ] §6.2 新增 `EnginePolicyBindingV2` + `IPolicyContributionV2`（不改 v1 记录、不原地扩参）；不引入策略工厂
 - [ ] §7.1 `targetEngineApi` 升级 major.minor 双段；三项破坏一次性结算
 - [ ] §7.2 校验规则增删清单（含贡献变体进 plan 哈希）
 - [ ] §8 测试三层方案与 fixture 落点（`tools/legacy-runner/fixtures/CompatPackV2FixturePack/`）

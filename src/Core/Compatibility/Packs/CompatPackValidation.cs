@@ -53,8 +53,12 @@ public sealed class CompatPackValidationContext
         KnownFunctionReturnTypes = knownFunctionReturnTypes ?? NoFunctionReturnTypes;
         MethodProjectedInstructionNames = methodProjectedInstructionNames ?? NoMethodProjectedInstructions;
         BaselineProfileId = string.IsNullOrWhiteSpace(baselineProfileId) ? "v24pure" : baselineProfileId.Trim();
+        // 缺省基线快照按"本上下文声明的基线 profile"现算（T7 语义级输入）：
+        // engineApi/描述符/变体/capability 全量进入哈希，不再是只覆盖名字的旧算法。
+        // 宿主始终显式注入；本缺省只留给测试/轻量场景。
         BaselineSurfaceHash = string.IsNullOrWhiteSpace(baselineSurfaceHash)
-            ? LegacySurfaceHash.ComputeV24SurfaceHash()
+            ? LegacySurfaceHash.ComputeV24SurfaceHash(
+                LegacySurfaceHash.BuildV24SurfaceHashInput(BaselineProfileId))
             : baselineSurfaceHash.Trim();
     }
 
@@ -127,10 +131,10 @@ public sealed class CompatPackValidationContext
     public string BaselineProfileId { get; }
 
     /// <summary>
-    /// 当前引擎侧的 v24 基线表面快照哈希（<see cref="LegacySurfaceHash.ComputeV24SurfaceHash"/>，
-    /// 生成清单的规范化 SHA256）。manifest 声明非空 <c>baseSurfaceHash</c> 且与本值不一致即拒载
-    ///（精确对账）；缺省（宿主未传/null/空白）取 <see cref="LegacySurfaceHash.ComputeV24SurfaceHash"/>
-    /// 的现算值，测试场景可显式传入自定基准。
+    /// 当前引擎侧的基线表面快照哈希（<see cref="LegacySurfaceHash.ComputeV24SurfaceHash(SurfaceHashInput)"/>，
+    /// 语义级规范文本的 SHA256，覆盖 profile/engineApi/描述符/变体/capability）。
+    /// manifest 声明非空 <c>baseSurfaceHash</c> 且与本值不一致即拒载（精确对账）；
+    /// 缺省（宿主未传/null/空白）按 <see cref="BaselineProfileId"/> 现算，测试场景可显式传入自定基准。
     /// </summary>
     public string BaselineSurfaceHash { get; }
 }

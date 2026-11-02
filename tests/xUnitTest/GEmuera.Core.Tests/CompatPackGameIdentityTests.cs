@@ -8,10 +8,11 @@ namespace GEmuera.Core.Tests;
 public class CompatPackGameIdentityTests
 {
     // CompatPackGameIdentity 构造器在 Emuera 契约程序集内为 internal，经 public TryParse 构造。
-    static CompatPackGameIdentity Identity(string accept = "exact")
+    static CompatPackGameIdentity Identity(string version = "305", string accept = "exact")
     {
         string json = "{\"packId\":\"test.identity\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1,"
-            + "\"gameIdentity\":{\"gameCode\":\"20250628\",\"version\":\"305\",\"versionAccept\":\"" + accept + "\"}}";
+            + "\"gameIdentity\":{\"gameCode\":\"20250628\",\"version\":\"" + version
+            + "\",\"versionAccept\":\"" + accept + "\"}}";
         return CompatPackManifest.TryParse(json, out var manifest, out var errors)
             ? manifest!.GameIdentity!
             : throw new InvalidOperationException(string.Join("; ", errors));
@@ -55,15 +56,38 @@ public class CompatPackGameIdentityTests
     }
 
     [Fact]
-    public void Matches_MinorAcceptsSameFirstSegment()
+    public void Matches_MinorComparesMajorAndMinorSegments()
     {
-        string json = "{\"packId\":\"test.identity\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1,"
-            + "\"gameIdentity\":{\"gameCode\":\"20250628\",\"version\":\"3.43\",\"versionAccept\":\"minor\"}}";
-        var minor = CompatPackManifest.TryParse(json, out var manifest, out var errors)
-            ? manifest!.GameIdentity!
-            : throw new InvalidOperationException(string.Join("; ", errors));
-        Assert.True(CompatPackGameIdentityCheck.Matches(minor, "20250628", "3.50"));
-        Assert.False(CompatPackGameIdentityCheck.Matches(minor, "20250628", "4.50"));
+        CompatPackGameIdentity minor = Identity("3.43", "minor");
+
+        // 真正的 major.minor 语义：前两段相等才通过（3.43 != 3.50）。
+        Assert.False(CompatPackGameIdentityCheck.Matches(minor, "20250628", "3.50"));
+        // spec §5.3：3.43 vs 4.0 必须失败（major 不同）。
+        Assert.False(CompatPackGameIdentityCheck.Matches(minor, "20250628", "4.0"));
+        // 补丁段不参与 minor 比较：3.43 与 3.43.7 通过。
+        Assert.True(CompatPackGameIdentityCheck.Matches(minor, "20250628", "3.43.7"));
+        Assert.True(CompatPackGameIdentityCheck.Matches(minor, "20250628", "3.43"));
+    }
+
+    [Fact]
+    public void Matches_MinorSingleSegmentFallsBackToWholeString()
+    {
+        CompatPackGameIdentity minor = Identity("305", "minor");
+
+        // 单段版本无法取 major.minor，退化为全串相等。
+        Assert.True(CompatPackGameIdentityCheck.Matches(minor, "20250628", "305"));
+        Assert.False(CompatPackGameIdentityCheck.Matches(minor, "20250628", "306"));
+        Assert.False(CompatPackGameIdentityCheck.Matches(minor, "20250628", "305.7"));
+    }
+
+    [Fact]
+    public void Matches_ExactRequiresWholeString()
+    {
+        CompatPackGameIdentity exact = Identity("3.43", "exact");
+
+        Assert.True(CompatPackGameIdentityCheck.Matches(exact, "20250628", "3.43"));
+        Assert.False(CompatPackGameIdentityCheck.Matches(exact, "20250628", "3.43.7"));
+        Assert.False(CompatPackGameIdentityCheck.Matches(exact, "20250628", "3.50"));
     }
 
     [Fact]

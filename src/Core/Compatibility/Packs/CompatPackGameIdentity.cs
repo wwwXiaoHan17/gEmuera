@@ -48,8 +48,10 @@ public static class CompatPackGameIdentityCheck
     }
 
     /// <summary>
-    /// 包身份声明与游戏实际值比对。versionAccept=exact 全串相等；minor 按 '.' 分段
-    /// 首段相等即通过（如 "3.43" 与 "3.50"；单段值如 "305" 退化为全等）。
+    /// 包身份声明与游戏实际值比对。versionAccept=exact 始终全串相等；minor 是真正的
+    /// major.minor 语义（spec §5.3）：双方都至少有 major.minor 两段时比较前两段
+    ///（补丁段不参与，"3.43" 与 "3.43.7" 通过，"3.43" 与 "3.50"/"4.0" 失败）；
+    /// 任一方只有单段时退化为全串相等（"305" 只与 "305" 相等）。
     /// 任一值缺失即不匹配（fail-closed）。
     /// </summary>
     public static bool Matches(CompatPackGameIdentity identity, string? gameCode, string? version)
@@ -63,15 +65,25 @@ public static class CompatPackGameIdentityCheck
             return true;
         if (!string.Equals(identity.VersionAccept, "minor", StringComparison.Ordinal))
             return false;
-        return FirstSegmentEquals(identity.Version, version);
+        return MinorSegmentsEqual(identity.Version, version);
     }
 
-    static bool FirstSegmentEquals(string declared, string actual)
+    static bool MinorSegmentsEqual(string declared, string actual)
     {
-        string declaredFirst = declared.Split('.')[0].Trim();
-        string actualFirst = actual.Split('.')[0].Trim();
-        return declaredFirst.Length > 0
-            && string.Equals(declaredFirst, actualFirst, StringComparison.Ordinal);
+        string[] declaredParts = declared.Split('.');
+        string[] actualParts = actual.Split('.');
+        // 单段版本（如 "305"）无法取 major.minor：退化为全串相等，不做模糊匹配。
+        if (declaredParts.Length < 2 || actualParts.Length < 2)
+            return string.Equals(declared, actual, StringComparison.Ordinal);
+
+        string declaredMajor = declaredParts[0].Trim();
+        string declaredMinor = declaredParts[1].Trim();
+        string actualMajor = actualParts[0].Trim();
+        string actualMinor = actualParts[1].Trim();
+        return declaredMajor.Length > 0
+            && declaredMinor.Length > 0
+            && string.Equals(declaredMajor, actualMajor, StringComparison.Ordinal)
+            && string.Equals(declaredMinor, actualMinor, StringComparison.Ordinal);
     }
 
     static bool IsCodeRow(string rowName) =>

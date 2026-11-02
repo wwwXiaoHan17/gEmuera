@@ -131,9 +131,10 @@ namespace Emuera.Compatibility.Packs
 		public string BaseProfileId { get; }
 		/// <summary>manifest 静态表面（空 = 仅 capability/variant 声明）。</summary>
 		public CompatPackSurface Surface { get; }
-		/// <summary>可选：声明基于哪个 v24 表面快照（生成清单哈希，规范化算法见
-		/// <c>LegacySurfaceHash.ComputeV24SurfaceHash</c>）。v1 起精确对账：声明非空且与当前
-		/// 引擎基线不一致即拒载（加载器/规则层执行）；不声明则不触发该校验。</summary>
+		/// <summary>可选：声明基于哪个 v24 基线表面语义快照（profile/engineApi/指令与函数描述符/
+		/// 内置变体/capability 的规范化 SHA256，算法见 docs/designs/compat-pack-interface.md §12.9，
+		/// 由 Core <c>LegacySurfaceHash.ComputeV24SurfaceHash(SurfaceHashInput)</c> 计算；官方包必填）。
+		/// 精确对账：声明非空且与当前引擎基线不一致即拒载（加载器/规则层执行）；不声明则不触发该校验。</summary>
 		public string? BaseSurfaceHash { get; }
 		public IReadOnlyList<string> Capabilities { get; }
 		public string? SaveProfileId { get; }

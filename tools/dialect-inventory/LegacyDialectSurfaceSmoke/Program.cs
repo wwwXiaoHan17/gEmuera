@@ -307,6 +307,7 @@ static class Program
                 "v24pure 查询基线指令 PRINT 不应提示。");
 
             AssertMethodProjectionInventoryMatchesRuntime();
+            AssertSurfaceHashInputConsistency();
             AssertPackProjection();
             AssertV18PackEquivalence();
             // 末尾：进程内 fallback 降级探针（会改写 Program 的全局计划绑定，必须在所有
@@ -328,6 +329,39 @@ static class Program
         }
     }
 
+
+    // —— T7：语义级 baseSurfaceHash 的宿主/生成器一致性 ——
+    // 宿主构造 SurfaceHashInput 时显式传入引擎 BuiltinCompatPackVariants.SupportedSelections()；
+    // 官方包生成器只依赖 Core，使用 LegacySurfaceHash.CanonicalBuiltinVariants 缺省镜像。
+    // 两者必须逐项相等，否则同一引擎表面会得到两个 hash。另外用引擎变体表显式构造的
+    // 输入必须与 canonical 缺省输入得到同一 hash（生成器写出的值 == 宿主校验值）。
+    private static void AssertSurfaceHashInputConsistency()
+    {
+        IReadOnlyDictionary<string, IReadOnlySet<string>> engineVariants =
+            BuiltinCompatPackVariants.SupportedSelections();
+        IReadOnlyDictionary<string, IReadOnlySet<string>> coreVariants =
+            GEmuera.Core.Compatibility.Packs.LegacySurfaceHash.CanonicalBuiltinVariants;
+
+        Assert(engineVariants.Count == coreVariants.Count
+                && engineVariants.All(pair => coreVariants.TryGetValue(pair.Key, out var coreSet)
+                    && coreSet is not null
+                    && pair.Value.Count == coreSet.Count
+                    && pair.Value.All(coreSet.Contains)),
+            "引擎 BuiltinCompatPackVariants 与 Core canonical 变体镜像不一致："
+            + "引擎=[" + string.Join(',', engineVariants.Keys.Order(StringComparer.Ordinal)) + "]"
+            + " Core=[" + string.Join(',', coreVariants.Keys.Order(StringComparer.Ordinal)) + "]。");
+
+        string canonicalHash = GEmuera.Core.Compatibility.Packs.LegacySurfaceHash.ComputeV24SurfaceHash(
+            GEmuera.Core.Compatibility.Packs.LegacySurfaceHash.BuildV24SurfaceHashInput("v24pure"));
+        string engineInputHash = GEmuera.Core.Compatibility.Packs.LegacySurfaceHash.ComputeV24SurfaceHash(
+            GEmuera.Core.Compatibility.Packs.LegacySurfaceHash.BuildV24SurfaceHashInput(
+                "v24pure",
+                GEmuera.Core.Compatibility.EngineCapabilityCatalog.CurrentEngineApi,
+                engineVariants));
+        Assert(canonicalHash == engineInputHash,
+            "宿主（引擎变体表）与生成器（Core canonical）构造的 SurfaceHashInput 得到不同 hash："
+            + canonicalHash + " vs " + engineInputHash + "。");
+    }
 
     // —— 生成清单 ↔ 运行时对照：MethodProjectedInstructionNames 必须等于引擎指令注册表里
     //    FunctionIdentifier.Method != null 的名字并集（六 profile——funcDic 的 METHOD 条目
@@ -714,6 +748,19 @@ static class Program
 
         try
         {
+            // T7：官方包 hash 必须等于宿主口径现算值（生成器写入 + 64 位小写十六进制）。
+            string expectedSurfaceHash = GEmuera.Core.Compatibility.Packs.LegacySurfaceHash.ComputeV24SurfaceHash(
+                GEmuera.Core.Compatibility.Packs.LegacySurfaceHash.BuildV24SurfaceHashInput(
+                    "v24pure",
+                    GEmuera.Core.Compatibility.EngineCapabilityCatalog.CurrentEngineApi,
+                    BuiltinCompatPackVariants.SupportedSelections()));
+            Assert(handle!.Manifest.BaseSurfaceHash is not null
+                    && System.Text.RegularExpressions.Regex.IsMatch(handle.Manifest.BaseSurfaceHash, "^[0-9a-f]{64}$"),
+                "packs/gemuera.v18 的 baseSurfaceHash 缺失或不是 64 位小写十六进制。");
+            Assert(handle.Manifest.BaseSurfaceHash == expectedSurfaceHash,
+                "packs/gemuera.v18 的 baseSurfaceHash 与宿主现算值不一致（重跑 Generate-V18PackManifest）："
+                + handle.Manifest.BaseSurfaceHash + " vs " + expectedSurfaceHash + "。");
+
             CompatibilityPlan baseline = BuiltInDialectCatalog.CreateLegacySessionPlan("v24pure");
             if (!CompatPackPlanAssembler.TryAssemble(
                     baseline, new[] { handle! }, context,

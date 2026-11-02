@@ -4,6 +4,7 @@
   "contractAbi": "1.0",
   "engineApi": "1.0",
   "baseProfileId": "v24pure",
+  "baseSurfaceHash": "c0e85a8ce5fc1990e5aa05fa5303663c09f6d8befbaaddd261b0ea955acda7c6",
   "capabilities": ["math.times-clamp.v1"],
   "surface": {
     "addInstructions": ["SETANIMETIMER"]

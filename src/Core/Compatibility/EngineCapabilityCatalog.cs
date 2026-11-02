@@ -57,8 +57,14 @@ public static class EngineCapabilityCatalog
     const string EraFlConsumerPrefix = "IEraFlCompatibilityPolicy.";
     const string MegatenConsumerPrefix = "IMegatenCompatibilityPolicy.";
 
+    /// <summary>
+    /// 引擎当前行为/能力契约版本（v1 = 1.0）。宿主 <c>CompatPackHost.CurrentEngineApi</c>
+    /// 与语义基线哈希的默认 engineApi 共用本常量，避免两处硬编码漂移。
+    /// </summary>
+    public static CompatVersion CurrentEngineApi { get; } = new(1, 0);
+
     // 所有既有 capability 的 engineApi 引入轴均为 1.0（Task 1 的双轴起点）。
-    static readonly CompatVersion EngineApiV1 = new(1, 0);
+    static readonly CompatVersion EngineApiV1 = CurrentEngineApi;
     static readonly IReadOnlyList<string> NoDependencies = Array.Empty<string>();
     static readonly IReadOnlyDictionary<string, CapabilityDescriptor> Catalog = BuildCatalog();
 

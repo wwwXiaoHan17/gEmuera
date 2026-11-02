@@ -105,7 +105,7 @@
         "null"
       ],
       "pattern": "^[0-9a-f]{8,64}$",
-      "description": "可选。声明基于哪个 v24 表面快照（生成清单的规范化 SHA256，算法见 docs/designs/compat-pack-interface.md §12.9 / LegacySurfaceHash.ComputeV24SurfaceHash）；声明非空且与当前引擎基线不一致即拒载（v1 精确对账），不声明则不校验。"
+      "description": "可选（官方包必填）。声明基于哪个 v24 基线表面语义快照（profile/engineApi/指令与函数描述符/内置变体/capability 的规范化 SHA256，算法见 docs/designs/compat-pack-interface.md §12.9 / LegacySurfaceHash.ComputeV24SurfaceHash(SurfaceHashInput)）；声明非空且与当前引擎基线不一致即拒载（v1 精确对账），不声明则不校验。"
     },
     "capabilities": {
       "type": [

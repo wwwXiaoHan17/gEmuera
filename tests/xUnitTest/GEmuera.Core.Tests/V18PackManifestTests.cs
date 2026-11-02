@@ -36,6 +36,13 @@ public class V18PackManifestTests
         // 身份与差量方向自检：包只隐藏（v18 ⊆ v24 由生成清单取证），不声明 capability。
         Assert.Equal("pack.gemuera.v18", handle!.Manifest.PackId);
         Assert.Equal("v24pure", handle.Manifest.BaseProfileId);
+        // T7：官方包必须声明语义级基线表面哈希（生成器写入，禁止手写）；
+        // 值必须与宿主/生成器共用的 Core 输入构造逐字相等，且是 64 位小写十六进制。
+        Assert.False(string.IsNullOrWhiteSpace(handle.Manifest.BaseSurfaceHash));
+        Assert.Matches("^[0-9a-f]{64}$", handle.Manifest.BaseSurfaceHash);
+        Assert.Equal(
+            LegacySurfaceHash.ComputeV24SurfaceHash(LegacySurfaceHash.BuildV24SurfaceHashInput("v24pure")),
+            handle.Manifest.BaseSurfaceHash);
         Assert.Empty(handle.Manifest.Capabilities);
         // 官方包已完成双轴迁移：不再依赖 legacy targetEngineApi 的 1.0/1.0 映射。
         Assert.Equal(new CompatVersion(1, 0), handle.Manifest.ContractAbi);

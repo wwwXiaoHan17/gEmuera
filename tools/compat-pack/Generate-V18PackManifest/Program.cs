@@ -1,5 +1,6 @@
 using System.Text;
 using GEmuera.Core.Compatibility;
+using GEmuera.Core.Compatibility.Packs;
 
 // ============================================================================
 // v18 第一方数据包清单生成器（packs/gemuera.v18/compatpack.manifest.json）。
@@ -20,6 +21,8 @@ using GEmuera.Core.Compatibility;
 // 末尾恰好一个换行。内容未变化时不重写（git 无噪声）。
 // 版本轴：新格式双轴 contractAbi/engineApi（格式 major.minor），不再输出 legacy
 // targetEngineApi（加载器仍接受其迁移映射，但官方包必须已完成迁移）。
+// baseSurfaceHash：与宿主共用 Core LegacySurfaceHash 的语义输入构造（profile/engineApi/
+// 指令与函数描述符/内置变体/capability），禁止手写；重跑本工具即恢复。
 // 生成物禁止手改：清单漂移由 GEmuera.Core.Tests/V18PackManifestTests 门禁拦截，
 // 重跑本工具即可恢复。
 //
@@ -82,8 +85,13 @@ if (!instructionClosureEqual || !functionClosureEqual)
     return 1;
 }
 
+// —— 语义级 v24 基线表面哈希（T7）：与宿主共用 Core 的 SurfaceHashInput 构造（R3），
+//    禁止手写 hash；覆盖 profile/engineApi/指令与函数描述符/内置变体/capability。 ——
+string baseSurfaceHash = LegacySurfaceHash.ComputeV24SurfaceHash(
+    LegacySurfaceHash.BuildV24SurfaceHashInput("v24pure"));
+
 // —— 规范化 JSON（键 Ordinal 排序；数组已排序；LF；UTF-8 无 BOM；末尾单换行） ——
-string json = BuildManifestJson(hideInstructions, hideFunctions);
+string json = BuildManifestJson(baseSurfaceHash, hideInstructions, hideFunctions);
 
 string outputDirectory = Path.Combine(repoRoot, "packs", "gemuera.v18");
 Directory.CreateDirectory(outputDirectory);
@@ -109,15 +117,17 @@ Console.WriteLine(
     + " − hide " + hideInstructions.Length + " = v18 指令 " + LegacyDialectInventories.V18InstructionNames.Length
     + "；v24 函数 " + v24FunctionNames.Length
     + " − hide " + hideFunctions.Length + " = v18 函数 " + v18FunctionNames.Length + "。");
+Console.WriteLine("baseSurfaceHash：" + baseSurfaceHash);
 return 0;
 
-static string BuildManifestJson(string[] hideInstructions, string[] hideFunctions)
+static string BuildManifestJson(string baseSurfaceHash, string[] hideInstructions, string[] hideFunctions)
 {
     // packId 说明：不能叫 "gemuera.v18"——它与内置方言模块 id 撞名（Compose 的包模块
     // 白名单禁止包含内置模块 id，CompatPackRules 的保留名对账同样拒载），故用 pack. 前缀。
     var builder = new StringBuilder();
     builder.Append("{\n");
     builder.Append("  \"baseProfileId\": \"v24pure\",\n");
+    builder.Append("  \"baseSurfaceHash\": \"").Append(baseSurfaceHash).Append("\",\n");
     builder.Append("  \"capabilities\": [],\n");
     builder.Append("  \"contractAbi\": \"1.0\",\n");
     builder.Append("  \"engineApi\": \"1.0\",\n");

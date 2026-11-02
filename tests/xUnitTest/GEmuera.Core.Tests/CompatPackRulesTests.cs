@@ -453,7 +453,7 @@ public class CompatPackRulesTests
     [Fact]
     public void Validate_BaseSurfaceHashMismatch_Rejects()
     {
-        // 精确对账（E2-R6）：manifest 声明非空 baseSurfaceHash 且与当前 v24 表面快照不一致
+        // 精确对账（E2-R6 / T7 语义级）：manifest 声明非空 baseSurfaceHash 且与当前基线语义快照不一致
         // → 拒载（错误文案含 baseSurfaceHash）；声明与基线一致 → 放行；不声明 → 不触发本规则。
         string mismatchJson = "{\"packId\":\"test.hash\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1,"
             + "\"baseSurfaceHash\":\"" + new string('0', 64) + "\"}";

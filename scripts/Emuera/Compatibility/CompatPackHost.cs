@@ -73,10 +73,26 @@ internal static CompatPackValidationContext BuildValidationContext(string baseli
                         // （与真指令共享注册表键空间），规则层必须据此镜像 surface 差量。
                         new HashSet<string>(LegacyDialectInventories.MethodProjectedInstructionNames, StringComparer.Ordinal),
                         baselineProfileId,
-                        // v24 基线表面快照哈希（baseSurfaceHash 精确对账基准，E2-R6）：与
-                        // BaselineInstructions/BaselineFunctions 同源（生成清单），显式传入而非
-                        // 依赖缺省——宿主是语义校验输入的唯一提供方，缺省仅留给测试场景。
-                        LegacySurfaceHash.ComputeV24SurfaceHash());
+                        // T7 语义级基线表面快照哈希（baseSurfaceHash 精确对账基准）：覆盖
+                        // profile/engineApi/描述符/变体/capability。构造点与官方包生成器共用
+                        // LegacySurfaceHash.BuildV24SurfaceHashInput（R3），显式传入而非依赖缺省——
+                        // 宿主是语义校验输入的唯一提供方，缺省仅留给测试场景。
+                        LegacySurfaceHash.ComputeV24SurfaceHash(BuildSurfaceHashInput(baselineProfileId)));
+        }
+
+        /// <summary>
+        /// 宿主侧语义哈希输入的单一构造点（T7/R3）：指令/函数描述符来自 Core 的基线 dialect
+        /// 投影（BuiltInDialectCatalog），engineApi 用宿主常量（<see cref="EngineCapabilityCatalog.CurrentEngineApi"/>），
+        /// 内置变体表显式传引擎 <see cref="BuiltinCompatPackVariants"/> 的导出表。
+        /// 官方包生成器使用同一个 Core 构造（缺省取 Core canonical 变体镜像）；两者一致性由
+        /// LegacyDialectSurfaceSmoke 断言（引擎导出表 == Core canonical，且包 hash == 现算 hash）。
+        /// </summary>
+        static SurfaceHashInput BuildSurfaceHashInput(string baselineProfileId)
+        {
+                return LegacySurfaceHash.BuildV24SurfaceHashInput(
+                        baselineProfileId,
+                        CurrentEngineApi,
+                        BuiltinVariantInstructions);
         }
 
 		/// <summary>
@@ -154,7 +170,7 @@ internal static CompatPackValidationContext BuildValidationContext(string baseli
 
 		/// <summary>引擎当前行为/能力契约版本（v1 = 1.0）。破坏性变更升 major，增量能力升 minor；
 		/// 不再复用 DialectModuleDefinition.ModuleApiVersion（两套版本语义不同源）。</summary>
-		internal static readonly CompatVersion CurrentEngineApi = new(1, 0);
+		internal static readonly CompatVersion CurrentEngineApi = EngineCapabilityCatalog.CurrentEngineApi;
 
 		/// <summary>
 		/// 是否显式启用了兼容包（存在启用路径）。Program.Main 早绑定路径的换绑预判：
