@@ -9,6 +9,7 @@ using MinorShift.Emuera.GameView;
 using System.IO;
 using System.Text.RegularExpressions;
 using GEmuera.Core.Compatibility;
+using GEmuera.Core.Compatibility.Packs;
 
 namespace MinorShift.Emuera
 {
@@ -78,7 +79,25 @@ namespace MinorShift.Emuera
 			compatibilityConsumption = LegacyCompatibilityPlanConsumption.Validate(
 				compatibilityPlan,
 				legacyInstructionNames,
-				legacyFunctionNames);
+				legacyFunctionNames,
+				new HashSet<CompatSymbolKey>(Program.Compatibility.ConditionallyHiddenSymbols, null),
+				new HashSet<string>(LegacyDialectInventories.MethodProjectedInstructionNames, StringComparer.Ordinal));
+		}
+
+		/// <summary>
+		/// 包投影失败降级到无包基线后的重绑定：先校验计划身份（<see cref="BindCompatibilityPlan"/>），
+		/// 再按新的运行时注册表重算消费快照。调用方必须先重建 <c>IdentifierDictionary</c>
+		/// 的 profile 投影（<c>RebindProfileRegistries</c>），否则旧包注册名会再次超出基线计划。
+		/// </summary>
+		internal static void RebindCompatibilityPlanAfterFallback(
+			CompatibilityPlan plan,
+			IEnumerable<string> legacyInstructionNames,
+			IEnumerable<string> legacyFunctionNames)
+		{
+			if (plan == null)
+				throw new ArgumentNullException(nameof(plan));
+			BindCompatibilityPlan(plan);
+			ConsumeCompatibilityPlan(legacyInstructionNames, legacyFunctionNames);
 		}
 
 		#region Rename

@@ -15,6 +15,7 @@ using System.Threading.Tasks;
 using uEmuera.Forms;
 using MinorShift.Emuera.Runtime.Utils.PluginSystem;
 using System.Diagnostics;
+using GEmuera.Core.Compatibility;
 
 namespace MinorShift.Emuera.GameProc
 {
@@ -204,7 +205,35 @@ namespace MinorShift.Emuera.GameProc
 					ParserMediator.ConsumeCompatibilityPlan(
 						idDic.GetLegacyInstructionNames(),
 						idDic.GetLegacyFunctionNames());
-					idDic.BindCompatibilityPlan(Program.CurrentCompatibilityPlan);
+					// 运行时精确闭包（设计 §6.7）：绑定失败不得静默回退全量 registry。
+					// 先降级到当前 profile 的无包基线 plan，再按新 profile 重建投影注册表并重绑；
+					// 连无包基线都失败才终止会话（异常携带 plan hash / profile / symbol）。
+					if (!idDic.BindCompatibilityPlan(Program.CurrentCompatibilityPlan))
+					{
+						CompatibilityPlan failedPlan = Program.CurrentCompatibilityPlan;
+						string failedSymbol = idDic.LastCompatibilityBindingError ?? "<unknown>";
+						if (!Program.TryFallbackToNoPackBaseline(failedPlan.ProfileId, out CompatibilityPlan baselinePlan))
+						{
+							throw new InvalidOperationException(
+								"[LOAD] CompatPack projection failed and no-pack baseline fallback failed: plan="
+								+ failedPlan.CanonicalHash + " profile=" + failedPlan.ProfileId
+								+ " symbol=" + failedSymbol);
+						}
+						// 旧注册表按包计划投影；基线重绑前必须按无包 profile 重新投影，
+						// 否则包里新增的名字会再次被判定为 registry 超出 plan。
+						idDic.RebindProfileRegistries();
+						ParserMediator.RebindCompatibilityPlanAfterFallback(
+							baselinePlan,
+							idDic.GetLegacyInstructionNames(),
+							idDic.GetLegacyFunctionNames());
+						if (!idDic.BindCompatibilityPlan(baselinePlan))
+						{
+							throw new InvalidOperationException(
+								"[LOAD] no-pack baseline bind failed: plan=" + baselinePlan.CanonicalHash
+								+ " profile=" + baselinePlan.ProfileId
+								+ " symbol=" + (idDic.LastCompatibilityBindingError ?? "<unknown>"));
+						}
+					}
 				}
 
 				StrForm.Initialize();

@@ -306,6 +306,7 @@ static class Program
             Assert(!v24.TryGetUnselectedModuleHint("PRINT", out _),
                 "v24pure 查询基线指令 PRINT 不应提示。");
 
+            AssertMethodProjectionInventoryMatchesRuntime();
             AssertPackProjection();
             AssertV18PackEquivalence();
 
@@ -319,6 +320,104 @@ static class Program
         }
     }
 
+
+    // —— 生成清单 ↔ 运行时对照：MethodProjectedInstructionNames 必须等于引擎指令注册表里
+    //    FunctionIdentifier.Method != null 的名字并集（六 profile——funcDic 的 METHOD 条目
+    //    是全局的、按函数可见性过滤；并集 = 任何会话可暴露的 METHOD 投影名。包规则用它做
+    //    addFunctions 镜像，因此不能用 v24pure 单 profile 的子集，否则包暴露 snake 系函数
+    //    时运行时会多出计划未声明的 METHOD 指令）。反射访问 internal 类型，不引入 IVT。——
+    private static void AssertMethodProjectionInventoryMatchesRuntime()
+    {
+        System.Reflection.Assembly engine = typeof(MinorShift.Emuera.Program).Assembly;
+        Type profileType = engine.GetType("MinorShift.Emuera.Compatibility.LegacyCompatibilityProfile")
+            ?? throw new InvalidOperationException("LegacyCompatibilityProfile type not found in engine assembly.");
+        Type identifierType = engine.GetType("MinorShift.Emuera.GameProc.Function.FunctionIdentifier")
+            ?? throw new InvalidOperationException("FunctionIdentifier type not found in engine assembly.");
+        System.Reflection.MethodInfo createProfile = profileType.GetMethod(
+            "CreateForProfile",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic,
+            binder: null,
+            types: new[] { typeof(string), typeof(bool) },
+            modifiers: null)
+            ?? throw new InvalidOperationException("LegacyCompatibilityProfile.CreateForProfile not found.");
+        System.Reflection.MethodInfo getInstructionNameDic = identifierType.GetMethod(
+            "GetInstructionNameDic",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic,
+            binder: null,
+            types: new[] { profileType },
+            modifiers: null)
+            ?? throw new InvalidOperationException("FunctionIdentifier.GetInstructionNameDic not found.");
+
+        Type functionCreatorType = engine.GetType("MinorShift.Emuera.GameData.Function.FunctionMethodCreator")
+            ?? throw new InvalidOperationException("FunctionMethodCreator type not found in engine assembly.");
+        System.Reflection.MethodInfo getMethodList = functionCreatorType.GetMethod(
+            "GetMethodList",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic,
+            binder: null,
+            types: new[] { profileType },
+            modifiers: null)
+            ?? throw new InvalidOperationException("FunctionMethodCreator.GetMethodList not found.");
+
+        string[] declared = GEmuera.Core.Compatibility.LegacyDialectInventories.MethodProjectedInstructionNames;
+        var declaredSet = new HashSet<string>(declared, StringComparer.Ordinal);
+        var runtimeMethodProjected = new HashSet<string>(StringComparer.Ordinal);
+        foreach ((string profileId, bool scopedVariableInstructionsEnabled) in new[]
+        {
+            ("v24pure", true), ("snake", true), ("erafl", true),
+            ("v18", true), ("erablue", true), ("megaten", true),
+            // scoped-variable 关闭是第三类条件符号（VARI/VARS），单独跑一次闭包校验。
+            ("v24pure", false),
+        })
+        {
+            object profile = createProfile.Invoke(null, new object[] { profileId, scopedVariableInstructionsEnabled })
+                ?? throw new InvalidOperationException("CreateForProfile returned null for " + profileId + ".");
+            object registry = getInstructionNameDic.Invoke(null, new[] { profile })
+                ?? throw new InvalidOperationException("GetInstructionNameDic returned null for " + profileId + ".");
+            var registryInstructionNames = new List<string>();
+            foreach (object entry in (System.Collections.IEnumerable)registry)
+            {
+                Type entryType = entry.GetType();
+                string? name = entryType.GetProperty("Key")?.GetValue(entry) as string;
+                object? identifier = entryType.GetProperty("Value")?.GetValue(entry);
+                if (string.IsNullOrEmpty(name) || identifier is null)
+                    continue;
+                registryInstructionNames.Add(name!);
+                object? method = identifier.GetType().GetProperty("Method")?.GetValue(identifier);
+                if (method is not null)
+                    runtimeMethodProjected.Add(name!);
+            }
+
+            // §6.7 运行时精确闭包：plan 与真实投影双向包含。条件符号来自会话 profile
+            //（模块隐藏集 + scoped-variable 关闭时的 VARI/VARS），METHOD 投影名恒为条件项。
+            LegacyCompatibilityProfile linkedProfile = LegacyCompatibilityProfile.CreateForProfile(
+                profileId, scopedVariableInstructionsEnabled);
+            object functionRegistry = getMethodList.Invoke(null, new[] { profile })
+                ?? throw new InvalidOperationException("GetMethodList returned null for " + profileId + ".");
+            var registryFunctionNames = new List<string>();
+            foreach (object entry in (System.Collections.IEnumerable)functionRegistry)
+            {
+                string? name = entry.GetType().GetProperty("Key")?.GetValue(entry) as string;
+                if (!string.IsNullOrEmpty(name))
+                    registryFunctionNames.Add(name!);
+            }
+            var conditionalSymbols = new HashSet<CompatSymbolKey>(linkedProfile.ConditionallyHiddenSymbols);
+            var consumption = LegacyCompatibilityPlanConsumption.Validate(
+                linkedProfile.Plan,
+                registryInstructionNames,
+                registryFunctionNames,
+                conditionalSymbols,
+                declaredSet);
+            Assert(consumption.PlanHash == linkedProfile.Plan.CanonicalHash,
+                $"profile {profileId}（scoped={scopedVariableInstructionsEnabled}）的 plan 消费快照丢失了计划身份。");
+        }
+
+        Assert(runtimeMethodProjected.SetEquals(declared),
+            "生成清单 MethodProjectedInstructionNames 与运行时 METHOD 投影不一致（重跑 LegacyDialectInventoryGenerator）："
+            + "缺=[" + string.Join(',', declared.Except(runtimeMethodProjected).Order(StringComparer.Ordinal)) + "]"
+            + " 多=[" + string.Join(',', runtimeMethodProjected.Except(declared).Order(StringComparer.Ordinal)) + "]。");
+        Assert(declared.SequenceEqual(declared.Order(StringComparer.Ordinal)),
+            "MethodProjectedInstructionNames 必须按 Ordinal 排序。");
+    }
 
     // —— 兼容包投影用例（宿主接线增量）：手工句柄（surface 贡献：注册 SETANIMETIMER/
     // SQL_CONNECT、隐藏 CALLSHARP/EXISTVAR）组装进 v24pure 计划，Compose 的包差量回放
@@ -335,6 +434,83 @@ static class Program
             instructions.HideInstruction("CALLSHARP");
             functions.HideFunction("EXISTVAR");
         }
+    }
+
+    // —— 包计划 ↔ 运行时注册表精确闭包（§6.7）：用引擎真实的 LegacyCompatibilityProfile
+    //    （反射构造，不经 IVT）投影包 plan，再由 Core 的 TryCreateSessionView 验证
+    //    registry ⊆ plan。这是"双形态闭包在运行时投影上成立"的端到端哨兵。 ——
+    private static void AssertRuntimePlanClosure(CompatibilityPlan plan, string label)
+    {
+        System.Reflection.Assembly engine = typeof(MinorShift.Emuera.Program).Assembly;
+        Type profileType = engine.GetType("MinorShift.Emuera.Compatibility.LegacyCompatibilityProfile")
+            ?? throw new InvalidOperationException("LegacyCompatibilityProfile type not found in engine assembly.");
+        System.Reflection.MethodInfo create = profileType.GetMethod(
+            "Create",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic,
+            binder: null,
+            types: new[] { typeof(CompatibilityPlan), typeof(bool) },
+            modifiers: null)
+            ?? throw new InvalidOperationException("LegacyCompatibilityProfile.Create(CompatibilityPlan, bool) not found.");
+        object profile = create.Invoke(null, new object[] { plan, true })
+            ?? throw new InvalidOperationException("LegacyCompatibilityProfile.Create returned null for " + label + ".");
+
+        var instructions = RuntimeRegistryKeys(
+            engine, "MinorShift.Emuera.GameProc.Function.FunctionIdentifier", "GetInstructionNameDic", profileType, profile);
+        var functions = RuntimeRegistryKeys(
+            engine, "MinorShift.Emuera.GameData.Function.FunctionMethodCreator", "GetMethodList", profileType, profile);
+
+        Assert(
+            CompatibilityDescriptorRoute<string, string>.TryCreateSessionView(
+                plan,
+                instructions,
+                StringComparer.Ordinal,
+                functions,
+                StringComparer.Ordinal,
+                out _),
+            label + "：运行时投影注册表超出组装 plan（双形态闭包失败，运行时会触发无包基线回退）。");
+
+        // 反向闭包（plan 的非条件项 ⊆ registry）与生产 ConsumeCompatibilityPlan 同口径：
+        // 条件符号 = 引擎 profile 的隐藏集（反射读取，含包隐藏差量/内置排除项）。
+        System.Reflection.PropertyInfo conditionalProperty = profileType.GetProperty(
+            "ConditionallyHiddenSymbols",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("LegacyCompatibilityProfile.ConditionallyHiddenSymbols not found.");
+        var conditionalSymbols = new HashSet<CompatSymbolKey>(
+            (IEnumerable<CompatSymbolKey>)conditionalProperty.GetValue(profile)!);
+        LegacyCompatibilityPlanConsumption.Validate(
+            plan,
+            instructions.Keys,
+            functions.Keys,
+            conditionalSymbols,
+            new HashSet<string>(GEmuera.Core.Compatibility.LegacyDialectInventories.MethodProjectedInstructionNames, StringComparer.Ordinal));
+    }
+
+    private static Dictionary<string, string> RuntimeRegistryKeys(
+        System.Reflection.Assembly engine,
+        string typeName,
+        string methodName,
+        Type profileType,
+        object profile)
+    {
+        Type registryType = engine.GetType(typeName)
+            ?? throw new InvalidOperationException(typeName + " not found in engine assembly.");
+        System.Reflection.MethodInfo method = registryType.GetMethod(
+            methodName,
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic,
+            binder: null,
+            types: new[] { profileType },
+            modifiers: null)
+            ?? throw new InvalidOperationException(typeName + "." + methodName + " not found.");
+        object registry = method.Invoke(null, new[] { profile })
+            ?? throw new InvalidOperationException(typeName + "." + methodName + " returned null.");
+        var keys = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (object entry in (System.Collections.IEnumerable)registry)
+        {
+            string? name = entry.GetType().GetProperty("Key")?.GetValue(entry) as string;
+            if (!string.IsNullOrEmpty(name))
+                keys[name!] = "handler";
+        }
+        return keys;
     }
 
     private static void AssertPackProjection()
@@ -361,6 +537,7 @@ static class Program
             throw new InvalidOperationException("pack assembly failed: " + string.Join("; ", assemblyErrors));
 
         LegacyCompatibilityProfile packed = LegacyCompatibilityProfile.Create(assembled, true);
+        AssertRuntimePlanClosure(assembled, "smoke.pack（手工句柄）");
 
         Assert(packed.IsInstructionVisible("SETANIMETIMER"), "包注册指令 SETANIMETIMER 在 v24 会话不可见。");
         Assert(packed.IsFunctionVisible("SQL_CONNECT"), "包注册函数 SQL_CONNECT 在 v24 会话不可见。");
@@ -455,6 +632,10 @@ static class Program
                 GEmuera.Core.Compatibility.LegacyDialectInventories.V24InstructionNames, StringComparer.Ordinal),
             baselineFunctions: new HashSet<string>(
                 GEmuera.Core.Compatibility.LegacyDialectInventories.V24Functions.Select(entry => entry.Name),
+                StringComparer.Ordinal),
+            // 宿主口径：METHOD 投影名并集参与双形态闭包（hide 函数会镜像隐藏同名 METHOD 指令）。
+            methodProjectedInstructionNames: new HashSet<string>(
+                GEmuera.Core.Compatibility.LegacyDialectInventories.MethodProjectedInstructionNames,
                 StringComparer.Ordinal));
         if (!CompatPackLoader.TryLoad(packPath, context, out CompatPackHandle? handle, out var loadErrors))
             throw new InvalidOperationException("v18 第一方数据包加载失败：" + string.Join("; ", loadErrors));
@@ -476,6 +657,7 @@ static class Program
 
             LegacyCompatibilityProfile builtinV18 = LegacyCompatibilityProfile.Create(builtinV18Plan, true);
             LegacyCompatibilityProfile packed = LegacyCompatibilityProfile.Create(assembled, true);
+            AssertRuntimePlanClosure(assembled, "packs/gemuera.v18（真实包 DLL）");
 
             // 投影后可见性逐名相等：universe 取两侧计划键的并集（含保留名/隐藏差量）。
             IEnumerable<string> instructionUniverse = builtinV18.Plan.Dialect.Instructions.Keys

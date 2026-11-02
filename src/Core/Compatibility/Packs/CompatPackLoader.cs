@@ -125,7 +125,7 @@ public static class CompatPackLoader
 
         IReadOnlyList<ICompatPackContribution> manifestContributions = CreateManifestContributions(manifest, context);
         if (!ValidatePackEntry(pack, manifest, context, out IReadOnlyList<ICompatPackContribution> contributions,
-                out var entryErrors, manifestContributions))
+                out var entryErrors, out IReadOnlyList<CompatSymbolState> surfaceStates, manifestContributions))
         {
             collected.AddRange(entryErrors.Select(error => prefix + error));
             loadContext.Unload();
@@ -140,7 +140,7 @@ public static class CompatPackLoader
 
         handle = new CompatPackHandle(
             manifest, pack, Path.GetFullPath(packAssemblyPath), assemblySha256, packSha256,
-            surface, capabilities, variants, policies, loadContext);
+            surface, capabilities, variants, policies, loadContext, surfaceStates);
         errors = collected;
         return true;
     }
@@ -203,10 +203,12 @@ public static class CompatPackLoader
         CompatPackValidationContext context,
         out IReadOnlyList<ICompatPackContribution> contributions,
         out IReadOnlyList<string> errors,
+        out IReadOnlyList<CompatSymbolState> surfaceStates,
         IReadOnlyList<ICompatPackContribution>? manifestContributions = null)
     {
         var collected = new List<string>();
         contributions = Array.Empty<ICompatPackContribution>();
+        surfaceStates = Array.Empty<CompatSymbolState>();
         try
         {
             // 入口类自报的清单必须与内嵌清单同源（id+版本一致），防止两处漂移。
@@ -226,7 +228,7 @@ public static class CompatPackLoader
                 combined.AddRange(manifestContributions);
             combined.AddRange(entryContributions);
             contributions = combined;
-            if (!CompatPackRules.Validate(manifest, contributions, context, out var ruleErrors))
+            if (!CompatPackRules.Validate(manifest, contributions, context, out var ruleErrors, out surfaceStates))
             {
                 collected.AddRange(ruleErrors);
                 errors = collected;
@@ -239,6 +241,7 @@ public static class CompatPackLoader
         catch (Exception exception)
         {
             contributions = Array.Empty<ICompatPackContribution>();
+            surfaceStates = Array.Empty<CompatSymbolState>();
             collected.Add("包入口访问失败（Manifest/Contributions 抛出异常）：" + exception.Message);
             errors = collected;
             return false;

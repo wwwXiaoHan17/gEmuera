@@ -15,6 +15,7 @@ public sealed class CompatPackValidationContext
     static readonly IReadOnlySet<string> NoHandlers = new HashSet<string>(StringComparer.Ordinal);
     static readonly IReadOnlyDictionary<string, string> NoFunctionReturnTypes =
         new Dictionary<string, string>(StringComparer.Ordinal);
+    static readonly IReadOnlySet<string> NoMethodProjectedInstructions = new HashSet<string>(StringComparer.Ordinal);
 
     public CompatPackValidationContext(
         CompatVersion currentContractAbi,
@@ -28,6 +29,7 @@ public sealed class CompatPackValidationContext
         IReadOnlySet<string>? knownInstructionHandlers = null,
         IReadOnlySet<string>? knownFunctionHandlers = null,
         IReadOnlyDictionary<string, string>? knownFunctionReturnTypes = null,
+        IReadOnlySet<string>? methodProjectedInstructionNames = null,
         string? baselineProfileId = null,
         string? baselineSurfaceHash = null)
     {
@@ -47,6 +49,7 @@ public sealed class CompatPackValidationContext
         KnownInstructionHandlers = knownInstructionHandlers ?? NoHandlers;
         KnownFunctionHandlers = knownFunctionHandlers ?? NoHandlers;
         KnownFunctionReturnTypes = knownFunctionReturnTypes ?? NoFunctionReturnTypes;
+        MethodProjectedInstructionNames = methodProjectedInstructionNames ?? NoMethodProjectedInstructions;
         BaselineProfileId = string.IsNullOrWhiteSpace(baselineProfileId) ? "v24pure" : baselineProfileId.Trim();
         BaselineSurfaceHash = string.IsNullOrWhiteSpace(baselineSurfaceHash)
             ? LegacySurfaceHash.ComputeV24SurfaceHash()
@@ -108,6 +111,15 @@ public sealed class CompatPackValidationContext
     /// FunctionDescriptor；缺失时规则层拒载，避免 plan 元数据与 handler 不一致）。
     /// </summary>
     public IReadOnlyDictionary<string, string> KnownFunctionReturnTypes { get; }
+
+    /// <summary>
+    /// 引擎 METHOD 投影名并集（<see cref="LegacyDialectInventories.MethodProjectedInstructionNames"/>，
+    /// 生成清单，六 profile 并集）。这些名字在指令注册表里是"表达式函数的语句形态"：
+    /// 指令名列表与函数名列表共享键空间，表面差量必须双形态闭包（hide 指令 → 镜像 hide 函数、
+    /// hide 函数 → 镜像 hide 指令、add 函数 → 镜像 add 指令、add 指令 → 拒载）。缺省空集 =
+    /// 测试/轻量场景不做双形态镜像（宿主必须传真实清单）。
+    /// </summary>
+    public IReadOnlySet<string> MethodProjectedInstructionNames { get; }
 
     /// <summary>包声明的基线 profile 必须与会话基线一致；缺省 v24pure。</summary>
     public string BaselineProfileId { get; }

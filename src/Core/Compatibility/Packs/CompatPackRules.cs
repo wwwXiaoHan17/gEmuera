@@ -17,6 +17,20 @@ public static class CompatPackRules
         IReadOnlyList<ICompatPackContribution> contributions,
         CompatPackValidationContext context,
         out IReadOnlyList<string> errors)
+        => Validate(manifest, contributions, context, out errors, out _);
+
+    /// <summary>
+    /// 清单与贡献的完整语义校验，并在通过时产出冻结的规范化表面状态
+    /// （<see cref="CompatSymbolState"/>：双形态闭包后的 Present/Hidden/变体选择）。
+    /// 加载器把 <paramref name="surfaceStates"/> 放进 <see cref="CompatPackHandle"/>，
+    /// 组装器只消费它；校验失败的输入仍会返回已收集到的状态供诊断（调用方必须按 false 拒载）。
+    /// </summary>
+    public static bool Validate(
+        CompatPackManifest manifest,
+        IReadOnlyList<ICompatPackContribution> contributions,
+        CompatPackValidationContext context,
+        out IReadOnlyList<string> errors,
+        out IReadOnlyList<CompatSymbolState> surfaceStates)
     {
         ArgumentNullException.ThrowIfNull(manifest);
         ArgumentNullException.ThrowIfNull(contributions);
@@ -252,7 +266,8 @@ public static class CompatPackRules
                 collected.Add("指令 " + selection.Key + " 同时出现在清单变体选择与变体贡献绑定中。");
         }
 
-        // 表面贡献对账：录制回放 ISurfaceContribution.Apply。
+        // 表面贡献对账：录制回放 ISurfaceContribution.Apply（每包恰好一次；T5 会把校验与
+        // 组装之间的原始贡献回放彻底替换为 ValidatedPackDelta）。
         var recorder = new RecordingSurfaceRegistry(collected);
         foreach (ICompatPackContribution contribution in contributions)
         {
@@ -268,20 +283,96 @@ public static class CompatPackRules
             }
         }
 
+        // 双形态闭包（设计 §6.7）：引擎把可见表达式函数投影成 METHOD 指令（
+        // FunctionIdentifier.GetInstructionNameDic），指令名与函数名共享注册表键空间。
+        // 只按裸名字做 add/hide 会漏掉另一形态：hide 指令 ABS 后函数 ABS 仍可见，运行时
+        // 注册表仍含 METHOD 指令 ABS（registry ⊄ plan）；hide 函数 EXISTVAR 后计划仍声明
+        // 指令 EXISTVAR（plan ⊄ registry）。这里把录制动作规范化成 symbol 状态：
+        //   hide 指令 ∩ method-projected → 补 hide 函数；
+        //   hide 函数 ∩ method-projected → 补 hide 指令；
+        //   add 函数 ∩ method-projected  → 补 Present 指令；
+        //   add 指令 ∩ method-projected  → 拒载（方法形态由函数可见性驱动，指令侧 Present 是 no-op）。
+        var states = new List<CompatSymbolState>();
+        var effectiveHiddenInstructions = new HashSet<string>(recorder.HiddenInstructions, StringComparer.Ordinal);
+        var effectiveHiddenFunctions = new HashSet<string>(recorder.HiddenFunctions, StringComparer.Ordinal);
+        foreach (string hidden in recorder.HiddenInstructions.Order(StringComparer.Ordinal))
+        {
+            states.Add(new CompatSymbolState(
+                new CompatSymbolKey(CompatSymbolKind.Instruction, hidden),
+                CompatSymbolStateKind.Hidden, manifest.PackId, null, null));
+            if (context.MethodProjectedInstructionNames.Contains(hidden))
+            {
+                effectiveHiddenFunctions.Add(hidden);
+                states.Add(new CompatSymbolState(
+                    new CompatSymbolKey(CompatSymbolKind.Function, hidden),
+                    CompatSymbolStateKind.Hidden, manifest.PackId, null, null));
+            }
+        }
+        foreach (string hidden in recorder.HiddenFunctions.Order(StringComparer.Ordinal))
+        {
+            states.Add(new CompatSymbolState(
+                new CompatSymbolKey(CompatSymbolKind.Function, hidden),
+                CompatSymbolStateKind.Hidden, manifest.PackId, null, null));
+            if (context.MethodProjectedInstructionNames.Contains(hidden))
+            {
+                effectiveHiddenInstructions.Add(hidden);
+                states.Add(new CompatSymbolState(
+                    new CompatSymbolKey(CompatSymbolKind.Instruction, hidden),
+                    CompatSymbolStateKind.Hidden, manifest.PackId, null, null));
+            }
+        }
+        foreach (string registered in recorder.RegisteredInstructions.Order(StringComparer.Ordinal))
+        {
+            if (context.MethodProjectedInstructionNames.Contains(registered))
+            {
+                collected.Add("包 " + manifest.PackId + " 注册指令 " + registered
+                    + " 是 METHOD 投影的表达式函数形态，指令侧注册不会让函数可见；请改用 addFunctions"
+                    + "（ISurfaceContribution 用 RegisterFunction 声明函数侧），指令侧 Present 由引擎投影自动补齐。");
+                continue;
+            }
+            states.Add(new CompatSymbolState(
+                new CompatSymbolKey(CompatSymbolKind.Instruction, registered),
+                CompatSymbolStateKind.Present, manifest.PackId, null, null));
+        }
+        foreach (string registered in recorder.RegisteredFunctions.Order(StringComparer.Ordinal))
+        {
+            recorder.RegisteredFunctionReturnTypes.TryGetValue(registered, out string? declaredReturnType);
+            states.Add(new CompatSymbolState(
+                new CompatSymbolKey(CompatSymbolKind.Function, registered),
+                CompatSymbolStateKind.Present, manifest.PackId, declaredReturnType, null));
+            if (context.MethodProjectedInstructionNames.Contains(registered))
+            {
+                effectiveHiddenInstructions.Remove(registered);
+                states.Add(new CompatSymbolState(
+                    new CompatSymbolKey(CompatSymbolKind.Instruction, registered),
+                    CompatSymbolStateKind.Present, manifest.PackId, null, null));
+            }
+        }
+        foreach (KeyValuePair<string, string> selection in manifest.VariantSelections)
+        {
+            states.Add(new CompatSymbolState(
+                new CompatSymbolKey(CompatSymbolKind.Variant, selection.Key),
+                CompatSymbolStateKind.VariantSelection, manifest.PackId, null, selection.Value));
+        }
+
         // hide 必须落在 v24 基线内（隐藏基线没有的名字没有意义，多为拼写错误）；
         // register 不得与 v24 基线同名（改既有指令语义必须走变体通道）。
-        foreach (string hidden in recorder.HiddenInstructions)
+        // 对账用双形态展开后的有效集合：镜像补出的隐藏名同样必须合法。
+        foreach (string hidden in effectiveHiddenInstructions.Order(StringComparer.Ordinal))
         {
             if (!context.BaselineInstructions.Contains(hidden))
                 collected.Add("隐藏指令不在 v24 基线内：" + hidden);
         }
-        foreach (string hidden in recorder.HiddenFunctions)
+        foreach (string hidden in effectiveHiddenFunctions.Order(StringComparer.Ordinal))
         {
             if (!context.BaselineFunctions.Contains(hidden))
                 collected.Add("隐藏函数不在 v24 基线内：" + hidden);
         }
-        foreach (string registered in recorder.RegisteredInstructions)
+        foreach (string registered in recorder.RegisteredInstructions.Order(StringComparer.Ordinal))
         {
+            // METHOD 投影名的 add 指令已在上面按死契约拒载；此处只对账真指令。
+            if (context.MethodProjectedInstructionNames.Contains(registered))
+                continue;
             if (context.BaselineInstructions.Contains(registered))
                 collected.Add("注册指令与 v24 基线同名（应走变体选择通道）：" + registered);
             // 引擎 handler 对账（宿主传入全集时启用）：注册名必须有真实 handler，否则
@@ -292,7 +383,7 @@ public static class CompatPackRules
                 collected.Add("包 " + manifest.PackId + " 注册指令 " + registered
                     + " 无引擎 handler（指令名拼错或引擎未收录；内置模块可声明的名字均在全集内）。");
         }
-        foreach (string registered in recorder.RegisteredFunctions)
+        foreach (string registered in recorder.RegisteredFunctions.Order(StringComparer.Ordinal))
         {
             if (context.BaselineFunctions.Contains(registered))
                 collected.Add("注册函数与 v24 基线同名：" + registered);
@@ -311,7 +402,7 @@ public static class CompatPackRules
         // 清单变体选择的指令必须在 v24 基线内（内置变体只存在于基线名）且不能同时被隐藏。
         foreach (KeyValuePair<string, string> binding in variantBindings)
         {
-            if (recorder.HiddenInstructions.Contains(binding.Key))
+            if (effectiveHiddenInstructions.Contains(binding.Key))
                 collected.Add("指令 " + binding.Key + " 同时被隐藏与变体绑定。");
             if (recorder.RegisteredInstructions.Contains(binding.Key))
                 collected.Add("指令 " + binding.Key + " 同时被表面注册与变体绑定（handler 来源歧义）。");
@@ -320,9 +411,26 @@ public static class CompatPackRules
         {
             if (!context.BaselineInstructions.Contains(selection.Key))
                 collected.Add("变体选择的指令不在 v24 基线内：" + selection.Key);
-            if (recorder.HiddenInstructions.Contains(selection.Key))
+            if (effectiveHiddenInstructions.Contains(selection.Key))
                 collected.Add("指令 " + selection.Key + " 同时被隐藏与清单变体选择。");
         }
+
+        // 规范化状态按 (Kind, Name) 排序后冻结：与包内贡献的声明顺序无关，
+        // 供句柄携带、组装器消费（同内容同状态序列，诊断可复现）。同一符号被多条贡献
+        // 以同一状态重复声明时只保留一条（如 hide 指令 ABS 与显式 hide 函数 ABS 都
+        // 镜像出 function:ABS Hidden）；同键异态（Present vs Hidden）保留，交给组装器
+        // 按"后写"语义裁决（非法包已在上面收集错误）。
+        var uniqueStates = new HashSet<(CompatSymbolKey Key, CompatSymbolStateKind Kind)>();
+        var frozenStates = new List<CompatSymbolState>(states.Count);
+        foreach (CompatSymbolState state in states
+            .OrderBy(state => state.Key.Kind)
+            .ThenBy(state => state.Key.Name, StringComparer.Ordinal)
+            .ThenBy(state => state.Key.ToContractString(), StringComparer.Ordinal))
+        {
+            if (uniqueStates.Add((state.Key, state.Kind)))
+                frozenStates.Add(state);
+        }
+        surfaceStates = frozenStates;
 
         errors = collected;
         return collected.Count == 0;
@@ -376,6 +484,8 @@ public static class CompatPackRules
         public HashSet<string> HiddenInstructions { get; } = new(StringComparer.Ordinal);
         public HashSet<string> RegisteredFunctions { get; } = new(StringComparer.Ordinal);
         public HashSet<string> HiddenFunctions { get; } = new(StringComparer.Ordinal);
+        // 规范化状态的 ReturnType 元数据来源（首次声明为准；重复注册本身已收集为错误）。
+        public Dictionary<string, string> RegisteredFunctionReturnTypes { get; } = new(StringComparer.Ordinal);
 
         string Normalize(string name, string kind)
         {
@@ -424,6 +534,8 @@ public static class CompatPackRules
                 {
                     if (!owner.RegisteredFunctions.Add(normalized))
                         owner.errors.Add("重复注册函数：" + normalized);
+                    else
+                        owner.RegisteredFunctionReturnTypes[normalized] = returnType;
                     if (string.IsNullOrWhiteSpace(returnType))
                         owner.errors.Add("注册函数 " + normalized + " 缺少返回类型。");
                 }

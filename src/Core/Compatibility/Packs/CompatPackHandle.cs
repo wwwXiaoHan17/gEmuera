@@ -19,7 +19,8 @@ public sealed class CompatPackHandle : ICompatPackLease
         IReadOnlyList<ICapabilityContribution> capabilities,
         IReadOnlyList<IInstructionVariantContribution> variants,
         IReadOnlyList<IPolicyContribution> policies,
-        CompatPackLoadContext loadContext)
+        CompatPackLoadContext loadContext,
+        IReadOnlyList<CompatSymbolState>? surfaceStates = null)
     {
         Manifest = manifest;
         Pack = pack;
@@ -31,6 +32,7 @@ public sealed class CompatPackHandle : ICompatPackLease
         Variants = variants;
         Policies = policies;
         LoadContext = loadContext;
+        SurfaceStates = surfaceStates;
     }
 
     public CompatPackManifest Manifest { get; }
@@ -42,6 +44,13 @@ public sealed class CompatPackHandle : ICompatPackLease
     public IReadOnlyList<ICapabilityContribution> Capabilities { get; }
     public IReadOnlyList<IInstructionVariantContribution> Variants { get; }
     public IReadOnlyList<IPolicyContribution> Policies { get; }
+
+    /// <summary>
+    /// 校验期冻结的规范化表面状态（双形态闭包后的 Present/Hidden/VariantSelection）。
+    /// 加载器路径（<see cref="CompatPackLoader"/>）必然携带；手工构造的句柄可为 null，
+    /// 组装器对 null 保留一次旧式回放（仅测试/迁移期兼容，T5 的 ValidatedPackDelta 将移除）。
+    /// </summary>
+    public IReadOnlyList<CompatSymbolState>? SurfaceStates { get; }
 
     internal CompatPackLoadContext LoadContext { get; }
 

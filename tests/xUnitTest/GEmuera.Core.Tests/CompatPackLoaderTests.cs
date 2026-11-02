@@ -28,7 +28,10 @@ public class CompatPackLoaderTests
         knownBuiltinVariantNames: new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
         baselineInstructions: new HashSet<string>(LegacyDialectInventories.V24InstructionNames, StringComparer.Ordinal),
         baselineFunctions: new HashSet<string>(
-            LegacyDialectInventories.V24Functions.Select(entry => entry.Name), StringComparer.Ordinal));
+            LegacyDialectInventories.V24Functions.Select(entry => entry.Name), StringComparer.Ordinal),
+        // 宿主口径：METHOD 投影名并集参与双形态闭包（hide 函数会镜像隐藏同名 METHOD 指令）。
+        methodProjectedInstructionNames: new HashSet<string>(
+            LegacyDialectInventories.MethodProjectedInstructionNames, StringComparer.Ordinal));
 
     public CompatPackLoaderTests()
     {
@@ -282,7 +285,7 @@ public class CompatPackLoaderTests
 
         var exception = Record.Exception(() =>
         {
-            Assert.False(CompatPackLoader.ValidatePackEntry(evil, manifest, RealContext(), out _, out var errors));
+            Assert.False(CompatPackLoader.ValidatePackEntry(evil, manifest, RealContext(), out _, out var errors, out _));
             Assert.Contains(errors!, e => e.Contains("抛出异常"));
         });
         Assert.Null(exception);
@@ -327,7 +330,7 @@ public class CompatPackLoaderTests
         Assert.IsType<ManifestSurfaceContribution>(manifestContributions[0]);
         Assert.True(
             CompatPackLoader.ValidatePackEntry(
-                pack, manifest, context, out var combined, out var errors, manifestContributions),
+                pack, manifest, context, out var combined, out var errors, out _, manifestContributions),
             string.Join("; ", errors));
         Assert.Single(combined);
         Assert.IsType<ManifestSurfaceContribution>(combined[0]);

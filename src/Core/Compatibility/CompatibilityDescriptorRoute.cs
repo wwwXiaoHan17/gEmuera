@@ -1,4 +1,5 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
+using GEmuera.Core.Compatibility.Packs;
 
 namespace GEmuera.Core.Compatibility;
 
@@ -78,6 +79,27 @@ public sealed class CompatibilityDescriptorRoute<TInstruction, TFunction>
         IReadOnlyDictionary<string, TFunction> legacyFunctions,
         IEqualityComparer<string> functionComparer,
         out CompatibilityDescriptorRoute<TInstruction, TFunction> route)
+        => TryCreateSessionView(
+            plan,
+            legacyInstructions,
+            instructionComparer,
+            legacyFunctions,
+            functionComparer,
+            out route,
+            out _);
+
+    /// <summary>
+    /// 会话驱动路由视图（带未声明符号诊断）：失败时 <paramref name="undeclaredSymbol"/>
+    /// 给出首个 registry 超出 plan 的符号（调用方据此生成含 symbol 名称的终止错误）。
+    /// </summary>
+    public static bool TryCreateSessionView(
+        CompatibilityPlan plan,
+        IReadOnlyDictionary<string, TInstruction> legacyInstructions,
+        IEqualityComparer<string> instructionComparer,
+        IReadOnlyDictionary<string, TFunction> legacyFunctions,
+        IEqualityComparer<string> functionComparer,
+        out CompatibilityDescriptorRoute<TInstruction, TFunction> route,
+        out CompatSymbolKey? undeclaredSymbol)
     {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(legacyInstructions);
@@ -85,15 +107,16 @@ public sealed class CompatibilityDescriptorRoute<TInstruction, TFunction>
         ArgumentNullException.ThrowIfNull(legacyFunctions);
         ArgumentNullException.ThrowIfNull(functionComparer);
 
+        undeclaredSymbol = null;
         foreach (var name in legacyInstructions.Keys)
         {
             if (!plan.Dialect.Instructions.ContainsKey(name))
-                return Missing(name, "instruction", out route);
+                return Missing(name, "instruction", CompatSymbolKind.Instruction, out route, out undeclaredSymbol);
         }
         foreach (var name in legacyFunctions.Keys)
         {
             if (!plan.Dialect.Functions.ContainsKey(name))
-                return Missing(name, "function", out route);
+                return Missing(name, "function", CompatSymbolKind.Function, out route, out undeclaredSymbol);
         }
 
         route = new CompatibilityDescriptorRoute<TInstruction, TFunction>(
@@ -103,9 +126,15 @@ public sealed class CompatibilityDescriptorRoute<TInstruction, TFunction>
                 new Dictionary<string, TFunction>(legacyFunctions, functionComparer)));
         return true;
 
-        bool Missing(string name, string kind, out CompatibilityDescriptorRoute<TInstruction, TFunction> missing)
+        bool Missing(
+            string name,
+            string kind,
+            CompatSymbolKind symbolKind,
+            out CompatibilityDescriptorRoute<TInstruction, TFunction> missing,
+            out CompatSymbolKey? missingSymbol)
         {
             Console.Error.WriteLine($"Compatibility plan does not declare legacy {kind} '{name}'.");
+            missingSymbol = new CompatSymbolKey(symbolKind, name);
             missing = null!;
             return false;
         }

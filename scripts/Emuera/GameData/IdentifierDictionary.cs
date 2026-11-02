@@ -14,6 +14,7 @@ using MinorShift.Emuera.GameProc.Function;
 using MinorShift.Emuera.GameData.Expression;
 using MinorShift._Library;
 using GEmuera.Core.Compatibility;
+using GEmuera.Core.Compatibility.Packs;
 
 namespace MinorShift.Emuera
 {
@@ -623,39 +624,53 @@ namespace MinorShift.Emuera
 		}
 
 		/// <summary>
+		/// 会话目录的未声明符号诊断（最近一次 <see cref="BindCompatibilityPlan"/> 失败时
+		/// 的契约字符串，如 <c>instruction:CALLSHARP</c>）；供降级终止异常携带 symbol 名称。
+		/// </summary>
+		internal string LastCompatibilityBindingError { get; private set; }
+
+		/// <summary>
 		/// Narrows legacy lookup to the immutable descriptor surface selected by
 		/// the startup plan. The legacy FunctionIdentifier/FunctionMethod objects
 		/// remain the behavior owners; this boundary only chooses which existing
 		/// handlers are reachable by the parser.
+		/// 返回 false = 会话注册表存在计划未声明的名字（运行时精确闭包失败）。调用方必须
+		/// 回退无包基线并重绑；本方法绝不再把路由置空后继续使用全量 registry（那会静默
+		/// 放大解析面、绕过计划哈希）。
 		/// </summary>
-		internal void BindCompatibilityPlan(CompatibilityPlan plan)
+		internal bool BindCompatibilityPlan(CompatibilityPlan plan)
 		{
 			if (plan == null)
 				throw new ArgumentNullException(nameof(plan));
+			LastCompatibilityBindingError = null;
 
 			if (plan.Dialect.Instructions.Count == 0 && plan.Dialect.Functions.Count == 0)
 			{
 				compatibilityInstructionDic = null;
 				compatibilityMethodDic = null;
-				return;
+				return true;
 			}
 
 			// 描述符通道激活：会话驱动路由——投影注册表（已含方言 handler 变体）的每个
 			// 名字必须被计划声明；计划多出的名字按条件可见性跳过（如 scoped-variable
-			/// 关闭会话中的 VARI/VARS、snake 主动排除的个别 v24 函数）。清单漂移时记错并
-			// 回退到投影注册表，保证解析面完整。
+			// 关闭会话中的 VARI/VARS、snake 主动排除的个别 v24 函数）。
 			if (!CompatibilityDescriptorRoute<FunctionIdentifier, FunctionMethod>.TryCreateSessionView(
 				plan,
 				instructionDic,
 				FunctionIdentifier.InstructionComparer,
 				methodDic,
 				FunctionMethodCreator.MethodComparer,
-				out CompatibilityDescriptorRoute<FunctionIdentifier, FunctionMethod> route))
+				out CompatibilityDescriptorRoute<FunctionIdentifier, FunctionMethod> route,
+				out CompatSymbolKey? undeclaredSymbol))
 			{
-				GenericUtils.Error("[DIALECT] CompatibilityPlan descriptor surface does not cover the projected legacy registry; falling back to the projected registry.");
-				compatibilityInstructionDic = null;
-				compatibilityMethodDic = null;
-				return;
+				LastCompatibilityBindingError = undeclaredSymbol is { } symbol
+					? symbol.ToContractString()
+					: "<unknown>";
+				GenericUtils.Error("[DIALECT] CompatibilityPlan does not cover the projected legacy registry (plan="
+					+ plan.CanonicalHash + " profile=" + plan.ProfileId
+					+ " symbol=" + LastCompatibilityBindingError + ").");
+				// 不落回全量 registry：保持未绑定（启动态为 null）并把失败交给调用方。
+				return false;
 			}
 			// 参考 v24/EE 的 FunctionIdentifier 静态构造会把“未与指令重名的式中関数”
 			// 统一注册为 METHOD_Instruction，所以 `OUTPUTLOG "file"` 这类独立语句行
@@ -673,6 +688,27 @@ namespace MinorShift.Emuera
 			}
 			compatibilityInstructionDic = new ReadOnlyDictionary<string, FunctionIdentifier>(routedInstructions);
 			compatibilityMethodDic = route.Functions;
+			return true;
+		}
+
+		/// <summary>
+		/// 包投影失败降级到无包基线后的注册表重建：<see cref="instructionDic"/> /
+		/// <see cref="methodDic"/> 来自构造期的 profile 投影（包计划已收窄），fallback 后
+		/// 必须按当前会话 profile（无包基线）重新投影，否则重绑会把旧包的注册名当成
+		/// "registry 超出 plan"再次拒绝。名称清单同步重算，供消费校验使用。
+		/// </summary>
+		internal void RebindProfileRegistries()
+		{
+			var compatibility = Program.Compatibility;
+			instructionDic = FunctionIdentifier.GetInstructionNameDic(compatibility);
+			methodDic = FunctionMethodCreator.GetMethodList(compatibility);
+			legacyInstructionNames = new ReadOnlyCollection<string>(
+				instructionDic
+					.Where(pair => pair.Value.Method == null)
+					.Select(pair => pair.Key)
+					.ToList());
+			legacyFunctionNames = new ReadOnlyCollection<string>(
+				new List<string>(methodDic.Keys));
 		}
 
 		public List<string> GetOverloadedList(LabelDictionary labelDic)

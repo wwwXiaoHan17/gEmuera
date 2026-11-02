@@ -463,6 +463,41 @@ namespace MinorShift.Emuera
 			}
 		}
 
+		/// <summary>
+		/// 包投影失败的运行时降级（设计 §6.7）：先释放当前会话的包租约，再清掉现有计划绑定
+		///（<see cref="ConfigureCompatibilityPlan(CompatibilityPlan, bool)"/> 拒绝直接换绑不同哈希
+		/// 的计划），按 <paramref name="profileId"/> 重建无包基线并重新绑定。
+		/// 返回 false = 连无包基线都无法建立；调用方必须终止会话（异常需携带 plan hash、
+		/// profile 与失败 symbol，由调用方补齐上下文）。
+		/// </summary>
+		internal static bool TryFallbackToNoPackBaseline(string profileId, out CompatibilityPlan baselinePlan)
+		{
+			baselinePlan = null;
+			try
+			{
+				// ClearCompatibilityPlan 内部再次 Dispose 会话（幂等），但先显式释放租约
+				// 可保证即便后续重建失败，包 ALC 也不会滞留到进程结束。
+				DisposeCompatPackSession();
+				ClearCompatibilityPlan();
+				CompatibilityPlan baseline = BuiltInDialectCatalog.CreateLegacySessionPlan(profileId);
+				// 沿用会话的 scoped-variable 配置：VARI/VARS 的可见性是计划投影的一部分，
+				// fallback 不能把它重置为默认值（否则同一 emuera.config 下行为漂移）。
+				ConfigureCompatibilityPlan(baseline, Config.UseScopedVariableInstruction);
+				baselinePlan = CurrentCompatibilityPlan;
+				if (baselinePlan is null)
+					return false;
+				GenericUtils.Error("[LOAD] CompatPack projection failed; fallback to no-pack baseline");
+				return true;
+			}
+			catch (Exception exception)
+			{
+				GenericUtils.Error("[LOAD] no-pack baseline fallback failed: "
+					+ exception.GetType().Name + ": " + exception.Message);
+				baselinePlan = null;
+				return false;
+			}
+		}
+
 		private static void ApplyAndroidWindowWidthPolicy()
 		{
 			if (Godot.OS.GetName() != "Android")

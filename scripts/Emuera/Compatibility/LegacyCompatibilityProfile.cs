@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using GEmuera.Core.Compatibility;
+using GEmuera.Core.Compatibility.Packs;
 
 namespace MinorShift.Emuera.Compatibility
 {
@@ -131,6 +132,8 @@ namespace MinorShift.Emuera.Compatibility
 		private readonly IReadOnlyDictionary<string, LegacyInstructionVariant> instructionVariants;
 		private readonly ISet<string> dialectFunctionContractNames;
 		private readonly bool scopedVariableInstructionsEnabled;
+		// 计划声明但本会话投影有意不暴露的符号（运行时精确闭包的反向检查豁免集）。
+		private readonly IReadOnlyCollection<CompatSymbolKey> conditionallyHiddenSymbols;
 
 		internal LegacyCompatibilityProfile(
 			string profileId,
@@ -164,6 +167,7 @@ namespace MinorShift.Emuera.Compatibility
 				dialectFunctionContractNames ?? Array.Empty<string>(), StringComparer.Ordinal);
 			this.hiddenNameOwners = hiddenNameOwners
 				?? new Dictionary<string, string>(StringComparer.Ordinal);
+			conditionallyHiddenSymbols = BuildConditionallyHiddenSymbols();
 		}
 
 		public string ProfileId { get; }
@@ -178,6 +182,13 @@ namespace MinorShift.Emuera.Compatibility
 		/// legacy Config singleton while the parser registry is being built.
 		/// </summary>
 		public bool ScopedVariableInstructionsEnabled => scopedVariableInstructionsEnabled;
+		/// <summary>
+		/// 计划里声明、但本会话投影有意不暴露的符号：模块隐藏集（如 snake 主动排除的
+		/// v24 函数、v18 隐藏的 v24 后增名）+ scoped-variable 关闭时的 VARI/VARS。
+		/// <see cref="GEmuera.Core.Compatibility.LegacyCompatibilityPlanConsumption.Validate"/>
+		/// 用它做"plan 的非条件项 ⊆ registry"的反向检查豁免；缺省空集 = 无包/无条件场景。
+		/// </summary>
+		public IReadOnlyCollection<CompatSymbolKey> ConditionallyHiddenSymbols => conditionallyHiddenSymbols;
 		/// <summary>
 		/// Identity of the registry surface projected from this profile. The Core
 		/// plan hash alone is insufficient because the scoped-variable setting
@@ -286,6 +297,24 @@ namespace MinorShift.Emuera.Compatibility
 			}
 			moduleId = owner;
 			return true;
+		}
+
+		private IReadOnlyCollection<CompatSymbolKey> BuildConditionallyHiddenSymbols()
+		{
+			var symbols = new List<CompatSymbolKey>(
+				hiddenInstructionNames.Count + hiddenFunctionNames.Count + scopedInstructionNames.Count);
+			foreach (string name in hiddenInstructionNames)
+				symbols.Add(new CompatSymbolKey(CompatSymbolKind.Instruction, name));
+			// VARI/VARS 是计划的固定成员，但只有 scoped-variable 开启的会话才投影；
+			// 关闭会话的注册表缺席是条件可见性，不是漂移。
+			if (!scopedVariableInstructionsEnabled)
+			{
+				foreach (string name in scopedInstructionNames)
+					symbols.Add(new CompatSymbolKey(CompatSymbolKind.Instruction, name));
+			}
+			foreach (string name in hiddenFunctionNames)
+				symbols.Add(new CompatSymbolKey(CompatSymbolKind.Function, name));
+			return symbols;
 		}
 
 		public static LegacyCompatibilityProfile Create(

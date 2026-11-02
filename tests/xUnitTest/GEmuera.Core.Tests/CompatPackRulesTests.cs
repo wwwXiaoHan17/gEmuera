@@ -712,6 +712,116 @@ public class CompatPackRulesTests
         Assert.Contains(engineErrors, e => e.Contains("engineApi") && e.Contains("2.0"));
     }
 
+    // —— 双形态闭包（Task 4，设计 §6.7）：指令名与表达式函数名共享引擎注册表键空间。
+    //    ABS/EXISTVAR 是 v24 基线的真实 METHOD 投影（函数可见 → 同名 METHOD 指令），
+    //    ACOS 只在 snake 面可见但恒为 METHOD 投影。用例只用真实生成清单驱动，
+    //    避免合成名掩盖"清单与运行时一致性"回归。——
+
+    static CompatPackValidationContext MethodProjectionContext() => new(
+        new CompatVersion(1, 0),
+        new CompatVersion(1, 0),
+        EngineCapabilityCatalog.All,
+        new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
+        new HashSet<string>(GEmuera.Core.Compatibility.LegacyDialectInventories.V24InstructionNames, StringComparer.Ordinal),
+        new HashSet<string>(
+            GEmuera.Core.Compatibility.LegacyDialectInventories.V24Functions.Select(entry => entry.Name),
+            StringComparer.Ordinal),
+        methodProjectedInstructionNames: new HashSet<string>(
+            GEmuera.Core.Compatibility.LegacyDialectInventories.MethodProjectedInstructionNames,
+            StringComparer.Ordinal));
+
+    [Fact]
+    public void Validate_HideMethodProjectedInstruction_ClosesFunctionSide()
+    {
+        // hideInstructions:["ABS"]，ABS 是 Method 投影：只隐藏指令会让函数 ABS 仍可见，
+        // 引擎仍会投影出 METHOD 指令 ABS → 规范化状态必须同时含两侧 Hidden。
+        var surface = new StubSurfaceDo { Do = (instructions, _) => instructions.HideInstruction("ABS") };
+
+        Assert.True(
+            CompatPackRules.Validate(
+                Manifest(),
+                new ICompatPackContribution[] { surface },
+                MethodProjectionContext(),
+                out var errors,
+                out var states),
+            string.Join("; ", errors));
+
+        Assert.Contains(states, state =>
+            state.Key == new CompatSymbolKey(CompatSymbolKind.Instruction, "ABS")
+            && state.Kind == CompatSymbolStateKind.Hidden
+            && state.OwnerPackId == "test.rules");
+        Assert.Contains(states, state =>
+            state.Key == new CompatSymbolKey(CompatSymbolKind.Function, "ABS")
+            && state.Kind == CompatSymbolStateKind.Hidden
+            && state.OwnerPackId == "test.rules");
+    }
+
+    [Fact]
+    public void Validate_HideMethodProjectedFunction_ClosesInstructionSide()
+    {
+        // hideFunctions:["EXISTVAR"]：计划指令侧仍声明 EXISTVAR（生成清单含 METHOD 投影），
+        // 但运行时注册表会随函数隐藏而缺席 → 自动补同名 hideInstructions 才是精确闭包。
+        var surface = new StubSurfaceDo { Do = (_, functions) => functions.HideFunction("EXISTVAR") };
+
+        Assert.True(
+            CompatPackRules.Validate(
+                Manifest(),
+                new ICompatPackContribution[] { surface },
+                MethodProjectionContext(),
+                out var errors,
+                out var states),
+            string.Join("; ", errors));
+
+        Assert.Contains(states, state =>
+            state.Key == new CompatSymbolKey(CompatSymbolKind.Function, "EXISTVAR")
+            && state.Kind == CompatSymbolStateKind.Hidden);
+        Assert.Contains(states, state =>
+            state.Key == new CompatSymbolKey(CompatSymbolKind.Instruction, "EXISTVAR")
+            && state.Kind == CompatSymbolStateKind.Hidden);
+    }
+
+    [Fact]
+    public void Validate_AddMethodProjectedInstruction_RejectsWithUseAddFunctionsHint()
+    {
+        // addInstructions:["ACOS"] 且 ACOS 是 Method 投影：指令侧注册不会让表达式函数
+        // 可见（可见性由函数面驱动），必须拒载并指引 addFunctions。
+        var surface = new StubSurfaceDo { Do = (instructions, _) => instructions.RegisterInstruction("ACOS") };
+
+        Assert.False(CompatPackRules.Validate(
+            Manifest(),
+            new ICompatPackContribution[] { surface },
+            MethodProjectionContext(),
+            out var errors));
+
+        Assert.Contains(errors, error => error.Contains("ACOS") && error.Contains("addFunctions"));
+    }
+
+    [Fact]
+    public void Validate_AddFunction_MirrorsMethodProjectionInstruction()
+    {
+        // addFunctions:["ACOS"] 且 ACOS 是 Method 投影：函数可见即被引擎投影为同名
+        // METHOD 指令，规范化状态必须同时含 function:ACOS Present 与 instruction:ACOS Present
+        //（返回类型元数据随函数状态冻结）。
+        var surface = new StubSurfaceDo { Do = (_, functions) => functions.RegisterFunction("ACOS", "Integer") };
+
+        Assert.True(
+            CompatPackRules.Validate(
+                Manifest(),
+                new ICompatPackContribution[] { surface },
+                MethodProjectionContext(),
+                out var errors,
+                out var states),
+            string.Join("; ", errors));
+
+        Assert.Contains(states, state =>
+            state.Key == new CompatSymbolKey(CompatSymbolKind.Function, "ACOS")
+            && state.Kind == CompatSymbolStateKind.Present
+            && state.ReturnType == "Integer");
+        Assert.Contains(states, state =>
+            state.Key == new CompatSymbolKey(CompatSymbolKind.Instruction, "ACOS")
+            && state.Kind == CompatSymbolStateKind.Present);
+    }
+
     [Fact]
     public void Validate_BaseProfileNotV24Pure_Rejects()
     {

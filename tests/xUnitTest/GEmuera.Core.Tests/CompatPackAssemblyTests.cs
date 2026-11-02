@@ -25,7 +25,10 @@ public class CompatPackAssemblyTests
         // 引擎 handler 全集（与宿主 BuildValidationContext 同口径：六 profile 清单并集），
         // 端到端证明真实夹具包（注册 SETANIMETIMER/SQL_CONNECT）穿过 handler 对账。
         knownInstructionHandlers: EngineInstructionHandlers(),
-        knownFunctionHandlers: EngineFunctionHandlers());
+        knownFunctionHandlers: EngineFunctionHandlers(),
+        // 宿主口径：METHOD 投影名并集参与双形态闭包（hide 函数会镜像隐藏同名 METHOD 指令）。
+        methodProjectedInstructionNames: new HashSet<string>(
+            LegacyDialectInventories.MethodProjectedInstructionNames, StringComparer.Ordinal));
 
     static HashSet<string> EngineInstructionHandlers()
     {
@@ -77,10 +80,16 @@ public class CompatPackAssemblyTests
             Assert.True(assembled.Dialect.TryGetInstruction("SQL_CONNECT", out var mirroredInstruction));
             Assert.Equal("test.hello-pack", mirroredInstruction.ModuleId);
 
-            // 计数：v24 基线 561/266；指令 +SETANIMETIMER +镜像SQL_CONNECT -CALLSHARP 净+1，
-            // 函数 +SQL_CONNECT -EXISTVAR 平衡。
-            Assert.Equal(baseline.Dialect.Instructions.Count + 1, assembled.Dialect.Instructions.Count);
+            // 计数：v24 基线 561/266；指令 +SETANIMETIMER +镜像SQL_CONNECT -CALLSHARP
+            // -镜像EXISTVAR（双形态闭包：隐藏函数 EXISTVAR 必须同步隐藏同名 METHOD 指令，
+            // 否则计划多声明一个运行时缺席的指令名）→ 净 0；函数 +SQL_CONNECT -EXISTVAR 平衡。
+            Assert.Equal(baseline.Dialect.Instructions.Count, assembled.Dialect.Instructions.Count);
             Assert.Equal(baseline.Dialect.Functions.Count, assembled.Dialect.Functions.Count);
+            // 双形态闭包的显式断言：ABS 这类 METHOD 投影两侧都必须留在基线里（未被误删），
+            // 而隐藏的 EXISTVAR 两侧都必须缺席。
+            Assert.True(assembled.Dialect.TryGetInstruction("ABS", out _) && assembled.Dialect.TryGetFunction("ABS", out _));
+            Assert.False(assembled.Dialect.TryGetInstruction("EXISTVAR", out _));
+            Assert.False(assembled.Dialect.TryGetFunction("EXISTVAR", out _));
 
             // capability 账本并入（manifest 2 + capability 贡献 1；策略贡献 v1 未接线、
             // 加载即拒载，其绑定 id 不得再进账本——DoesNotContain 钉住该回归）。

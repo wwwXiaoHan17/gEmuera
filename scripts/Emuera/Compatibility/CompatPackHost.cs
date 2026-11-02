@@ -69,6 +69,9 @@ internal static CompatPackValidationContext BuildValidationContext(string baseli
                         BuildEngineInstructionHandlerNames(),
                         BuildEngineFunctionHandlerNames(),
                         BuildEngineFunctionReturnTypes(),
+                        // 双形态闭包的生成侧事实源：引擎把可见表达式函数投影为 METHOD 指令
+                        // （与真指令共享注册表键空间），规则层必须据此镜像 surface 差量。
+                        new HashSet<string>(LegacyDialectInventories.MethodProjectedInstructionNames, StringComparer.Ordinal),
                         baselineProfileId,
                         // v24 基线表面快照哈希（baseSurfaceHash 精确对账基准，E2-R6）：与
                         // BaselineInstructions/BaselineFunctions 同源（生成清单），显式传入而非

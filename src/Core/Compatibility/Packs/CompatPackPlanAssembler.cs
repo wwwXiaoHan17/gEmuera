@@ -106,43 +106,52 @@ public static class CompatPackPlanAssembler
                 }
             }
 
-            var recorder = new AssemblySurfaceRecorder(collected, pack.Manifest.PackId);
-            foreach (ISurfaceContribution contribution in pack.Surface)
+            // 表面差量只消费校验期冻结的规范化状态（含双形态镜像），不再回放包贡献对象
+            //（设计 §6.6：校验一次、组装只读冻结 delta）。手工构造的旧式句柄
+            //（SurfaceStates == null）保留一次兼容回放，仅测试/迁移期使用。
+            IReadOnlyList<CompatSymbolState> surfaceStates = pack.SurfaceStates
+                ?? ReplaySurfaceStatesForLegacyHandle(pack, collected);
+            foreach (CompatSymbolState state in surfaceStates)
             {
-                if (contribution is null)
+                switch (state.Key.Kind)
                 {
-                    collected.Add("包 " + pack.Manifest.PackId + " 的表面贡献列表含 null 元素。");
-                    continue;
-                }
-                try
-                {
-                    contribution.Apply(recorder.Instructions, recorder.Functions);
-                }
-                catch (Exception exception)
-                {
-                    collected.Add("包 " + pack.Manifest.PackId + " 表面贡献 '" + DescribeContribution(contribution)
-                        + "' Apply 回放抛出异常：" + exception.Message);
+                    case CompatSymbolKind.Instruction:
+                        if (state.Kind == CompatSymbolStateKind.Present)
+                        {
+                            if (addedInstructions.TryGetValue(state.Key.Name, out var instructionOwner))
+                                collected.Add("指令 " + state.Key.Name + " 被多个包注册："
+                                    + instructionOwner.PackId + " 与 " + pack.Manifest.PackId + "。");
+                            else
+                                addedInstructions[state.Key.Name] = (pack.Manifest.PackId, state.Key.Name);
+                        }
+                        else if (state.Kind == CompatSymbolStateKind.Hidden)
+                        {
+                            removedInstructions.Add(state.Key.Name);
+                        }
+                        break;
+                    case CompatSymbolKind.Function:
+                        if (state.Kind == CompatSymbolStateKind.Present)
+                        {
+                            if (addedFunctions.TryGetValue(state.Key.Name, out var functionOwner))
+                                collected.Add("函数 " + state.Key.Name + " 被多个包注册："
+                                    + functionOwner.PackId + " 与 " + pack.Manifest.PackId + "。");
+                            else
+                                addedFunctions[state.Key.Name] = (
+                                    pack.Manifest.PackId,
+                                    state.Key.Name,
+                                    string.IsNullOrWhiteSpace(state.ReturnType) ? "Unknown" : state.ReturnType);
+                        }
+                        else if (state.Kind == CompatSymbolStateKind.Hidden)
+                        {
+                            removedFunctions.Add(state.Key.Name);
+                        }
+                        break;
+                    case CompatSymbolKind.Variant:
+                        // 变体选择沿用 manifest 的跨包合并语义（CollectVariantSelections）；
+                        // VariantSelection 状态作为 T5 ValidatedPackDelta 的冻结载体保留。
+                        break;
                 }
             }
-
-            foreach (var registered in recorder.RegisteredInstructions)
-            {
-                if (addedInstructions.TryGetValue(registered.Key, out var owner))
-                    collected.Add("指令 " + registered.Key + " 被多个包注册：" + owner.PackId + " 与 " + pack.Manifest.PackId + "。");
-                else
-                    addedInstructions[registered.Key] = (pack.Manifest.PackId, registered.Key);
-            }
-            foreach (var entry in recorder.RegisteredFunctions)
-            {
-                if (addedFunctions.TryGetValue(entry.Key, out var owner))
-                    collected.Add("函数 " + entry.Key + " 被多个包注册：" + owner.PackId + " 与 " + pack.Manifest.PackId + "。");
-                else
-                    addedFunctions[entry.Key] = (pack.Manifest.PackId, entry.Key, entry.Value);
-            }
-            foreach (string name in recorder.HiddenInstructions)
-                removedInstructions.Add(name);
-            foreach (string name in recorder.HiddenFunctions)
-                removedFunctions.Add(name);
         }
 
         if (collected.Count > 0)
@@ -174,19 +183,10 @@ public static class CompatPackPlanAssembler
         foreach (var entry in addedFunctions.Values)
         {
             functions[entry.Name] = new FunctionDescriptor(entry.Name, "compatpack", entry.PackId, entry.ReturnType);
-            // 函数名镜像声明进指令面：引擎把可见的表达式函数投影为 METHOD 指令进入解析器
-            // 指令注册表（语句语法，FunctionIdentifier.GetInstructionNameDic），而会话校验
-            //（LegacyCompatibilityPlanConsumption）要求注册表里每个名字都被计划的**指令侧**
-            // 声明——内置方言的生成清单即双侧声明（如 snake 的 SQL_CONNECT 同时在指令/函数
-            // 清单内）。包只声明函数侧时引擎投影仍会发生，故此处无条件镜像补齐指令侧声明；
-            // 计划多出的声明被既有语义容忍（VARI/VARS 条件可见性先例），不与包的指令注册
-            // 混淆（ContainsKey 保留已有指令描述符的变体语义），也不进差量哈希（派生数据）。
-            // 同名缝隙语义（hide 指令 X + register 函数 X）：镜像会把刚被 Remove 的 X 复活回
-            // 指令面——这是引擎真实行为的忠实反映（语句/函数双形态共享键，函数可见即投影
-            // 同名 METHOD 指令；内置先例 v24 的 BITMAP_CACHE_ENABLE：隐藏 snake 语句形态 +
-            // METHOD 投影函数形态并存），非规则漂移，不拒载。
-            if (!instructions.ContainsKey(entry.Name))
-                instructions[entry.Name] = new InstructionDescriptor(entry.Name, "compatpack", entry.PackId, VmCompletionMode.CoreImmediate);
+            // 函数侧到指令侧的 METHOD 投影镜像不在这里推导：规范化状态已在校验期按
+            // MethodProjectedInstructionNames 产出同名 Present 指令（引擎把可见表达式函数
+            // 投影为 METHOD 指令进入解析器注册表，因此指令侧声明必须与运行时投影同义）。
+            // 这样组装器的输入是"校验通过的状态"，而不是二次解释原始 add/hide 名单。
         }
         if (collected.Count > 0)
         {
@@ -223,6 +223,67 @@ public static class CompatPackPlanAssembler
         assembled = new CompatibilityPlan(baseline.ProfileId, dialect, capabilities, saveProfileId, canonicalHash);
         errors = collected;
         return true;
+    }
+
+    /// <summary>
+    /// 旧式手工句柄（无校验期冻结状态）的一次性兼容回放：仅测试/迁移期路径，
+    /// 加载器产出的句柄恒携带 <see cref="CompatPackHandle.SurfaceStates"/>。回放语义与
+    /// T4 之前逐字等价（含"所有注册函数无条件镜像指令侧"），避免手工夹具的行为漂移；
+    /// T5 的 ValidatedPackDelta 接线后删除本方法。
+    /// </summary>
+    static IReadOnlyList<CompatSymbolState> ReplaySurfaceStatesForLegacyHandle(
+        CompatPackHandle pack,
+        List<string> collected)
+    {
+        var recorder = new AssemblySurfaceRecorder(collected, pack.Manifest.PackId);
+        foreach (ISurfaceContribution contribution in pack.Surface)
+        {
+            if (contribution is null)
+            {
+                collected.Add("包 " + pack.Manifest.PackId + " 的表面贡献列表含 null 元素。");
+                continue;
+            }
+            try
+            {
+                contribution.Apply(recorder.Instructions, recorder.Functions);
+            }
+            catch (Exception exception)
+            {
+                collected.Add("包 " + pack.Manifest.PackId + " 表面贡献 '" + DescribeContribution(contribution)
+                    + "' Apply 回放抛出异常：" + exception.Message);
+            }
+        }
+
+        var states = new List<CompatSymbolState>();
+        foreach (string name in recorder.RegisteredInstructions.Keys)
+        {
+            states.Add(new CompatSymbolState(
+                new CompatSymbolKey(CompatSymbolKind.Instruction, name),
+                CompatSymbolStateKind.Present, pack.Manifest.PackId, null, null));
+        }
+        foreach (KeyValuePair<string, string> entry in recorder.RegisteredFunctions)
+        {
+            states.Add(new CompatSymbolState(
+                new CompatSymbolKey(CompatSymbolKind.Function, entry.Key),
+                CompatSymbolStateKind.Present, pack.Manifest.PackId, entry.Value, null));
+            // 旧语义：函数注册无条件镜像指令侧声明（METHOD 投影的最宽口径）。
+            states.Add(new CompatSymbolState(
+                new CompatSymbolKey(CompatSymbolKind.Instruction, entry.Key),
+                CompatSymbolStateKind.Present, pack.Manifest.PackId, null, null));
+        }
+        foreach (string name in recorder.HiddenInstructions)
+        {
+            states.Add(new CompatSymbolState(
+                new CompatSymbolKey(CompatSymbolKind.Instruction, name),
+                CompatSymbolStateKind.Hidden, pack.Manifest.PackId, null, null));
+        }
+        foreach (string name in recorder.HiddenFunctions)
+        {
+            states.Add(new CompatSymbolState(
+                new CompatSymbolKey(CompatSymbolKind.Function, name),
+                CompatSymbolStateKind.Hidden, pack.Manifest.PackId, null, null));
+        }
+        return states;
     }
 
     /// <summary>

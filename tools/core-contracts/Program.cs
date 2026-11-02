@@ -1,4 +1,5 @@
 using GEmuera.Core.Compatibility;
+using GEmuera.Core.Compatibility.Packs;
 using GEmuera.Core.Session;
 using GEmuera.Core.Runtime;
 using CoreContractSmoke;
@@ -452,7 +453,10 @@ Assert(consumedSnake.InstructionDescriptorCount == snakePlan.Dialect.Instruction
 var consumedSnakeNarrowSession = LegacyCompatibilityPlanConsumption.Validate(
     snakePlan,
     new[] { "PRINT" },
-    snakePlan.Dialect.Functions.Keys);
+    snakePlan.Dialect.Functions.Keys,
+    // 窄会话（只投影 PRINT）把 SNAKE_PRINT 声明为条件符号：§6.7 反向检查要求
+    // "plan 的非条件项 ⊆ registry"，该测试要验证的正是条件项被豁免、非条件项仍受检。
+    new HashSet<CompatSymbolKey> { new(CompatSymbolKind.Instruction, "SNAKE_PRINT") });
 Assert(consumedSnakeNarrowSession.ConditionallyHiddenDescriptorCount > 0,
     "Legacy plan consumption did not tolerate conditionally hidden descriptors.");
 AssertThrows<InvalidOperationException>(
