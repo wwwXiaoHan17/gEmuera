@@ -81,12 +81,11 @@ public static class CompatPackRules
                 + "，但 v1 legacy 存档路径尚不消费 plan.SaveProfileId（v2 预留）；携带即拒载。");
         }
 
-        // 原则（1）：manifest 声明的 capability 必须在引擎词汇表内。
+        // 原则（1）：manifest 声明的 capability 必须在引擎 catalog 内且为 Wired；
+        // 已知 Wired 集合稍后统一做 Requires/Implies/ConflictsWith 闭包。
+        var requestedCapabilities = new SortedSet<string>(StringComparer.Ordinal);
         foreach (string capability in manifest.Capabilities)
-        {
-            if (!context.KnownCapabilityIds.Contains(capability))
-                collected.Add("清单声明未知 capability id：" + capability);
-        }
+            ValidateCapability(context, capability, "清单", requestedCapabilities, collected);
 
         // 贡献 id 包内唯一。贡献列表与各成员集合都来自包作者代码，null 一律收集错误而非抛出
         // （fail-closed：加载器的任何输入都不允许异常逃逸）。
@@ -123,8 +122,12 @@ public static class CompatPackRules
                     }
                     foreach (string id in capability.CapabilityIds)
                     {
-                        if (!context.KnownCapabilityIds.Contains(id))
-                            collected.Add("贡献 '" + contribution.ContributionId + "' 声明未知 capability id：" + id);
+                        ValidateCapability(
+                            context,
+                            id,
+                            "贡献 '" + contribution.ContributionId + "'",
+                            requestedCapabilities,
+                            collected);
                     }
                     break;
                 case IPolicyContribution policy:
@@ -147,8 +150,12 @@ public static class CompatPackRules
                             collected.Add("策略贡献 '" + contribution.ContributionId + "' 含 null 绑定。");
                             continue;
                         }
-                        if (!context.KnownCapabilityIds.Contains(binding.CapabilityId))
-                            collected.Add("策略贡献 '" + contribution.ContributionId + "' 绑定未知 capability id：" + binding.CapabilityId);
+                        ValidateCapability(
+                            context,
+                            binding.CapabilityId,
+                            "策略贡献 '" + contribution.ContributionId + "'",
+                            requestedCapabilities,
+                            collected);
                     }
                     break;
                 case IInstructionVariantContribution variant:
@@ -190,6 +197,18 @@ public static class CompatPackRules
                     // 表面对账在下方录制回放中做。
                     break;
             }
+        }
+
+        // capability 闭包（设计 §6.3）：Requires 递归存在且 Wired、Implies 自动加入、
+        // ConflictsWith 任一出现即拒载。只对上方已验证为已知 Wired 的集合解析——未知/
+        // DiagnosticOnly 已逐项收集，避免重复噪音；闭包失败同样 fail-closed。
+        if (!EngineCapabilityCatalog.TryResolveForPack(
+                context.Capabilities,
+                requestedCapabilities,
+                out _,
+                out IReadOnlyList<string> closureErrors))
+        {
+            collected.AddRange(closureErrors);
         }
 
         // 变体选择对账：清单 variantSelections 的 builtin 值必须在内置变体名录；
@@ -292,6 +311,37 @@ public static class CompatPackRules
 
         errors = collected;
         return collected.Count == 0;
+    }
+
+    /// <summary>
+    /// 单个 capability 声明的词汇/接线校验：必须存在于 engine catalog 且为 Wired，
+    /// 未知或 DiagnosticOnly 一律拒载（fail-at-load，避免包声明"看起来生效"的 no-op）。
+    /// 已知 Wired 项收集进 <paramref name="requestedCapabilities"/> 供闭包解析。
+    /// </summary>
+    static void ValidateCapability(
+        CompatPackValidationContext context,
+        string? capabilityId,
+        string owner,
+        ISet<string> requestedCapabilities,
+        List<string> errors)
+    {
+        if (string.IsNullOrWhiteSpace(capabilityId))
+        {
+            errors.Add(owner + " 声明空 capability id。");
+            return;
+        }
+        if (!context.Capabilities.TryGetValue(capabilityId, out CapabilityDescriptor? descriptor))
+        {
+            errors.Add(owner + " 声明未知 capability id：" + capabilityId);
+            return;
+        }
+        if (descriptor.Status != CapabilityStatus.Wired)
+        {
+            errors.Add(owner + " 声明的 capability " + capabilityId
+                + " 为 DiagnosticOnly（无真实引擎行为消费者），不能进入包的激活集合。");
+            return;
+        }
+        requestedCapabilities.Add(capabilityId);
     }
 
     /// <summary>录制型注册表桥：校验期 dry-run 捕获表面贡献的全部调用。</summary>

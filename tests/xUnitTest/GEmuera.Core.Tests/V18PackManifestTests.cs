@@ -17,7 +17,7 @@ public class V18PackManifestTests
     static CompatPackValidationContext V18PackContext() => new(
         currentContractAbi: new CompatVersion(1, 0),
         currentEngineApi: new CompatVersion(1, 0),
-        knownCapabilityIds: new HashSet<string>(StringComparer.Ordinal),
+        capabilities: EngineCapabilityCatalog.All,
         knownBuiltinVariantNames: new HashSet<string>(StringComparer.Ordinal),
         baselineInstructions: new HashSet<string>(LegacyDialectInventories.V24InstructionNames, StringComparer.Ordinal),
         baselineFunctions: new HashSet<string>(

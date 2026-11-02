@@ -23,9 +23,6 @@ namespace MinorShift.Emuera.Compatibility
 	{
 		/// <summary>启用包清单的进程内传递通道（launcher 注入 / 外部诊断覆盖）。</summary>
 		internal const string EnabledPacksEnvironmentVariable = "GEMUERA_COMPAT_PACKS";
-		// 与 tools/legacy-runner/profiles.generated.json 的 profileIds 一致；
-		// capability 词汇表 = 六 profile 声明的能力并集（引擎已收录的全部 quirk id）。
-		static readonly string[] AllProfileIds = { "v24pure", "v18", "snake", "erafl", "erablue", "megaten" };
 
 		// 内置方言模块保留名（与 LegacyCompatibilityModuleCatalog.modules 的模块 id 同源）；
 		// packId 撞保留名在校验段拒载，绝不让它走到 Compose 的白名单校验（降级不变量）。
@@ -58,14 +55,12 @@ namespace MinorShift.Emuera.Compatibility
 
 internal static CompatPackValidationContext BuildValidationContext(string baselineProfileId)
         {
-                var profiles = BuiltInDialectCatalog.CreateLegacyProfileCatalog();
-                var capabilities = new HashSet<string>(StringComparer.Ordinal);
-                foreach (string profileId in AllProfileIds)
-                        capabilities.UnionWith(profiles.Resolve(profileId).RequiredCapabilityIds);
                 return new CompatPackValidationContext(
                         CurrentContractAbi,
                         CurrentEngineApi,
-                        capabilities,
+                        // 词汇表唯一事实源 = 引擎 capability catalog（设计 §6.3），
+                        // 不再用六 profile RequiredCapabilityIds 并集隐式推断。
+                        EngineCapabilityCatalog.All,
                         new HashSet<string>(BuiltinVariantNames, StringComparer.Ordinal),
                         new HashSet<string>(LegacyDialectInventories.V24InstructionNames, StringComparer.Ordinal),
                         new HashSet<string>(LegacyDialectInventories.V24Functions.Select(entry => entry.Name), StringComparer.Ordinal),

@@ -111,11 +111,23 @@ public static class BuiltInDialectCatalog
         profiles.Freeze();
         var profile = profiles.Resolve(profileId);
         var modules = CreateLegacyBaseline();
+        // 闭合解析（设计 §6.3）：内置 profile 也走同一 catalog；DiagnosticOnly 作为账本
+        // 保留在 OrderedCapabilityIds 中（不激活），因此既有计划的 capability 集合/哈希不变。
+        if (!EngineCapabilityCatalog.TryResolveForProfile(
+                profile.RequiredCapabilityIds,
+                out CapabilityResolution capabilityResolution,
+                out IReadOnlyList<string> capabilityErrors))
+        {
+            throw new InvalidOperationException(
+                "Built-in compatibility profile '" + profile.ProfileId
+                + "' declares capabilities outside the engine catalog: "
+                + string.Join("; ", capabilityErrors));
+        }
         return new CompatibilityPlanBuilder(modules).Build(
             profile.ProfileId,
             profile.RootModuleIds,
             profile.DefaultPorts,
-            profile.RequiredCapabilityIds,
+            capabilityResolution.OrderedCapabilityIds,
             profile.DefaultSaveProfileId);
     }
 

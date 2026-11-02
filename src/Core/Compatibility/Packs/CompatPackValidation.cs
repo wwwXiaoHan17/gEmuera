@@ -4,7 +4,7 @@ namespace GEmuera.Core.Compatibility.Packs;
 
 /// <summary>
 /// 加载器校验所需的宿主输入（fail-closed 语义校验的数据源）。结构校验在契约程序集的
-/// CompatPackManifest 内完成；本上下文由宿主在会话组装期提供：capability 词汇表、
+/// CompatPackManifest 内完成；本上下文由宿主在会话组装期提供：engine capability 目录、
 /// 内置变体名录、v24 基线表面（对账用）、引擎 handler 名全集（register 对账用）。
 /// </summary>
 public sealed class CompatPackValidationContext
@@ -19,7 +19,7 @@ public sealed class CompatPackValidationContext
     public CompatPackValidationContext(
         CompatVersion currentContractAbi,
         CompatVersion currentEngineApi,
-        IReadOnlySet<string> knownCapabilityIds,
+        IReadOnlyDictionary<string, CapabilityDescriptor> capabilities,
         IReadOnlySet<string> knownBuiltinVariantNames,
         IReadOnlySet<string> baselineInstructions,
         IReadOnlySet<string> baselineFunctions,
@@ -38,7 +38,7 @@ public sealed class CompatPackValidationContext
             throw new ArgumentOutOfRangeException(nameof(currentEngineApi));
         CurrentContractAbi = currentContractAbi;
         CurrentEngineApi = currentEngineApi;
-        KnownCapabilityIds = knownCapabilityIds ?? throw new ArgumentNullException(nameof(knownCapabilityIds));
+        Capabilities = capabilities ?? throw new ArgumentNullException(nameof(capabilities));
         KnownBuiltinVariantNames = knownBuiltinVariantNames ?? throw new ArgumentNullException(nameof(knownBuiltinVariantNames));
         BaselineInstructions = baselineInstructions ?? throw new ArgumentNullException(nameof(baselineInstructions));
         BaselineFunctions = baselineFunctions ?? throw new ArgumentNullException(nameof(baselineFunctions));
@@ -59,8 +59,12 @@ public sealed class CompatPackValidationContext
     /// <summary>引擎当前行为/能力契约版本（v1 = 1.0；破坏性变更升 major，增量升 minor）。</summary>
     public CompatVersion CurrentEngineApi { get; }
 
-    /// <summary>capability id 词汇表（引擎能力实现库已收录的 id）；包声明未知 id 即拒载。</summary>
-    public IReadOnlySet<string> KnownCapabilityIds { get; }
+    /// <summary>
+    /// 引擎 capability 目录（结构化描述符；宿主传 <see cref="EngineCapabilityCatalog.All"/>）。
+    /// 包声明未知 id 或 DiagnosticOnly capability 即拒载；规则层对已知 Wired 集合做 Requires/
+    /// Implies/ConflictsWith 闭包。测试可注入合成目录以覆盖 resolver 算法。
+    /// </summary>
+    public IReadOnlyDictionary<string, CapabilityDescriptor> Capabilities { get; }
 
     /// <summary>内置变体名（形如 builtin:setbgimage-snake；宿主桥维护与 LegacyInstructionVariant 的映射）。</summary>
     public IReadOnlySet<string> KnownBuiltinVariantNames { get; }

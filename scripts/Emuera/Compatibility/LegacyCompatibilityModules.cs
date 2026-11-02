@@ -784,8 +784,9 @@ namespace MinorShift.Emuera.Compatibility
 
 		// 模块语义仍以选中为准；社区包在 v24pure 基线上声明完整 snake capability 集时，
 		// IsEnabled 同样为 true（P-D 后内置模块退场，包成为唯一声明载体）。
+		// 只由 catalog 标为 Wired 的子集推断：DiagnosticOnly 账本项不能放大行为（设计 §6.3）。
 		public bool IsEnabled => moduleSelected
-			|| GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.RequiredCapabilityIds.All(capabilities.Contains);
+			|| GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.RequiredWiredCapabilityIds.All(capabilities.Contains);
 		public bool UsesParserDiagnostics => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.ParserDiagnostics);
 		public bool AllowsUserDefinedVariableResolution => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.UserDefinedVariableResolution);
 		public bool AllowsPrivateArguments => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.PrivateArguments);
@@ -919,7 +920,9 @@ internal sealed class LegacyEraFlCompatibilityPolicy : IEraFlCompatibilityPolicy
         return new LegacyEraFlCompatibilityPolicy(capabilityIds, moduleSelected);
     }
 
-    public bool IsEnabled => moduleSelected || EraFlCompatibilityModule.RequiredCapabilityIds.All(capabilities.Contains);
+    // 只由 catalog 标为 Wired 的子集推断：DiagnosticOnly 表面 capability（如 markup.div-v2.v1）
+    // 只是 profile 账本，不再参与 IsEnabled 推断（设计 §6.3；Lead 裁定的有意行为变化）。
+    public bool IsEnabled => moduleSelected || EraFlCompatibilityModule.RequiredWiredCapabilityIds.All(capabilities.Contains);
     public bool UsesExtendedDisplayHistory => capabilities.Contains(EraFlCompatibilityModule.DisplayExtendedHistoryBehavior);
     public bool AllowsFloatLiterals => capabilities.Contains(EraFlCompatibilityModule.FloatLiteralsBehavior);
     public bool AllowsOutKeyword => capabilities.Contains(EraFlCompatibilityModule.OutKeywordBehavior);

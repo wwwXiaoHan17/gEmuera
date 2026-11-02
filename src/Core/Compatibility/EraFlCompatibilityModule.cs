@@ -138,6 +138,20 @@ public static class EraFlCompatibilityModule
     public static IReadOnlyList<string> RequiredCapabilityIds => RequiredCapabilities;
     public static IReadOnlyList<BehaviorPortSnapshot> DefaultPorts => DefaultBehaviorPorts;
 
+    /// <summary>
+    /// <see cref="RequiredCapabilityIds"/> 中引擎 catalog 标为
+    /// <see cref="CapabilityStatus.Wired"/> 的子集。IsEnabled 只由该子集推断：
+    /// 无真实消费者 / 仅表面声明的 capability 不得放大 eraFL 行为（设计 §6.3）。
+    /// Lazy 在 catalog 完成后才求值，避免静态初始化递归；也避免每次 IsEnabled 重复分配。
+    /// </summary>
+    public static IReadOnlyList<string> RequiredWiredCapabilityIds => RequiredWiredCapabilities.Value;
+
+    private static readonly Lazy<IReadOnlyList<string>> RequiredWiredCapabilities = new(
+        () => Array.AsReadOnly(RequiredCapabilities
+            .Where(capabilityId => EngineCapabilityCatalog.All.TryGetValue(capabilityId, out CapabilityDescriptor? descriptor)
+                && descriptor.Status == CapabilityStatus.Wired)
+            .ToArray()));
+
     public static DialectModuleDefinition CreateDefinition()
     {
         return new DialectModuleDefinition(

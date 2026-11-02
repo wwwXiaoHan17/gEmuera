@@ -51,7 +51,7 @@ public sealed class HelloCapabilityContribution : ICapabilityContribution
 {
     public string ContributionId => "test.hello-pack.capabilities";
 
-    public IReadOnlyList<string> CapabilityIds { get; } = new[] { "markup.div-v2.v1" };
+    public IReadOnlyList<string> CapabilityIds { get; } = new[] { "math.times-clamp.v1" };
 }
 
 // v1 死契约样本：仅供拒载向测试（CompatPackRulesTests）直接构造，不得进正向夹具贡献集。

@@ -131,4 +131,18 @@ public static class SnakeCompatibilityCapabilities
             FloatTypeSystem,
             PresetErdMerge,
         });
+
+    /// <summary>
+    /// <see cref="RequiredCapabilityIds"/> 中引擎 catalog 标为
+    /// <see cref="CapabilityStatus.Wired"/> 的子集。policy 的 IsEnabled 只由该子集推断：
+    /// DiagnosticOnly 项只是 profile 账本，不能拿来放大行为（设计 §6.3）。
+    /// Lazy 在 catalog 完成后才求值，避免静态初始化递归；也避免每次 IsEnabled 重复分配。
+    /// </summary>
+    public static IReadOnlyList<string> RequiredWiredCapabilityIds => RequiredWiredCapabilities.Value;
+
+    private static readonly Lazy<IReadOnlyList<string>> RequiredWiredCapabilities = new(
+        () => Array.AsReadOnly(RequiredCapabilityIds
+            .Where(capabilityId => EngineCapabilityCatalog.All.TryGetValue(capabilityId, out CapabilityDescriptor? descriptor)
+                && descriptor.Status == CapabilityStatus.Wired)
+            .ToArray()));
 }

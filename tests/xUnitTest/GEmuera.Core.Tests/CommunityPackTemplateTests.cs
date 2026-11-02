@@ -16,10 +16,7 @@ public class CommunityPackTemplateTests
     static CompatPackValidationContext CommunityContext() => new(
         currentContractAbi: new CompatVersion(1, 0),
         currentEngineApi: new CompatVersion(1, 0),
-        knownCapabilityIds: new HashSet<string>(StringComparer.Ordinal)
-        {
-            "math.times-clamp.v1",
-        },
+        capabilities: EngineCapabilityCatalog.All,
         knownBuiltinVariantNames: new HashSet<string>(StringComparer.Ordinal),
         baselineInstructions: new HashSet<string>(LegacyDialectInventories.V24InstructionNames, StringComparer.Ordinal),
         baselineFunctions: new HashSet<string>(

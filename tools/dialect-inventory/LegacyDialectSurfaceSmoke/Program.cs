@@ -449,7 +449,7 @@ static class Program
         var context = new CompatPackValidationContext(
             currentContractAbi: new CompatVersion(1, 0),
             currentEngineApi: new CompatVersion(1, 0),
-            knownCapabilityIds: new HashSet<string>(StringComparer.Ordinal),
+            capabilities: GEmuera.Core.Compatibility.EngineCapabilityCatalog.All,
             knownBuiltinVariantNames: new HashSet<string>(StringComparer.Ordinal),
             baselineInstructions: new HashSet<string>(
                 GEmuera.Core.Compatibility.LegacyDialectInventories.V24InstructionNames, StringComparer.Ordinal),

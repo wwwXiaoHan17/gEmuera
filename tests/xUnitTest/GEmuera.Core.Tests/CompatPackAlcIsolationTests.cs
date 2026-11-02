@@ -21,13 +21,7 @@ public class CompatPackAlcIsolationTests
     static CompatPackValidationContext RealContext() => new(
         currentContractAbi: new CompatVersion(1, 0),
         currentEngineApi: new CompatVersion(1, 0),
-        knownCapabilityIds: new HashSet<string>(StringComparer.Ordinal)
-        {
-            "input.pointer-button.v1",
-            "startup.continue-after-fault.v1",
-            "markup.div-v2.v1",
-            "parse.diagnostics.v1",
-        },
+        capabilities: EngineCapabilityCatalog.All,
         knownBuiltinVariantNames: new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
         baselineInstructions: new HashSet<string>(LegacyDialectInventories.V24InstructionNames, StringComparer.Ordinal),
         baselineFunctions: new HashSet<string>(

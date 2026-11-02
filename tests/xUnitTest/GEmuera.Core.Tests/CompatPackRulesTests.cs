@@ -1,4 +1,5 @@
 using Emuera.Compatibility.Packs;
+using GEmuera.Core.Compatibility;
 using GEmuera.Core.Compatibility.Packs;
 using Xunit;
 
@@ -13,7 +14,7 @@ public class CompatPackRulesTests
 {
     const string ManifestJson =
         "{\"packId\":\"test.rules\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1,"
-        + "\"capabilities\":[\"parse.diagnostics.v1\"],"
+        + "\"capabilities\":[\"math.times-clamp.v1\"],"
         + "\"variantSelections\":{\"SETBGIMAGE\":\"builtin:snake\"}}";
 
     static CompatPackManifest Manifest() =>
@@ -24,7 +25,7 @@ public class CompatPackRulesTests
     static CompatPackValidationContext Context() => new(
         new CompatVersion(1, 0),
         new CompatVersion(1, 0),
-        new HashSet<string>(StringComparer.Ordinal) { "parse.diagnostics.v1", "markup.div-v2.v1" },
+        EngineCapabilityCatalog.All,
         new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
         new HashSet<string>(StringComparer.Ordinal) { "CALLSHARP", "SETBGIMAGE", "PRINT" },
         new HashSet<string>(StringComparer.Ordinal) { "EXISTVAR" });
@@ -72,7 +73,7 @@ public class CompatPackRulesTests
         var context = new CompatPackValidationContext(
             new CompatVersion(1, 0),
             new CompatVersion(1, 0),
-            new HashSet<string>(StringComparer.Ordinal) { "parse.diagnostics.v1" },
+            EngineCapabilityCatalog.All,
             new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
             new HashSet<string>(StringComparer.Ordinal) { "CALLSHARP" },
             new HashSet<string>(StringComparer.Ordinal) { "EXISTVAR" },
@@ -153,7 +154,7 @@ public class CompatPackRulesTests
         var context = new CompatPackValidationContext(
             new CompatVersion(1, 0),
             new CompatVersion(1, 0),
-            new HashSet<string>(StringComparer.Ordinal) { "markup.div-v2.v1", "parse.diagnostics.v1" },
+            EngineCapabilityCatalog.All,
             new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
             new HashSet<string>(GEmuera.Core.Compatibility.LegacyDialectInventories.V24InstructionNames, StringComparer.Ordinal),
             new HashSet<string>(GEmuera.Core.Compatibility.LegacyDialectInventories.V24Functions.Select(e => e.Name), StringComparer.Ordinal));
@@ -223,7 +224,7 @@ public class CompatPackRulesTests
         return new CompatPackValidationContext(
             new CompatVersion(1, 0),
             new CompatVersion(1, 0),
-            new HashSet<string>(StringComparer.Ordinal) { "parse.diagnostics.v1" },
+            EngineCapabilityCatalog.All,
             new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
             new HashSet<string>(StringComparer.Ordinal) { "SETBGIMAGE", "CALLSHARP", "PRINT" },
             new HashSet<string>(StringComparer.Ordinal) { "EXISTVAR" },
@@ -261,7 +262,7 @@ public class CompatPackRulesTests
         var stricter = new CompatPackValidationContext(
             new CompatVersion(1, 0),
             new CompatVersion(1, 0),
-            new HashSet<string>(StringComparer.Ordinal), // 空词汇表：策略绑定的 id 即未知
+            new Dictionary<string, CapabilityDescriptor>(StringComparer.Ordinal), // 空目录：策略绑定的 id 即未知
             new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
             new HashSet<string>(StringComparer.Ordinal) { "CALLSHARP" },
             new HashSet<string>(StringComparer.Ordinal) { "EXISTVAR" });
@@ -326,7 +327,7 @@ public class CompatPackRulesTests
         IReadOnlySet<string> functionHandlers) => new(
         new CompatVersion(1, 0),
         new CompatVersion(1, 0),
-        new HashSet<string>(StringComparer.Ordinal) { "parse.diagnostics.v1" },
+        EngineCapabilityCatalog.All,
         new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
         new HashSet<string>(StringComparer.Ordinal) { "CALLSHARP", "SETBGIMAGE", "PRINT" },
         new HashSet<string>(StringComparer.Ordinal) { "EXISTVAR" },
@@ -438,7 +439,7 @@ public class CompatPackRulesTests
         var context = new CompatPackValidationContext(
             new CompatVersion(1, 0),
             new CompatVersion(1, 0),
-            new HashSet<string>(StringComparer.Ordinal),
+            EngineCapabilityCatalog.All,
             new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
             new HashSet<string>(StringComparer.Ordinal) { "CALLSHARP", "SETBGIMAGE", "PRINT" },
             new HashSet<string>(StringComparer.Ordinal) { "EXISTVAR" },
@@ -479,7 +480,7 @@ public class CompatPackRulesTests
         var context = new CompatPackValidationContext(
             new CompatVersion(1, 0),
             new CompatVersion(1, 0),
-            new HashSet<string>(StringComparer.Ordinal),
+            EngineCapabilityCatalog.All,
             new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
             new HashSet<string>(StringComparer.Ordinal) { "CALLSHARP", "SETBGIMAGE", "PRINT" },
             new HashSet<string>(StringComparer.Ordinal) { "EXISTVAR" },
@@ -503,6 +504,64 @@ public class CompatPackRulesTests
         Assert.Contains(errors, e => e.Contains("saveProfileId") && e.Contains("v1"));
     }
 
+    // —— engine capability catalog（设计 §6.3）：未知 / DiagnosticOnly 一律拒载 ——
+
+    [Fact]
+    public void Validate_UnknownCapability_Rejects()
+    {
+        string json = "{\"packId\":\"test.unknown-cap\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1,"
+            + "\"capabilities\":[\"does.not.exist.v1\"]}";
+        var manifest = CompatPackManifest.TryParse(json, out var parsed, out var parseErrors)
+            ? parsed! : throw new InvalidOperationException(string.Join("; ", parseErrors));
+
+        Assert.False(CompatPackRules.Validate(manifest, Array.Empty<ICompatPackContribution>(), Context(), out var errors));
+        Assert.Contains(errors, e => e.Contains("未知 capability id") && e.Contains("does.not.exist.v1"));
+    }
+
+    [Fact]
+    public void Validate_DiagnosticOnlyCapability_Rejects()
+    {
+        // 表面 capability 无真实行为消费者：包声明它不是"已实现"，必须在加载段拒载
+        // （fail-at-load），否则包作者会得到静默 no-op。
+        string json = "{\"packId\":\"test.diagnostic-cap\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1,"
+            + "\"capabilities\":[\"markup.div-v2.v1\"]}";
+        var manifest = CompatPackManifest.TryParse(json, out var parsed, out var parseErrors)
+            ? parsed! : throw new InvalidOperationException(string.Join("; ", parseErrors));
+
+        Assert.False(CompatPackRules.Validate(manifest, Array.Empty<ICompatPackContribution>(), Context(), out var errors));
+        Assert.Contains(errors, e => e.Contains("markup.div-v2.v1") && e.Contains("DiagnosticOnly"));
+    }
+
+    [Fact]
+    public void Validate_ConflictingCapabilities_Rejects()
+    {
+        // 合成目录覆盖"规则层确实把 context.Capabilities 交给 TryResolveForPack 做闭包"；
+        // 当前 engine catalog 无天然冲突对（见 EngineCapabilityCatalogTests 的 R4 说明）。
+        var catalog = new Dictionary<string, CapabilityDescriptor>(StringComparer.Ordinal)
+        {
+            ["a.conflict.v1"] = new(
+                "a.conflict.v1", CapabilityStatus.Wired, Array.Empty<string>(), Array.Empty<string>(),
+                new[] { "b.conflict.v1" }, "test.consumer", new CompatVersion(1, 0)),
+            ["b.conflict.v1"] = new(
+                "b.conflict.v1", CapabilityStatus.Wired, Array.Empty<string>(), Array.Empty<string>(),
+                new[] { "a.conflict.v1" }, "test.consumer", new CompatVersion(1, 0)),
+        };
+        var context = new CompatPackValidationContext(
+            new CompatVersion(1, 0),
+            new CompatVersion(1, 0),
+            catalog,
+            new HashSet<string>(StringComparer.Ordinal),
+            new HashSet<string>(StringComparer.Ordinal),
+            new HashSet<string>(StringComparer.Ordinal));
+        string json = "{\"packId\":\"test.conflict\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1,"
+            + "\"capabilities\":[\"a.conflict.v1\",\"b.conflict.v1\"]}";
+        var manifest = CompatPackManifest.TryParse(json, out var parsed, out var parseErrors)
+            ? parsed! : throw new InvalidOperationException(string.Join("; ", parseErrors));
+
+        Assert.False(CompatPackRules.Validate(manifest, Array.Empty<ICompatPackContribution>(), context, out var errors));
+        Assert.Contains(errors, e => e.Contains("conflict", StringComparison.OrdinalIgnoreCase));
+    }
+
     // —— 双轴版本模型（contractAbi / engineApi）：major 必须相等、包 minor <= 引擎 minor，
     //    两轴独立判定，错误文案必须指明是哪一轴。——
 
@@ -512,7 +571,7 @@ public class CompatPackRulesTests
         string baselineProfileId = "v24pure") => new(
         currentContractAbi,
         currentEngineApi,
-        new HashSet<string>(StringComparer.Ordinal) { "parse.diagnostics.v1" },
+        EngineCapabilityCatalog.All,
         new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
         new HashSet<string>(StringComparer.Ordinal) { "CALLSHARP", "SETBGIMAGE", "PRINT" },
         new HashSet<string>(StringComparer.Ordinal) { "EXISTVAR" },

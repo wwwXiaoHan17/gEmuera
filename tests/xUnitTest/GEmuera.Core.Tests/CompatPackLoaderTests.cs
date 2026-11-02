@@ -24,13 +24,7 @@ public class CompatPackLoaderTests
     static CompatPackValidationContext RealContext() => new(
         currentContractAbi: new CompatVersion(1, 0),
         currentEngineApi: new CompatVersion(1, 0),
-        knownCapabilityIds: new HashSet<string>(StringComparer.Ordinal)
-        {
-            "input.pointer-button.v1",
-            "startup.continue-after-fault.v1",
-            "markup.div-v2.v1",
-            "parse.diagnostics.v1",
-        },
+        capabilities: EngineCapabilityCatalog.All,
         knownBuiltinVariantNames: new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
         baselineInstructions: new HashSet<string>(LegacyDialectInventories.V24InstructionNames, StringComparer.Ordinal),
         baselineFunctions: new HashSet<string>(
@@ -154,22 +148,21 @@ public class CompatPackLoaderTests
     [Fact]
     public void TryLoad_UnknownCapability_Rejects()
     {
+        // 只提供清单声明的另一个 id：parse.parser-diagnostics.v1 因缺失而成为 unknown。
         var context = new CompatPackValidationContext(
             new CompatVersion(1, 0),
             new CompatVersion(1, 0),
-            new HashSet<string>(StringComparer.Ordinal) { "startup.continue-after-fault.v1", "markup.div-v2.v1", "parse.diagnostics.v1" },
+            new Dictionary<string, CapabilityDescriptor>(StringComparer.Ordinal)
+            {
+                ["startup.continue-after-fault.v1"] = EngineCapabilityCatalog.All["startup.continue-after-fault.v1"],
+            },
             new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
             new HashSet<string>(LegacyDialectInventories.V24InstructionNames, StringComparer.Ordinal),
             new HashSet<string>(LegacyDialectInventories.V24Functions.Select(entry => entry.Name), StringComparer.Ordinal));
 
         Assert.False(CompatPackLoader.TryLoad(PackPath, context, out _, out var errors));
-        Assert.Contains(errors, e => e.Contains("input.pointer-button.v1"));
+        Assert.Contains(errors, e => e.Contains("parse.parser-diagnostics.v1"));
     }
-
-    static string[] RealCaps() => new[]
-    {
-        "input.pointer-button.v1", "startup.continue-after-fault.v1", "markup.div-v2.v1", "parse.diagnostics.v1",
-    };
 
     [Fact]
     public void TryLoad_EngineApiMismatch_Rejects()
@@ -177,7 +170,7 @@ public class CompatPackLoaderTests
         var context = new CompatPackValidationContext(
             new CompatVersion(1, 0),
             new CompatVersion(2, 0),
-            new HashSet<string>(RealCaps(), StringComparer.Ordinal),
+            EngineCapabilityCatalog.All,
             new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
             new HashSet<string>(LegacyDialectInventories.V24InstructionNames, StringComparer.Ordinal),
             new HashSet<string>(LegacyDialectInventories.V24Functions.Select(entry => entry.Name), StringComparer.Ordinal));
@@ -193,7 +186,7 @@ public class CompatPackLoaderTests
         var context = new CompatPackValidationContext(
             new CompatVersion(1, 0),
             new CompatVersion(1, 0),
-            new HashSet<string>(RealCaps(), StringComparer.Ordinal),
+            EngineCapabilityCatalog.All,
             new HashSet<string>(StringComparer.Ordinal),
             new HashSet<string>(LegacyDialectInventories.V24InstructionNames, StringComparer.Ordinal),
             new HashSet<string>(LegacyDialectInventories.V24Functions.Select(entry => entry.Name), StringComparer.Ordinal));
@@ -208,7 +201,7 @@ public class CompatPackLoaderTests
         var context = new CompatPackValidationContext(
             new CompatVersion(1, 0),
             new CompatVersion(1, 0),
-            new HashSet<string>(RealCaps(), StringComparer.Ordinal),
+            EngineCapabilityCatalog.All,
             new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
             new HashSet<string>(StringComparer.Ordinal), // 空指令基线 → HideInstruction("CALLSHARP") 必然失配
             new HashSet<string>(LegacyDialectInventories.V24Functions.Select(entry => entry.Name), StringComparer.Ordinal));
@@ -223,7 +216,7 @@ public class CompatPackLoaderTests
         var context = new CompatPackValidationContext(
             new CompatVersion(1, 0),
             new CompatVersion(1, 0),
-            new HashSet<string>(RealCaps(), StringComparer.Ordinal),
+            EngineCapabilityCatalog.All,
             new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
             new HashSet<string>(LegacyDialectInventories.V24InstructionNames.Append("SETANIMETIMER"), StringComparer.Ordinal),
             new HashSet<string>(LegacyDialectInventories.V24Functions.Select(entry => entry.Name), StringComparer.Ordinal));
