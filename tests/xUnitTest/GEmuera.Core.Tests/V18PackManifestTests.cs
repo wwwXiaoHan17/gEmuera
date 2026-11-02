@@ -35,6 +35,10 @@ public class V18PackManifestTests
         Assert.Equal("pack.gemuera.v18", handle!.Manifest.PackId);
         Assert.Equal("v24pure", handle.Manifest.BaseProfileId);
         Assert.Empty(handle.Manifest.Capabilities);
+        // 官方包已完成双轴迁移：不再依赖 legacy targetEngineApi 的 1.0/1.0 映射。
+        Assert.Equal(new CompatVersion(1, 0), handle.Manifest.ContractAbi);
+        Assert.Equal(new CompatVersion(1, 0), handle.Manifest.EngineApi);
+        Assert.False(handle.Manifest.UsedLegacyTargetEngineApi);
         Assert.Empty(handle.Manifest.Surface.AddInstructions);
         Assert.Empty(handle.Manifest.Surface.AddFunctions);
         Assert.Equal(

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Emuera.Compatibility.Packs;
 using Xunit;
 
@@ -281,4 +282,72 @@ public class CompatPackManifestTests
         Assert.False(CompatPackManifest.TryParse(WithField("\"surface\"", "{\"unknown\":[\"X\"]}"), out _, out _));
     }
 
+    [Fact]
+    public void Schema_DeclaresDualAxisAndLegacyBranches()
+    {
+        string path = Path.Combine(
+            FindRepositoryRoot(), "src", "EmueraCompatPack", "compatpack.manifest.schema.json");
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
+        JsonElement root = document.RootElement;
+
+        // v1.1：双轴为规范格式，legacy targetEngineApi 仅作迁移期兼容。
+        Assert.Equal("gemuera:compatpack:manifest:schema:v1.1", root.GetProperty("$id").GetString());
+        Assert.False(root.GetProperty("additionalProperties").GetBoolean());
+        Assert.Equal(
+            new[] { "packId", "packVersion" },
+            root.GetProperty("required").EnumerateArray().Select(item => item.GetString()));
+
+        JsonElement properties = root.GetProperty("properties");
+        Assert.True(properties.TryGetProperty("contractAbi", out JsonElement contractAbi));
+        Assert.True(properties.TryGetProperty("engineApi", out JsonElement engineApi));
+        Assert.True(properties.TryGetProperty("targetEngineApi", out JsonElement targetEngineApi));
+        const string versionPattern = "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$";
+        Assert.Equal(versionPattern, contractAbi.GetProperty("pattern").GetString());
+        Assert.Equal(versionPattern, engineApi.GetProperty("pattern").GetString());
+
+        // legacy 字段只接受 1（JSON 数字或字符串 "1"），与运行期解析器一致。
+        JsonElement[] legacyValues = targetEngineApi.GetProperty("oneOf").EnumerateArray().ToArray();
+        Assert.Equal(2, legacyValues.Length);
+        Assert.Contains(legacyValues, value => value.TryGetProperty("const", out JsonElement constant)
+            && constant.ValueKind == JsonValueKind.Number && constant.GetInt32() == 1);
+        Assert.Contains(legacyValues, value => value.TryGetProperty("const", out JsonElement constant)
+            && constant.ValueKind == JsonValueKind.String && constant.GetString() == "1");
+
+        // 顶层 oneOf：双轴分支要求双轴同存且禁 targetEngineApi；legacy 分支要求 targetEngineApi 且禁双轴。
+        JsonElement[] branches = root.GetProperty("oneOf").EnumerateArray().ToArray();
+        Assert.Equal(2, branches.Length);
+
+        JsonElement dualAxisBranch = Assert.Single(
+            branches,
+            branch => RequiredFields(branch).SetEquals(new[] { "contractAbi", "engineApi" }));
+        Assert.Equal(
+            JsonValueKind.False,
+            dualAxisBranch.GetProperty("properties").GetProperty("targetEngineApi").ValueKind);
+
+        JsonElement legacyBranch = Assert.Single(
+            branches,
+            branch => RequiredFields(branch).SetEquals(new[] { "targetEngineApi" }));
+        Assert.Equal(JsonValueKind.False, legacyBranch.GetProperty("properties").GetProperty("contractAbi").ValueKind);
+        Assert.Equal(JsonValueKind.False, legacyBranch.GetProperty("properties").GetProperty("engineApi").ValueKind);
+
+        static HashSet<string> RequiredFields(JsonElement branch) =>
+            branch.GetProperty("required").EnumerateArray()
+                .Select(item => item.GetString()!)
+                .ToHashSet(StringComparer.Ordinal);
+    }
+
+    /// <summary>从测试输出目录向上查找含 AGENTS.md 的仓库根（不硬编码机器路径）。</summary>
+    private static string FindRepositoryRoot()
+    {
+        DirectoryInfo? directory = new(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "AGENTS.md")))
+                return directory.FullName;
+            directory = directory.Parent;
+        }
+
+        throw new InvalidOperationException(
+            "未能从测试输出目录向上找到含 AGENTS.md 的仓库根：" + AppContext.BaseDirectory);
+    }
 }

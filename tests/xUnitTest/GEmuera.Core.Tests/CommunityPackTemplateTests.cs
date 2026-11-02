@@ -40,6 +40,10 @@ public class CommunityPackTemplateTests
 
         Assert.Empty(errors);
         Assert.Equal("community.template", handle!.Manifest.PackId);
+        // 模板包已完成双轴迁移：contractAbi/engineApi 同存，不再携带 legacy targetEngineApi。
+        Assert.Equal(new CompatVersion(1, 0), handle.Manifest.ContractAbi);
+        Assert.Equal(new CompatVersion(1, 0), handle.Manifest.EngineApi);
+        Assert.False(handle.Manifest.UsedLegacyTargetEngineApi);
         Assert.IsType<ManifestOnlyCompatPack>(handle.Pack);
         Assert.NotEmpty(handle.Surface);
         handle.Unload();

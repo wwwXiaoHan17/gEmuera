@@ -1,6 +1,7 @@
 {
   "packId": "community.host-binding-probe",
   "packVersion": "1.0.0",
-  "targetEngineApi": 1,
+  "contractAbi": "1.0",
+  "engineApi": "1.0",
   "baseProfileId": "v24pure"
 }

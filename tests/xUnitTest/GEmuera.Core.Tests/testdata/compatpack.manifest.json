@@ -1,7 +1,8 @@
 {
   "packId": "test.hello-pack",
   "packVersion": "1.0.0",
-  "targetEngineApi": 1,
+  "contractAbi": "1.0",
+  "engineApi": "1.0",
   "capabilities": ["input.pointer-button.v1", "startup.continue-after-fault.v1"],
   "variantSelections": { "SETBGIMAGE": "builtin:snake" }
 }

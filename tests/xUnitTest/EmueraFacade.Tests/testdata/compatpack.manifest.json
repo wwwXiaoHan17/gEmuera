@@ -1,7 +1,8 @@
 {
   "packId": "test.hello-pack",
   "packVersion": "1.0.0",
-  "targetEngineApi": 1,
+  "contractAbi": "1.0",
+  "engineApi": "1.0",
   "baseSurfaceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "capabilities": ["input.pointer-button.v1", "startup.continue-after-fault.v1"],
   "saveProfileId": "gemuera.hello",

@@ -18,6 +18,8 @@ using GEmuera.Core.Compatibility;
 //
 // 输出规范化：对象键 Ordinal 排序、数组 Ordinal 排序、LF 行尾、UTF-8 无 BOM、
 // 末尾恰好一个换行。内容未变化时不重写（git 无噪声）。
+// 版本轴：新格式双轴 contractAbi/engineApi（格式 major.minor），不再输出 legacy
+// targetEngineApi（加载器仍接受其迁移映射，但官方包必须已完成迁移）。
 // 生成物禁止手改：清单漂移由 GEmuera.Core.Tests/V18PackManifestTests 门禁拦截，
 // 重跑本工具即可恢复。
 //
@@ -117,6 +119,8 @@ static string BuildManifestJson(string[] hideInstructions, string[] hideFunction
     builder.Append("{\n");
     builder.Append("  \"baseProfileId\": \"v24pure\",\n");
     builder.Append("  \"capabilities\": [],\n");
+    builder.Append("  \"contractAbi\": \"1.0\",\n");
+    builder.Append("  \"engineApi\": \"1.0\",\n");
     builder.Append("  \"packId\": \"pack.gemuera.v18\",\n");
     builder.Append("  \"packVersion\": \"1.0.0\",\n");
     builder.Append("  \"surface\": {\n");
@@ -126,8 +130,7 @@ static string BuildManifestJson(string[] hideInstructions, string[] hideFunction
     builder.Append(",\n");
     AppendNameArray(builder, "hideInstructions", hideInstructions);
     builder.Append("\n");
-    builder.Append("  },\n");
-    builder.Append("  \"targetEngineApi\": 1\n");
+    builder.Append("  }\n");
     builder.Append("}\n");
     return builder.ToString();
 }

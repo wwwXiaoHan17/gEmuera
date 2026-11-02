@@ -1,13 +1,12 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "gemuera:compatpack:manifest:schema:v1",
-  "title": "gEmuera 兼容包清单 v1",
-  "description": "兼容包程序集必须内嵌的资源 compatpack.manifest.json 的结构约束。运行期由 Emuera.Compatibility.Packs.CompatPackManifest 解析（fail-closed，未知字段整体拒绝）；本 schema 供包作者编辑器校验与文档对照。语义校验（capability id 词汇表命中、变体名与贡献对账、表面名单与引擎注册表对账）在加载器侧执行。",
+  "$id": "gemuera:compatpack:manifest:schema:v1.1",
+  "title": "gEmuera 兼容包清单 v1.1",
+  "description": "兼容包程序集必须内嵌的资源 compatpack.manifest.json 的结构约束。v1.1 起以 contractAbi（契约 ABI 线）+ engineApi（引擎行为契约线）双轴声明依赖版本；迁移窗口内仍接受 legacy targetEngineApi: 1（映射为双轴 1.0/1.0），但新旧字段不得混用。运行期由 Emuera.Compatibility.Packs.CompatPackManifest 解析（fail-closed，未知字段整体拒绝）；本 schema 供包作者编辑器校验与文档对照。语义校验（capability id 词汇表命中、变体名与贡献对账、表面名单与引擎注册表对账）在加载器侧执行。",
   "type": "object",
   "required": [
     "packId",
-    "packVersion",
-    "targetEngineApi"
+    "packVersion"
   ],
   "additionalProperties": false,
   "properties": {
@@ -21,16 +20,24 @@
       "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
       "description": "语义化版本（x.y.z）。"
     },
+    "contractAbi": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+      "description": "新格式必填（与 engineApi 同存）。包编译时依赖的公开契约面版本（Emuera.CompatPack ABI 线），major.minor；主版本须与引擎相等，包 minor 不得高于引擎 minor。"
+    },
+    "engineApi": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+      "description": "新格式必填（与 contractAbi 同存）。包依赖的引擎行为/能力契约版本，major.minor；比较规则同 contractAbi。"
+    },
     "targetEngineApi": {
-      "description": "目标引擎 ModuleApiVersion，正整数（接受 JSON 数字或字符串形式）。主版本不匹配拒载。",
+      "description": "legacy 迁移字段，仅接受 1（JSON 数字或字符串 \"1\"），运行期映射为 contractAbi=engineApi=1.0；只能单独出现，与双轴混用即拒载。新格式禁止携带。",
       "oneOf": [
         {
-          "type": "integer",
-          "minimum": 1
+          "const": 1
         },
         {
-          "type": "string",
-          "pattern": "^[1-9][0-9]*$"
+          "const": "1"
         }
       ]
     },
@@ -163,5 +170,37 @@
         }
       }
     }
-  }
+  },
+  "oneOf": [
+    {
+      "description": "新格式：contractAbi 与 engineApi 必须同存，禁止 legacy targetEngineApi。",
+      "required": [
+        "contractAbi",
+        "engineApi"
+      ],
+      "properties": {
+        "targetEngineApi": false
+      }
+    },
+    {
+      "description": "legacy 迁移格式：仅 targetEngineApi 且值为 1（数字或字符串 \"1\"），禁止双轴字段。",
+      "required": [
+        "targetEngineApi"
+      ],
+      "properties": {
+        "contractAbi": false,
+        "engineApi": false,
+        "targetEngineApi": {
+          "oneOf": [
+            {
+              "const": 1
+            },
+            {
+              "const": "1"
+            }
+          ]
+        }
+      }
+    }
+  ]
 }
