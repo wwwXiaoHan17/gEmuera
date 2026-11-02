@@ -283,6 +283,192 @@ public class CompatPackManifestTests
     }
 
     [Fact]
+    public void Parse_CompositionFields_AreImmutableAndOrdered()
+    {
+        const string json = """
+        {
+          "packId": "test.compose",
+          "packVersion": "1.0.0",
+          "contractAbi": "1.0",
+          "engineApi": "1.0",
+          "baseProfileId": "v24pure",
+          "requires": {
+            "packs": [
+              { "packId": "community.shared", "versionRange": "[1.0.0,2.0.0)" }
+            ]
+          },
+          "conflicts": { "packs": ["community.legacy"] },
+          "overrides": [
+            { "symbol": "instruction:SETANIMETIMER", "priority": 20 }
+          ]
+        }
+        """;
+
+        Assert.True(CompatPackManifest.TryParse(json, out var manifest, out var errors), string.Join("; ", errors));
+        Assert.Empty(errors);
+        Assert.Single(manifest!.RequiredPacks);
+        Assert.Equal("community.shared", manifest.RequiredPacks[0].PackId);
+        Assert.Equal("[1.0.0,2.0.0)", manifest.RequiredPacks[0].VersionRange);
+        Assert.Equal(new[] { "community.legacy" }, manifest.ConflictingPacks);
+        Assert.Equal(20, manifest.Overrides[0].Priority);
+        Assert.Equal("instruction:SETANIMETIMER", manifest.Overrides[0].Symbol);
+    }
+
+    [Theory]
+    [InlineData("1.0.0")]
+    [InlineData("[1.0.0,2.0.0)")]
+    [InlineData("(1.0.0,2.0.0]")]
+    [InlineData("[1.0.0,1.0.0]")]
+    public void Parse_RequiresVersionRange_AcceptsSemverAndIntervals(string range)
+    {
+        string json = "{\"packId\":\"test.range\",\"packVersion\":\"1.0.0\","
+            + "\"contractAbi\":\"1.0\",\"engineApi\":\"1.0\","
+            + "\"requires\":{\"packs\":[{\"packId\":\"community.b\",\"versionRange\":\""
+            + range + "\"}]}}";
+
+        Assert.True(CompatPackManifest.TryParse(json, out var manifest, out var errors), string.Join("; ", errors));
+        Assert.Equal(range, manifest!.RequiredPacks[0].VersionRange);
+    }
+
+    [Theory]
+    [InlineData("[1.0.0,1.0.0)")]
+    [InlineData("(1.0.0,1.0.0]")]
+    [InlineData("[2.0.0,1.0.0]")]
+    public void Parse_RequiresVersionRange_RejectsDegenerateIntervals(string range)
+    {
+        // 与 Core SemanticVersionRange.IsValid 同语义：min==max 仅双闭合法、min>max 非法。
+        string json = "{\"packId\":\"test.range\",\"packVersion\":\"1.0.0\","
+            + "\"contractAbi\":\"1.0\",\"engineApi\":\"1.0\","
+            + "\"requires\":{\"packs\":[{\"packId\":\"community.b\",\"versionRange\":\""
+            + range + "\"}]}}";
+
+        Assert.False(CompatPackManifest.TryParse(json, out _, out var errors));
+        Assert.Contains(errors, error => error.Contains("版本范围不合法"));
+    }
+
+    [Fact]
+    public void Parse_CompositionFields_DefaultToEmpty()
+    {
+        Assert.True(CompatPackManifest.TryParse(ValidMinimal, out var manifest, out _));
+
+        Assert.Empty(manifest!.RequiredPacks);
+        Assert.Empty(manifest.ConflictingPacks);
+        Assert.Empty(manifest.Overrides);
+    }
+
+    [Theory]
+    [InlineData("{\"unknown\":[]}")]
+    [InlineData("[{\"packId\":\"community.b\",\"versionRange\":\"1.0.0\"}]")]
+    [InlineData("{\"packs\":[{\"packId\":\"community.b\"}]}")]
+    [InlineData("{\"packs\":[{\"versionRange\":\"1.0.0\"}]}")]
+    [InlineData("{\"packs\":[{\"packId\":\"community.b\",\"versionRange\":\"1.0.0\",\"extra\":true}]}")]
+    [InlineData("{\"packs\":[{\"packId\":\"community.b\",\"versionRange\":\"latest\"}]}")]
+    [InlineData("{\"packs\":[{\"packId\":\"BAD ID\",\"versionRange\":\"1.0.0\"}]}")]
+    [InlineData("{\"packs\":[{\"packId\":\"community.b\",\"versionRange\":\"1.0.0\"},{\"packId\":\"community.b\",\"versionRange\":\"[1.0.0,2.0.0)\"}]}")]
+    public void Parse_RequiresInvalid_Fails(string requiresJson)
+    {
+        Assert.False(CompatPackManifest.TryParse(WithField("\"requires\"", requiresJson), out _, out var errors));
+        Assert.NotEmpty(errors);
+    }
+
+    [Theory]
+    [InlineData("{\"unknown\":[]}")]
+    [InlineData("[\"community.legacy\"]")]
+    [InlineData("{\"packs\":[\"UPPER\"]}")]
+    [InlineData("{\"packs\":[\"community.legacy\",\"community.legacy\"]}")]
+    public void Parse_ConflictsInvalid_Fails(string conflictsJson)
+    {
+        Assert.False(CompatPackManifest.TryParse(WithField("\"conflicts\"", conflictsJson), out _, out var errors));
+        Assert.NotEmpty(errors);
+    }
+
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("[{\"symbol\":\"INSTRUCTION:SETANIMETIMER\",\"priority\":1}]")]
+    [InlineData("[{\"symbol\":\"command:SETANIMETIMER\",\"priority\":1}]")]
+    [InlineData("[{\"symbol\":\"instruction:\",\"priority\":1}]")]
+    [InlineData("[{\"symbol\":\"instruction:HAS SPACE\",\"priority\":1}]")]
+    [InlineData("[{\"symbol\":\"instruction:SETANIMETIMER\"}]")]
+    [InlineData("[{\"symbol\":\"instruction:SETANIMETIMER\",\"priority\":-1}]")]
+    [InlineData("[{\"symbol\":\"instruction:SETANIMETIMER\",\"priority\":1.5}]")]
+    [InlineData("[{\"symbol\":\"instruction:SETANIMETIMER\",\"priority\":1,\"extra\":true}]")]
+    [InlineData("[{\"symbol\":\"instruction:SETANIMETIMER\",\"priority\":1},{\"symbol\":\"instruction:setanimetimer\",\"priority\":2}]")]
+    public void Parse_OverridesInvalid_Fails(string overridesJson)
+    {
+        Assert.False(CompatPackManifest.TryParse(WithField("\"overrides\"", overridesJson), out _, out var errors));
+        Assert.NotEmpty(errors);
+    }
+
+    [Fact]
+    public void Parse_OverrideSymbol_IsCanonicalized()
+    {
+        // instruction/variant 名字按引擎语义 Trim+Upper；函数名只 Trim（CJK 原样）。
+        const string json = """
+        {
+          "packId": "test.canonical",
+          "packVersion": "1.0.0",
+          "contractAbi": "1.0",
+          "engineApi": "1.0",
+          "overrides": [
+            { "symbol": "instruction: setanimetimer ", "priority": 1 },
+            { "symbol": "function:sql_connect", "priority": 2 },
+            { "symbol": "variant:setbgimage", "priority": 3 }
+          ]
+        }
+        """;
+
+        Assert.True(CompatPackManifest.TryParse(json, out var manifest, out var errors), string.Join("; ", errors));
+        Assert.Equal("instruction:SETANIMETIMER", manifest!.Overrides[0].Symbol);
+        Assert.Equal("function:sql_connect", manifest.Overrides[1].Symbol);
+        Assert.Equal("variant:SETBGIMAGE", manifest.Overrides[2].Symbol);
+    }
+
+    [Fact]
+    public void Schema_DeclaresCompositionFields()
+    {
+        string path = Path.Combine(
+            FindRepositoryRoot(), "src", "EmueraCompatPack", "compatpack.manifest.schema.json");
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
+        JsonElement root = document.RootElement;
+
+        // R2：组合字段不升 schema 版本（仍为 v1.1），字段扩展只加定义。
+        Assert.Equal("gemuera:compatpack:manifest:schema:v1.1", root.GetProperty("$id").GetString());
+        Assert.False(root.GetProperty("additionalProperties").GetBoolean());
+
+        JsonElement properties = root.GetProperty("properties");
+        JsonElement requires = properties.GetProperty("requires");
+        JsonElement conflicts = properties.GetProperty("conflicts");
+        JsonElement overrides = properties.GetProperty("overrides");
+        Assert.False(requires.GetProperty("additionalProperties").GetBoolean());
+        Assert.False(conflicts.GetProperty("additionalProperties").GetBoolean());
+
+        JsonElement requiresPacks = requires.GetProperty("properties").GetProperty("packs");
+        JsonElement requiresItem = requiresPacks.GetProperty("items");
+        Assert.False(requiresItem.GetProperty("additionalProperties").GetBoolean());
+        Assert.Equal(
+            new[] { "packId", "versionRange" },
+            requiresItem.GetProperty("required").EnumerateArray().Select(item => item.GetString()));
+        Assert.Equal(
+            "^[a-z0-9][a-z0-9.\\-]*$",
+            requiresItem.GetProperty("properties").GetProperty("packId").GetProperty("pattern").GetString());
+        Assert.True(requiresItem.GetProperty("properties").GetProperty("versionRange")
+            .TryGetProperty("pattern", out _));
+
+        JsonElement conflictItem = conflicts.GetProperty("properties").GetProperty("packs").GetProperty("items");
+        Assert.Equal("^[a-z0-9][a-z0-9.\\-]*$", conflictItem.GetProperty("pattern").GetString());
+
+        JsonElement overrideItem = overrides.GetProperty("items");
+        Assert.False(overrideItem.GetProperty("additionalProperties").GetBoolean());
+        Assert.Equal(
+            new[] { "symbol", "priority" },
+            overrideItem.GetProperty("required").EnumerateArray().Select(item => item.GetString()));
+        Assert.Equal(
+            "^(instruction|function|variant):[^\\s:]+$",
+            overrideItem.GetProperty("properties").GetProperty("symbol").GetProperty("pattern").GetString());
+        Assert.Equal(0, overrideItem.GetProperty("properties").GetProperty("priority").GetProperty("minimum").GetInt32());
+    }
+
+    [Fact]
     public void Schema_DeclaresDualAxisAndLegacyBranches()
     {
         string path = Path.Combine(

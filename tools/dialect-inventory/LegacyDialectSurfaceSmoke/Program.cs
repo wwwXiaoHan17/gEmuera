@@ -598,7 +598,8 @@ static class Program
     {
         CompatibilityPlan baseline = BuiltInDialectCatalog.CreateLegacySessionPlan("v24pure");
         if (!CompatPackPlanAssembler.TryAssemble(
-                baseline, new[] { CreateSmokePackHandle() }, out CompatibilityPlan assembled, out var assemblyErrors))
+                baseline, new[] { CreateSmokePackHandle() }, PackValidationContext(),
+                out CompatibilityPlan assembled, out var assemblyErrors))
             throw new InvalidOperationException("smoke.pack assembly failed: " + string.Join("; ", assemblyErrors));
         return assembled;
     }
@@ -715,7 +716,8 @@ static class Program
         {
             CompatibilityPlan baseline = BuiltInDialectCatalog.CreateLegacySessionPlan("v24pure");
             if (!CompatPackPlanAssembler.TryAssemble(
-                    baseline, new[] { handle! }, out CompatibilityPlan assembled, out var assemblyErrors))
+                    baseline, new[] { handle! }, context,
+                    out CompatibilityPlan assembled, out var assemblyErrors))
                 throw new InvalidOperationException("v18 第一方数据包组装失败：" + string.Join("; ", assemblyErrors));
 
             CompatibilityPlan builtinV18Plan = BuiltInDialectCatalog.CreateLegacySessionPlan("v18");
@@ -800,7 +802,9 @@ static class Program
         CompatPackHandle packB = MultiPackHandle("smoke.pack.b", 'b', new MultiPackSurfaceB());
 
         CompatibilityPlan baseline = BuiltInDialectCatalog.CreateLegacySessionPlan("v24pure");
-        if (!CompatPackPlanAssembler.TryAssemble(baseline, new[] { packA, packB }, out CompatibilityPlan assembled, out var assemblyErrors))
+        if (!CompatPackPlanAssembler.TryAssemble(
+                baseline, new[] { packA, packB }, PackValidationContext(),
+                out CompatibilityPlan assembled, out var assemblyErrors))
             throw new InvalidOperationException("multi-pack assembly failed: " + string.Join("; ", assemblyErrors));
 
         LegacyCompatibilityProfile multi = LegacyCompatibilityProfile.Create(assembled, true);

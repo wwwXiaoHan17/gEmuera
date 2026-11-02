@@ -16,6 +16,7 @@
     <!-- 契约类型（自 src/EmueraFacade/Compatibility/Packs/ git mv 而来，XML 文档注释原样保留）。 -->
     <Compile Include="ICompatPack.cs" />
     <Compile Include="CompatVersion.cs" />
+    <Compile Include="CompatPackComposition.cs" />
     <Compile Include="CompatPackManifest.cs" />
     <Compile Include="CompatPackVariants.cs" />
     <!-- 清单 schema 仅供包作者编辑器校验与文档对照，随包分发不参与编译。 -->

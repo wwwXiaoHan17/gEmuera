@@ -206,7 +206,7 @@ internal static CompatPackLaunchResult ConfigureForLaunch(CompatibilityPlan base
                                 return new CompatPackLaunchResult(baselinePlan, null);
                         }
 
-                        if (!CompatPackPlanAssembler.TryAssemble(baselinePlan, set!.Handles, out CompatibilityPlan assembled, out IReadOnlyList<string> assemblyErrors))
+                        if (!CompatPackPlanAssembler.TryAssemble(baselinePlan, set!.Handles, context, out CompatibilityPlan assembled, out IReadOnlyList<string> assemblyErrors))
                         {
                                 set!.UnloadAll();
                                 global::GenericUtils.Error("[LOAD] CompatPack disabled (assembly rejected): " + string.Join("; ", assemblyErrors));

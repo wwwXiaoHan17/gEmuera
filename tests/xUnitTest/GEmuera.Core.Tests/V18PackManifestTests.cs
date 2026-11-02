@@ -28,8 +28,9 @@ public class V18PackManifestTests
     {
         string packPath = typeof(GemueraV18Pack.GemueraV18PackMarker).Assembly.Location;
         using var directory = new IsolatedPackDirectory(packPath);
+        var context = V18PackContext();
 
-        Assert.True(CompatPackLoader.TryLoad(directory.MainAssemblyPath, V18PackContext(), out var handle, out var errors),
+        Assert.True(CompatPackLoader.TryLoad(directory.MainAssemblyPath, context, out var handle, out var errors),
             string.Join("; ", errors));
         Assert.Empty(errors);
         // 身份与差量方向自检：包只隐藏（v18 ⊆ v24 由生成清单取证），不声明 capability。
@@ -55,6 +56,7 @@ public class V18PackManifestTests
         Assert.True(CompatPackPlanAssembler.TryAssemble(
                 BuiltInDialectCatalog.CreateLegacySessionPlan("v24pure"),
                 new[] { handle },
+                context,
                 out CompatibilityPlan assembled,
                 out var assemblyErrors),
             string.Join("; ", assemblyErrors));

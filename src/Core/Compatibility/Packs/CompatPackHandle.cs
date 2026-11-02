@@ -36,6 +36,12 @@ public sealed class CompatPackHandle : ICompatPackLease
     public string PackAssemblyPath { get; }
     public string AssemblySha256 { get; }
 
+    /// <summary>包身份（<see cref="CompatPackManifest.PackId"/> 的转发；组合解析按此建图去重）。</summary>
+    public string PackId => Manifest.PackId;
+
+    /// <summary>包版本（<see cref="CompatPackManifest.PackVersion"/> 的转发；依赖版本范围匹配以此为准）。</summary>
+    public string PackVersion => Manifest.PackVersion;
+
     /// <summary>包内容哈希（<see cref="ValidatedPackDelta.PackSha256"/> 的转发，组装期一等输入）。</summary>
     public string PackSha256 => ValidatedDelta.PackSha256;
 

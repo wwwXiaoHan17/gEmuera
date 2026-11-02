@@ -479,6 +479,12 @@ public static class CompatPackLoader
             differing.Add("saveProfileId");
         if (!VariantSelectionsEqual(entryManifest.VariantSelections, embeddedManifest.VariantSelections))
             differing.Add("variantSelections");
+        if (!RequiredPacksEqual(entryManifest.RequiredPacks, embeddedManifest.RequiredPacks))
+            differing.Add("requires");
+        if (!SequenceEqual(entryManifest.ConflictingPacks, embeddedManifest.ConflictingPacks))
+            differing.Add("conflicts");
+        if (!OverridesEqual(entryManifest.Overrides, embeddedManifest.Overrides))
+            differing.Add("overrides");
         if (!GameIdentityEquals(entryManifest.GameIdentity, embeddedManifest.GameIdentity))
             differing.Add("gameIdentity");
 
@@ -521,6 +527,40 @@ public static class CompatPackLoader
         {
             if (!right.TryGetValue(pair.Key, out string? value)
                 || !string.Equals(pair.Value, value, StringComparison.Ordinal))
+                return false;
+        }
+        return true;
+    }
+
+    static bool RequiredPacksEqual(
+        IReadOnlyList<CompatPackDependency> left,
+        IReadOnlyList<CompatPackDependency> right)
+    {
+        if (ReferenceEquals(left, right))
+            return true;
+        if (left is null || right is null || left.Count != right.Count)
+            return false;
+        for (int index = 0; index < left.Count; index++)
+        {
+            if (!string.Equals(left[index].PackId, right[index].PackId, StringComparison.Ordinal)
+                || !string.Equals(left[index].VersionRange, right[index].VersionRange, StringComparison.Ordinal))
+                return false;
+        }
+        return true;
+    }
+
+    static bool OverridesEqual(
+        IReadOnlyList<CompatPackOverride> left,
+        IReadOnlyList<CompatPackOverride> right)
+    {
+        if (ReferenceEquals(left, right))
+            return true;
+        if (left is null || right is null || left.Count != right.Count)
+            return false;
+        for (int index = 0; index < left.Count; index++)
+        {
+            if (!string.Equals(left[index].Symbol, right[index].Symbol, StringComparison.Ordinal)
+                || left[index].Priority != right[index].Priority)
                 return false;
         }
         return true;

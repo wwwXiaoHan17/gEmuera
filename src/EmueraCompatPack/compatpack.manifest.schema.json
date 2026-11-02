@@ -138,6 +138,85 @@
         "pattern": "^\\S+$"
       }
     },
+    "requires": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "description": "可选。包依赖声明：requires.packs[] 的 packId + versionRange 必须同时启用且版本匹配，否则组合拒载（缺失/版本不满足/依赖环；错误含依赖链）。版本范围语义同 Core SemanticVersionRange：精确 x.y.z 或 [min,max)/(min,max]/[min,max]/(min,max)。",
+      "properties": {
+        "packs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "required": [
+              "packId",
+              "versionRange"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "packId": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9.\\-]*$",
+                "description": "被依赖包的 packId。"
+              },
+              "versionRange": {
+                "type": "string",
+                "pattern": "^(?:[0-9]+\\.[0-9]+\\.[0-9]+|[\\[(][0-9]+\\.[0-9]+\\.[0-9]+,[0-9]+\\.[0-9]+\\.[0-9]+[\\])])$",
+                "description": "依赖包版本范围（精确 SemVer 或区间）；重复 packId、空/非法范围运行期拒载。"
+              }
+            }
+          }
+        }
+      }
+    },
+    "conflicts": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "description": "可选。包冲突声明：conflicts.packs[] 中任一包与声明包同时启用即整体拒载（任意版本；priority 不能覆盖冲突）。",
+      "properties": {
+        "packs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9.\\-]*$"
+          }
+        }
+      }
+    },
+    "overrides": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "description": "可选。显式覆盖声明：仅当同一符号被多个包以不同最终状态声明时生效；只有声明 override 的包可胜出，多个 override 取 priority 唯一最高者（同 priority 拒载）。目标必须是本次组合真实存在的符号且不得覆盖 v24 基线 instruction/function handler。",
+      "items": {
+        "type": "object",
+        "required": [
+          "symbol",
+          "priority"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "symbol": {
+            "type": "string",
+            "pattern": "^(instruction|function|variant):[^\\s:]+$",
+            "description": "被覆盖符号的契约串（指令/变体名 Trim+Upper，函数名只 Trim）。"
+          },
+          "priority": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "覆盖优先级（>= 0）；同符号多个 override 取唯一最高者。"
+          }
+        }
+      }
+    },
     "gameIdentity": {
       "type": [
         "object",

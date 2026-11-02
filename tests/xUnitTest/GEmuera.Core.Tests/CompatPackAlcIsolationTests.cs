@@ -76,7 +76,7 @@ public class CompatPackAlcIsolationTests
             // 组装正向：表面贡献真实折叠进 v24pure 会话计划（指令落位 + 模块归属 + 哈希变化）。
             CompatibilityPlan baseline = BuiltInDialectCatalog.CreateLegacySessionPlan("v24pure");
             Assert.True(
-                CompatPackPlanAssembler.TryAssemble(baseline, new[] { handle }, out var assembled, out var assemblyErrors),
+                CompatPackPlanAssembler.TryAssemble(baseline, new[] { handle }, RealContext(), out var assembled, out var assemblyErrors),
                 string.Join("; ", assemblyErrors));
             Assert.True(assembled!.Dialect.TryGetInstruction("SETANIMETIMER", out var addedInstruction));
             Assert.Equal("community.contract-fixture", addedInstruction.ModuleId);

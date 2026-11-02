@@ -76,6 +76,11 @@ namespace Emuera.Compatibility.Packs
 			"^[0-9]+\\.[0-9]+\\.[0-9]+$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
 		private static readonly Regex LowerHexPattern = new(
 			"^[0-9a-f]{8,64}$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
+		// 与 Core 的 SemanticVersionRange 同语义（契约程序集不能引用 Core，故在此等价实现）：
+		// 精确 x.y.z 或 [min,max) / (min,max] / [min,max] / (min,max)；min==max 仅双闭合法。
+		private static readonly Regex VersionRangePattern = new(
+			"^(?<left>\\[|\\()(?<min>[0-9]+\\.[0-9]+\\.[0-9]+),(?<max>[0-9]+\\.[0-9]+\\.[0-9]+)(?<right>\\]|\\))$",
+			RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
 		internal CompatPackManifest(
 			string packId,
@@ -89,6 +94,9 @@ namespace Emuera.Compatibility.Packs
 			IReadOnlyList<string> capabilities,
 			string? saveProfileId,
 			IReadOnlyDictionary<string, string> variantSelections,
+			IReadOnlyList<CompatPackDependency> requiredPacks,
+			IReadOnlyList<string> conflictingPacks,
+			IReadOnlyList<CompatPackOverride> overrides,
 			CompatPackGameIdentity? gameIdentity)
 		{
 			PackId = packId;
@@ -102,6 +110,9 @@ namespace Emuera.Compatibility.Packs
 			Capabilities = capabilities;
 			SaveProfileId = saveProfileId;
 			VariantSelections = variantSelections;
+			RequiredPacks = requiredPacks ?? Array.Empty<CompatPackDependency>();
+			ConflictingPacks = conflictingPacks ?? Array.Empty<string>();
+			Overrides = overrides ?? Array.Empty<CompatPackOverride>();
 			GameIdentity = gameIdentity;
 		}
 
@@ -130,6 +141,16 @@ namespace Emuera.Compatibility.Packs
 		/// v1 没有自带变体通道——IInstructionVariantContribution 为 v2 接线预留（宿主尚不消费，
 		/// 携带即拒载），不要按"贡献绑定隐式生效"的旧表述使用。</summary>
 		public IReadOnlyDictionary<string, string> VariantSelections { get; }
+
+		/// <summary>组合依赖（requires.packs[]，按清单声明顺序不可变）。</summary>
+		public IReadOnlyList<CompatPackDependency> RequiredPacks { get; }
+
+		/// <summary>声明冲突的 packId（conflicts.packs[]，任意版本冲突）。</summary>
+		public IReadOnlyList<string> ConflictingPacks { get; }
+
+		/// <summary>显式覆盖声明（overrides[]，按清单声明顺序不可变）。</summary>
+		public IReadOnlyList<CompatPackOverride> Overrides { get; }
+
 		public CompatPackGameIdentity? GameIdentity { get; }
 
 		/// <summary>解析并结构校验清单 JSON。任何字段不合法返回 false 且 errors 非空。</summary>
@@ -181,6 +202,9 @@ namespace Emuera.Compatibility.Packs
 				IReadOnlyList<string> capabilities = RequireStringArray(root, "capabilities", collected, required: false);
 				string? saveProfileId = RequireId(root, "saveProfileId", collected, required: false);
 				IReadOnlyDictionary<string, string> variantSelections = RequireVariantSelections(root, collected);
+				IReadOnlyList<CompatPackDependency> requiredPacks = RequireRequiredPacks(root, collected);
+				IReadOnlyList<string> conflictingPacks = RequireConflictingPacks(root, collected);
+				IReadOnlyList<CompatPackOverride> overrides = RequireOverrides(root, collected);
 				CompatPackGameIdentity? gameIdentity = RequireGameIdentity(root, collected);
 
 				// 未知字段整体拒绝（与 schema additionalProperties:false 一致），防止拼写错误静默失效。
@@ -199,6 +223,9 @@ namespace Emuera.Compatibility.Packs
 						case "capabilities":
 						case "saveProfileId":
 						case "variantSelections":
+						case "requires":
+						case "conflicts":
+						case "overrides":
 						case "gameIdentity":
 							break;
 						default:
@@ -223,6 +250,9 @@ namespace Emuera.Compatibility.Packs
 					capabilities,
 					saveProfileId,
 					variantSelections,
+					requiredPacks,
+					conflictingPacks,
+					overrides,
 					gameIdentity);
 				return true;
 			}
@@ -607,6 +637,308 @@ namespace Emuera.Compatibility.Packs
 				result.Add(normalized);
 			}
 			return new ReadOnlyCollection<string>(result);
+		}
+
+		/// <summary>
+		/// requires.packs[]：包依赖（packId + versionRange）。语义校验（依赖闭包/版本匹配）
+		/// 在 Core 组合解析器；本层只管结构与语法（fail-closed）：未知成员、重复 packId、
+		/// 空/非法版本范围一律整体拒载。
+		/// </summary>
+		private static IReadOnlyList<CompatPackDependency> RequireRequiredPacks(
+			JsonElement root, List<string> errors)
+		{
+			var result = new List<CompatPackDependency>();
+			if (!root.TryGetProperty("requires", out JsonElement requires) || requires.ValueKind == JsonValueKind.Null)
+				return new ReadOnlyCollection<CompatPackDependency>(result);
+			if (requires.ValueKind != JsonValueKind.Object)
+			{
+				errors.Add("字段 'requires' 必须是对象（{ \"packs\": [...] }）。");
+				return new ReadOnlyCollection<CompatPackDependency>(result);
+			}
+
+			var seen = new HashSet<string>(StringComparer.Ordinal);
+			foreach (JsonProperty property in requires.EnumerateObject())
+			{
+				if (!string.Equals(property.Name, "packs", StringComparison.Ordinal))
+				{
+					errors.Add("字段 'requires' 含未知成员：'" + property.Name + "'。");
+					continue;
+				}
+				if (property.Value.ValueKind == JsonValueKind.Null)
+					continue;
+				if (property.Value.ValueKind != JsonValueKind.Array)
+				{
+					errors.Add("字段 'requires.packs' 必须是数组。");
+					continue;
+				}
+				foreach (JsonElement item in property.Value.EnumerateArray())
+				{
+					if (item.ValueKind != JsonValueKind.Object)
+					{
+						errors.Add("字段 'requires.packs' 含非对象元素。");
+						continue;
+					}
+					string? packId = null;
+					string? versionRange = null;
+					bool hasPackId = false;
+					bool hasVersionRange = false;
+					foreach (JsonProperty member in item.EnumerateObject())
+					{
+						switch (member.Name)
+						{
+							case "packId":
+								hasPackId = true;
+								packId = RequireMemberText(
+									member.Value, "requires.packs[].packId", errors, IdPattern,
+									"小写字母数字、点、连字符");
+								break;
+							case "versionRange":
+								hasVersionRange = true;
+								versionRange = RequireMemberVersionRange(
+									member.Value, "requires.packs[].versionRange", errors);
+								break;
+							default:
+								errors.Add("字段 'requires.packs[]' 含未知成员：'" + member.Name + "'。");
+								break;
+						}
+					}
+					if (!hasPackId)
+						errors.Add("字段 'requires.packs[]' 缺少 packId。");
+					if (!hasVersionRange)
+						errors.Add("字段 'requires.packs[]' 缺少 versionRange。");
+					// 缺字段/非法字段的条目已逐项报错；不再构造半条依赖。
+					if (packId is null || versionRange is null)
+						continue;
+					if (!seen.Add(packId))
+					{
+						errors.Add("字段 'requires.packs' 的 packId 重复：" + packId);
+						continue;
+					}
+					result.Add(new CompatPackDependency(packId, versionRange));
+				}
+			}
+			return new ReadOnlyCollection<CompatPackDependency>(result);
+		}
+
+		/// <summary>
+		/// conflicts.packs[]：声明的包同时启用即拒载（任意版本）。重复/非法 id 整体拒绝；
+		/// 语义层（实际启用集合比对）在 Core 组合解析器。
+		/// </summary>
+		private static IReadOnlyList<string> RequireConflictingPacks(JsonElement root, List<string> errors)
+		{
+			var result = new List<string>();
+			if (!root.TryGetProperty("conflicts", out JsonElement conflicts) || conflicts.ValueKind == JsonValueKind.Null)
+				return new ReadOnlyCollection<string>(result);
+			if (conflicts.ValueKind != JsonValueKind.Object)
+			{
+				errors.Add("字段 'conflicts' 必须是对象（{ \"packs\": [...] }）。");
+				return new ReadOnlyCollection<string>(result);
+			}
+
+			var seen = new HashSet<string>(StringComparer.Ordinal);
+			foreach (JsonProperty property in conflicts.EnumerateObject())
+			{
+				if (!string.Equals(property.Name, "packs", StringComparison.Ordinal))
+				{
+					errors.Add("字段 'conflicts' 含未知成员：'" + property.Name + "'。");
+					continue;
+				}
+				if (property.Value.ValueKind == JsonValueKind.Null)
+					continue;
+				if (property.Value.ValueKind != JsonValueKind.Array)
+				{
+					errors.Add("字段 'conflicts.packs' 必须是字符串数组。");
+					continue;
+				}
+				foreach (JsonElement item in property.Value.EnumerateArray())
+				{
+					string? packId = RequireMemberText(
+						item, "conflicts.packs[]", errors, IdPattern, "小写字母数字、点、连字符");
+					if (packId is null)
+						continue;
+					if (!seen.Add(packId))
+					{
+						errors.Add("字段 'conflicts.packs' 的 packId 重复：" + packId);
+						continue;
+					}
+					result.Add(packId);
+				}
+			}
+			return new ReadOnlyCollection<string>(result);
+		}
+
+		/// <summary>
+		/// overrides[]：symbol + priority。symbol 只接受 instruction:/function:/variant:
+		/// 契约串（名字按引擎语义规范化：指令/变体 Trim+Upper，函数名只 Trim）；priority
+		/// 必须是 &gt;= 0 的 32 位整数；未知成员、重复 symbol（规范化后）整体拒载。
+		/// 语义层（目标存在性/基线保护/同优先级拒载）在 Core 组合解析器。
+		/// </summary>
+		private static IReadOnlyList<CompatPackOverride> RequireOverrides(JsonElement root, List<string> errors)
+		{
+			var result = new List<CompatPackOverride>();
+			if (!root.TryGetProperty("overrides", out JsonElement overrides) || overrides.ValueKind == JsonValueKind.Null)
+				return new ReadOnlyCollection<CompatPackOverride>(result);
+			if (overrides.ValueKind != JsonValueKind.Array)
+			{
+				errors.Add("字段 'overrides' 必须是数组。");
+				return new ReadOnlyCollection<CompatPackOverride>(result);
+			}
+
+			var seen = new HashSet<string>(StringComparer.Ordinal);
+			foreach (JsonElement item in overrides.EnumerateArray())
+			{
+				if (item.ValueKind != JsonValueKind.Object)
+				{
+					errors.Add("字段 'overrides' 含非对象元素。");
+					continue;
+				}
+				string? symbol = null;
+				int? priority = null;
+				bool hasSymbol = false;
+				bool hasPriority = false;
+				foreach (JsonProperty member in item.EnumerateObject())
+				{
+					switch (member.Name)
+					{
+						case "symbol":
+							hasSymbol = true;
+							symbol = RequireOverrideSymbol(member.Value, "overrides[].symbol", errors);
+							break;
+						case "priority":
+							hasPriority = true;
+							if (member.Value.ValueKind != JsonValueKind.Number
+								|| !member.Value.TryGetInt32(out int parsed))
+							{
+								errors.Add("字段 'overrides[].priority' 必须是 32 位整数。");
+								break;
+							}
+							if (parsed < 0)
+							{
+								errors.Add("字段 'overrides[].priority' 不能为负数：" + parsed);
+								break;
+							}
+							priority = parsed;
+							break;
+						default:
+							errors.Add("字段 'overrides[]' 含未知成员：'" + member.Name + "'。");
+							break;
+					}
+				}
+				if (!hasSymbol)
+					errors.Add("字段 'overrides[]' 缺少 symbol。");
+				if (!hasPriority)
+					errors.Add("字段 'overrides[]' 缺少 priority。");
+				if (symbol is null || priority is null)
+					continue;
+				if (!seen.Add(symbol))
+				{
+					errors.Add("字段 'overrides' 的 symbol 重复（规范化后冲突）：" + symbol);
+					continue;
+				}
+				result.Add(new CompatPackOverride(symbol, priority.Value));
+			}
+			return new ReadOnlyCollection<CompatPackOverride>(result);
+		}
+
+		private static string? RequireMemberText(
+			JsonElement value, string field, List<string> errors, Regex pattern, string form)
+		{
+			if (value.ValueKind != JsonValueKind.String)
+			{
+				errors.Add("字段 '" + field + "' 不是字符串。");
+				return null;
+			}
+			string text = (value.GetString() ?? "").Trim();
+			if (!pattern.IsMatch(text))
+			{
+				errors.Add("字段 '" + field + "' 形式不合法（应为 " + form + "）：" + text);
+				return null;
+			}
+			return text;
+		}
+
+		private static string? RequireMemberVersionRange(JsonElement value, string field, List<string> errors)
+		{
+			if (value.ValueKind != JsonValueKind.String)
+			{
+				errors.Add("字段 '" + field + "' 不是字符串（版本范围）。");
+				return null;
+			}
+			string text = (value.GetString() ?? "").Trim();
+			if (!IsValidVersionRange(text))
+			{
+				errors.Add("字段 '" + field + "' 的版本范围不合法（精确 x.y.z 或 [min,max)/(min,max]）：" + text);
+				return null;
+			}
+			return text;
+		}
+
+		/// <summary>与 Core SemanticVersionRange.IsValid 等价的语法判定（契约程序集不引用 Core）。</summary>
+		private static bool IsValidVersionRange(string range)
+		{
+			if (SemverPattern.IsMatch(range))
+				return true;
+			Match match = VersionRangePattern.Match(range);
+			if (!match.Success
+				|| !Version.TryParse(match.Groups["min"].Value, out Version? min)
+				|| !Version.TryParse(match.Groups["max"].Value, out Version? max))
+			{
+				return false;
+			}
+			int comparison = min.CompareTo(max);
+			if (comparison < 0)
+				return true;
+			if (comparison > 0)
+				return false;
+			return match.Groups["left"].Value == "[" && match.Groups["right"].Value == "]";
+		}
+
+		private static string? RequireOverrideSymbol(JsonElement value, string field, List<string> errors)
+		{
+			if (value.ValueKind != JsonValueKind.String)
+			{
+				errors.Add("字段 '" + field + "' 必须是字符串（instruction:/function:/variant: 契约串）。");
+				return null;
+			}
+			string raw = (value.GetString() ?? "").Trim();
+			int separator = raw.IndexOf(':');
+			if (separator <= 0 || separator == raw.Length - 1)
+			{
+				errors.Add("字段 '" + field + "' 不是 kind:name 契约串：" + raw);
+				return null;
+			}
+			string prefix = raw.Substring(0, separator);
+			string name = raw.Substring(separator + 1).Trim();
+			bool function;
+			if (string.Equals(prefix, "instruction", StringComparison.Ordinal)
+				|| string.Equals(prefix, "variant", StringComparison.Ordinal))
+			{
+				function = false;
+			}
+			else if (string.Equals(prefix, "function", StringComparison.Ordinal))
+			{
+				function = true;
+			}
+			else
+			{
+				errors.Add("字段 '" + field + "' 的前缀只接受 instruction:/function:/variant:：" + prefix);
+				return null;
+			}
+			if (name.Length == 0 || name.IndexOf(':') >= 0)
+			{
+				errors.Add("字段 '" + field + "' 的名字为空或含 ':'：" + raw);
+				return null;
+			}
+			foreach (char c in name)
+			{
+				if (char.IsWhiteSpace(c))
+				{
+					errors.Add("字段 '" + field + "' 的名字不允许包含空白：" + raw);
+					return null;
+				}
+			}
+			// 与 Core CompatSymbolKey 的规范化一致：指令/变体名 Trim+Upper，函数名只 Trim。
+			return prefix + ":" + (function ? name : name.ToUpperInvariant());
 		}
 
 		private static CompatPackGameIdentity? RequireGameIdentity(JsonElement root, List<string> errors)

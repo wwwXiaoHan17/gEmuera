@@ -115,6 +115,11 @@ public static class CompatPackRules
                 + "，但 v1 legacy 存档路径尚不消费 plan.SaveProfileId（v2 预留）；携带即拒载。");
         }
 
+        // 组合声明（T6）的单包可判定子集：自依赖/自冲突、override 目标不得是 v24 基线
+        // instruction/function handler、variant override 目标必须是 v24 基线指令。跨包语义
+        // （依赖闭包/版本匹配/环/actual conflicts/priority 仲裁）在 CompatPackCompositionResolver。
+        ValidateCompositionManifest(manifest, context, collected);
+
         // 原则（1）：manifest 声明的 capability 必须在引擎 catalog 内且为 Wired；
         // 已知 Wired 集合稍后统一做 Requires/Implies/ConflictsWith 闭包。
         var requestedCapabilities = new SortedSet<string>(StringComparer.Ordinal);
@@ -454,6 +459,72 @@ public static class CompatPackRules
 
         errors = collected;
         return collected.Count == 0;
+    }
+
+    /// <summary>
+    /// 组合声明（requires/conflicts/overrides）在单包加载期可判定的语义子集（fail-closed）：
+    /// 依赖/冲突不得指向自身（否则启用即自我否决，几乎必是笔误）；override 不得覆盖 v24
+    /// 基线 instruction/function handler（改既有语义必须走变体通道），variant override 的
+    /// 目标指令必须已在 v24 基线内（内置变体只存在于基线名）。跨包目标存在性/优先级仲裁
+    /// 需要完整启用集合，留给组合解析器（本层不能误判）。
+    /// </summary>
+    static void ValidateCompositionManifest(
+        CompatPackManifest manifest,
+        CompatPackValidationContext context,
+        List<string> errors)
+    {
+        var requiredPackIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (CompatPackDependency dependency in manifest.RequiredPacks)
+        {
+            if (string.Equals(dependency.PackId, manifest.PackId, StringComparison.Ordinal))
+                errors.Add("包 " + manifest.PackId + " 不能依赖自身（requires.packs 含自身）。");
+            if (!requiredPackIds.Add(dependency.PackId))
+                errors.Add("包 " + manifest.PackId + " 的 requires.packs 含重复 packId：" + dependency.PackId);
+            if (!SemanticVersionRange.IsValid(dependency.VersionRange))
+                errors.Add("包 " + manifest.PackId + " 依赖 " + dependency.PackId
+                    + " 的版本范围不合法：" + dependency.VersionRange);
+        }
+
+        var conflictingPackIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (string conflict in manifest.ConflictingPacks)
+        {
+            if (string.Equals(conflict, manifest.PackId, StringComparison.Ordinal))
+                errors.Add("包 " + manifest.PackId + " 不能与自身冲突（conflicts.packs 含自身）。");
+            if (!conflictingPackIds.Add(conflict))
+                errors.Add("包 " + manifest.PackId + " 的 conflicts.packs 含重复 packId：" + conflict);
+        }
+
+        var overrideSymbols = new HashSet<string>(StringComparer.Ordinal);
+        foreach (CompatPackOverride entry in manifest.Overrides)
+        {
+            if (!CompatSymbolKey.TryParse(entry.Symbol, out CompatSymbolKey key))
+            {
+                errors.Add("包 " + manifest.PackId + " 的 override symbol 不是合法契约串：" + entry.Symbol);
+                continue;
+            }
+            if (!overrideSymbols.Add(key.ToContractString()))
+                errors.Add("包 " + manifest.PackId + " 的 overrides 含重复 symbol：" + key.ToContractString());
+            if (entry.Priority < 0)
+                errors.Add("包 " + manifest.PackId + " 的 override priority 不能为负数：" + entry.Priority);
+            switch (key.Kind)
+            {
+                case CompatSymbolKind.Instruction:
+                    if (context.BaselineInstructions.Contains(key.Name))
+                        errors.Add("包 " + manifest.PackId + " 的 override 不能覆盖 v24 基线指令 handler："
+                            + key.ToContractString() + "（改既有语义必须走变体选择通道）。");
+                    break;
+                case CompatSymbolKind.Function:
+                    if (context.BaselineFunctions.Contains(key.Name))
+                        errors.Add("包 " + manifest.PackId + " 的 override 不能覆盖 v24 基线函数 handler："
+                            + key.ToContractString() + "（改既有语义必须走变体选择通道）。");
+                    break;
+                case CompatSymbolKind.Variant:
+                    if (!context.BaselineInstructions.Contains(key.Name))
+                        errors.Add("包 " + manifest.PackId + " 的 variant override 目标指令不在 v24 基线内："
+                            + key.ToContractString() + "（内置变体只存在于基线指令名）。");
+                    break;
+            }
+        }
     }
 
     /// <summary>

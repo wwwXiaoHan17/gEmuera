@@ -525,6 +525,7 @@ public class CompatPackLoaderTests
                 CompatPackPlanAssembler.TryAssemble(
                     BuiltInDialectCatalog.CreateLegacySessionPlan("v24pure"),
                     new[] { handle },
+                    RealContext(),
                     out var assembled,
                     out var assemblyErrors),
                 string.Join("; ", assemblyErrors));
@@ -557,6 +558,28 @@ public class CompatPackLoaderTests
             CompatPackLoader.ValidatePackEntry(pack, embedded, RealContext(), out _, out var errors, out _, out var delta));
         Assert.Null(delta);
         Assert.Contains(errors, error => error.Contains("不一致") && error.Contains("capabilities"));
+    }
+
+    [Fact]
+    public void ValidatePackEntry_CompositionFieldMismatch_Rejects()
+    {
+        // T6：入口清单与内嵌清单的 requires/conflicts/overrides 也必须逐字段相等——
+        // 组合声明漂移会让"清单声明的包"与"代码宣称的包"在依赖/冲突语义上分裂。
+        const string embeddedJson = "{\"packId\":\"test.compose-parity\",\"packVersion\":\"1.0.0\","
+            + "\"contractAbi\":\"1.0\",\"engineApi\":\"1.0\"}";
+        CompatPackManifest embedded = CompatPackManifest.TryParse(embeddedJson, out var parsed, out var parseErrors)
+            ? parsed! : throw new InvalidOperationException(string.Join("; ", parseErrors));
+        const string driftedJson = "{\"packId\":\"test.compose-parity\",\"packVersion\":\"1.0.0\","
+            + "\"contractAbi\":\"1.0\",\"engineApi\":\"1.0\","
+            + "\"overrides\":[{\"symbol\":\"instruction:SETANIMETIMER\",\"priority\":10}]}";
+        CompatPackManifest drifted = CompatPackManifest.TryParse(driftedJson, out var parsedDrifted, out var driftErrors)
+            ? parsedDrifted! : throw new InvalidOperationException(string.Join("; ", driftErrors));
+        var pack = new CountingPack(drifted, new CountingSurfaceContribution());
+
+        Assert.False(
+            CompatPackLoader.ValidatePackEntry(pack, embedded, RealContext(), out _, out var errors, out _, out var delta));
+        Assert.Null(delta);
+        Assert.Contains(errors, error => error.Contains("不一致") && error.Contains("overrides"));
     }
 
     sealed class CountingPack : ICompatPack
