@@ -148,7 +148,7 @@ public class CompatPackLoaderTests
     [Fact]
     public void TryLoad_UnknownCapability_Rejects()
     {
-        // 只提供清单声明的另一个 id：parse.parser-diagnostics.v1 因缺失而成为 unknown。
+        // 只提供清单声明的另一个 id：input.pointer-button.v1 因缺失而成为 unknown。
         var context = new CompatPackValidationContext(
             new CompatVersion(1, 0),
             new CompatVersion(1, 0),
@@ -161,7 +161,7 @@ public class CompatPackLoaderTests
             new HashSet<string>(LegacyDialectInventories.V24Functions.Select(entry => entry.Name), StringComparer.Ordinal));
 
         Assert.False(CompatPackLoader.TryLoad(PackPath, context, out _, out var errors));
-        Assert.Contains(errors, e => e.Contains("parse.parser-diagnostics.v1"));
+        Assert.Contains(errors, e => e.Contains("input.pointer-button.v1"));
     }
 
     [Fact]

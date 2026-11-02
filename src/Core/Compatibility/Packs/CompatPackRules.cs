@@ -205,10 +205,25 @@ public static class CompatPackRules
         if (!EngineCapabilityCatalog.TryResolveForPack(
                 context.Capabilities,
                 requestedCapabilities,
-                out _,
+                out CapabilityResolution closure,
                 out IReadOnlyList<string> closureErrors))
         {
             collected.AddRange(closureErrors);
+        }
+        else
+        {
+            // R18 fail-closed：v1 组装器（CompatPackPlanAssembler）只并集 manifest/贡献
+            // 显式声明的 id，闭包输出尚未接线。若解析结果里有未显式声明的 id（Requires/
+            // Implies 展开），规则会放行但 plan 缺该 id → 静默漂移，必须拒载；作者把 id
+            // 显式写进清单/贡献即可通过（闭包语义与 v1 组装器等价）。
+            foreach (string expandedId in closure.OrderedCapabilityIds)
+            {
+                if (requestedCapabilities.Contains(expandedId))
+                    continue;
+                collected.Add("包 " + manifest.PackId + " 的 capability 闭包展开出未显式声明的 id："
+                    + expandedId + "；v1 组装器尚未接线 Implies 闭包输出（Requires 展开同样不会进入 plan），"
+                    + "请在 manifest 或 capability 贡献中显式声明该 id。");
+            }
         }
 
         // 变体选择对账：清单 variantSelections 的 builtin 值必须在内置变体名录；

@@ -3,6 +3,6 @@
   "packVersion": "1.0.0",
   "contractAbi": "1.0",
   "engineApi": "1.0",
-  "capabilities": ["parse.parser-diagnostics.v1", "startup.continue-after-fault.v1"],
+  "capabilities": ["input.pointer-button.v1", "startup.continue-after-fault.v1"],
   "variantSelections": { "SETBGIMAGE": "builtin:snake" }
 }

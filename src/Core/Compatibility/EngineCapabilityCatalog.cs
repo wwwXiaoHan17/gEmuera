@@ -205,7 +205,8 @@ public static class EngineCapabilityCatalog
                 SnakeConsumerPrefix + mapping.Value));
         }
 
-        // eraFL 表面 capability：只有模块账本声明，没有 IEraFlCompatibilityPolicy 属性级消费者。
+        // eraFL 表面 capability：markup.div-v2 / markup.image-dual-src / resource.dynamic-sprite
+        // 只有模块账本声明，没有 IEraFlCompatibilityPolicy 属性级消费者（DiagnosticOnly）。
         Add(catalog, Diagnostic(
             EraFlCompatibilityModule.MarkupDivCapability,
             "EraFlCompatibilityModule.RequiredCapabilityIds"));
@@ -213,14 +214,20 @@ public static class EngineCapabilityCatalog
             EraFlCompatibilityModule.MarkupDualImageCapability,
             "EraFlCompatibilityModule.RequiredCapabilityIds"));
         Add(catalog, Diagnostic(
-            EraFlCompatibilityModule.DynamicMapCapability,
-            "EraFlCompatibilityModule.RequiredCapabilityIds"));
-        Add(catalog, Diagnostic(
-            EraFlCompatibilityModule.PointerButtonCapability,
-            "EraFlCompatibilityModule.RequiredCapabilityIds"));
-        Add(catalog, Diagnostic(
             EraFlCompatibilityModule.DynamicSpriteCapability,
             "EraFlCompatibilityModule.RequiredCapabilityIds"));
+
+        // display.dynamic-map-transaction / input.pointer-button 有真实消费者（R13）：
+        // LegacyEraFlCompatibilityPolicy 用 HasDynamicMap/HasPointerButton 门控 GMap 三方法
+        // 与 TaskStartRoomLookupFunction/GMapQuestType 两属性、指针两方法
+        //（scripts/Emuera/Compatibility/LegacyCompatibilityModules.cs）。社区包声明后确实
+        // 改变运行期行为，必须是 Wired，不能被当成诊断账本拒载。
+        Add(catalog, Wired(
+            EraFlCompatibilityModule.DynamicMapCapability,
+            "LegacyEraFlCompatibilityPolicy.HasDynamicMap"));
+        Add(catalog, Wired(
+            EraFlCompatibilityModule.PointerButtonCapability,
+            "LegacyEraFlCompatibilityPolicy.HasPointerButton"));
 
         // eraFL 行为 capability：IEraFlCompatibilityPolicy 的属性/方法由 id 驱动。
         Add(catalog, Wired(
@@ -263,7 +270,7 @@ public static class EngineCapabilityCatalog
             EraFlCompatibilityModule.ResourceDynamicSpriteBehavior,
             "EraFlCompatibilityModule.DefaultPorts"));
 
-        // eraMegaten：五个行为均有 IMegatenCompatibilityPolicy 属性消费者。
+        // eraMegaten：四个行为有真实 IMegatenCompatibilityPolicy 属性消费者（Wired）。
         Add(catalog, Wired(
             MegatenCompatibilityModule.LabelLookupCaseBehavior,
             MegatenConsumerPrefix + "UsesVariableCaseForFunctionLabelLookup"));
@@ -274,11 +281,18 @@ public static class EngineCapabilityCatalog
             MegatenCompatibilityModule.PrivateSystemShadowBehavior,
             MegatenConsumerPrefix + "AllowsPrivateSystemVariableShadowing"));
         Add(catalog, Wired(
-            MegatenCompatibilityModule.StandardColorNameBehavior,
-            MegatenConsumerPrefix + "UsesStandardColorNameTable"));
-        Add(catalog, Wired(
             MegatenCompatibilityModule.HtmlRgbZeroAlphaBehavior,
             MegatenConsumerPrefix + "TreatZeroAlphaRgbHexAsOpaque"));
+
+        // ui.standard-color-name.v1 只有 policy 属性、没有运行期消费者（Lead 裁决 R17）：
+        // 2026-10-20 按 v24 基线语义移除了 Color.FromName 的 megaten 门控
+        //（governance/evolution-log/2026-10-20-standard-color-name-fallback.md），
+        // scripts/uEmuera/Drawing.cs 现在无条件查标准颜色名表，UsesStandardColorNameTable
+        // 全仓无读取点。该 id 仍保留在 megaten profile 账本（DiagnosticOnly 保留账本），
+        // 但包不能声明它（声明也不会改变行为，属静默 no-op）。
+        Add(catalog, Diagnostic(
+            MegatenCompatibilityModule.StandardColorNameBehavior,
+            MegatenConsumerPrefix + "UsesStandardColorNameTable (no runtime consumer since 2026-10-20)"));
 
         // eraBlue：外部插件加载是宿主能力声明，legacy policy 当前无消费者。
         Add(catalog, Diagnostic(
@@ -306,8 +320,24 @@ public static class EngineCapabilityCatalog
         consumerContractId,
         EngineApiV1);
 
+    /// <summary>
+    /// 测试注入入口：用与生产目录相同的 <see cref="Add"/> 合并逻辑构造目录，
+    /// 钉住"同一 id 被多个模块登记"时的消费者合并与不一致 fail-fast 语义。
+    /// </summary>
+    internal static IReadOnlyDictionary<string, CapabilityDescriptor> ComposeCatalog(
+        IEnumerable<CapabilityDescriptor> descriptors)
+    {
+        ArgumentNullException.ThrowIfNull(descriptors);
+        var catalog = new Dictionary<string, CapabilityDescriptor>(StringComparer.Ordinal);
+        foreach (CapabilityDescriptor descriptor in descriptors)
+            Add(catalog, descriptor);
+        return new ReadOnlyDictionary<string, CapabilityDescriptor>(catalog);
+    }
+
     // 同一 id 可能被多个模块声明（declare.out-keyword.v1 由 snake 与 eraFL 共用）：
     // 只保留一条描述符，消费者契约按 Ordinal 合并，避免静默丢掉任一真实消费者。
+    // 状态相同还不够——Requires/Implies/ConflictsWith 的任何不一致都是声明漂移，
+    // 构建期（静态初始化）即 fail-fast，而不是让后登记的依赖被静默丢弃。
     static void Add(Dictionary<string, CapabilityDescriptor> catalog, CapabilityDescriptor descriptor)
     {
         if (!catalog.TryGetValue(descriptor.CapabilityId, out CapabilityDescriptor? existing))
@@ -320,9 +350,29 @@ public static class EngineCapabilityCatalog
             throw new InvalidOperationException(
                 "capability '" + descriptor.CapabilityId + "' 在 engine catalog 中出现不一致状态。");
         }
+        if (!SequenceEqualOrdinal(existing.Requires, descriptor.Requires)
+            || !SequenceEqualOrdinal(existing.Implies, descriptor.Implies)
+            || !SequenceEqualOrdinal(existing.ConflictsWith, descriptor.ConflictsWith))
+        {
+            throw new InvalidOperationException(
+                "capability '" + descriptor.CapabilityId
+                + "' 在 engine catalog 中重复登记，但 Requires/Implies/ConflictsWith 声明不一致。");
+        }
         string merged = MergeConsumers(existing.ConsumerContractId, descriptor.ConsumerContractId);
         if (!string.Equals(merged, existing.ConsumerContractId, StringComparison.Ordinal))
             catalog[descriptor.CapabilityId] = existing with { ConsumerContractId = merged };
+    }
+
+    static bool SequenceEqualOrdinal(IReadOnlyList<string> left, IReadOnlyList<string> right)
+    {
+        if (left.Count != right.Count)
+            return false;
+        for (int index = 0; index < left.Count; index++)
+        {
+            if (!string.Equals(left[index], right[index], StringComparison.Ordinal))
+                return false;
+        }
+        return true;
     }
 
     static string MergeConsumers(string left, string right)

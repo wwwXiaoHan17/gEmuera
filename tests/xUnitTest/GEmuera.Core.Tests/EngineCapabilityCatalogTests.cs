@@ -50,12 +50,50 @@ public class EngineCapabilityCatalogTests
     }
 
     [Fact]
-    public void ResolveForPack_RequiresAndImplies_AreExpandedOnce()
+    public void ResolveForPack_KnownWiredCapability_Succeeds()
     {
+        // 真实 catalog 路径的冒烟；"Requires/Implies 只展开一次"的语义由下方注入式
+        // 合成目录用例钉住（真实 catalog 当前没有任何依赖边）。
         Assert.True(EngineCapabilityCatalog.TryResolveForPack(
             new[] { "math.times-clamp.v1" }, out var resolution, out var errors));
-        Assert.Contains("math.times-clamp.v1", resolution.OrderedCapabilityIds);
+        Assert.Equal(new[] { "math.times-clamp.v1" }, resolution.OrderedCapabilityIds);
         Assert.Empty(errors);
+    }
+
+    [Fact]
+    public void ResolveForPack_RequiresDiagnosticOnly_Fails()
+    {
+        // Requires 指向 DiagnosticOnly（无真实行为消费者）不能算依赖满足：
+        // 否则包会凭一个诊断账本 id 拿到激活。
+        var catalog = Catalog(
+            Descriptor("root.v1", requires: new[] { "diag.only.v1" }),
+            Descriptor("diag.only.v1", CapabilityStatus.DiagnosticOnly));
+
+        Assert.False(EngineCapabilityCatalog.TryResolveForPack(
+            catalog, new[] { "root.v1" }, out _, out var errors));
+        Assert.Contains(errors, e => e.Contains("diag.only.v1") && e.Contains("不是 Wired"));
+    }
+
+    [Fact]
+    public void ResolveForPack_RequiresCycle_AccountsEachCapabilityOnce()
+    {
+        // Requires 环不得无限展开：每个 id 只入账一次（BFS 发现序）。
+        var catalog = Catalog(
+            Descriptor("cycle.a.v1", requires: new[] { "cycle.b.v1" }),
+            Descriptor("cycle.b.v1", requires: new[] { "cycle.a.v1" }));
+
+        Assert.True(EngineCapabilityCatalog.TryResolveForPack(
+            catalog, new[] { "cycle.a.v1" }, out var resolution, out var errors), string.Join("; ", errors));
+        Assert.Equal(new[] { "cycle.a.v1", "cycle.b.v1" }, resolution.OrderedCapabilityIds);
+    }
+
+    [Fact]
+    public void ResolveForPack_NullRequest_Fails()
+    {
+        Assert.False(EngineCapabilityCatalog.TryResolveForPack(
+            null!, out var resolution, out var errors));
+        Assert.Empty(resolution.OrderedCapabilityIds);
+        Assert.Contains(errors, e => e.Contains("null"));
     }
 
     [Fact]
@@ -141,11 +179,48 @@ public class EngineCapabilityCatalogTests
     {
         // 表面账本（DiagnosticOnly 也在内）不得因闭合解析过滤而收缩：
         // erafl 13 = 5 表面 + 8 policy 行为；erablue 2；megaten 6（含共享启动容错）。
+        // 顺序与 tools/core-contracts/Program.cs 的 eraFL 断言逐项一致（plan 内按 Ordinal 排序）。
         CompatibilityPlan erafl = BuiltInDialectCatalog.CreateLegacySessionPlan("erafl");
-        Assert.Equal(13, erafl.CapabilityIds.Count);
-        Assert.Contains(EraFlCompatibilityModule.MarkupDivCapability, erafl.CapabilityIds);
-        Assert.Contains(EraFlCompatibilityModule.DynamicMapCapability, erafl.CapabilityIds);
-        Assert.Contains(EraFlCompatibilityModule.InputOmittedDefaultArgumentBehavior, erafl.CapabilityIds);
+        Assert.Equal(new[]
+        {
+            "arith.safe-arithmetic-guard.v1",
+            "datatable.xml-leading-bom.v1",
+            "declare.out-keyword.v1",
+            "display.dynamic-map-transaction.v1",
+            "display.extended-history.v1",
+            "input.omitted-default-argument.v1",
+            "input.pointer-blank-string.v1",
+            "input.pointer-button.v1",
+            "markup.div-v2.v1",
+            "markup.font-extended-attributes.v1",
+            "markup.image-dual-src.v1",
+            "resource.dynamic-sprite.v1",
+            "type.float-literals.v1",
+        }, erafl.CapabilityIds);
+
+        // snake 19 项（全 Wired）按 Ordinal 排序。
+        Assert.Equal(new[]
+        {
+            "call.extra-arguments.v1",
+            "csv.preset-erd-merge.v1",
+            "csv.relation-without-mastername.v1",
+            "declare.out-keyword.v1",
+            "display.fast-refresh.v1",
+            "flow.before-error-event.v1",
+            "flow.throw-event.v1",
+            "graphics.mask-alpha-channel.v1",
+            "lex.escape-e-two-char.v1",
+            "math.rand-clamp.v1",
+            "math.times-clamp.v1",
+            "parse.parser-diagnostics.v1",
+            "parse.private-arguments.v1",
+            "parse.scoped-variable-pre-registration.v1",
+            "parse.user-defined-variable-resolution.v1",
+            "parse.variadic-strip.v1",
+            "random.reseed-on-randomize.v1",
+            "startup.continue-after-fault.v1",
+            "type.float-system.v1",
+        }, BuiltInDialectCatalog.CreateLegacySessionPlan("snake").CapabilityIds);
 
         Assert.Equal(2, BuiltInDialectCatalog.CreateLegacySessionPlan("erablue").CapabilityIds.Count);
         Assert.Equal(6, BuiltInDialectCatalog.CreateLegacySessionPlan("megaten").CapabilityIds.Count);
@@ -163,6 +238,15 @@ public class EngineCapabilityCatalogTests
             Assert.False(string.IsNullOrWhiteSpace(entry.Value.ConsumerContractId), entry.Key);
             Assert.Equal(EngineApiV1, entry.Value.IntroducedInEngineApi);
         }
+
+        // 最终分类账：32 Wired / 9 DiagnosticOnly / 41 unique。
+        // DiagnosticOnly 9 = eraFL 3 零消费者表面 + 4 端口账本 + megaten 标准色名 + erablue 插件。
+        Assert.Equal(32, EngineCapabilityCatalog.All.Values.Count(d => d.Status == CapabilityStatus.Wired));
+        Assert.Equal(9, EngineCapabilityCatalog.All.Values.Count(d => d.Status == CapabilityStatus.DiagnosticOnly));
+        Assert.Equal(41, EngineCapabilityCatalog.All.Values
+            .Select(d => d.CapabilityId)
+            .Distinct(StringComparer.Ordinal)
+            .Count());
     }
 
     [Fact]
@@ -184,18 +268,14 @@ public class EngineCapabilityCatalogTests
     }
 
     [Fact]
-    public void Catalog_EraFlSurfaceCapabilities_AreDiagnosticOnly()
+    public void Catalog_EraFlSurfaceCapabilities_ZeroConsumerAreDiagnosticOnly()
     {
-        // 5 个表面 capability 没有 IEraFlCompatibilityPolicy 属性级消费者：
-        // 其中 markup.div-v2 / markup.image-dual-src / resource.dynamic-sprite 零消费；
-        // display.dynamic-map-transaction / input.pointer-button 虽被 legacy policy 私有字段
-        // 读取以放行 GMap/指针算法，但并非独立 policy 属性（brief 口径：无真实 policy 属性）。
+        // 3 个零消费者表面 capability 没有 IEraFlCompatibilityPolicy 属性级消费者，
+        // 也没有 capability-gated 运行期行为：标 DiagnosticOnly（包不能声明）。
         string[] surfaceCapabilityIds =
         {
             EraFlCompatibilityModule.MarkupDivCapability,
             EraFlCompatibilityModule.MarkupDualImageCapability,
-            EraFlCompatibilityModule.DynamicMapCapability,
-            EraFlCompatibilityModule.PointerButtonCapability,
             EraFlCompatibilityModule.DynamicSpriteCapability,
         };
 
@@ -203,6 +283,27 @@ public class EngineCapabilityCatalogTests
         {
             Assert.True(EngineCapabilityCatalog.All.TryGetValue(capabilityId, out CapabilityDescriptor? descriptor), capabilityId);
             Assert.Equal(CapabilityStatus.DiagnosticOnly, descriptor!.Status);
+        }
+    }
+
+    [Fact]
+    public void Catalog_EraFlGMapAndPointerButton_AreWiredWithPolicyConsumers()
+    {
+        // R13：display.dynamic-map-transaction / input.pointer-button 有真实消费者——
+        // LegacyEraFlCompatibilityPolicy 的 HasDynamicMap/HasPointerButton 门控 GMap 三方法与
+        // TaskStartRoomLookupFunction/GMapQuestType 两属性、指针两方法。它们必须是 Wired，
+        // 否则社区包声明这些能力会被当成诊断账本拒载（真实行为永远无法被包激活）。
+        var consumers = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [EraFlCompatibilityModule.DynamicMapCapability] = "LegacyEraFlCompatibilityPolicy.HasDynamicMap",
+            [EraFlCompatibilityModule.PointerButtonCapability] = "LegacyEraFlCompatibilityPolicy.HasPointerButton",
+        };
+
+        foreach (KeyValuePair<string, string> entry in consumers)
+        {
+            Assert.True(EngineCapabilityCatalog.All.TryGetValue(entry.Key, out CapabilityDescriptor? descriptor), entry.Key);
+            Assert.Equal(CapabilityStatus.Wired, descriptor!.Status);
+            Assert.Equal(entry.Value, descriptor.ConsumerContractId);
         }
     }
 
@@ -255,12 +356,12 @@ public class EngineCapabilityCatalogTests
     [Fact]
     public void Catalog_MegatenCapabilities_AreWired()
     {
+        // megaten Wired = 4：标准色名不在内（R17，见下方专属用例）。
         string[] capabilityIds =
         {
             MegatenCompatibilityModule.LabelLookupCaseBehavior,
             MegatenCompatibilityModule.RefOutNameBehavior,
             MegatenCompatibilityModule.PrivateSystemShadowBehavior,
-            MegatenCompatibilityModule.StandardColorNameBehavior,
             MegatenCompatibilityModule.HtmlRgbZeroAlphaBehavior,
         };
 
@@ -270,6 +371,25 @@ public class EngineCapabilityCatalogTests
             Assert.Equal(CapabilityStatus.Wired, descriptor!.Status);
             Assert.Contains("IMegatenCompatibilityPolicy.", descriptor.ConsumerContractId, StringComparison.Ordinal);
         }
+
+        Assert.Equal(4, EngineCapabilityCatalog.All.Values.Count(
+            descriptor => descriptor.ConsumerContractId.Contains("IMegatenCompatibilityPolicy.", StringComparison.Ordinal)
+                && descriptor.Status == CapabilityStatus.Wired));
+    }
+
+    [Fact]
+    public void Catalog_MegatenStandardColorName_IsDiagnosticOnly()
+    {
+        // R17（Lead 裁决）：2026-10-20 按 v24 基线语义移除了 Color.FromName 的 megaten 门控
+        //（governance/evolution-log/2026-10-20-standard-color-name-fallback.md）。
+        // scripts/uEmuera/Drawing.cs 无条件查标准颜色名表，UsesStandardColorNameTable 无
+        // 运行期读取点；该 id 只是 megaten profile 账本（DiagnosticOnly 保留账本），
+        // 包不能声明它（声明也不会改变行为）。
+        Assert.True(EngineCapabilityCatalog.All.TryGetValue(
+            MegatenCompatibilityModule.StandardColorNameBehavior, out CapabilityDescriptor? descriptor));
+        Assert.Equal(CapabilityStatus.DiagnosticOnly, descriptor!.Status);
+        Assert.Contains("UsesStandardColorNameTable", descriptor.ConsumerContractId, StringComparison.Ordinal);
+        Assert.Contains("no runtime consumer", descriptor.ConsumerContractId, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -289,5 +409,78 @@ public class EngineCapabilityCatalogTests
         Assert.Equal(CapabilityStatus.Wired, descriptor!.Status);
         Assert.Contains("ISnakeCompatibilityPolicy.AllowsOutKeyword", descriptor.ConsumerContractId, StringComparison.Ordinal);
         Assert.Contains("IEraFlCompatibilityPolicy.AllowsOutKeyword", descriptor.ConsumerContractId, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RequiredWiredCapabilityIds_PinnedCounts()
+    {
+        // IsEnabled 只由 catalog 的 Wired 子集推断，计数漂移会直接改变会话激活语义：
+        // snake 19/19 全 Wired；eraFL 13 项账本里 3 个零消费者表面项是 DiagnosticOnly，
+        // Wired = 10（8 policy 行为 + display.dynamic-map-transaction + input.pointer-button）。
+        Assert.Equal(19, SnakeCompatibilityCapabilities.RequiredWiredCapabilityIds.Count);
+        Assert.Equal(10, EraFlCompatibilityModule.RequiredWiredCapabilityIds.Count);
+
+        Assert.Contains(EraFlCompatibilityModule.DynamicMapCapability, EraFlCompatibilityModule.RequiredWiredCapabilityIds);
+        Assert.Contains(EraFlCompatibilityModule.PointerButtonCapability, EraFlCompatibilityModule.RequiredWiredCapabilityIds);
+        Assert.DoesNotContain(EraFlCompatibilityModule.MarkupDivCapability, EraFlCompatibilityModule.RequiredWiredCapabilityIds);
+        Assert.DoesNotContain(EraFlCompatibilityModule.MarkupDualImageCapability, EraFlCompatibilityModule.RequiredWiredCapabilityIds);
+        Assert.DoesNotContain(EraFlCompatibilityModule.DynamicSpriteCapability, EraFlCompatibilityModule.RequiredWiredCapabilityIds);
+    }
+
+    [Fact]
+    public void RequiredCapabilityIds_AreAllRegisteredInCatalog()
+    {
+        // 模块账本里的每个 id 都必须有 catalog 登记（缺失会让 Wired 过滤静默跳过）。
+        foreach (string capabilityId in SnakeCompatibilityCapabilities.RequiredCapabilityIds)
+            Assert.True(EngineCapabilityCatalog.All.ContainsKey(capabilityId), "snake: " + capabilityId);
+        foreach (string capabilityId in EraFlCompatibilityModule.RequiredCapabilityIds)
+            Assert.True(EngineCapabilityCatalog.All.ContainsKey(capabilityId), "erafl: " + capabilityId);
+    }
+
+    [Fact]
+    public void ComposeCatalog_DuplicateIdSameStatus_MergesConsumers()
+    {
+        var composed = EngineCapabilityCatalog.ComposeCatalog(new[]
+        {
+            Descriptor("shared.v1", consumerContractId: "ISnakeCompatibilityPolicy.Shared"),
+            Descriptor("shared.v1", consumerContractId: "IEraFlCompatibilityPolicy.Shared"),
+        });
+
+        Assert.Single(composed);
+        Assert.Equal(
+            "IEraFlCompatibilityPolicy.Shared | ISnakeCompatibilityPolicy.Shared",
+            composed["shared.v1"].ConsumerContractId);
+    }
+
+    [Fact]
+    public void ComposeCatalog_DuplicateIdConflictingStatus_Throws()
+    {
+        Assert.Throws<InvalidOperationException>(() => EngineCapabilityCatalog.ComposeCatalog(new[]
+        {
+            Descriptor("shared.v1", CapabilityStatus.Wired),
+            Descriptor("shared.v1", CapabilityStatus.DiagnosticOnly),
+        }));
+    }
+
+    [Fact]
+    public void ComposeCatalog_DuplicateIdConflictingDependencies_Throws()
+    {
+        // 状态相同还不够：Requires/Implies/ConflictsWith 任一不一致都是声明漂移，
+        // 构建期必须 fail-fast，不能静默保留先登记者的依赖（后登记依赖会被吞掉）。
+        Assert.Throws<InvalidOperationException>(() => EngineCapabilityCatalog.ComposeCatalog(new[]
+        {
+            Descriptor("shared.v1", requires: new[] { "dep.a.v1" }),
+            Descriptor("shared.v1", requires: new[] { "dep.b.v1" }),
+        }));
+        Assert.Throws<InvalidOperationException>(() => EngineCapabilityCatalog.ComposeCatalog(new[]
+        {
+            Descriptor("shared.v1", implies: new[] { "implied.v1" }),
+            Descriptor("shared.v1"),
+        }));
+        Assert.Throws<InvalidOperationException>(() => EngineCapabilityCatalog.ComposeCatalog(new[]
+        {
+            Descriptor("shared.v1", conflictsWith: new[] { "other.v1" }),
+            Descriptor("shared.v1"),
+        }));
     }
 }

@@ -562,6 +562,91 @@ public class CompatPackRulesTests
         Assert.Contains(errors, e => e.Contains("conflict", StringComparison.OrdinalIgnoreCase));
     }
 
+    // —— R18：capability 闭包输出尚未接入 v1 组装器。规则层解析出 Require/Implies
+    //    展开的 id 后必须拒载，否则"规则通过、plan 缺 id"会静默漂移。——
+
+    static CompatPackValidationContext ClosureContext()
+    {
+        var catalog = new Dictionary<string, CapabilityDescriptor>(StringComparer.Ordinal)
+        {
+            ["root.v1"] = new(
+                "root.v1", CapabilityStatus.Wired, Array.Empty<string>(), new[] { "implied.v1" },
+                Array.Empty<string>(), "test.consumer", new CompatVersion(1, 0)),
+            ["required.v1"] = new(
+                "required.v1", CapabilityStatus.Wired, Array.Empty<string>(), Array.Empty<string>(),
+                Array.Empty<string>(), "test.consumer", new CompatVersion(1, 0)),
+            ["implied.v1"] = new(
+                "implied.v1", CapabilityStatus.Wired, Array.Empty<string>(), Array.Empty<string>(),
+                Array.Empty<string>(), "test.consumer", new CompatVersion(1, 0)),
+        };
+        return new CompatPackValidationContext(
+            new CompatVersion(1, 0),
+            new CompatVersion(1, 0),
+            catalog,
+            new HashSet<string>(StringComparer.Ordinal),
+            new HashSet<string>(StringComparer.Ordinal),
+            new HashSet<string>(StringComparer.Ordinal));
+    }
+
+    static CompatPackManifest ManifestWithCapabilities(params string[] capabilities)
+    {
+        string json = "{\"packId\":\"test.closure\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1,"
+            + "\"capabilities\":[" + string.Join(",", capabilities.Select(id => "\"" + id + "\"")) + "]}";
+        return CompatPackManifest.TryParse(json, out var manifest, out var errors)
+            ? manifest! : throw new InvalidOperationException(string.Join("; ", errors));
+    }
+
+    [Fact]
+    public void Validate_ImpliesClosureNotWiredIntoV1Assembler_Rejects()
+    {
+        // root.v1 implies implied.v1，但包里只显式写了 root.v1：解析结果会多出 implied.v1，
+        // 而 CompatPackPlanAssembler 只并集显式声明的 id → 必须拒载（fail-closed）。
+        Assert.False(CompatPackRules.Validate(
+            ManifestWithCapabilities("root.v1"),
+            Array.Empty<ICompatPackContribution>(),
+            ClosureContext(),
+            out var errors));
+        Assert.Contains(errors, e => e.Contains("implied.v1") && e.Contains("Implies 闭包输出"));
+    }
+
+    [Fact]
+    public void Validate_RequiresClosureNotWiredIntoV1Assembler_Rejects()
+    {
+        // Requires 展开同理：required.v1 不会自动进 plan，必须显式声明。
+        var catalog = new Dictionary<string, CapabilityDescriptor>(StringComparer.Ordinal)
+        {
+            ["root-requires.v1"] = new(
+                "root-requires.v1", CapabilityStatus.Wired, new[] { "required.v1" }, Array.Empty<string>(),
+                Array.Empty<string>(), "test.consumer", new CompatVersion(1, 0)),
+            ["required.v1"] = new(
+                "required.v1", CapabilityStatus.Wired, Array.Empty<string>(), Array.Empty<string>(),
+                Array.Empty<string>(), "test.consumer", new CompatVersion(1, 0)),
+        };
+        var context = new CompatPackValidationContext(
+            new CompatVersion(1, 0), new CompatVersion(1, 0), catalog,
+            new HashSet<string>(StringComparer.Ordinal),
+            new HashSet<string>(StringComparer.Ordinal),
+            new HashSet<string>(StringComparer.Ordinal));
+
+        Assert.False(CompatPackRules.Validate(
+            ManifestWithCapabilities("root-requires.v1"),
+            Array.Empty<ICompatPackContribution>(),
+            context,
+            out var errors));
+        Assert.Contains(errors, e => e.Contains("required.v1") && e.Contains("闭包输出"));
+    }
+
+    [Fact]
+    public void Validate_ExpandedCapabilityExplicitlyDeclared_Succeeds()
+    {
+        // 显式写出闭包 id 后，v1 组装器并集即可得到完整集合 → 放行。
+        Assert.True(CompatPackRules.Validate(
+            ManifestWithCapabilities("root.v1", "implied.v1"),
+            Array.Empty<ICompatPackContribution>(),
+            ClosureContext(),
+            out var errors), string.Join("; ", errors));
+    }
+
     // —— 双轴版本模型（contractAbi / engineApi）：major 必须相等、包 minor <= 引擎 minor，
     //    两轴独立判定，错误文案必须指明是哪一轴。——
 

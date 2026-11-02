@@ -147,10 +147,27 @@ public static class EraFlCompatibilityModule
     public static IReadOnlyList<string> RequiredWiredCapabilityIds => RequiredWiredCapabilities.Value;
 
     private static readonly Lazy<IReadOnlyList<string>> RequiredWiredCapabilities = new(
-        () => Array.AsReadOnly(RequiredCapabilities
-            .Where(capabilityId => EngineCapabilityCatalog.All.TryGetValue(capabilityId, out CapabilityDescriptor? descriptor)
-                && descriptor.Status == CapabilityStatus.Wired)
-            .ToArray()));
+        ResolveRequiredWiredCapabilities);
+
+    // fail-closed：先断言每个 RequiredCapabilityIds 都在 catalog 内（漏登记 = 引擎错误，
+    // 立即抛出带 id 的异常），再按 Wired 过滤。否则缺登记项会被静默跳过，IsEnabled 的
+    // Wired 子集缩小甚至为空 → 任意会话都"满足"要求（fail-open）。
+    static IReadOnlyList<string> ResolveRequiredWiredCapabilities()
+    {
+        var wired = new List<string>(RequiredCapabilities.Count);
+        foreach (string capabilityId in RequiredCapabilities)
+        {
+            if (!EngineCapabilityCatalog.All.TryGetValue(capabilityId, out CapabilityDescriptor? descriptor))
+            {
+                throw new InvalidOperationException(
+                    "eraFL module declares capability '" + capabilityId
+                    + "' that is missing from EngineCapabilityCatalog.All.");
+            }
+            if (descriptor.Status == CapabilityStatus.Wired)
+                wired.Add(capabilityId);
+        }
+        return wired.AsReadOnly();
+    }
 
     public static DialectModuleDefinition CreateDefinition()
     {

@@ -84,7 +84,7 @@ public class CompatPackAssemblyTests
 
             // capability 账本并入（manifest 2 + capability 贡献 1；策略贡献 v1 未接线、
             // 加载即拒载，其绑定 id 不得再进账本——DoesNotContain 钉住该回归）。
-            Assert.Contains("parse.parser-diagnostics.v1", assembled.CapabilityIds);
+            Assert.Contains("input.pointer-button.v1", assembled.CapabilityIds);
             Assert.Contains("startup.continue-after-fault.v1", assembled.CapabilityIds);
             Assert.Contains("math.times-clamp.v1", assembled.CapabilityIds);
             Assert.DoesNotContain("parse.diagnostics.v1", assembled.CapabilityIds);
