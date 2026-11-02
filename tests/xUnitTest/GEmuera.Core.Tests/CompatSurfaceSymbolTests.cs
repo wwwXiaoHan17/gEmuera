@@ -64,6 +64,34 @@ public class CompatSurfaceSymbolTests
         Assert.False(CompatSymbolKey.TryParse(text, out _));
     }
 
+    [Theory]
+    [InlineData("A:B")]
+    [InlineData("A B")]
+    [InlineData("ABS\tX")]
+    [InlineData("AB\u3000S")]
+    public void Constructor_RejectsNamesThatTryParseCannotRoundTrip(string name)
+    {
+        // final review M11：构造器只 Trim 会接受 ':'/内部空白，ToContractString 于是产出
+        // TryParse 拒绝的串（"instruction:A:B" 无法解回同一符号）。构造器与 TryParse 必须
+        // 同一套校验——负向入口也 fail-closed。
+        var exception = Record.Exception(() => new CompatSymbolKey(CompatSymbolKind.Instruction, name));
+        Assert.IsType<ArgumentException>(exception);
+    }
+
+    [Fact]
+    public void Constructor_OutputAlwaysParsesBackToSameKey()
+    {
+        foreach (CompatSymbolKind kind in new[]
+        {
+            CompatSymbolKind.Instruction, CompatSymbolKind.Function, CompatSymbolKind.Variant,
+        })
+        {
+            var key = new CompatSymbolKey(kind, "  setbgimage  ");
+            Assert.True(CompatSymbolKey.TryParse(key.ToContractString(), out CompatSymbolKey roundTripped));
+            Assert.Equal(key, roundTripped);
+        }
+    }
+
     [Fact]
     public void InstructionAndFunctionKeys_WithSameName_RemainDistinct()
     {

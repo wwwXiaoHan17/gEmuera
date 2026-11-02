@@ -176,6 +176,57 @@ public class CompatPackCompositionResolverTests
     }
 
     [Fact]
+    public void Resolve_VariantOverrideHighestPriorityWins()
+    {
+        // spec §6.5.5 / plan Task 6：变体选择与指令/函数一样可被 overrides 仲裁，取唯一
+        // 最高 priority（final review M9 补齐 winner 路径的自动化证据）。
+        var a = Handle("community.a", 'a',
+            states: new[]
+            {
+                CompatPackCompositionTestData.VariantSelection("SETBGIMAGE", "builtin:snake", "community.a"),
+            },
+            overrides: new[] { new CompatPackOverride("variant:SETBGIMAGE", 10) });
+        var b = Handle("community.b", 'b',
+            states: new[]
+            {
+                CompatPackCompositionTestData.VariantSelection("SETBGIMAGE", "builtin:megaten", "community.b"),
+            },
+            overrides: new[] { new CompatPackOverride("variant:SETBGIMAGE", 20) });
+
+        Assert.True(Resolve(new[] { a, b }, out var result, out var errors), string.Join("; ", errors));
+
+        var key = new CompatSymbolKey(CompatSymbolKind.Variant, "SETBGIMAGE");
+        Assert.True(result.SymbolStates.TryGetValue(key, out var state));
+        Assert.Equal(CompatSymbolStateKind.VariantSelection, state!.Kind);
+        Assert.Equal("builtin:megaten", state.BuiltinVariant);
+        Assert.Equal("community.b", state.OwnerPackId);
+    }
+
+    [Fact]
+    public void Resolve_VariantOverridePriorityTie_Fails()
+    {
+        var a = Handle("community.a", 'a',
+            states: new[]
+            {
+                CompatPackCompositionTestData.VariantSelection("SETBGIMAGE", "builtin:snake", "community.a"),
+            },
+            overrides: new[] { new CompatPackOverride("variant:SETBGIMAGE", 20) });
+        var b = Handle("community.b", 'b',
+            states: new[]
+            {
+                CompatPackCompositionTestData.VariantSelection("SETBGIMAGE", "builtin:megaten", "community.b"),
+            },
+            overrides: new[] { new CompatPackOverride("variant:SETBGIMAGE", 20) });
+
+        Assert.False(Resolve(new[] { a, b }, out var result, out var errors));
+
+        Assert.Null(result);
+        // 并列最高 priority 在 override 仲裁层直接拒载（与 instruction 覆盖同一条规则）。
+        Assert.Contains(errors, error => error.Contains("variant:SETBGIMAGE")
+            && error.Contains("priority") && error.Contains("20"));
+    }
+
+    [Fact]
     public void Resolve_SameFinalState_MergesWithoutOverride()
     {
         // 同一最终状态（都隐藏）可合并：owner 取 Ordinal 最小者，结果与输入顺序无关。

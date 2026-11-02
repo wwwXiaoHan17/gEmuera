@@ -388,6 +388,29 @@ public static class CompatPackRules
                 CompatSymbolStateKind.VariantSelection, manifest.PackId, null, selection.Value));
         }
 
+        // 同一包对同一符号契约键同时声明 Present 与 Hidden 属自相矛盾（final review M7）：
+        // 录制器按 (Key, Kind) 去重，跨形态镜像（addFunctions 投影出的 Present 指令 +
+        // hideInstructions，或 hide 指令镜像出的 Hidden 函数 + add 函数）都能造出同键异态。
+        // 旧实现只会在组装期由 resolver 拒绝，整次启动回退；这里在加载期就拒载并给作者
+        // 可定位的契约串。基线名字规则只能拦住同形态的直接 add/hide 冲突，拦不住镜像。
+        var stateKindsBySymbol = new Dictionary<CompatSymbolKey, (bool Present, bool Hidden)>();
+        foreach (CompatSymbolState state in states)
+        {
+            stateKindsBySymbol.TryGetValue(state.Key, out (bool Present, bool Hidden) kinds);
+            if (state.Kind == CompatSymbolStateKind.Present)
+                kinds.Present = true;
+            else if (state.Kind == CompatSymbolStateKind.Hidden)
+                kinds.Hidden = true;
+            stateKindsBySymbol[state.Key] = kinds;
+        }
+        foreach (KeyValuePair<CompatSymbolKey, (bool Present, bool Hidden)> pair in
+            stateKindsBySymbol.OrderBy(pair => pair.Key.Kind).ThenBy(pair => pair.Key.Name, StringComparer.Ordinal))
+        {
+            if (pair.Value.Present && pair.Value.Hidden)
+                collected.Add("包 " + manifest.PackId + " 对同一符号同时声明新增与隐藏（add+hide 自相矛盾，"
+                    + "含 METHOD 投影镜像）：" + pair.Key.ToContractString() + "；请二选一。");
+        }
+
         // hide 必须落在 v24 基线内（隐藏基线没有的名字没有意义，多为拼写错误）；
         // register 不得与 v24 基线同名（改既有指令语义必须走变体通道）。
         // 对账用双形态展开后的有效集合：镜像补出的隐藏名同样必须合法。

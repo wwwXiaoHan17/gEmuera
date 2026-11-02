@@ -27,6 +27,17 @@ public readonly record struct CompatSymbolKey
         string normalized = (name ?? "").Trim();
         if (normalized.Length == 0)
             throw new ArgumentException("表面符号名不能为空。", nameof(name));
+        // 与 TryParse 同一套归一/校验（final review M11）：构造器若接受 ':' 或内部空白，
+        // ToContractString 会产出 TryParse 拒绝的串（如 "instruction:A:B"），契约串不再可逆，
+        // 依赖它的 override/诊断/哈希输入也就无法解析回同一符号。
+        if (normalized.IndexOf(':') >= 0)
+            throw new ArgumentException(
+                "表面符号名不得包含 ':'（契约串分隔符，会产生不可解析的 kind:name 形式）。", nameof(name));
+        foreach (char c in normalized)
+        {
+            if (char.IsWhiteSpace(c))
+                throw new ArgumentException("表面符号名不得包含空白字符。", nameof(name));
+        }
         Kind = kind;
         Name = kind == CompatSymbolKind.Function ? normalized : normalized.ToUpperInvariant();
     }

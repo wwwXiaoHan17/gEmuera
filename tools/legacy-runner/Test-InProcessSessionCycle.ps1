@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string]$ProjectRoot = (Get-Location).Path
 )
@@ -230,7 +230,12 @@ try {
     Assert-InProcessCycleContract ($identifierDictionarySource.Contains('compatibilityInstructionDic ?? instructionDic')) 'Instruction lookup does not honor the frozen descriptor route.'
     Assert-InProcessCycleContract ($identifierDictionarySource.Contains('compatibilityMethodDic ?? methodDic')) 'Function lookup does not honor the frozen descriptor route.'
     Assert-InProcessCycleContract ($identifierDictionarySource.Contains('CompatibilityDescriptorRoute<FunctionIdentifier, FunctionMethod>')) 'IdentifierDictionary does not delegate to the fail-closed descriptor route.'
-    Assert-InProcessCycleContract ($processSource.LastIndexOf('ConsumeCompatibilityPlan') -lt $processSource.LastIndexOf('BindCompatibilityPlan(Program.CurrentCompatibilityPlan)')) 'Process binds the descriptor route before validating the legacy registry.'
+    # 设计 §6.7（final review I3）：Bind 与 Consume 在同一 fallback scope 内，且先 Bind
+    # 再 Consume（旧的"先 Consume 再 Bind"会让反向 mismatch 在回退路径之前终止会话）。
+    $projectionBindIndex = $processSource.IndexOf('dictionary.BindCompatibilityPlan(plan)')
+    $projectionConsumeIndex = $processSource.IndexOf('ParserMediator.ConsumeCompatibilityPlan(')
+    Assert-InProcessCycleContract ($processSource.Contains('TryProjectCompatibilityPlanWithFallback')) 'Process does not project Bind+Consume under one fallback scope.'
+    Assert-InProcessCycleContract ($projectionBindIndex -ge 0 -and $projectionConsumeIndex -gt $projectionBindIndex) 'Process does not bind the descriptor route before consuming the legacy registry.'
     $keyMacroSource = [IO.File]::ReadAllText($keyMacroPath)
     Assert-InProcessCycleContract ($keyMacroSource.Contains('ResetCanarySessionState')) 'KeyMacro has no canary reset boundary.'
     Assert-InProcessCycleContract ($keyMacroSource.Contains('macro[i] = ""')) 'KeyMacro reset does not clear macro contents.'

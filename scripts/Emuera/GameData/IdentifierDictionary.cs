@@ -684,9 +684,14 @@ namespace MinorShift.Emuera
 
 			if (plan.Dialect.Instructions.Count == 0 && plan.Dialect.Functions.Count == 0)
 			{
-				compatibilityInstructionDic = null;
-				compatibilityMethodDic = null;
-				return true;
+				// 空描述符计划不再静默回退全量 registry（final review M6）：没有描述符就无法
+				// 证明"会话注册表 ⊆ plan"，继续使用全量 registry 等于绕过计划哈希与精确闭包。
+				// 确实需要无限制查找的旧调用点必须显式调用 <see cref="UnbindCompatibilityPlan"/>。
+				LastCompatibilityBindingError = "<empty-plan>";
+				GenericUtils.Error("[DIALECT] CompatibilityPlan declares no instruction/function descriptors;"
+					+ " refusing silent full-registry fallback (plan=" + plan.CanonicalHash
+					+ " profile=" + plan.ProfileId + ").");
+				return false;
 			}
 
 			// 描述符通道激活：会话驱动路由——投影注册表（已含方言 handler 变体）的每个
@@ -730,6 +735,18 @@ namespace MinorShift.Emuera
 		}
 
 		/// <summary>
+		/// 显式解绑（无描述符会话的唯一入口）：路由回到全量 <see cref="instructionDic"/> /
+		/// <see cref="methodDic"/>，与"从未绑定"状态等价。仅给确实不携带 descriptor 表面的
+		/// 旧调用点使用；携带计划时一律走 <see cref="BindCompatibilityPlan"/>（空计划 fail-closed）。
+		/// </summary>
+		internal void UnbindCompatibilityPlan()
+		{
+			compatibilityInstructionDic = null;
+			compatibilityMethodDic = null;
+			LastCompatibilityBindingError = null;
+		}
+
+		/// <summary>
 		/// 包投影失败降级到无包基线后的注册表重建：<see cref="instructionDic"/> /
 		/// <see cref="methodDic"/> 来自构造期的 profile 投影（包计划已收窄），fallback 后
 		/// 必须按当前会话 profile（无包基线）重新投影，否则重绑会把旧包的注册名当成
@@ -750,7 +767,24 @@ namespace MinorShift.Emuera
 					.ToList());
 			legacyFunctionNames = new ReadOnlyCollection<string>(
 				new List<string>(methodDic.Keys));
+			RebuildProfileVariableProjection();
 			RecomputeProfileDerivedNames();
+		}
+
+		/// <summary>
+		/// 变量名投影按当前 profile 重新裁剪（final review M4）：<see cref="varData"/> 在启动期
+		/// 按带包 profile 构造（<c>RESULTF</c> 仅 snake float 类型系统会话注册，
+		/// VariableData.cs 的 <c>UsesFloatTypeSystem</c> 门控），会话中途无法重建
+		/// VariableData 本身。fallback 到无包基线后若不裁剪，v24pure 会话仍能解析包专属
+		/// 变量名（RESULTF 以 SystemVariable 残留），"无包基线"状态与直接启动不等价。
+		/// 反向补回只作防御（fallback 的目标基线能力集合是原包计划的子集，正常不触发）。
+		/// </summary>
+		void RebuildProfileVariableProjection()
+		{
+			// fallback 的目标基线（当前 profile 的无包计划）能力集合必然是原包计划的子集，
+			// 因此投影门控只会关闭、不会重新打开；这里只做裁剪，不重建 VariableData。
+			if (!Program.Compatibility.Snake.UsesFloatTypeSystem)
+				varTokenDic.Remove("RESULTF");
 		}
 
 		public List<string> GetOverloadedList(LabelDictionary labelDic)

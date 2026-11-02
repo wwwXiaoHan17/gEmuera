@@ -69,15 +69,18 @@ namespace MinorShift.Emuera
 		/// Consumes the frozen descriptor surface after the legacy registry is
 		/// built. Empty descriptor registries preserve legacy behavior; any
 		/// selected descriptor must nevertheless exist in the active registry.
+		/// 计划显式传入（不再读静态 <see cref="compatibilityPlan"/>）：Bind 与 Consume
+		/// 必须能在同一 fallback scope 内对同一份 plan 求值（设计 §6.7 两个方向一致）。
 		/// </summary>
 		internal static void ConsumeCompatibilityPlan(
+			CompatibilityPlan plan,
 			IEnumerable<string> legacyInstructionNames,
 			IEnumerable<string> legacyFunctionNames)
 		{
-			if (compatibilityPlan == null)
-				throw new InvalidOperationException("Parser compatibility plan must be bound before registry consumption.");
+			if (plan == null)
+				throw new ArgumentNullException(nameof(plan));
 			compatibilityConsumption = LegacyCompatibilityPlanConsumption.Validate(
-				compatibilityPlan,
+				plan,
 				legacyInstructionNames,
 				legacyFunctionNames,
 				new HashSet<CompatSymbolKey>(Program.Compatibility.ConditionallyHiddenSymbols, null),
@@ -97,7 +100,7 @@ namespace MinorShift.Emuera
 			if (plan == null)
 				throw new ArgumentNullException(nameof(plan));
 			BindCompatibilityPlan(plan);
-			ConsumeCompatibilityPlan(legacyInstructionNames, legacyFunctionNames);
+			ConsumeCompatibilityPlan(plan, legacyInstructionNames, legacyFunctionNames);
 		}
 
 		#region Rename

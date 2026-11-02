@@ -25,6 +25,8 @@
     <ProjectReference Include="..\..\..\packs\gemuera.v18\gemuera.v18.csproj" />
     <!-- 契约夹具：只引用 Emuera 契约程序集的最小 ICompatPack 样本（ALC 正向用例复用）。 -->
     <ProjectReference Include="..\CompatPackContractOnlyFixture\CompatPackContractOnlyFixture.csproj" />
+    <!-- 多入口夹具（M9）：同一程序集两个 ICompatPack 实现类，钉住"恰好一个入口"拒载。 -->
+    <ProjectReference Include="..\CompatPackDoubleEntryFixture\CompatPackDoubleEntryFixture.csproj" />
     <!-- 加载器全链路夹具（T5 起测试程序集不再兼任包样本）：入口类 + 表面/能力贡献，
          程序集只引用契约程序集，隔离目录加载时 GetTypes 可完整枚举。 -->
     <ProjectReference Include="..\HelloCompatPackFixture\HelloCompatPackFixture.csproj" />

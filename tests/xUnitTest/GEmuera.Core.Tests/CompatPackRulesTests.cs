@@ -86,6 +86,40 @@ public class CompatPackRulesTests
     }
 
     [Fact]
+    public void Validate_AddAndHideSameSymbolIncludingMirror_Rejects()
+    {
+        // M7：同一包对同一符号契约键同时声明 Present 与 Hidden（含 METHOD 投影镜像出的
+        // 另一形态）必须在加载期拒载，而不是先加载成功、等组装期由 resolver 拒绝导致整次
+        // 启动回退。此处构造 RegisterFunction(HIDE_MIRROR)（Present function + 镜像 Present
+        // instruction）与 HideInstruction(HIDE_MIRROR)（Hidden instruction + 镜像 Hidden
+        // function）的交叉组合；基线名字规则另有错误，本用例只钉住新增的自相矛盾诊断。
+        string json = "{\"packId\":\"test.self-conflict\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1}";
+        CompatPackManifest manifest = CompatPackManifest.TryParse(json, out var parsed, out var parseErrors)
+            ? parsed! : throw new InvalidOperationException(string.Join("; ", parseErrors));
+        var context = new CompatPackValidationContext(
+            new CompatVersion(1, 0),
+            new CompatVersion(1, 0),
+            EngineCapabilityCatalog.All,
+            new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
+            new HashSet<string>(StringComparer.Ordinal) { "HIDE_MIRROR" },
+            new HashSet<string>(StringComparer.Ordinal) { "EXISTVAR" },
+            methodProjectedInstructionNames: new HashSet<string>(StringComparer.Ordinal) { "HIDE_MIRROR" });
+        var surface = new StubSurfaceDo
+        {
+            Do = (instructions, functions) =>
+            {
+                functions.RegisterFunction("HIDE_MIRROR", "Int64");
+                instructions.HideInstruction("HIDE_MIRROR");
+            },
+        };
+
+        Assert.False(CompatPackRules.Validate(
+            manifest, new ICompatPackContribution[] { surface }, context, out var errors));
+        Assert.Contains(errors, error => error.Contains("同时声明新增与隐藏") && error.Contains("instruction:HIDE_MIRROR"));
+        Assert.Contains(errors, error => error.Contains("同时声明新增与隐藏") && error.Contains("function:HIDE_MIRROR"));
+    }
+
+    [Fact]
     public void Validate_NullContributionElement_Rejects()
     {
         Assert.False(CompatPackRules.Validate(Manifest(), new ICompatPackContribution[] { null! }, Context(), out var errors));

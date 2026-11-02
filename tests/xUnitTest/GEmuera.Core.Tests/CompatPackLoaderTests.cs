@@ -14,8 +14,9 @@ namespace GEmuera.Core.Tests;
 /// 显式发现→依赖闭包→隔离→清单解析→入口发现→语义校验→冻结差量→哈希固化。
 /// T5 起不再拿测试程序集兼任"包样本"：测试程序集引用 xunit/Core，隔离 ALC 中的无关类型
 /// 会让 GetTypes 抛 ReflectionTypeLoadException，而加载器对该异常改为 fail-closed。
-/// 所有真实包加载都经 <see cref="IsolatedPackDirectory"/>：加载器把包目录顶层全部 *.dll
-/// 读成依赖闭包，共享 bin 目录会让"包"语义失真。
+/// 所有真实包加载都经 <see cref="IsolatedPackDirectory"/>：包依赖闭包必须在只含本包
+/// 程序集（主 DLL + 它真实引用到的依赖）的目录里成立，共享 bin 目录里的无关程序集会
+/// 被加载器按"未被引用"拒载（I1 一包一目录）。
 /// </summary>
 [Collection("CompatPack")]
 public class CompatPackLoaderTests
@@ -340,6 +341,23 @@ public class CompatPackLoaderTests
     }
 
     [Fact]
+    public void ResolvePackEntry_AssemblyWithTwoEntries_Rejects()
+    {
+        // plan Task 5 Step 6 / spec §6.5：一个包程序集必须恰好一个 ICompatPack 入口。
+        // 多入口时按 GetTypes 顺序挑一个会让贡献集合依赖类型枚举顺序（不确定），必须拒载。
+        string json = "{\"packId\":\"test.double-entry\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1}";
+        CompatPackManifest manifest = CompatPackManifest.TryParse(json, out var parsed, out var parseErrors)
+            ? parsed! : throw new InvalidOperationException(string.Join("; ", parseErrors));
+
+        var errors = new List<string>();
+        ICompatPack? pack = CompatPackLoader.ResolvePackEntry(
+            typeof(CompatPackDoubleEntryFixture.DoubleEntryFixtureMarker).Assembly, manifest, errors);
+
+        Assert.Null(pack);
+        Assert.Contains(errors, error => error.Contains("多个 ICompatPack") && error.Contains("2 个"));
+    }
+
+    [Fact]
     public void ResolvePackEntry_AssemblyWithoutEntry_ReturnsManifestOnlyPack()
     {
         string json = "{\"packId\":\"test.data-only\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1,"
@@ -405,84 +423,138 @@ public class CompatPackLoaderTests
     // —— T5：加载完整性、依赖哈希与冻结差量 ——
 
     [Fact]
-    public void TryLoad_ChangingDependencyBytes_ChangesPackSha256()
+    public void TryLoad_ChangingReferencedDependencyBytes_ChangesPackSha256()
     {
         // 依赖闭包进 PackSha256：同一主 DLL / 内嵌清单，只改同目录依赖字节 → 包哈希必须变，
         // 程序集哈希（只看主 DLL 字节）必须不变。依赖只按文件基名/长度/字节入哈希。
-        using var directory = new IsolatedPackDirectory(HelloPackPath);
-        const string dependencyName = "DummyDependency.dll";
-        directory.WriteAssembly(dependencyName, new byte[] { 1, 2, 3, 4 });
+        string packPath = typeof(CompatPackTypeLoadFixture.TypeLoadFailingPack).Assembly.Location;
+        string dependencyPath = typeof(CompatPackTypeLoadDependency.TypeLoadDependencyBase).Assembly.Location;
+        byte[] dependencyBytes = File.ReadAllBytes(dependencyPath);
+        using var directory = new IsolatedPackDirectory(packPath, dependencyPath);
 
         Assert.True(CompatPackLoader.TryLoad(directory.MainAssemblyPath, RealContext(), out var first, out var firstErrors),
             string.Join("; ", firstErrors));
         string firstPackSha256 = first!.PackSha256;
         string assemblySha256 = first.AssemblySha256;
-        CompatPackDependencyInfo recorded = Assert.Single(
-            first.Dependencies, dependency => dependency.FileName == dependencyName);
+        CompatPackDependencyInfo recorded = Assert.Single(first.Dependencies);
+        Assert.Equal(TypeLoadDependencyName, recorded.FileName);
         // 诊断只记 basename + SHA256（不泄漏完整路径）。
         Assert.DoesNotContain(Path.DirectorySeparatorChar, recorded.FileName);
-        Assert.Equal(
-            Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(new byte[] { 1, 2, 3, 4 }))
-                .ToLowerInvariant(),
-            recorded.Sha256);
+        Assert.Equal(Sha256Reference(dependencyBytes), recorded.Sha256);
         Assert.Matches("^[0-9a-f]{64}$", firstPackSha256);
         first.Unload();
 
-        directory.WriteAssembly(dependencyName, new byte[] { 1, 2, 3, 5 });
+        // 追加 1 字节：仍是可装载 PE（元数据偏移不变），但字节/哈希必须变——
+        // 入哈希的字节就是被 ALC 装载的字节。
+        byte[] mutated = dependencyBytes.Append((byte)0).ToArray();
+        directory.WriteAssembly(TypeLoadDependencyName, mutated);
         Assert.True(CompatPackLoader.TryLoad(directory.MainAssemblyPath, RealContext(), out var second, out var secondErrors),
             string.Join("; ", secondErrors));
         Assert.Equal(assemblySha256, second!.AssemblySha256);
         Assert.NotEqual(firstPackSha256, second.PackSha256);
-        // 独立推演：主 DLL + 内嵌清单 + DummyDependency 字节的规范哈希。
+        // 独立推演：主 DLL + 内嵌清单 + 被引用依赖字节的规范哈希。
         byte[] mainBytes = File.ReadAllBytes(directory.MainAssemblyPath);
         Assert.Equal(
-            ExpectedPackSha256(mainBytes, (dependencyName, new byte[] { 1, 2, 3, 5 })),
+            ExpectedPackSha256(mainBytes, (TypeLoadDependencyName, mutated)),
             second.PackSha256);
         second.Unload();
     }
 
+    const string TypeLoadDependencyName = "CompatPackTypeLoadDependency.dll";
+
     [Fact]
-    public void TryLoad_DependencyHashIsOrderIndependent()
+    public void TryLoad_UnreferencedTopLevelDll_RejectsWithActionableError()
     {
-        // M-6：PackSha256 必须与依赖的落盘/枚举顺序无关（ComputePackHash 按文件基名 Ordinal
-        // 排序）。两个 dummy 依赖以相反顺序写入两个隔离目录，同一主 DLL/manifest 必须得到
-        // 同一哈希；并用独立规范推演分别钉住两个方向的精确值。
-        const string firstDependency = "AaaDependency.dll";
-        const string secondDependency = "ZzzDependency.dll";
-        byte[] firstBytes = { 1, 2, 3 };
-        byte[] secondBytes = { 4, 5, 6 };
+        // I1：目录顶层未被主程序集 AssemblyRef 引用的 DLL 一律拒载。旧的"整个目录都是
+        // 依赖闭包"语义会让同目录的另一个包进 PackSha256 并可被 ALC 解析（未启用包可见）。
+        using var directory = new IsolatedPackDirectory(HelloPackPath);
+        string neighbourName = Path.GetFileName(FixturePath);
+        directory.WriteAssembly(neighbourName, File.ReadAllBytes(FixturePath));
 
-        using var forward = new IsolatedPackDirectory(HelloPackPath);
-        forward.WriteAssembly(firstDependency, firstBytes);
-        forward.WriteAssembly(secondDependency, secondBytes);
+        Assert.False(
+            CompatPackLoader.TryLoad(directory.MainAssemblyPath, RealContext(), out var handle, out var errors),
+            "目录内未被引用的 DLL 被当作依赖接受。");
+        Assert.Null(handle);
+        Assert.Contains(errors, error => error.Contains("自包含") && error.Contains(neighbourName));
+        Assert.Contains(errors, error => error.Contains("未被主程序集") && error.Contains("独立目录"));
+    }
 
-        using var reverse = new IsolatedPackDirectory(HelloPackPath);
-        reverse.WriteAssembly(secondDependency, secondBytes);
-        reverse.WriteAssembly(firstDependency, firstBytes);
+    [Fact]
+    public void TryLoad_TwoPacksInOneDirectory_RejectsBothAndNeverMixesPackHashes()
+    {
+        // I1 主回归（共享扫描根）：两个互不引用的包放在同一目录 → 加载其中任一个都必须
+        // 失败（另一个是未被引用的顶层 DLL），而不是把邻居字节算进自己的 PackSha256 /
+        // 装进自己的 ALC。移走邻居后，主包 PackSha256 与干净单包目录逐字相同（无污染）。
+        string neighbourSource = HelloPackPath;
+        string neighbourName = Path.GetFileName(neighbourSource);
+        using var shared = new IsolatedPackDirectory(FixturePath);
+        shared.WriteAssembly(neighbourName, File.ReadAllBytes(neighbourSource));
 
+        Assert.False(
+            CompatPackLoader.TryLoad(shared.MainAssemblyPath, RealContext(), out _, out var mainErrors),
+            "同目录另一个包存在时主包仍被接受。");
+        Assert.Contains(mainErrors, error => error.Contains(neighbourName) && error.Contains("未被主程序集"));
+
+        Assert.False(
+            CompatPackLoader.TryLoad(
+                Path.Combine(shared.DirectoryPath, neighbourName), RealContext(), out _, out var neighbourErrors),
+            "同目录另一个包存在时邻居包仍被接受。");
+        Assert.Contains(neighbourErrors, error => error.Contains("未被主程序集"));
+
+        File.Delete(Path.Combine(shared.DirectoryPath, neighbourName));
         Assert.True(
-            CompatPackLoader.TryLoad(forward.MainAssemblyPath, RealContext(), out var forwardHandle, out var forwardErrors),
-            string.Join("; ", forwardErrors));
+            CompatPackLoader.TryLoad(shared.MainAssemblyPath, RealContext(), out var sharedHandle, out var sharedErrors),
+            string.Join("; ", sharedErrors));
+        using var solo = new IsolatedPackDirectory(FixturePath);
         Assert.True(
-            CompatPackLoader.TryLoad(reverse.MainAssemblyPath, RealContext(), out var reverseHandle, out var reverseErrors),
-            string.Join("; ", reverseErrors));
+            CompatPackLoader.TryLoad(solo.MainAssemblyPath, RealContext(), out var soloHandle, out var soloErrors),
+            string.Join("; ", soloErrors));
         try
         {
-            Assert.Equal(forwardHandle!.PackSha256, reverseHandle!.PackSha256);
-            byte[] mainBytes = File.ReadAllBytes(forward.MainAssemblyPath);
-            Assert.Equal(
-                ExpectedPackSha256(mainBytes, (firstDependency, firstBytes), (secondDependency, secondBytes)),
-                forwardHandle.PackSha256);
-            Assert.Equal(
-                ExpectedPackSha256(mainBytes, (secondDependency, secondBytes), (firstDependency, firstBytes)),
-                reverseHandle.PackSha256);
+            Assert.Equal(soloHandle!.PackSha256, sharedHandle!.PackSha256);
         }
         finally
         {
-            forwardHandle?.Unload();
-            reverseHandle?.Unload();
+            sharedHandle?.Unload();
+            soloHandle?.Unload();
         }
     }
+
+    [Fact]
+    public void TryLoad_DependencyClosureHash_IsDeterministicAcrossDirectories()
+    {
+        // M-6：PackSha256 必须与目录落盘/枚举顺序无关（闭包按 AssemblyRef 推导，哈希按
+        // 文件基名 Ordinal 排序）。两个内容相同的隔离目录必须得到同一包哈希，且与独立
+        // 规范推演（主 DLL + 内嵌清单 + 被引用依赖字节）逐字一致。
+        string packPath = typeof(CompatPackTypeLoadFixture.TypeLoadFailingPack).Assembly.Location;
+        string dependencyPath = typeof(CompatPackTypeLoadDependency.TypeLoadDependencyBase).Assembly.Location;
+        byte[] dependencyBytes = File.ReadAllBytes(dependencyPath);
+        using var first = new IsolatedPackDirectory(packPath, dependencyPath);
+        using var second = new IsolatedPackDirectory(packPath, dependencyPath);
+
+        Assert.True(
+            CompatPackLoader.TryLoad(first.MainAssemblyPath, RealContext(), out var firstHandle, out var firstErrors),
+            string.Join("; ", firstErrors));
+        Assert.True(
+            CompatPackLoader.TryLoad(second.MainAssemblyPath, RealContext(), out var secondHandle, out var secondErrors),
+            string.Join("; ", secondErrors));
+        try
+        {
+            Assert.Equal(firstHandle!.PackSha256, secondHandle!.PackSha256);
+            byte[] mainBytes = File.ReadAllBytes(first.MainAssemblyPath);
+            Assert.Equal(
+                ExpectedPackSha256(mainBytes, (TypeLoadDependencyName, dependencyBytes)),
+                firstHandle.PackSha256);
+        }
+        finally
+        {
+            firstHandle?.Unload();
+            secondHandle?.Unload();
+        }
+    }
+
+    static string Sha256Reference(byte[] bytes)
+        => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant();
 
     [SymlinkFact]
     public void TryLoad_SymlinkOutsidePackDirectory_IsRejected()

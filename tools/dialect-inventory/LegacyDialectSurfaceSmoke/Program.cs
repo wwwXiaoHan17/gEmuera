@@ -730,7 +730,10 @@ static class Program
     private static void AssertV18PackEquivalence()
     {
         // 经包工程的 public 标记类取真实 DLL 路径（MSBuild 保证已构建并复制到本输出目录）。
-        string packPath = typeof(GemueraV18Pack.GemueraV18PackMarker).Assembly.Location;
+        // I1 一包一目录：共享 bin 输出目录里的无关程序集会让依赖闭包拒载，先复制到只含
+        // 本包主 DLL 的临时目录，再走与生产完全相同的加载链。
+        string packPath = CopyPackToIsolatedDirectory(
+            typeof(GemueraV18Pack.GemueraV18PackMarker).Assembly.Location, out string packDirectory);
         var context = new CompatPackValidationContext(
             currentContractAbi: new CompatVersion(1, 0),
             currentEngineApi: new CompatVersion(1, 0),
@@ -807,6 +810,33 @@ static class Program
         finally
         {
             handle!.Unload();
+            TryDeleteDirectory(packDirectory);
+        }
+    }
+
+    /// <summary>把单个包 DLL 复制进只含它的临时目录（一包一目录的部署契约）。</summary>
+    private static string CopyPackToIsolatedDirectory(string sourceAssemblyPath, out string directoryPath)
+    {
+        directoryPath = Path.Combine(Path.GetTempPath(), "compat-pack-smoke-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directoryPath);
+        string destination = Path.Combine(directoryPath, Path.GetFileName(sourceAssemblyPath));
+        File.Copy(sourceAssemblyPath, destination);
+        return destination;
+    }
+
+    private static void TryDeleteDirectory(string directoryPath)
+    {
+        try
+        {
+            if (Directory.Exists(directoryPath))
+                Directory.Delete(directoryPath, recursive: true);
+        }
+        catch (IOException)
+        {
+            // 临时目录清理失败不影响门禁结论。
+        }
+        catch (UnauthorizedAccessException)
+        {
         }
     }
 
@@ -895,8 +925,10 @@ static class Program
             | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
         const System.Reflection.BindingFlags anyInstance = System.Reflection.BindingFlags.Instance
             | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
-        // IdentifierDictionary.DefinedNameType 的私有枚举序数（Reserved=1、SystemMethod=3）。
+        // IdentifierDictionary.DefinedNameType 的私有枚举序数（Reserved=1、SystemVariable=2、
+        // SystemMethod=3）。
         const int reservedNameType = 1;
+        const int systemVariableNameType = 2;
         const int systemMethodNameType = 3;
 
         System.Reflection.MethodInfo configure = programType.GetMethod(
@@ -936,8 +968,16 @@ static class Program
         object packedFunctions = RuntimeRegistryObject(
             engine, "MinorShift.Emuera.GameData.Function.FunctionMethodCreator", "GetMethodList", profileType, packedProfile);
 
+        // 变量名投影（M4）：VariableData 在启动期按带包 profile 构造，RESULTF 只在 float
+        // 类型系统会话注册（VariableData.cs:215）；fallback 后必须按 UsesFloatTypeSystem 裁剪。
+        // 真实 VariableData 无法在探针里构造（SetDefaultValue 读 ConstantData.ItemPrice /
+        // GetCsvNameList，需 LoadData 的 CSV 链，见报告 M4 说明），这里按同名键合成字典，
+        // 验证的是投影门控本身（Remove + nameDic 派生项重算）。
+        object packedVariableTokens = CreateProbeVariableTokens(identifierType);
+
         object packedDictionary = NewIdentifierDictionaryProbe(
-            identifierType, nameDictionaryType, definedNameType, packedInstructions, packedFunctions);
+            identifierType, nameDictionaryType, definedNameType, packedInstructions, packedFunctions,
+            packedVariableTokens);
         // 构造期等价路径：按包 profile 派生一次（Rebind 之前的 nameDic 状态）。
         recompute.Invoke(packedDictionary, null);
         SortedDictionary<string, int> before = ReadNamedTypes(GetNameDictionary(identifierType, packedDictionary));
@@ -950,6 +990,11 @@ static class Program
         Assert(before.TryGetValue("REFF", out int reffNameType) && reffNameType == reservedNameType
                 && before.ContainsKey("VARIADIC"),
             "探针前提失败：带包 profile 未登记 snake 保留字 REFF/VARIADIC（capability 未激活？）。");
+        Assert(before.TryGetValue("RESULTF", out int resultfNameType) && resultfNameType == systemVariableNameType,
+            "探针前提失败：带包（float 类型系统）profile 的 nameDic 未登记 RESULTF（SystemVariable）；"
+            + "变量投影门控没有可验证的输入。");
+        Assert(VariableTokensContain(identifierType, packedDictionary, "RESULTF"),
+            "探针前提失败：带包会话的 varTokenDic 不含 RESULTF（真实 VariableData 未按 float capability 构造？）。");
 
         // 2) 生产降级路径：Program.TryFallbackToNoPackBaseline("v24pure", out plan)。
         object?[] fallbackArguments = { "v24pure", null };
@@ -978,10 +1023,16 @@ static class Program
             "fallback 后 nameDic 未恢复基线可见函数 EXISTVAR（SystemMethod）。");
         Assert(!after.ContainsKey("REFF") && !after.ContainsKey("VARIADIC"),
             "fallback 后 nameDic 仍残留 snake 保留字 REFF/VARIADIC。");
+        // M4：包专属变量名（RESULTF 由 type.float-system.v1 门控）必须随 fallback 消失，
+        // 否则 v24pure 会话仍能解析包带来的变量，状态不等价。
+        Assert(!VariableTokensContain(identifierType, packedDictionary, "RESULTF"),
+            "fallback 后 varTokenDic 仍残留 RESULTF（变量投影未按 UsesFloatTypeSystem 裁剪）。");
+        Assert(!after.ContainsKey("RESULTF"), "fallback 后 nameDic 仍把 RESULTF 登记为 SystemVariable。");
 
-        // 对照：空字典实例直接按基线重绑（同一 Program.Compatibility / 同一空 varToken 输入）。
+        // 对照：同一份真实变量名字典输入，直接按无包基线重绑（独立实例，不共享可变字典）。
         object freshDictionary = NewIdentifierDictionaryProbe(
-            identifierType, nameDictionaryType, definedNameType, packedInstructions, packedFunctions);
+            identifierType, nameDictionaryType, definedNameType, packedInstructions, packedFunctions,
+            CreateProbeVariableTokens(identifierType));
         rebind.Invoke(freshDictionary, null);
         SortedDictionary<string, int> fresh = ReadNamedTypes(GetNameDictionary(identifierType, freshDictionary));
 
@@ -994,6 +1045,99 @@ static class Program
                 "fallback 后 nameDic 派生项与直接按无包基线重绑不一致：" + pair.Key
                 + " 期望类型=" + pair.Value + " 实际=" + (present ? actual.ToString() : "<missing>"));
         }
+
+        // 4) I3 反向 mismatch（plan ⊄ registry）：plan 的非条件符号在会话注册表缺席时，生产
+        //    helper 必须与 Bind 失败走同一 fallback（旧实现先 Consume，会在回退路径之前抛错
+        //    终止会话）。用"少一个基线指令"的真实注册表副本触发 Bind 通过、Consume 失败。
+        Type processType = engine.GetType("MinorShift.Emuera.GameProc.Process")
+            ?? throw new InvalidOperationException("Process type not found.");
+        System.Reflection.MethodInfo projectWithFallback = processType.GetMethod(
+                "TryProjectCompatibilityPlanWithFallback", anyStatic)
+            ?? throw new InvalidOperationException("Process.TryProjectCompatibilityPlanWithFallback not found.");
+        Type functionIdentifierType = engine.GetType("MinorShift.Emuera.GameProc.Function.FunctionIdentifier")
+            ?? throw new InvalidOperationException("FunctionIdentifier type not found.");
+        Type instructionRegistryType = typeof(Dictionary<,>).MakeGenericType(typeof(string), functionIdentifierType);
+        System.Reflection.PropertyInfo currentPlanProperty = programType.GetProperty("CurrentCompatibilityPlan", anyStatic)
+            ?? throw new InvalidOperationException("Program.CurrentCompatibilityPlan not found.");
+
+        CompatibilityPlan reversePlan = AssembleSmokePackPlan();
+        System.Reflection.MethodInfo clearPlan = programType.GetMethod(
+                "ClearCompatibilityPlan", anyStatic, binder: null, types: Type.EmptyTypes, modifiers: null)
+            ?? throw new InvalidOperationException("Program.ClearCompatibilityPlan() not found.");
+        // 上一步的 fallback 已把 v24pure 基线绑定到进程；同进程换绑不同哈希的计划前必须清理。
+        clearPlan.Invoke(null, null);
+        configure.Invoke(null, new object[] { reversePlan, true });
+        object reverseProfile = currentProfileProperty.GetValue(null)
+            ?? throw new InvalidOperationException("Program.Compatibility returned null after reverse-plan bind.");
+        object reverseInstructions = RuntimeRegistryObject(
+            engine, "MinorShift.Emuera.GameProc.Function.FunctionIdentifier", "GetInstructionNameDic",
+            profileType, reverseProfile);
+        object filteredInstructions = CopyRegistryWithout(reverseInstructions, instructionRegistryType, "PRINT");
+        object reverseDictionary = NewIdentifierDictionaryProbe(
+            identifierType, nameDictionaryType, definedNameType, filteredInstructions, packedFunctions,
+            CreateProbeVariableTokens(identifierType));
+        // Process 的 idDic 由构造器填充 legacy 名称清单；探针实例按同一规则补齐（不能用
+        // Rebind：那会用当前 profile 的全量注册表覆盖掉我们刻意裁剪的 instructionDic）。
+        SeedLegacyNameFields(identifierType, reverseDictionary, filteredInstructions, packedFunctions);
+
+        object?[] reverseArguments = { reverseDictionary, reversePlan, null };
+        bool reverseProjected = (bool)(projectWithFallback.Invoke(null, reverseArguments) ?? false);
+        Assert(reverseProjected,
+            "反向 mismatch（plan 声明的 PRINT 不在注册表）未走 fallback 成功：" + reverseArguments[2]);
+        CompatibilityPlan reverseBaseline = currentPlanProperty.GetValue(null) as CompatibilityPlan
+            ?? throw new InvalidOperationException("反向 mismatch fallback 后 Program.CurrentCompatibilityPlan 为 null。");
+        Assert(reverseBaseline.ProfileId == "v24pure" && reverseBaseline.CanonicalHash == expectedBaseline.CanonicalHash,
+            "反向 mismatch fallback 后的计划不是 v24pure 无包基线（profile=" + reverseBaseline.ProfileId
+            + " hash=" + reverseBaseline.CanonicalHash + "）。");
+        Assert(GetInstanceField(identifierType, reverseDictionary, "compatibilityInstructionDic") != null,
+            "反向 mismatch fallback 后字典未绑定无包基线描述符路由。");
+
+        // 5) fallback 也失败：plan 的 ProfileId 无法解析出无包基线 → helper 返回 false，
+        //    异常必须携带 plan hash / profile / 失败 symbol（外层 Fatal 日志据此定位）。
+        CompatibilityPlan unknownProfilePlan = CreateCompatibilityPlanProbe(
+            "fallback-unavailable-profile", reversePlan);
+        object unknownDictionary = NewIdentifierDictionaryProbe(
+            identifierType, nameDictionaryType, definedNameType, filteredInstructions, packedFunctions,
+            CreateProbeVariableTokens(identifierType));
+        SeedLegacyNameFields(identifierType, unknownDictionary, filteredInstructions, packedFunctions);
+        object?[] unknownArguments = { unknownDictionary, unknownProfilePlan, null };
+        bool unknownProjected = (bool)(projectWithFallback.Invoke(null, unknownArguments) ?? false);
+        Assert(!unknownProjected, "无包基线不可用（未知 profile）时 helper 仍返回成功。");
+        Exception unknownFailure = (Exception)(unknownArguments[2]
+            ?? throw new InvalidOperationException("helper 返回 false 但未产出异常（契约破坏）。"));
+        Assert(unknownFailure.Message.Contains(unknownProfilePlan.CanonicalHash),
+            "fallback 失败异常未携带 plan hash：" + unknownFailure.Message);
+        Assert(unknownFailure.Message.Contains("fallback-unavailable-profile"),
+            "fallback 失败异常未携带 profile：" + unknownFailure.Message);
+        Assert(unknownFailure.Message.Contains("PRINT"),
+            "fallback 失败异常未携带失败 symbol：" + unknownFailure.Message);
+        Assert(unknownFailure.Message.Contains("no-pack baseline fallback failed"),
+            "fallback 失败异常不是统一文案：" + unknownFailure.Message);
+
+        // 6) M6：空描述符计划不再静默回退全量 registry；显式 Unbind 是无描述符会话的唯一入口。
+        CompatibilityPlan emptyPlan = new CompatibilityPlanBuilder(BuiltInDialectCatalog.CreateLegacyBaseline())
+            .Build("v24pure", Array.Empty<string>());
+        object emptyDictionary = NewIdentifierDictionaryProbe(
+            identifierType, nameDictionaryType, definedNameType, packedInstructions, packedFunctions,
+            CreateProbeVariableTokens(identifierType));
+        SeedLegacyNameFields(identifierType, emptyDictionary, packedInstructions, packedFunctions);
+        System.Reflection.MethodInfo bindPlanMethod = identifierType.GetMethod("BindCompatibilityPlan", anyInstance)
+            ?? throw new InvalidOperationException("IdentifierDictionary.BindCompatibilityPlan not found.");
+        bool emptyBound = (bool)(bindPlanMethod.Invoke(emptyDictionary, new object[] { emptyPlan }) ?? false);
+        Assert(!emptyBound, "空描述符计划仍被 BindCompatibilityPlan 静默接受（应 fail-closed）。");
+        System.Reflection.PropertyInfo bindingErrorProperty = identifierType.GetProperty(
+                "LastCompatibilityBindingError",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("IdentifierDictionary.LastCompatibilityBindingError not found.");
+        Assert((string?)bindingErrorProperty.GetValue(emptyDictionary) == "<empty-plan>",
+            "空描述符计划的失败标记不是 <empty-plan>。");
+        System.Reflection.MethodInfo unbindPlanMethod = identifierType.GetMethod("UnbindCompatibilityPlan", anyInstance)
+            ?? throw new InvalidOperationException("IdentifierDictionary.UnbindCompatibilityPlan not found.");
+        unbindPlanMethod.Invoke(emptyDictionary, null);
+        Assert(GetInstanceField(identifierType, emptyDictionary, "compatibilityInstructionDic") == null,
+            "UnbindCompatibilityPlan 未恢复全量 registry 路由（compatibilityInstructionDic 非 null）。");
+
+        Console.WriteLine("fallback probe: reverse-mismatch fallback + fallback-unavailable + empty-plan branches exercised.");
     }
 
     // 反射填充一个 IdentifierDictionary 实例（不跑构造器：VariableData 依赖 CSV 装载）。
@@ -1003,7 +1147,8 @@ static class Program
         Type nameDictionaryType,
         Type definedNameType,
         object instructionRegistry,
-        object functionRegistry)
+        object functionRegistry,
+        object variableTokens)
     {
         object instance = System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(identifierType);
         SetInstanceField(identifierType, instance, "nameDic",
@@ -1011,13 +1156,106 @@ static class Program
         SetInstanceField(identifierType, instance, "profileDerivedNames",
             Activator.CreateInstance(nameDictionaryType)
                 ?? throw new InvalidOperationException("profileDerivedNames dictionary construction failed."));
-        SetInstanceField(identifierType, instance, "varTokenDic",
-            NewEmptyInstanceDictionary(identifierType, "varTokenDic"));
+        SetInstanceField(identifierType, instance, "varTokenDic", variableTokens);
         SetInstanceField(identifierType, instance, "localvarTokenDic",
             NewEmptyInstanceDictionary(identifierType, "localvarTokenDic"));
         SetInstanceField(identifierType, instance, "instructionDic", instructionRegistry);
         SetInstanceField(identifierType, instance, "methodDic", functionRegistry);
         return instance;
+    }
+
+    /// <summary>
+    /// 探针变量名字典（M4 门控输入）：带包会话按 float 类型系统注册 RESULTF，fallback 后
+    /// 必须按 <c>UsesFloatTypeSystem</c> 裁剪。真实 <c>VariableData</c> 在探针里不可构造
+    /// （<c>SetDefaultValue</c> 读 <c>ConstantData.ItemPrice</c> 与 CSV 名表，需要
+    /// <c>LoadData</c> 的 CSV 装载链，缺 CSV 时 NullReferenceException），因此这里直接
+    /// 合成同名键——被验证的是投影门控（Remove + nameDic 派生项重算），不是 CSV 装载。
+    /// </summary>
+    private static object CreateProbeVariableTokens(Type identifierType)
+    {
+        System.Reflection.FieldInfo field = identifierType.GetField(
+                "varTokenDic", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("IdentifierDictionary.varTokenDic not found.");
+        object dictionary = Activator.CreateInstance(field.FieldType)
+            ?? throw new InvalidOperationException("probe varTokenDic construction failed.");
+        // 门控逻辑只读键名（Remove/Contains/枚举 Key），占位值用 null 即可（VariableToken 是抽象类）。
+        ((System.Collections.IDictionary)dictionary).Add("RESULTF", null!);
+        return dictionary;
+    }
+
+    /// <summary>
+    /// 按 IdentifierDictionary 构造器的同一规则填充 legacy 名称清单：指令取非 METHOD 投影
+    /// 名字（METHOD 指令由函数可见性驱动），函数取注册表全部键。
+    /// </summary>
+    private static void SeedLegacyNameFields(
+        Type identifierType,
+        object dictionary,
+        object instructionRegistry,
+        object functionRegistry)
+    {
+        var methodProjected = new HashSet<string>(
+            GEmuera.Core.Compatibility.LegacyDialectInventories.MethodProjectedInstructionNames,
+            StringComparer.Ordinal);
+        List<string> instructionNames = RegistryNames(instructionRegistry)
+            .Where(name => !methodProjected.Contains(name))
+            .ToList();
+        List<string> functionNames = RegistryNames(functionRegistry).ToList();
+        SetInstanceField(identifierType, dictionary, "legacyInstructionNames", instructionNames.AsReadOnly());
+        SetInstanceField(identifierType, dictionary, "legacyFunctionNames", functionNames.AsReadOnly());
+    }
+
+    private static bool VariableTokensContain(Type identifierType, object identifierDictionary, string name)
+    {
+        System.Reflection.FieldInfo field = identifierType.GetField(
+                "varTokenDic", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("IdentifierDictionary.varTokenDic not found.");
+        object? tokens = field.GetValue(identifierDictionary);
+        return tokens is System.Collections.IDictionary dictionary && dictionary.Contains(name);
+    }
+
+    private static object? GetInstanceField(Type type, object instance, string fieldName)
+    {
+        System.Reflection.FieldInfo field = type.GetField(
+                fieldName, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException(type.Name + "." + fieldName + " not found.");
+        return field.GetValue(instance);
+    }
+
+    /// <summary>复制注册表并剔除一个名字（构造"plan ⊄ registry"的反向 mismatch 输入）。</summary>
+    private static object CopyRegistryWithout(object source, Type dictionaryType, string excludedName)
+    {
+        var sourceDictionary = source as System.Collections.IDictionary
+            ?? throw new InvalidOperationException("registry is not a non-generic IDictionary.");
+        if (!sourceDictionary.Contains(excludedName))
+            throw new InvalidOperationException("registry does not contain '" + excludedName + "'.");
+        object copy = Activator.CreateInstance(dictionaryType)
+            ?? throw new InvalidOperationException("registry copy construction failed.");
+        var target = (System.Collections.IDictionary)copy;
+        foreach (System.Collections.DictionaryEntry entry in sourceDictionary)
+        {
+            if (entry.Key is string name && string.Equals(name, excludedName, StringComparison.Ordinal))
+                continue;
+            target.Add(entry.Key!, entry.Value!);
+        }
+        return copy;
+    }
+
+    /// <summary>反射构造带自定义 ProfileId 的 CompatibilityPlan（验证 fallback 不可用分支）。</summary>
+    private static CompatibilityPlan CreateCompatibilityPlanProbe(string profileId, CompatibilityPlan template)
+    {
+        System.Reflection.ConstructorInfo constructor = typeof(CompatibilityPlan).GetConstructor(
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic,
+                binder: null,
+                types: new[]
+                {
+                    typeof(string), typeof(DialectPlan), typeof(IEnumerable<string>), typeof(string), typeof(string),
+                },
+                modifiers: null)
+            ?? throw new InvalidOperationException("CompatibilityPlan internal constructor not found.");
+        return (CompatibilityPlan)constructor.Invoke(new object?[]
+        {
+            profileId, template.Dialect, template.CapabilityIds, template.SaveProfileId, template.CanonicalHash,
+        });
     }
 
     private static void SetInstanceField(Type type, object instance, string fieldName, object value)

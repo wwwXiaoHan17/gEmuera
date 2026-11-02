@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- M9 夹具：同一程序集内有两个 ICompatPack 实现类。加载器的"恰好一个入口"规则
+         必须拒载这种包（否则入口选择依赖类型枚举顺序，贡献集合不确定）。 -->
+    <ProjectReference Include="..\..\..\src\EmueraCompatPack\EmueraCompatPack.csproj" />
+  </ItemGroup>
+</Project>

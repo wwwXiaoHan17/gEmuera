@@ -379,6 +379,7 @@ namespace MinorShift.Emuera
 			// 路径：按当前 profile 重建纯基线计划组合（计划与投影一致降级为该 profile
 			// 的无包基线，非 v24 时保持原 profile）。
 			LegacyCompatibilityProfile profile;
+			bool projectionFellBack = false;
 			try
 			{
 				// plan 自身携带 pack 模块白名单与 variantSelections（CompatPackPlanAssembler
@@ -387,10 +388,15 @@ namespace MinorShift.Emuera
 			}
 			catch (Exception exception)
 			{
-				global::GenericUtils.Error("[LOAD] CompatPack projection failed, fallback to no-pack composition: "
+				projectionFellBack = true;
+				// 异常详情行不含 "fallback"（发布门禁把 fallback 之后 160 字符内的
+				// fail/error/exception 视为回退失败）；成功回退标记单独一行、逐字与
+				// Program.TryFallbackToNoPackBaseline 相同，便于门禁与人工排查共用。
+				global::GenericUtils.Error("[LOAD] CompatPack projection failed: "
 					+ exception.GetType().Name + ": " + exception.Message);
 				plan = BuiltInDialectCatalog.CreateLegacySessionPlan(plan.ProfileId);
 				profile = LegacyCompatibilityProfile.Create(plan, scopedVariableInstructionsEnabled);
+				global::GenericUtils.Error("[LOAD] CompatPack projection failed; fallback to no-pack baseline");
 			}
 			var existing = System.Threading.Volatile.Read(ref m1CompatibilityPlan);
 			if (existing != null && !string.Equals(existing.CanonicalHash, plan.CanonicalHash, StringComparison.Ordinal))
@@ -404,10 +410,38 @@ namespace MinorShift.Emuera
 			// （同哈希）必须保留早前绑定的包租约，否则 ALC 会在启动中途被卸载。
 			if (packSession != null)
 			{
-				var orphaned = System.Threading.Volatile.Read(ref m1CompatPackSession);
-				if (orphaned != null && !ReferenceEquals(orphaned, packSession))
-					orphaned.Dispose();
-				System.Threading.Volatile.Write(ref m1CompatPackSession, packSession);
+				if (projectionFellBack)
+				{
+					// 计划已降级为无包基线：包 session 的 ALC/入口实例不再被任何投影引用，
+					// 必须此处确定性回收。否则 CompatPackHost 已记的 "enabled" 日志会指向一个
+					// 实际未投影的包，且 ALC 一直驻留到进程结束（final review M5）。
+					try
+					{
+						int abandonedCount = packSession.Handles.Count;
+						packSession.Dispose();
+						// 文案避开 fail/error/terminated 与 "fallback"：发布门禁在成功回退标记之后
+						// 扫描失败词，且每条 "fallback" 行都要求写明目标基线；这条只是清理账本。
+						global::GenericUtils.Info("[LOAD] CompatPack session unloaded after projection rollback: count="
+							+ abandonedCount);
+					}
+					catch (Exception exception)
+					{
+						global::GenericUtils.Error("[LOAD] CompatPack session unload after projection fallback failed: "
+							+ exception.GetType().Name + ": " + exception.Message);
+					}
+				}
+				else
+				{
+					var orphaned = System.Threading.Volatile.Read(ref m1CompatPackSession);
+					if (orphaned != null && !ReferenceEquals(orphaned, packSession))
+						orphaned.Dispose();
+					System.Threading.Volatile.Write(ref m1CompatPackSession, packSession);
+					// enabled 日志在 CompatPackHost.ConfigureForLaunch（profile 创建之前）就写了；
+					// 这里补一条 applied，证明"计划确实投影为该 profile"（final review M5）。
+					global::GenericUtils.Info("[LOAD] CompatPack projection applied: plan="
+						+ plan.CanonicalHash + " profile=" + profile.ProfileId
+						+ " packs=" + packSession.Handles.Count);
+				}
 			}
 		}
 

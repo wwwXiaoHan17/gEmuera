@@ -4,10 +4,10 @@ using System.IO;
 namespace GEmuera.Core.Tests;
 
 /// <summary>
-/// 隔离的临时包目录（T5）：加载器把包目录顶层全部 <c>*.dll</c> 读成依赖字节闭包并纳入
-/// <c>PackSha256</c>，共享 bin 输出目录（xunit/Core/其它夹具程序集）会让"包"语义失真
-///（依赖闭包变成整个测试输出、失败路径也会被无关程序集干扰）。测试统一把被测包程序集
-///（及显式声明的依赖）复制进只含这些文件的临时目录再加载，用完确定性删除。
+/// 隔离的临时包目录（T5；I1 起是硬性部署契约）：加载器只把主程序集 + 它真实 AssemblyRef
+/// 递归引用到的顶层 DLL 当依赖闭包（并纳入 <c>PackSha256</c>），目录内未被引用的 DLL 直接
+/// 拒载。共享 bin 输出目录里的 xunit/Core/其它夹具程序集会让"包"语义失真，因此测试统一
+/// 把被测包程序集（及显式声明的依赖）复制进只含这些文件的临时目录再加载，用完确定性删除。
 /// </summary>
 sealed class IsolatedPackDirectory : IDisposable
 {

@@ -202,38 +202,14 @@ namespace MinorShift.Emuera.GameProc
 				GlobalStatic.IdentifierDictionary = idDic;
 				if (Program.CurrentCompatibilityPlan != null)
 				{
-					ParserMediator.ConsumeCompatibilityPlan(
-						idDic.GetLegacyInstructionNames(),
-						idDic.GetLegacyFunctionNames());
-					// 运行时精确闭包（设计 §6.7）：绑定失败不得静默回退全量 registry。
-					// 先降级到当前 profile 的无包基线 plan，再按新 profile 重建投影注册表并重绑；
-					// 连无包基线都失败才终止会话（异常携带 plan hash / profile / symbol）。
-					if (!idDic.BindCompatibilityPlan(Program.CurrentCompatibilityPlan))
-					{
-						CompatibilityPlan failedPlan = Program.CurrentCompatibilityPlan;
-						string failedSymbol = idDic.LastCompatibilityBindingError ?? "<unknown>";
-						if (!Program.TryFallbackToNoPackBaseline(failedPlan.ProfileId, out CompatibilityPlan baselinePlan))
-						{
-							throw new InvalidOperationException(
-								"[LOAD] CompatPack projection failed and no-pack baseline fallback failed: plan="
-								+ failedPlan.CanonicalHash + " profile=" + failedPlan.ProfileId
-								+ " symbol=" + failedSymbol);
-						}
-						// 旧注册表按包计划投影；基线重绑前必须按无包 profile 重新投影，
-						// 否则包里新增的名字会再次被判定为 registry 超出 plan。
-						idDic.RebindProfileRegistries();
-						ParserMediator.RebindCompatibilityPlanAfterFallback(
-							baselinePlan,
-							idDic.GetLegacyInstructionNames(),
-							idDic.GetLegacyFunctionNames());
-						if (!idDic.BindCompatibilityPlan(baselinePlan))
-						{
-							throw new InvalidOperationException(
-								"[LOAD] no-pack baseline bind failed: plan=" + baselinePlan.CanonicalHash
-								+ " profile=" + baselinePlan.ProfileId
-								+ " symbol=" + (idDic.LastCompatibilityBindingError ?? "<unknown>"));
-						}
-					}
+					// 运行时精确闭包（设计 §6.7）：Bind 与 Consume 在同一 fallback scope 内。
+					// 两个方向的 mismatch（registry ⊄ plan 与 plan ⊄ registry）都必须先降级到
+					// 当前 profile 的无包基线；连基线都失败才终止会话（异常携带 plan hash /
+					// profile / symbol）。旧实现先 Consume 再 Bind：反向 mismatch 会在 Bind
+					// 之前抛错，会话直接终止而不是回退（final review I3）。
+					if (!TryProjectCompatibilityPlanWithFallback(
+							idDic, Program.CurrentCompatibilityPlan, out Exception projectionFailure))
+						throw projectionFailure;
 				}
 
 				StrForm.Initialize();
@@ -298,6 +274,99 @@ namespace MinorShift.Emuera.GameProc
 			state.Begin(BeginType.TITLE);
 			GC.Collect();
             return true;
+		}
+
+		/// <summary>
+		/// 运行时精确闭包（设计 §6.7）的统一入口：Bind 与 Consume 必须落在同一个 fallback
+		/// scope 内。两个方向的 mismatch——registry ⊄ plan（Bind）与 plan ⊄ registry
+		/// （Consume）——都先降级到当前 profile 的无包基线；连基线都建立/绑定失败才终止
+		/// 会话（返回 false，<paramref name="failure"/> 携带 plan hash / profile / symbol）。
+		/// 旧实现先 Consume 再 Bind：反向 mismatch 在 Bind 之前抛错，会话直接终止而不是
+		/// 回退（final whole-branch review I3）。
+		/// </summary>
+		internal static bool TryProjectCompatibilityPlanWithFallback(
+			IdentifierDictionary dictionary,
+			CompatibilityPlan plan,
+			out Exception failure)
+		{
+			if (dictionary == null)
+				throw new ArgumentNullException(nameof(dictionary));
+			if (plan == null)
+				throw new ArgumentNullException(nameof(plan));
+			failure = null;
+			if (TryBindAndConsumeCompatibilityPlan(dictionary, plan, out string projectionFailure))
+				return true;
+
+			string failedPlanHash = plan.CanonicalHash;
+			string failedProfile = plan.ProfileId;
+			if (!Program.TryFallbackToNoPackBaseline(failedProfile, out CompatibilityPlan baselinePlan))
+			{
+				failure = new InvalidOperationException(
+					"[LOAD] CompatPack projection failed and no-pack baseline fallback failed: plan="
+					+ failedPlanHash + " profile=" + failedProfile + " symbol=" + projectionFailure);
+				return false;
+			}
+
+			try
+			{
+				// 旧注册表按包计划投影；基线重绑前必须按无包 profile 重新投影，否则包里新增的
+				// 名字会再次被判定为 registry 超出 plan。
+				dictionary.RebindProfileRegistries();
+				ParserMediator.RebindCompatibilityPlanAfterFallback(
+					baselinePlan,
+					dictionary.GetLegacyInstructionNames(),
+					dictionary.GetLegacyFunctionNames());
+				if (!dictionary.BindCompatibilityPlan(baselinePlan))
+				{
+					throw new InvalidOperationException(
+						"no-pack baseline registry binding failed: symbol="
+						+ (dictionary.LastCompatibilityBindingError ?? "<unknown>"));
+				}
+			}
+			catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
+			{
+				failure = new InvalidOperationException(
+					"[LOAD] CompatPack projection failed and no-pack baseline fallback failed: plan="
+					+ failedPlanHash + " profile=" + failedProfile + " symbol=" + projectionFailure
+					+ " fallback=" + exception.Message);
+				return false;
+			}
+			return true;
+		}
+
+		/// <summary>
+		/// 先 Bind 再 Consume（顺序即 fail-closed 语义：先把注册表收窄到 plan 声明的表面，
+		/// 再校验 plan 的非条件符号都真实投影）。Bind 失败或 Consume 抛
+		/// <see cref="InvalidOperationException"/> 都返回 false，由调用方走同一 fallback scope；
+		/// 任何异常都不从这里逃逸成"会话终止"。
+		/// </summary>
+		internal static bool TryBindAndConsumeCompatibilityPlan(
+			IdentifierDictionary dictionary,
+			CompatibilityPlan plan,
+			out string failure)
+		{
+			failure = "";
+			if (!dictionary.BindCompatibilityPlan(plan))
+			{
+				failure = dictionary.LastCompatibilityBindingError ?? "<unknown>";
+				return false;
+			}
+			try
+			{
+				ParserMediator.ConsumeCompatibilityPlan(
+					plan,
+					dictionary.GetLegacyInstructionNames(),
+					dictionary.GetLegacyFunctionNames());
+				return true;
+			}
+			catch (Exception exception)
+			{
+				// 反向闭包（plan 的非条件符号不在会话注册表）：与 Bind 失败同一条降级路径。
+				// 任何异常（含实现缺陷）都降级到无包基线，而不是从初始化流程里逃逸成会话终止。
+				failure = exception.GetType().Name + ": " + exception.Message;
+				GenericUtils.Error("[LOAD] CompatibilityPlan consumption mismatch: " + failure);
+				return false;
+			}
 		}
 
 		public void ReloadErb()

@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Reflection;
+using System.Reflection.Metadata;
+using System.Reflection.PortableExecutable;
 using System.Security.Cryptography;
 using System.Text;
 using Emuera.Compatibility.Packs;
@@ -19,6 +21,11 @@ namespace GEmuera.Core.Compatibility.Packs;
 ///   4. ALC 只从该字节图 <c>LoadFromStream</c> 装依赖，禁止在 Load() 里按路径二次读盘；
 ///   5. PackSha256 覆盖主程序集 + 内嵌清单原始字节 + 依赖闭包（文件名/长度/字节）；
 ///   6. 入口类 Manifest 必须与内嵌清单全字段相等；类型加载失败一律 fail-closed。
+/// I1 部署契约（2026-11-03 final review）：
+///   依赖闭包**只**含主程序集 + 它真实 AssemblyRef 递归引用到的同目录顶层 DLL。
+///   目录内未被引用的 DLL 一律拒载——共享扫描根里的另一个包曾经被当成"依赖"计入
+///   PackSha256、并可从 ALC 解析（未启用包也可见），同一包在不同安装目录下哈希还会
+///   随邻居变化。因此包目录必须自包含且只含本包程序集（一包一目录）。
 /// </summary>
 public static class CompatPackLoader
 {
@@ -39,6 +46,11 @@ public static class CompatPackLoader
     static readonly StringComparison PathComparison = OperatingSystem.IsWindows()
         ? StringComparison.OrdinalIgnoreCase
         : StringComparison.Ordinal;
+
+    /// <summary>依赖闭包按完整路径去重时的比较器（与 <see cref="PathComparison"/> 同语义）。</summary>
+    static readonly StringComparer PathNameComparer = OperatingSystem.IsWindows()
+        ? StringComparer.OrdinalIgnoreCase
+        : StringComparer.Ordinal;
 
     /// <summary>
     /// 包程序集字节读取的唯一入口（<see cref="BytesReaderOverrideForTest"/> 命中时走 seam，
@@ -119,9 +131,10 @@ public static class CompatPackLoader
             return false;
         }
 
-        // 依赖闭包（T5）：包目录顶层的全部 *.dll 都是包的一部分——既是 ALC 的唯一依赖来源，
-        // 也是 PackSha256 的输入。主 DLL 也在图中（避免哈希把主 DLL 漏出闭包语义），
-        // 但计算哈希时排除（主程序集字节已单独入账）。
+        // 依赖闭包（T5 同源字节；I1 按真实 AssemblyRef 推导）：主 DLL + 它递归引用到的
+        // 同目录顶层 DLL——既是 ALC 的唯一依赖来源，也是 PackSha256 的输入。未被引用的
+        // 顶层 DLL 直接拒载（见 TryBuildDependencyBytes）。主 DLL 也在图中（避免哈希把
+        // 主 DLL 漏出闭包语义），但计算哈希时排除（主程序集字节已单独入账）。
         if (!TryBuildDependencyBytes(
                 fullPath, packDirectory, assemblyBytes, prefix, collected,
                 out IReadOnlyDictionary<string, byte[]> dependencyBytes, out string mainFileName))
@@ -226,9 +239,17 @@ public static class CompatPackLoader
     }
 
     /// <summary>
-    /// 读入包目录顶层的依赖字节图（file name → bytes，含主 DLL）。枚举顺序 Ordinal 排序；
-    /// 任一文件是指向包目录外的 symlink/junction 即整体拒载（路径逃逸不能进入哈希/装载）；
-    /// 主 DLL 复用调用方已读取的字节（TOCTOU 同源不变量），其余文件各读一次。
+    /// 读入包依赖闭包的字节图（file name → bytes，含主 DLL）。闭包推导（I1）：
+    ///   1. 枚举包目录顶层 *.dll（Ordinal 排序），任一文件是指向目录外的 symlink/junction
+    ///      即整体拒载（路径逃逸不能进入哈希/装载）；
+    ///   2. 从主程序集元数据读 AssemblyRef；凡引用名对应目录内 <c>&lt;name&gt;.dll</c>
+    ///      的文件进入闭包并递归展开（间接依赖）；
+    ///   3. 目录内**未被引用**的 DLL 一律拒载——那是另一个包/无关文件，计入哈希会让
+    ///      同一包随邻居变化，进入 ALC 又会让未启用包可解析；
+    ///   4. 闭包内每个文件各读一次字节；主 DLL 复用调用方已读取的字节（TOCTOU 同源）。
+    /// 元数据不可解析的**已被引用**文件不在此处拒载：它已损坏，交由 ALC 装载期给出
+    /// 权威的 BadImageFormatException/ReflectionTypeLoadException（错误更可定位）；
+    /// 主程序集自身不可解析时同样跳过闭包推导，只把主 DLL 入图。
     /// </summary>
     static bool TryBuildDependencyBytes(
         string mainFullPath,
@@ -262,6 +283,11 @@ public static class CompatPackLoader
         }
         Array.Sort(files, StringComparer.Ordinal);
 
+        // 文件基名 → 完整路径。Windows 文件系统大小写不敏感，与 ALC 的 <name>.dll 解析
+        // 语义对齐（CompatPackLoadContext.TryGetDependencyBytes 的 Windows 回退）；同目录
+        // 出现仅大小写不同的同名程序集时无法确定绑定目标 → fail-closed。
+        var filesByName = new Dictionary<string, string>(
+            OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
         bool mainSeen = false;
         foreach (string file in files)
         {
@@ -280,28 +306,13 @@ public static class CompatPackLoader
                 return false;
 
             string fileName = Path.GetFileName(fullFile);
+            if (!filesByName.TryAdd(fileName, fullFile))
+            {
+                errors.Add(prefix + "包目录内存在仅大小写不同的重名程序集：" + fileName + "（无法确定绑定目标）。");
+                return false;
+            }
             if (string.Equals(fullFile, mainFullPath, PathComparison))
-            {
-                graph[mainFileName] = assemblyBytes;
                 mainSeen = true;
-                continue;
-            }
-
-            byte[] bytes;
-            try
-            {
-                bytes = ReadBytes(fullFile);
-            }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-            {
-                errors.Add(prefix + "依赖程序集读取失败（" + fileName + "）：" + exception.Message);
-                return false;
-            }
-            if (!graph.TryAdd(fileName, bytes))
-            {
-                errors.Add(prefix + "包目录内存在重名依赖程序集：" + fileName + "。");
-                return false;
-            }
         }
 
         if (!mainSeen)
@@ -310,7 +321,95 @@ public static class CompatPackLoader
             // 依赖字节图中"的结构性不变量不被平台差异打破。
             graph[mainFileName] = assemblyBytes;
         }
+
+        if (!TryReadAssemblyReferenceNames(assemblyBytes, out List<string> mainReferences))
+        {
+            // 主程序集不是可解析的托管程序集：交给 ALC 装载期给出权威拒载文案，
+            // 闭包推导阶段不改写错误（也不把同目录其它 DLL 误报成"未被引用"）。
+            return true;
+        }
+
+        var closure = new HashSet<string>(PathNameComparer) { mainFullPath };
+        var bytesByPath = new Dictionary<string, byte[]>(PathNameComparer) { [mainFullPath] = assemblyBytes };
+        var pending = new Queue<string>();
+        pending.Enqueue(mainFullPath);
+        while (pending.Count > 0)
+        {
+            string current = pending.Dequeue();
+            // 已被引用的依赖若元数据损坏则无法继续推导它的引用，但它仍在闭包/哈希内，
+            // 装载期必然 fail-closed（不在此处改写错误文案）。
+            if (!TryReadAssemblyReferenceNames(bytesByPath[current], out List<string> references))
+                continue;
+            foreach (string reference in references)
+            {
+                if (!filesByName.TryGetValue(reference + ".dll", out string? dependencyPath))
+                    continue; // 框架/契约/宿主程序集：不在包目录，由 ALC 允许清单处理
+                if (!closure.Add(dependencyPath))
+                    continue;
+                byte[] dependencyBytesForFile;
+                try
+                {
+                    dependencyBytesForFile = ReadBytes(dependencyPath);
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+                {
+                    errors.Add(prefix + "依赖程序集读取失败（" + Path.GetFileName(dependencyPath)
+                        + "）：" + exception.Message);
+                    return false;
+                }
+                bytesByPath[dependencyPath] = dependencyBytesForFile;
+                pending.Enqueue(dependencyPath);
+            }
+        }
+
+        // 未被主程序集（递归）引用的顶层 DLL = 另一个包或无关文件：拒绝而不是悄悄计入
+        // 哈希/装进 ALC（I1 多包共享扫描根污染）。
+        string[] unreferenced = filesByName
+            .Where(pair => !closure.Contains(pair.Value))
+            .Select(pair => pair.Key)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
+        if (unreferenced.Length > 0)
+        {
+            errors.Add(prefix + "包目录必须自包含且只含本包程序集：顶层 DLL " + string.Join(", ", unreferenced)
+                + " 未被主程序集 " + mainFileName + " 的 AssemblyRef 引用（闭包 = 主程序集 + 实际引用的"
+                + "递归依赖）。多包混放或无关 DLL 会污染 PackSha256 与 ALC 依赖闭包；"
+                + "请把每个包及其私有依赖放入独立目录。");
+            return false;
+        }
+
+        foreach (KeyValuePair<string, byte[]> entry in bytesByPath)
+            graph[Path.GetFileName(entry.Key)] = entry.Value;
         return true;
+    }
+
+    /// <summary>
+    /// 读取程序集元数据里的 AssemblyRef 名字（不装载、不执行代码）。返回 false = 不是
+    /// 可解析的托管程序集（坏 PE/无元数据）；调用方按 fail-closed 处理。
+    /// </summary>
+    static bool TryReadAssemblyReferenceNames(byte[] assemblyBytes, out List<string> references)
+    {
+        references = new List<string>();
+        try
+        {
+            using var stream = new MemoryStream(assemblyBytes, writable: false);
+            using var peReader = new PEReader(stream);
+            if (!peReader.HasMetadata)
+                return false;
+            MetadataReader metadata = peReader.GetMetadataReader();
+            foreach (AssemblyReferenceHandle handle in metadata.AssemblyReferences)
+            {
+                AssemblyReference reference = metadata.GetAssemblyReference(handle);
+                string name = metadata.GetString(reference.Name);
+                if (!string.IsNullOrEmpty(name))
+                    references.Add(name);
+            }
+            return true;
+        }
+        catch (Exception exception) when (exception is BadImageFormatException or InvalidOperationException or IOException)
+        {
+            return false;
+        }
     }
 
     /// <summary>
