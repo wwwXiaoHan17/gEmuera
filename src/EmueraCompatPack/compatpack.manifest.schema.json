@@ -200,8 +200,7 @@
       "items": {
         "type": "object",
         "required": [
-          "symbol",
-          "priority"
+          "symbol"
         ],
         "additionalProperties": false,
         "properties": {
@@ -213,7 +212,8 @@
           "priority": {
             "type": "integer",
             "minimum": 0,
-            "description": "覆盖优先级（>= 0）；同符号多个 override 取唯一最高者。"
+            "default": 0,
+            "description": "覆盖优先级（>= 0，可省略，缺省 0）；同符号多个 override 取唯一最高者。"
           }
         }
       }
@@ -322,7 +322,13 @@
   "then": {
     "required": [
       "baseSurfaceHash"
-    ]
+    ],
+    "properties": {
+      "baseSurfaceHash": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$"
+      }
+    }
   },
   "oneOf": [
     {

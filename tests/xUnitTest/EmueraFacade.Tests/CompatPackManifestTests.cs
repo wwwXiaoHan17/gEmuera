@@ -392,7 +392,6 @@ public class CompatPackManifestTests
     [InlineData("[{\"symbol\":\"command:SETANIMETIMER\",\"priority\":1}]")]
     [InlineData("[{\"symbol\":\"instruction:\",\"priority\":1}]")]
     [InlineData("[{\"symbol\":\"instruction:HAS SPACE\",\"priority\":1}]")]
-    [InlineData("[{\"symbol\":\"instruction:SETANIMETIMER\"}]")]
     [InlineData("[{\"symbol\":\"instruction:SETANIMETIMER\",\"priority\":-1}]")]
     [InlineData("[{\"symbol\":\"instruction:SETANIMETIMER\",\"priority\":1.5}]")]
     [InlineData("[{\"symbol\":\"instruction:SETANIMETIMER\",\"priority\":1,\"extra\":true}]")]
@@ -401,6 +400,20 @@ public class CompatPackManifestTests
     {
         Assert.False(CompatPackManifest.TryParse(WithField("\"overrides\"", overridesJson), out _, out var errors));
         Assert.NotEmpty(errors);
+    }
+
+    [Fact]
+    public void Parse_OverrideWithoutPriority_DefaultsToZero()
+    {
+        // spec §5.2：priority 为非负整数、缺省 0（final review M2）。只有需要仲裁时才写。
+        Assert.True(
+            CompatPackManifest.TryParse(
+                WithField("\"overrides\"", "[{\"symbol\":\"instruction:SETANIMETIMER\"}]"),
+                out var manifest, out var errors),
+            string.Join("; ", errors));
+        CompatPackOverride entry = Assert.Single(manifest!.Overrides);
+        Assert.Equal("instruction:SETANIMETIMER", entry.Symbol);
+        Assert.Equal(0, entry.Priority);
     }
 
     [Fact]
@@ -447,6 +460,10 @@ public class CompatPackManifestTests
         Assert.Contains(
             "baseSurfaceHash",
             then.GetProperty("required").EnumerateArray().Select(item => item.GetString()));
+        // M3：then 分支必须收紧为 string（null 会在运行期被规则层拒载，schema 不得放行）。
+        JsonElement thenHash = then.GetProperty("properties").GetProperty("baseSurfaceHash");
+        Assert.Equal("string", thenHash.GetProperty("type").GetString());
+        Assert.Equal("^[0-9a-f]{64}$", thenHash.GetProperty("pattern").GetString());
     }
 
     [Fact]
@@ -497,13 +514,16 @@ public class CompatPackManifestTests
         Assert.True(overrides.GetProperty("uniqueItems").GetBoolean());
         JsonElement overrideItem = overrides.GetProperty("items");
         Assert.False(overrideItem.GetProperty("additionalProperties").GetBoolean());
+        // M2：priority 可省略（缺省 0），schema 与 parser 一致。
         Assert.Equal(
-            new[] { "symbol", "priority" },
+            new[] { "symbol" },
             overrideItem.GetProperty("required").EnumerateArray().Select(item => item.GetString()));
         Assert.Equal(
             "^(instruction|function|variant):[^\\s:]+$",
             overrideItem.GetProperty("properties").GetProperty("symbol").GetProperty("pattern").GetString());
-        Assert.Equal(0, overrideItem.GetProperty("properties").GetProperty("priority").GetProperty("minimum").GetInt32());
+        JsonElement prioritySchema = overrideItem.GetProperty("properties").GetProperty("priority");
+        Assert.Equal(0, prioritySchema.GetProperty("minimum").GetInt32());
+        Assert.Equal(0, prioritySchema.GetProperty("default").GetInt32());
     }
 
     [Fact]

@@ -16,6 +16,15 @@
 > 前置依赖：Task 4 会话所有权（`CompatPackSession`，设计 §5.4 末段）；Task 3 ALC 契约-only
 > 允许清单硬化（`src/Core/Compatibility/Packs/CompatPackLoadContext.cs`）；Task 8 P-D 退役 spec
 > （`docs/plans/2026-10-03-pd-module-retirement-spec.md`，本 spec 不与其冲突，见 §2.3）。
+>
+> **状态更新（2026-11-03，CompatPack v1 final fix wave）**：本文是 2026-10-03 的 v2 代码贡献
+> design spike，其中"当前实现"的描述已部分被 v1 收尾覆盖——§1.4 的
+> `EngineModuleApiVersion` / `targetEngineApi` 精确匹配已由双轴 `contractAbi`/`engineApi`
+> 取代（legacy `targetEngineApi:1` 仅迁移期映射；见设计文档 §12.5/§12.10 与 2026-11-02
+> v1 spec §4.5）；§1.6 的"组装器完全没有消费 `pack.Variants`"**仍然成立**（v1 继续拒载
+> 变体/策略贡献），但 `manifest.variantSelections` 已进 plan 哈希与 handler 投影。
+> 阅读实现现状时以 `docs/designs/compat-pack-interface.md` §12.10 为准；本文其余设计结论
+> （v2 适配器接口、ALC/委托所有权、契约面新增）不受影响。
 
 ## 0. 术语与回答索引
 
@@ -99,8 +108,11 @@
   包目录 `<name>.dll` → 私有实例（`:47-49`）；其余一律 `FileLoadException`（`:50-54`）。
   **包不能看见 `GEmuera.Core` 或宿主内部程序集**（`:17-18` 注释，探针测试
   `tests/xUnitTest/GEmuera.Core.Tests/CompatPackAlcIsolationTests.cs` 钉住）。
-- API 版本：`EngineModuleApiVersion = 1`（`CompatPackHost.cs:152`），清单 `targetEngineApi`
-  精确匹配拒载（`CompatPackRules.cs:52-56`）。
+- API 版本（**历史，2026-10-03 时点**）：`EngineModuleApiVersion = 1`（`CompatPackHost.cs:152`），
+  清单 `targetEngineApi` 精确匹配拒载（`CompatPackRules.cs:52-56`）。**2026-11-02 起已被
+  双轴取代**：`contractAbi`（公开契约面）+ `engineApi`（引擎行为/能力契约），各自
+  major 相等且包 minor 不高于引擎 minor；legacy `targetEngineApi:1` 仅迁移期映射为 1.0/1.0
+  （见 `src/EmueraCompatPack/CompatPackManifest.cs` 与 v1 spec §4.5）。
 
 ### 1.5 上游参照（emuera.em-master PluginSystem，仅作对比，不整体引入）
 
@@ -121,8 +133,9 @@
 
 - `CompatPackPlanAssembler.TryAssemble`（`src/Core/Compatibility/Packs/CompatPackPlanAssembler.cs:21-224`）
   折叠 manifest `variantSelections` 进哈希（`:317-318` 经 `ComputeDialectDeltaHash`
-  `:295-320`），但**完全没有消费 `pack.Variants`**（全文无该属性引用）——v2 接线必须把贡献
-  绑定加进方言差量哈希（§7.2 规则 4），否则"变体差异不进 plan 哈希"，破坏设计 §9
+  `:295-320`），但**完全没有消费 `pack.Variants`**（全文无该属性引用；**2026-11-03 现状仍如此**：
+  v1 继续按死契约拒载变体/策略贡献，只有 `manifest.variantSelections` 进 plan 哈希与 handler
+  投影）——v2 接线必须把贡献绑定加进方言差量哈希（§7.2 规则 4），否则"变体差异不进 plan 哈希"，破坏设计 §9
   "包内容不变 → 会话计划哈希不变"的对偶（内容变 → 哈希必变）。
 - `CompatPackSession` 只持有句柄与 plan（`CompatPackSession.cs:25-74`），无任何
   "句柄 → 引擎可用对象"的投影辅助——v2 需在宿主侧补 factory map 提取（§5.2）。
@@ -215,8 +228,9 @@ Trade-off：
      "返回 null"，fail-closed 路径并无消失；
    - v1 契约注释与设计文档两处（`CompatPackVariants.cs:22-24`、`compat-pack-interface.md:104/:117`）
      均按"object + 宿主桥收窄"定稿，spike 无推翻依据；
-   - 拒载移除（v2 接线任务）与契约面新增（adapter 接口）由 `targetEngineApi` 主版本递增
-     一次性结算（§7.1），不需要在同一破坏点上再改工厂签名。
+   - 拒载移除（v2 接线任务）与契约面新增（adapter 接口）由 `engineApi` 主版本递增
+     一次性结算（§7.1；2026-11-02 起的双轴语义，原 `targetEngineApi`），不需要在同一破坏点上
+     再改工厂签名。
    - 被否决的子选项：v2 直接把返回类型改为 `ICompatInstructionAdapter`——同为 API 主版本
      破坏，但与既定设计文档相抵且无附加收益。
 

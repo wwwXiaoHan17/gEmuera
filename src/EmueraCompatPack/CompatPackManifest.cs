@@ -797,9 +797,11 @@ namespace Emuera.Compatibility.Packs
 					continue;
 				}
 				string? symbol = null;
-				int? priority = null;
+				// spec §5.2：priority 为非负整数、缺省 0（final review M2）。只有显式声明
+				// 多个 override 需要仲裁时才需要写 priority。
+				int priority = 0;
 				bool hasSymbol = false;
-				bool hasPriority = false;
+				bool priorityValid = true;
 				foreach (JsonProperty member in item.EnumerateObject())
 				{
 					switch (member.Name)
@@ -809,16 +811,17 @@ namespace Emuera.Compatibility.Packs
 							symbol = RequireOverrideSymbol(member.Value, "overrides[].symbol", errors);
 							break;
 						case "priority":
-							hasPriority = true;
 							if (member.Value.ValueKind != JsonValueKind.Number
 								|| !member.Value.TryGetInt32(out int parsed))
 							{
 								errors.Add("字段 'overrides[].priority' 必须是 32 位整数。");
+								priorityValid = false;
 								break;
 							}
 							if (parsed < 0)
 							{
 								errors.Add("字段 'overrides[].priority' 不能为负数：" + parsed);
+								priorityValid = false;
 								break;
 							}
 							priority = parsed;
@@ -830,16 +833,14 @@ namespace Emuera.Compatibility.Packs
 				}
 				if (!hasSymbol)
 					errors.Add("字段 'overrides[]' 缺少 symbol。");
-				if (!hasPriority)
-					errors.Add("字段 'overrides[]' 缺少 priority。");
-				if (symbol is null || priority is null)
+				if (symbol is null || !priorityValid)
 					continue;
 				if (!seen.Add(symbol))
 				{
 					errors.Add("字段 'overrides' 的 symbol 重复（规范化后冲突）：" + symbol);
 					continue;
 				}
-				result.Add(new CompatPackOverride(symbol, priority.Value));
+				result.Add(new CompatPackOverride(symbol, priority));
 			}
 			return new ReadOnlyCollection<CompatPackOverride>(result);
 		}
