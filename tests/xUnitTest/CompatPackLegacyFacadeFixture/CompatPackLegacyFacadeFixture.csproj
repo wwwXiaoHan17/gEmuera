@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- 旧 facade 包夹具（T8）：直接引用 facade（AssemblyName=Emuera, 1.824.0.0），
+         不直接引用契约程序集 Emuera.CompatPack；契约类型经 facade 的 TypeForwardedTo
+         在编译期可见（ProjectReference 传递提供转发目标元数据，这是 Roslyn 解析
+         TypeForwardedTo 的硬性要求）。
+         注意：Roslyn 对转发类型会直接绑定到定义程序集，所以编译产物含
+         AssemblyRef 'Emuera.CompatPack'；测试 helper 把该引用名改写为 'Emuera'，
+         复现拆分前旧包的真实二进制形态（详见 CompatPackLegacyFacadeTests）。 -->
+    <ProjectReference Include="..\..\..\src\EmueraFacade\Emuera.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="compatpack.manifest.json" LogicalName="compatpack.manifest.json" />
+  </ItemGroup>
+</Project>

@@ -22,6 +22,10 @@
     <ProjectReference Include="..\..\..\src\EmueraCompatPack\EmueraCompatPack.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <!-- 冻结的 v1.0 public API 规范文本（T8）：复制到输出目录供 CompatPackPublicApiTests 读取。 -->
+    <None Update="CompatPackPublicApi.v1.0.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
     <!-- 以规范资源名内嵌合法样例清单：验证 TryLoadFromAssembly 的资源发现路径。 -->
     <EmbeddedResource Include="testdata\compatpack.manifest.json" LogicalName="compatpack.manifest.json" />
     <!-- 大小写不同的资源名 + 非法内容：证明资源发现是 Ordinal 精确匹配（命中错误大小写即会因内容非法而失败）。 -->

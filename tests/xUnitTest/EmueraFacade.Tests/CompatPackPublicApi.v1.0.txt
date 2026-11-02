@@ -1,0 +1,118 @@
+# gemuera CompatPack public API baseline v1.0
+assembly=Emuera.CompatPack|version=1.0.0.0|culture=neutral|publicKeyToken=null
+public-types=17
+type=Emuera.Compatibility.Packs.CompatPackDependency|public sealed record class|base=System.Object|interfaces=System.IEquatable<Emuera.Compatibility.Packs.CompatPackDependency>
+  positional=System.String PackId, System.String VersionRange
+  ctor=.ctor(System.String PackId, System.String VersionRange)
+  property=System.String PackId {get,set}
+  property=System.String VersionRange {get,set}
+  method=Emuera.Compatibility.Packs.CompatPackDependency <Clone>$()
+  method=System.Boolean Equals(Emuera.Compatibility.Packs.CompatPackDependency other)
+  method=System.Boolean Equals(System.Object obj)
+  method=System.Int32 GetHashCode()
+  method=System.String ToString()
+  method=System.Void Deconstruct(out System.String PackId, out System.String VersionRange)
+  method=static System.Boolean op_Equality(Emuera.Compatibility.Packs.CompatPackDependency left, Emuera.Compatibility.Packs.CompatPackDependency right)
+  method=static System.Boolean op_Inequality(Emuera.Compatibility.Packs.CompatPackDependency left, Emuera.Compatibility.Packs.CompatPackDependency right)
+type=Emuera.Compatibility.Packs.CompatPackGameIdentity|public sealed class|base=System.Object|interfaces=<none>
+  property=System.String GameCode {get}
+  property=System.String Version {get}
+  property=System.String VersionAccept {get}
+type=Emuera.Compatibility.Packs.CompatPackManifest|public sealed class|base=System.Object|interfaces=<none>
+  field=const System.String ManifestResourceName = "compatpack.manifest.json"
+  property=Emuera.Compatibility.Packs.CompatPackGameIdentity GameIdentity {get}
+  property=Emuera.Compatibility.Packs.CompatPackSurface Surface {get}
+  property=Emuera.Compatibility.Packs.CompatVersion ContractAbi {get}
+  property=Emuera.Compatibility.Packs.CompatVersion EngineApi {get}
+  property=System.Boolean UsedLegacyTargetEngineApi {get}
+  property=System.Collections.Generic.IReadOnlyDictionary<System.String, System.String> VariantSelections {get}
+  property=System.Collections.Generic.IReadOnlyList<Emuera.Compatibility.Packs.CompatPackDependency> RequiredPacks {get}
+  property=System.Collections.Generic.IReadOnlyList<Emuera.Compatibility.Packs.CompatPackOverride> Overrides {get}
+  property=System.Collections.Generic.IReadOnlyList<System.String> Capabilities {get}
+  property=System.Collections.Generic.IReadOnlyList<System.String> ConflictingPacks {get}
+  property=System.String BaseProfileId {get}
+  property=System.String BaseSurfaceHash {get}
+  property=System.String PackId {get}
+  property=System.String PackVersion {get}
+  property=System.String SaveProfileId {get}
+  method=static System.Boolean TryLoadFromAssembly(System.Reflection.Assembly assembly, out Emuera.Compatibility.Packs.CompatPackManifest manifest, out System.Collections.Generic.IReadOnlyList<System.String> errors)
+  method=static System.Boolean TryParse(System.String json, out Emuera.Compatibility.Packs.CompatPackManifest manifest, out System.Collections.Generic.IReadOnlyList<System.String> errors)
+type=Emuera.Compatibility.Packs.CompatPackOverride|public sealed record class|base=System.Object|interfaces=System.IEquatable<Emuera.Compatibility.Packs.CompatPackOverride>
+  positional=System.String Symbol, System.Int32 Priority
+  ctor=.ctor(System.String Symbol, System.Int32 Priority)
+  property=System.Int32 Priority {get,set}
+  property=System.String Symbol {get,set}
+  method=Emuera.Compatibility.Packs.CompatPackOverride <Clone>$()
+  method=System.Boolean Equals(Emuera.Compatibility.Packs.CompatPackOverride other)
+  method=System.Boolean Equals(System.Object obj)
+  method=System.Int32 GetHashCode()
+  method=System.String ToString()
+  method=System.Void Deconstruct(out System.String Symbol, out System.Int32 Priority)
+  method=static System.Boolean op_Equality(Emuera.Compatibility.Packs.CompatPackOverride left, Emuera.Compatibility.Packs.CompatPackOverride right)
+  method=static System.Boolean op_Inequality(Emuera.Compatibility.Packs.CompatPackOverride left, Emuera.Compatibility.Packs.CompatPackOverride right)
+type=Emuera.Compatibility.Packs.CompatPackSurface|public sealed class|base=System.Object|interfaces=<none>
+  property=System.Collections.Generic.IReadOnlyList<System.String> AddFunctions {get}
+  property=System.Collections.Generic.IReadOnlyList<System.String> AddInstructions {get}
+  property=System.Collections.Generic.IReadOnlyList<System.String> HideFunctions {get}
+  property=System.Collections.Generic.IReadOnlyList<System.String> HideInstructions {get}
+  property=static Emuera.Compatibility.Packs.CompatPackSurface Empty {get}
+type=Emuera.Compatibility.Packs.CompatVersion|public readonly record struct|base=System.ValueType|interfaces=System.IEquatable<Emuera.Compatibility.Packs.CompatVersion>
+  positional=System.Int32 Major, System.Int32 Minor
+  ctor=.ctor(System.Int32 Major, System.Int32 Minor)
+  property=System.Int32 Major {get,set}
+  property=System.Int32 Minor {get,set}
+  method=System.Boolean CanRunOn(Emuera.Compatibility.Packs.CompatVersion engineVersion)
+  method=System.Boolean Equals(Emuera.Compatibility.Packs.CompatVersion other)
+  method=System.Boolean Equals(System.Object obj)
+  method=System.Int32 GetHashCode()
+  method=System.String ToString()
+  method=System.Void Deconstruct(out System.Int32 Major, out System.Int32 Minor)
+  method=static System.Boolean TryParse(System.String value, out Emuera.Compatibility.Packs.CompatVersion version)
+  method=static System.Boolean op_Equality(Emuera.Compatibility.Packs.CompatVersion left, Emuera.Compatibility.Packs.CompatVersion right)
+  method=static System.Boolean op_Inequality(Emuera.Compatibility.Packs.CompatVersion left, Emuera.Compatibility.Packs.CompatVersion right)
+type=Emuera.Compatibility.Packs.EnginePolicyBinding|public sealed record class|base=System.Object|interfaces=System.IEquatable<Emuera.Compatibility.Packs.EnginePolicyBinding>
+  positional=System.String CapabilityId
+  ctor=.ctor(System.String CapabilityId)
+  property=System.String CapabilityId {get,set}
+  method=Emuera.Compatibility.Packs.EnginePolicyBinding <Clone>$()
+  method=System.Boolean Equals(Emuera.Compatibility.Packs.EnginePolicyBinding other)
+  method=System.Boolean Equals(System.Object obj)
+  method=System.Int32 GetHashCode()
+  method=System.String ToString()
+  method=System.Void Deconstruct(out System.String CapabilityId)
+  method=static System.Boolean op_Equality(Emuera.Compatibility.Packs.EnginePolicyBinding left, Emuera.Compatibility.Packs.EnginePolicyBinding right)
+  method=static System.Boolean op_Inequality(Emuera.Compatibility.Packs.EnginePolicyBinding left, Emuera.Compatibility.Packs.EnginePolicyBinding right)
+type=Emuera.Compatibility.Packs.ICapabilityContribution|public interface|base=<none>|interfaces=Emuera.Compatibility.Packs.ICompatPackContribution
+  property=System.Collections.Generic.IReadOnlyList<System.String> CapabilityIds {get}
+type=Emuera.Compatibility.Packs.ICompatInstructionFactory|public interface|base=<none>|interfaces=<none>
+  method=System.Object CreateInstruction()
+type=Emuera.Compatibility.Packs.ICompatPack|public interface|base=<none>|interfaces=<none>
+  property=Emuera.Compatibility.Packs.CompatPackManifest Manifest {get}
+  property=System.Collections.Generic.IReadOnlyList<Emuera.Compatibility.Packs.ICompatPackContribution> Contributions {get}
+type=Emuera.Compatibility.Packs.ICompatPackContribution|public interface|base=<none>|interfaces=<none>
+  property=System.String ContributionId {get}
+type=Emuera.Compatibility.Packs.IFunctionSurfaceRegistry|public interface|base=<none>|interfaces=<none>
+  method=System.Void HideFunction(System.String name)
+  method=System.Void RegisterFunction(System.String name, System.String returnType)
+type=Emuera.Compatibility.Packs.IInstructionSurfaceRegistry|public interface|base=<none>|interfaces=<none>
+  method=System.Void HideInstruction(System.String name)
+  method=System.Void RegisterInstruction(System.String name)
+type=Emuera.Compatibility.Packs.IInstructionVariantContribution|public interface|base=<none>|interfaces=Emuera.Compatibility.Packs.ICompatPackContribution
+  property=System.Collections.Generic.IReadOnlyList<Emuera.Compatibility.Packs.InstructionVariantBinding> Bindings {get}
+type=Emuera.Compatibility.Packs.IPolicyContribution|public interface|base=<none>|interfaces=Emuera.Compatibility.Packs.ICompatPackContribution
+  property=System.Collections.Generic.IReadOnlyList<Emuera.Compatibility.Packs.EnginePolicyBinding> Policies {get}
+type=Emuera.Compatibility.Packs.ISurfaceContribution|public interface|base=<none>|interfaces=Emuera.Compatibility.Packs.ICompatPackContribution
+  method=System.Void Apply(Emuera.Compatibility.Packs.IInstructionSurfaceRegistry instructions, Emuera.Compatibility.Packs.IFunctionSurfaceRegistry functions)
+type=Emuera.Compatibility.Packs.InstructionVariantBinding|public sealed record class|base=System.Object|interfaces=System.IEquatable<Emuera.Compatibility.Packs.InstructionVariantBinding>
+  positional=System.String InstructionName, Emuera.Compatibility.Packs.ICompatInstructionFactory Factory
+  ctor=.ctor(System.String InstructionName, Emuera.Compatibility.Packs.ICompatInstructionFactory Factory)
+  property=Emuera.Compatibility.Packs.ICompatInstructionFactory Factory {get,set}
+  property=System.String InstructionName {get,set}
+  method=Emuera.Compatibility.Packs.InstructionVariantBinding <Clone>$()
+  method=System.Boolean Equals(Emuera.Compatibility.Packs.InstructionVariantBinding other)
+  method=System.Boolean Equals(System.Object obj)
+  method=System.Int32 GetHashCode()
+  method=System.String ToString()
+  method=System.Void Deconstruct(out System.String InstructionName, out Emuera.Compatibility.Packs.ICompatInstructionFactory Factory)
+  method=static System.Boolean op_Equality(Emuera.Compatibility.Packs.InstructionVariantBinding left, Emuera.Compatibility.Packs.InstructionVariantBinding right)
+  method=static System.Boolean op_Inequality(Emuera.Compatibility.Packs.InstructionVariantBinding left, Emuera.Compatibility.Packs.InstructionVariantBinding right)

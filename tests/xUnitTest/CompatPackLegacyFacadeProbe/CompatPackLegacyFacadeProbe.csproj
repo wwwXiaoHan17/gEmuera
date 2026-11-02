@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- 干净进程探针（T8）：只引用 GEmuera.Core，不引用 facade，也不引用夹具；
+         夹具路径由命令行传入，确保探针进程的 Default ALC 里没有 Emuera facade。
+         测试用 dotnet exec 加测试 runtimeconfig 启动它（不依赖 probe 自己的
+         deps/runtimeconfig 被复制）。 -->
+    <ProjectReference Include="..\..\..\src\Core\GEmuera.Core.csproj" />
+  </ItemGroup>
+</Project>

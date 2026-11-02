@@ -32,6 +32,12 @@
     <ProjectReference Include="..\CompatPackTypeLoadFixture\CompatPackTypeLoadFixture.csproj" />
     <!-- 宿主绑定探针（负向夹具）：故意引用 GEmuera.Core，钉住 ALC 允许清单 fail-closed 拒载。 -->
     <ProjectReference Include="..\CompatPackHostBindingProbe\CompatPackHostBindingProbe.csproj" />
+    <!-- 旧 facade 包夹具（T8）：只引用 src/EmueraFacade；测试把二进制 AssemblyRef 改写成
+         拆分前形态后验证 facade 预载成功 / 干净进程拒载两向。 -->
+    <ProjectReference Include="..\CompatPackLegacyFacadeFixture\CompatPackLegacyFacadeFixture.csproj" />
+    <!-- 干净进程探针（T8）：只引用 GEmuera.Core（不引用 facade）；测试经 dotnet exec 启动，
+         程序集随 ProjectReference 复制到测试输出（不静态调用其入口点）。 -->
+    <ProjectReference Include="..\CompatPackLegacyFacadeProbe\CompatPackLegacyFacadeProbe.csproj" />
   </ItemGroup>
   <!-- T5 起测试程序集不再兼任"包样本"（内嵌清单已移入 HelloCompatPackFixture）：
        测试程序集引用 xunit/Core，隔离 ALC 的 GetTypes 会因无关类型加载失败而触发 fail-closed。 -->
