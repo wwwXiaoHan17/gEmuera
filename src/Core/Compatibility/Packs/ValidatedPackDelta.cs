@@ -13,7 +13,8 @@ namespace GEmuera.Core.Compatibility.Packs;
 ///     <see cref="CompatPackLoader"/>：主程序集 + 内嵌清单原始字节 + 依赖文件名/长度/字节）；
 ///   - CapabilityIds：清单 + 贡献显式声明经 engine capability closure
 ///     （Requires/Implies 展开）后的结果，Ordinal 排序去重；
-///   - SurfaceStates：T4 双形态闭包后的规范化符号状态，按 (Kind, Name) 规范排序；
+///   - SurfaceStates：T4 双形态闭包后的规范化符号状态，按
+///     (Kind, Name, State, OwnerPackId, ReturnType, BuiltinVariant) 规范排序；
 ///   - VariantSelections：清单变体选择的不可变副本；
 ///   - DeltaSemanticHash：以上字段按规范文本计算的 SHA256（见 <see cref="DeltaSemanticHash"/>）。
 /// </summary>

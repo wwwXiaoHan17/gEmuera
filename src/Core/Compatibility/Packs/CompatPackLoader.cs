@@ -48,6 +48,26 @@ public static class CompatPackLoader
         BytesReaderOverrideForTest is { } reader ? reader(path) : File.ReadAllBytes(path);
 
     /// <summary>
+    /// 拒载错误的路径前缀：只回显文件基名（普通 <c>[LOAD]</c> 日志不得泄漏完整路径）；
+    /// 无法取得基名（非法路径字符/超长路径）时退回调用方原始文本，保证前缀构造本身不抛错。
+    /// </summary>
+    static string DisplayPrefix(string? packAssemblyPath)
+    {
+        if (string.IsNullOrWhiteSpace(packAssemblyPath))
+            return "[] ";
+        string? name;
+        try
+        {
+            name = Path.GetFileName(packAssemblyPath);
+        }
+        catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            name = null;
+        }
+        return "[" + (string.IsNullOrEmpty(name) ? packAssemblyPath : name) + "] ";
+    }
+
+    /// <summary>
     /// 加载单个包。任何失败返回 false 且 handle 为 null，绝不返回半加载结果。
     /// 同源字节不变量（E2-R5 TOCTOU）：主程序集字节与依赖字节恰好读一次，双哈希与经 stream
     /// 的装载共用这些 byte[]；<see cref="CompatPackHandle.PackAssemblyPath"/> 仅作诊断来源，
@@ -61,7 +81,9 @@ public static class CompatPackLoader
     {
         handle = null;
         var collected = new List<string>();
-        string prefix = "[" + (packAssemblyPath ?? "") + "] ";
+        // M-5（spec §7.2）：普通 [LOAD] 诊断只回显文件基名，不泄漏调用方的完整路径；
+        // 需要完整路径的排查走 debug 日志（本 loader 不记录路径）。
+        string prefix = DisplayPrefix(packAssemblyPath);
 
         if (string.IsNullOrWhiteSpace(packAssemblyPath))
         {
@@ -111,83 +133,96 @@ public static class CompatPackLoader
         // 同源字节不变量（E2-R5 TOCTOU）：assemblyBytes 恰好读一次，既是双哈希的输入，
         // 也是经 MemoryStream 装载的程序集本体——两次独立读盘（先哈希后按路径装载）会被
         // 并发的文件替换撕开，固化哈希描述旧内容而运行的是新内容。
-        Assembly assembly;
         var loadContext = new CompatPackLoadContext(fullPath, dependencyBytes);
+        bool handleRetained = false;
         try
         {
-            assembly = loadContext.LoadFromStream(new MemoryStream(assemblyBytes, writable: false));
+            Assembly assembly;
+            try
+            {
+                assembly = loadContext.LoadFromStream(new MemoryStream(assemblyBytes, writable: false));
+            }
+            catch (Exception exception)
+            {
+                collected.Add(prefix + "包程序集加载失败：" + exception.Message);
+                errors = collected;
+                return false;
+            }
+
+            if (!CompatPackManifest.TryLoadFromAssembly(assembly, out var parsedManifest, out var manifestErrors)
+                || parsedManifest is null)
+            {
+                collected.Add(prefix + "内嵌清单缺失或非法：");
+                collected.AddRange(manifestErrors.Select(error => prefix + "  " + error));
+                errors = collected;
+                return false;
+            }
+            CompatPackManifest manifest = parsedManifest!;
+            string assemblySha256 = Hash(assemblyBytes);
+            // PackSha256 必须在任何语义校验之前冻结（校验失败也不改变"这个包内容是什么"的
+            // 事实）；规范格式见 ComputePackHash。
+            string packSha256 = ComputePackHash(
+                assemblyBytes, ReadEmbeddedManifestBytes(assembly), dependencyBytes, mainFileName);
+
+            ICompatPack? pack;
+            try
+            {
+                pack = ResolvePackEntry(assembly, manifest, collected);
+            }
+            catch (Exception exception)
+            {
+                collected.Add(prefix + "包入口实例化失败：" + DescribeException(exception));
+                errors = collected;
+                return false;
+            }
+            if (pack is null || collected.Count > 0)
+            {
+                errors = collected;
+                return false;
+            }
+
+            IReadOnlyList<ICompatPackContribution> manifestContributions =
+                CreateManifestContributions(manifest, context);
+            if (!ValidatePackEntry(
+                    pack, manifest, context, out _, out var entryErrors, out _, out ValidatedPackDelta? validatedDelta,
+                    manifestContributions, packSha256))
+            {
+                collected.AddRange(entryErrors.Select(error => prefix + error));
+                errors = collected;
+                return false;
+            }
+            if (validatedDelta is null)
+            {
+                collected.Add(prefix + "校验通过但未冻结 ValidatedPackDelta（内部不变量破坏）。");
+                errors = collected;
+                return false;
+            }
+
+            var dependencies = dependencyBytes
+                .Where(pair => !string.Equals(pair.Key, mainFileName, StringComparison.Ordinal))
+                .OrderBy(pair => pair.Key, StringComparer.Ordinal)
+                .Select(pair => new CompatPackDependencyInfo(pair.Key, Hash(pair.Value)))
+                .ToArray();
+
+            handle = new CompatPackHandle(
+                manifest, pack, fullPath, assemblySha256, validatedDelta, dependencies, loadContext);
+            handleRetained = true;
+            errors = collected;
+            return true;
         }
         catch (Exception exception)
         {
-            collected.Add(prefix + "包程序集加载失败：" + exception.Message);
-            loadContext.Unload();
+            // M-3：哈希/内嵌清单字节读取/清单贡献构造等任何未预期异常都在此按 fail-closed
+            // 拒载，异常绝不从 TryLoad 逃逸；ALC 由 finally 统一回收（成功路径才保留）。
+            collected.Add(prefix + "包加载失败（未预期异常，fail-closed）：" + DescribeException(exception));
             errors = collected;
             return false;
         }
-
-        if (!CompatPackManifest.TryLoadFromAssembly(assembly, out var parsedManifest, out var manifestErrors)
-            || parsedManifest is null)
+        finally
         {
-            collected.Add(prefix + "内嵌清单缺失或非法：");
-            collected.AddRange(manifestErrors.Select(error => prefix + "  " + error));
-            loadContext.Unload();
-            errors = collected;
-            return false;
+            if (!handleRetained)
+                loadContext.Unload();
         }
-        CompatPackManifest manifest = parsedManifest!;
-        string assemblySha256 = Hash(assemblyBytes);
-        // PackSha256 必须在任何语义校验之前冻结（校验失败也不改变"这个包内容是什么"的
-        // 事实）；规范格式见 ComputePackHash。
-        string packSha256 = ComputePackHash(
-            assemblyBytes, ReadEmbeddedManifestBytes(assembly), dependencyBytes, mainFileName);
-
-        ICompatPack? pack;
-        try
-        {
-            pack = ResolvePackEntry(assembly, manifest, collected);
-        }
-        catch (Exception exception)
-        {
-            collected.Add(prefix + "包入口实例化失败：" + DescribeException(exception));
-            loadContext.Unload();
-            errors = collected;
-            return false;
-        }
-        if (pack is null || collected.Count > 0)
-        {
-            loadContext.Unload();
-            errors = collected;
-            return false;
-        }
-
-        IReadOnlyList<ICompatPackContribution> manifestContributions = CreateManifestContributions(manifest, context);
-        if (!ValidatePackEntry(
-                pack, manifest, context, out _, out var entryErrors, out _, out ValidatedPackDelta? validatedDelta,
-                manifestContributions, packSha256))
-        {
-            collected.AddRange(entryErrors.Select(error => prefix + error));
-            loadContext.Unload();
-            errors = collected;
-            return false;
-        }
-        if (validatedDelta is null)
-        {
-            collected.Add(prefix + "校验通过但未冻结 ValidatedPackDelta（内部不变量破坏）。");
-            loadContext.Unload();
-            errors = collected;
-            return false;
-        }
-
-        var dependencies = dependencyBytes
-            .Where(pair => !string.Equals(pair.Key, mainFileName, StringComparison.Ordinal))
-            .OrderBy(pair => pair.Key, StringComparer.Ordinal)
-            .Select(pair => new CompatPackDependencyInfo(pair.Key, Hash(pair.Value)))
-            .ToArray();
-
-        handle = new CompatPackHandle(
-            manifest, pack, fullPath, assemblySha256, validatedDelta, dependencies, loadContext);
-        errors = collected;
-        return true;
     }
 
     /// <summary>
@@ -281,6 +316,8 @@ public static class CompatPackLoader
     /// <summary>
     /// 拒绝指向包目录外的文件符号链接/目录联接。解析失败同样 fail-closed（无法证明目标
     /// 在包目录内）；普通文件（非链接）返回 true。
+    /// M-1：链接解析 + 目标规范化 + 包含判定整体包在 try/catch 内——超长目标、平台不支持、
+    /// 权限等任何解析失败都记错误并返回 false，绝不让异常逃出 loader（TryX 契约）。
     /// </summary>
     static bool TryEnsureLinkWithinDirectory(
         string fullPath,
@@ -288,28 +325,30 @@ public static class CompatPackLoader
         string prefix,
         List<string> errors)
     {
-        FileSystemInfo? target;
+        string fileName = Path.GetFileName(fullPath);
+        bool withinDirectory;
         try
         {
-            target = File.ResolveLinkTarget(fullPath, returnFinalTarget: true);
+            FileSystemInfo? target = File.ResolveLinkTarget(fullPath, returnFinalTarget: true);
+            if (target is null)
+                return true;
+
+            string resolved = Path.GetFullPath(target.FullName);
+            string directoryWithSeparator =
+                Path.TrimEndingDirectorySeparator(Path.GetFullPath(packDirectory)) + Path.DirectorySeparatorChar;
+            withinDirectory = resolved.StartsWith(directoryWithSeparator, PathComparison);
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        catch (Exception exception)
         {
-            errors.Add(prefix + "包目录内文件的符号链接解析失败（" + Path.GetFileName(fullPath) + "）："
+            errors.Add(prefix + "包目录内文件的符号链接解析失败（" + fileName + "）："
                 + exception.Message);
             return false;
         }
-        if (target is null)
-            return true;
-
-        string resolved = Path.GetFullPath(target.FullName);
-        string directoryWithSeparator =
-            Path.TrimEndingDirectorySeparator(Path.GetFullPath(packDirectory)) + Path.DirectorySeparatorChar;
-        if (resolved.StartsWith(directoryWithSeparator, PathComparison))
+        if (withinDirectory)
             return true;
 
         errors.Add(prefix + "包目录内的文件是指向包目录外的符号链接/联接，拒载（路径逃逸）："
-            + Path.GetFileName(fullPath) + "。");
+            + fileName + "。");
         return false;
     }
 
@@ -339,7 +378,8 @@ public static class CompatPackLoader
             }
             if (!packIds.Add(handle!.Manifest.PackId))
             {
-                collected.Add("[" + path + "] packId 重复：" + handle.Manifest.PackId);
+                // M-5：错误前缀同样只回显基名。
+                collected.Add(DisplayPrefix(path) + "packId 重复：" + handle.Manifest.PackId);
                 // 重复包已成功加载（ALC 存活），确定回收而非等 GC。
                 handle.Unload();
                 continue;
@@ -442,6 +482,62 @@ public static class CompatPackLoader
             pack, manifest, context, out contributions, out errors, out surfaceStates, out _, manifestContributions);
 
     /// <summary>
+    /// 入口清单与内嵌清单的比较表（M-2）：PropertyName 是 <see cref="CompatPackManifest"/> 的
+    /// public 属性名，FieldName 是错误/清单字段名（如 targetEngineApi），Selector 取值。
+    /// 比较逻辑只遍历本表，反射守卫测试据 PropertyName 断言"manifest 新增属性未被比较"会红。
+    /// </summary>
+    static readonly (string PropertyName, string FieldName, Func<CompatPackManifest, object?> Selector)[]
+        EntryManifestFields =
+        {
+            (nameof(CompatPackManifest.PackId), "packId", manifest => manifest.PackId),
+            (nameof(CompatPackManifest.PackVersion), "packVersion", manifest => manifest.PackVersion),
+            (nameof(CompatPackManifest.ContractAbi), "contractAbi", manifest => manifest.ContractAbi),
+            (nameof(CompatPackManifest.EngineApi), "engineApi", manifest => manifest.EngineApi),
+            (nameof(CompatPackManifest.UsedLegacyTargetEngineApi), "targetEngineApi",
+                manifest => manifest.UsedLegacyTargetEngineApi),
+            (nameof(CompatPackManifest.BaseProfileId), "baseProfileId", manifest => manifest.BaseProfileId),
+            (nameof(CompatPackManifest.Surface), "surface", manifest => manifest.Surface),
+            (nameof(CompatPackManifest.BaseSurfaceHash), "baseSurfaceHash", manifest => manifest.BaseSurfaceHash),
+            (nameof(CompatPackManifest.Capabilities), "capabilities", manifest => manifest.Capabilities),
+            (nameof(CompatPackManifest.SaveProfileId), "saveProfileId", manifest => manifest.SaveProfileId),
+            (nameof(CompatPackManifest.VariantSelections), "variantSelections",
+                manifest => manifest.VariantSelections),
+            (nameof(CompatPackManifest.RequiredPacks), "requires", manifest => manifest.RequiredPacks),
+            (nameof(CompatPackManifest.ConflictingPacks), "conflicts", manifest => manifest.ConflictingPacks),
+            (nameof(CompatPackManifest.Overrides), "overrides", manifest => manifest.Overrides),
+            (nameof(CompatPackManifest.GameIdentity), "gameIdentity", manifest => manifest.GameIdentity),
+        };
+
+    /// <summary>
+    /// 比较表已覆盖的 <see cref="CompatPackManifest"/> public 属性名（反射守卫测试的唯一读取面；
+    /// 不在别处重复维护）。
+    /// </summary>
+    internal static IReadOnlyList<string> ComparedEntryManifestProperties { get; } =
+        EntryManifestFields.Select(field => field.PropertyName).ToArray();
+
+    /// <summary>
+    /// 清单字段的规范相等：字符串 Ordinal、序列按序、字典按内容、值对象/结构按值。
+    /// 新增字段类型必须在此显式声明比较语义（否则会落到 Equals，由测试与评审约束）。
+    /// </summary>
+    static bool ManifestFieldEquals(object? left, object? right) => (left, right) switch
+    {
+        (null, null) => true,
+        (null, _) or (_, null) => false,
+        (string leftText, string rightText) => string.Equals(leftText, rightText, StringComparison.Ordinal),
+        (CompatPackSurface leftSurface, CompatPackSurface rightSurface) => SurfaceEquals(leftSurface, rightSurface),
+        (IReadOnlyDictionary<string, string> leftVariants, IReadOnlyDictionary<string, string> rightVariants)
+            => VariantSelectionsEqual(leftVariants, rightVariants),
+        (IReadOnlyList<CompatPackDependency> leftRequires, IReadOnlyList<CompatPackDependency> rightRequires)
+            => RequiredPacksEqual(leftRequires, rightRequires),
+        (IReadOnlyList<CompatPackOverride> leftOverrides, IReadOnlyList<CompatPackOverride> rightOverrides)
+            => OverridesEqual(leftOverrides, rightOverrides),
+        (CompatPackGameIdentity leftIdentity, CompatPackGameIdentity rightIdentity)
+            => GameIdentityEquals(leftIdentity, rightIdentity),
+        (IReadOnlyList<string> leftList, IReadOnlyList<string> rightList) => SequenceEqual(leftList, rightList),
+        _ => Equals(left, right),
+    };
+
+    /// <summary>
     /// 入口类 Manifest 与内嵌清单的逐字段相等判定；不相等时把差异字段名并入错误
     ///（fail-closed，入口清单不得覆盖内嵌清单）。
     /// </summary>
@@ -457,36 +553,14 @@ public static class CompatPackLoader
         }
 
         var differing = new List<string>();
-        if (!string.Equals(entryManifest.PackId, embeddedManifest.PackId, StringComparison.Ordinal))
-            differing.Add("packId");
-        if (!string.Equals(entryManifest.PackVersion, embeddedManifest.PackVersion, StringComparison.Ordinal))
-            differing.Add("packVersion");
-        if (entryManifest.ContractAbi != embeddedManifest.ContractAbi)
-            differing.Add("contractAbi");
-        if (entryManifest.EngineApi != embeddedManifest.EngineApi)
-            differing.Add("engineApi");
-        if (entryManifest.UsedLegacyTargetEngineApi != embeddedManifest.UsedLegacyTargetEngineApi)
-            differing.Add("targetEngineApi");
-        if (!string.Equals(entryManifest.BaseProfileId, embeddedManifest.BaseProfileId, StringComparison.Ordinal))
-            differing.Add("baseProfileId");
-        if (!SurfaceEquals(entryManifest.Surface, embeddedManifest.Surface))
-            differing.Add("surface");
-        if (!string.Equals(entryManifest.BaseSurfaceHash, embeddedManifest.BaseSurfaceHash, StringComparison.Ordinal))
-            differing.Add("baseSurfaceHash");
-        if (!SequenceEqual(entryManifest.Capabilities, embeddedManifest.Capabilities))
-            differing.Add("capabilities");
-        if (!string.Equals(entryManifest.SaveProfileId, embeddedManifest.SaveProfileId, StringComparison.Ordinal))
-            differing.Add("saveProfileId");
-        if (!VariantSelectionsEqual(entryManifest.VariantSelections, embeddedManifest.VariantSelections))
-            differing.Add("variantSelections");
-        if (!RequiredPacksEqual(entryManifest.RequiredPacks, embeddedManifest.RequiredPacks))
-            differing.Add("requires");
-        if (!SequenceEqual(entryManifest.ConflictingPacks, embeddedManifest.ConflictingPacks))
-            differing.Add("conflicts");
-        if (!OverridesEqual(entryManifest.Overrides, embeddedManifest.Overrides))
-            differing.Add("overrides");
-        if (!GameIdentityEquals(entryManifest.GameIdentity, embeddedManifest.GameIdentity))
-            differing.Add("gameIdentity");
+        // 单一比较表：反射守卫测试（CompatPackLoaderTests）遍历 CompatPackManifest 的 public
+        // 实例属性并断言全部被本表覆盖——未来给清单加字段而忘记扩展比较时该用例直接红，
+        // 防止"入口清单可静默覆盖内嵌清单的新字段"（M-2）。
+        foreach ((_, string fieldName, Func<CompatPackManifest, object?> selector) in EntryManifestFields)
+        {
+            if (!ManifestFieldEquals(selector(entryManifest), selector(embeddedManifest)))
+                differing.Add(fieldName);
+        }
 
         if (differing.Count == 0)
             return true;

@@ -27,12 +27,22 @@ public sealed class CompatPackHandle : ICompatPackLease
         PackAssemblyPath = packAssemblyPath;
         AssemblySha256 = assemblySha256;
         ValidatedDelta = validatedDelta ?? throw new ArgumentNullException(nameof(validatedDelta));
-        Dependencies = dependencyClosure ?? Array.Empty<CompatPackDependencyInfo>();
+        // M-9：防御性复制并包成只读视图，句柄对外不可变的承诺不依赖调用方自律。
+        Dependencies = dependencyClosure is null
+            ? Array.Empty<CompatPackDependencyInfo>()
+            : Array.AsReadOnly(dependencyClosure.ToArray());
         LoadContext = loadContext;
     }
 
     public CompatPackManifest Manifest { get; }
+
+    /// <summary>
+    /// 包入口实例：仅用于 ABI/诊断（例如宿主查询包身份）。T5 起组装期只读
+    /// <see cref="ValidatedDelta"/>；**禁止在组装期读取 <see cref="ICompatPack.Contributions"/>**
+    ///——那等于第二次执行包作者代码，破坏"校验一次、组装只读冻结差量"的不变量（M-10）。
+    /// </summary>
     public ICompatPack Pack { get; }
+
     public string PackAssemblyPath { get; }
     public string AssemblySha256 { get; }
 

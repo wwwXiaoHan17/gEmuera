@@ -92,14 +92,19 @@ internal sealed class CompatPackLoadContext : AssemblyLoadContext
             bytes = found;
             return true;
         }
-        // Windows 文件系统大小写不敏感：依赖程序集名与文件名的 casing 可能不同，
-        // 回退到 OrdinalIgnoreCase 扫描（包目录通常只有少量 dll）。
-        foreach (KeyValuePair<string, byte[]> entry in dependencyBytes)
+        // M-4：大小写回退只在 Windows 启用——那是文件系统大小写不敏感的平台，依赖程序集名
+        // 与文件名的 casing 可能不同。Linux/macOS 允许 Foo.dll 与 foo.dll 并存，IgnoreCase
+        // 扫描的结果取决于字典枚举顺序（不确定），因此保持 Ordinal 严格匹配（miss 即按
+        // 允许清单 fail-closed 拒载，而不是随机选一个同名不同 casing 的程序集）。
+        if (OperatingSystem.IsWindows())
         {
-            if (string.Equals(entry.Key, fileName, StringComparison.OrdinalIgnoreCase))
+            foreach (KeyValuePair<string, byte[]> entry in dependencyBytes)
             {
-                bytes = entry.Value;
-                return true;
+                if (string.Equals(entry.Key, fileName, StringComparison.OrdinalIgnoreCase))
+                {
+                    bytes = entry.Value;
+                    return true;
+                }
             }
         }
         bytes = null!;

@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text;
 using Emuera.Compatibility.Packs;
 using GEmuera.Core.Compatibility;
@@ -440,11 +441,55 @@ public class CompatPackLoaderTests
     }
 
     [Fact]
+    public void TryLoad_DependencyHashIsOrderIndependent()
+    {
+        // M-6：PackSha256 必须与依赖的落盘/枚举顺序无关（ComputePackHash 按文件基名 Ordinal
+        // 排序）。两个 dummy 依赖以相反顺序写入两个隔离目录，同一主 DLL/manifest 必须得到
+        // 同一哈希；并用独立规范推演分别钉住两个方向的精确值。
+        const string firstDependency = "AaaDependency.dll";
+        const string secondDependency = "ZzzDependency.dll";
+        byte[] firstBytes = { 1, 2, 3 };
+        byte[] secondBytes = { 4, 5, 6 };
+
+        using var forward = new IsolatedPackDirectory(HelloPackPath);
+        forward.WriteAssembly(firstDependency, firstBytes);
+        forward.WriteAssembly(secondDependency, secondBytes);
+
+        using var reverse = new IsolatedPackDirectory(HelloPackPath);
+        reverse.WriteAssembly(secondDependency, secondBytes);
+        reverse.WriteAssembly(firstDependency, firstBytes);
+
+        Assert.True(
+            CompatPackLoader.TryLoad(forward.MainAssemblyPath, RealContext(), out var forwardHandle, out var forwardErrors),
+            string.Join("; ", forwardErrors));
+        Assert.True(
+            CompatPackLoader.TryLoad(reverse.MainAssemblyPath, RealContext(), out var reverseHandle, out var reverseErrors),
+            string.Join("; ", reverseErrors));
+        try
+        {
+            Assert.Equal(forwardHandle!.PackSha256, reverseHandle!.PackSha256);
+            byte[] mainBytes = File.ReadAllBytes(forward.MainAssemblyPath);
+            Assert.Equal(
+                ExpectedPackSha256(mainBytes, (firstDependency, firstBytes), (secondDependency, secondBytes)),
+                forwardHandle.PackSha256);
+            Assert.Equal(
+                ExpectedPackSha256(mainBytes, (secondDependency, secondBytes), (firstDependency, firstBytes)),
+                reverseHandle.PackSha256);
+        }
+        finally
+        {
+            forwardHandle?.Unload();
+            reverseHandle?.Unload();
+        }
+    }
+
+    [SymlinkFact]
     public void TryLoad_SymlinkOutsidePackDirectory_IsRejected()
     {
         // 依赖闭包读的是"包目录内的 dll"：指向目录外的 symlink 必须拒载，否则部署目录
         // 里的一个链接就能把任意宿主/系统文件卷进包哈希与装载路径。Windows 创建符号链接
-        // 需要开发者模式/特权；创建失败时按环境能力跳过本用例（不是通过）。
+        // 需要开发者模式/特权：能力探测在 discovery 期完成（SymlinkFactAttribute），不能
+        // 创建时 xUnit 报告 skipped——跳过 ≠ 通过。
         using var directory = new IsolatedPackDirectory(HelloPackPath);
         string outsideDirectory = Path.Combine(
             Path.GetTempPath(), "compat-pack-outside-" + Guid.NewGuid().ToString("N"));
@@ -454,14 +499,9 @@ public class CompatPackLoaderTests
         try
         {
             string linkPath = Path.Combine(directory.DirectoryPath, "LinkedDependency.dll");
-            try
-            {
-                File.CreateSymbolicLink(linkPath, outsideDll);
-            }
-            catch (Exception exception) when (exception is UnauthorizedAccessException or IOException)
-            {
-                return;
-            }
+            // discovery 已确认本机具备能力；若运行期仍失败（环境变化），让异常按测试失败
+            // 上报——绝不吞掉后 return 成 passed。
+            File.CreateSymbolicLink(linkPath, outsideDll);
 
             Assert.False(
                 CompatPackLoader.TryLoad(directory.MainAssemblyPath, RealContext(), out var handle, out var errors),
@@ -488,8 +528,57 @@ public class CompatPackLoaderTests
             CompatPackLoader.TryLoad(directory.MainAssemblyPath, RealContext(), out var handle, out var errors),
             "坏依赖/类型加载失败被降级成 manifest-only（fail-closed 未生效）。");
         Assert.Null(handle);
-        Assert.Contains(errors, error => error.Contains("ReflectionTypeLoadException")
-            || error.Contains("CompatPackTypeLoadDependency"));
+        // I-2(a)：必须给出"依赖字节确实被找到并送进 LoadFromStream"的证据。坏字节在
+        // ALC.Load 中触发 BadImageFormatException，经 ReflectionTypeLoadException 的
+        // LoaderExceptions 出现在错误里；依赖缺失/依赖图键错误只会产生裸 FileLoadException，
+        // 不能满足 BadImageFormatException 断言（旧的 "ReflectionTypeLoadException 或依赖名"
+        // OR 断言会被这种"根本没装载依赖"的失败蒙混过去）。
+        Assert.Contains(errors, error => error.Contains("ReflectionTypeLoadException"));
+        Assert.Contains(errors, error => error.Contains("BadImageFormatException"));
+    }
+
+    [Fact]
+    public void TryLoad_ValidDependencyBytes_LoadsDependencyFromGraph()
+    {
+        // I-2(b) 正向证据：依赖字节图既是 PackSha256 的输入，也是 ALC 的唯一装载来源。
+        // 入口类型继承依赖程序集的基类；依赖字节有效且不被覆盖 → GetTypes/入口实例化必须
+        // 成功，且依赖程序集只能出现在包的隔离 ALC 内（该 ALC 没有任何路径回退）。
+        string fixturePath = typeof(CompatPackTypeLoadFixture.TypeLoadFailingPack).Assembly.Location;
+        string dependencyPath = typeof(CompatPackTypeLoadDependency.TypeLoadDependencyBase).Assembly.Location;
+        const string dependencyName = "CompatPackTypeLoadDependency.dll";
+        byte[] dependencyBytes = File.ReadAllBytes(dependencyPath);
+
+        using var directory = new IsolatedPackDirectory(fixturePath, dependencyPath);
+        Assert.True(
+            CompatPackLoader.TryLoad(directory.MainAssemblyPath, RealContext(), out var handle, out var errors),
+            "有效依赖未被依赖字节图装载：" + string.Join("; ", errors));
+        try
+        {
+            // 入口类型（继承依赖基类）已成功实例化 → 基类解析走通。
+            Assert.Equal("CompatPackTypeLoadFixture.TypeLoadFailingPack", handle!.Pack.GetType().FullName);
+
+            // 依赖诊断：basename + 内容 SHA256（不含主 DLL，不含完整路径）。
+            CompatPackDependencyInfo recorded = Assert.Single(handle.Dependencies);
+            Assert.Equal(dependencyName, recorded.FileName);
+            Assert.Equal(
+                Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(dependencyBytes)).ToLowerInvariant(),
+                recorded.Sha256);
+
+            // 依赖程序集确实装进了包的隔离 ALC（来自字节图；该 ALC 无磁盘路径回退）。
+            Assert.Contains(
+                handle.LoadContext.Assemblies,
+                assembly => string.Equals(assembly.GetName().Name, "CompatPackTypeLoadDependency", StringComparison.Ordinal));
+
+            // 依赖字节同时进入 PackSha256：与独立规范推演一致。
+            byte[] mainBytes = File.ReadAllBytes(directory.MainAssemblyPath);
+            Assert.Equal(
+                ExpectedPackSha256(mainBytes, (dependencyName, dependencyBytes)),
+                handle.PackSha256);
+        }
+        finally
+        {
+            handle?.Unload();
+        }
     }
 
     [Fact]
@@ -580,6 +669,33 @@ public class CompatPackLoaderTests
             CompatPackLoader.ValidatePackEntry(pack, embedded, RealContext(), out _, out var errors, out _, out var delta));
         Assert.Null(delta);
         Assert.Contains(errors, error => error.Contains("不一致") && error.Contains("overrides"));
+    }
+
+    [Fact]
+    public void EntryManifestComparison_CoversEveryManifestPublicProperty()
+    {
+        // M-2 反射守卫：入口清单与内嵌清单的"全字段相等"由 loader 的比较表驱动；本用例
+        // 遍历 CompatPackManifest 的全部 public 实例属性，断言每个属性都被比较表覆盖。
+        // T6 给清单加 requires/conflicts/overrides 时已出现过手工字段清单漂移风险；未来再
+        // 加字段而忘记扩展比较表 → 本用例红，而不是让入口清单静默覆盖新字段。
+        string[] declared = typeof(CompatPackManifest)
+            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Select(property => property.Name)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
+        Assert.NotEmpty(declared);
+
+        IReadOnlyList<string> compared = CompatPackLoader.ComparedEntryManifestProperties;
+        string[] missing = declared.Except(compared, StringComparer.Ordinal).ToArray();
+        string[] stale = compared.Except(declared, StringComparer.Ordinal).ToArray();
+
+        Assert.True(
+            missing.Length == 0,
+            "入口/内嵌清单比较未覆盖 CompatPackManifest 的 public 属性：" + string.Join(", ", missing));
+        Assert.True(
+            stale.Length == 0,
+            "入口/内嵌清单比较表包含不存在/非 public 的 CompatPackManifest 属性：" + string.Join(", ", stale));
+        Assert.Equal(declared.Length, compared.Distinct(StringComparer.Ordinal).Count());
     }
 
     sealed class CountingPack : ICompatPack
