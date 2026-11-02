@@ -342,12 +342,19 @@ function Test-AndroidEvidence {
         Write-GateCheck -Name '三场景日志均包含 [LOAD]' -Passed $false -Detail ($loadIssues -join ' ; ')
     }
 
-    # ---- 未处理失败：plan hash / ALC / unhandled / fatal ----
+    # ---- 未处理失败：plan hash / ALC / unhandled / fatal / 包加载降级 / fallback 失败 ----
+    # fallback 失败行必须单独拦截：它们同时包含 "fallback" 与 "no-pack baseline"，
+    # 旧规则只校验目标基线和 fatal，会把 "fallback failed" 当成合法回退（review I1）。
+    # 注意顺序：成功回退行是 "projection failed; fallback to no-pack baseline"，
+    # 失败词在 fallback 之前，因此不会被下面"fallback 之后失败"的规则误伤。
     $forbiddenRules = @(
         [pscustomobject]@{ Label = '未处理 plan hash 失败'; Pattern = '(?i)(plan\s*hash|计划哈希)[^\r\n]{0,160}(fail|failed|mismatch|error|does not match|不匹配|不一致|失败)' },
         [pscustomobject]@{ Label = 'ALC 失败'; Pattern = '(?i)(assemblyloadcontext|\bALC\b)[^\r\n]{0,160}(fail|failed|error|exception|leak|not unload|未回收|失败|异常)' },
         [pscustomobject]@{ Label = '未处理异常'; Pattern = '(?i)unhandled\s+exception|未处理异常' },
-        [pscustomobject]@{ Label = 'fatal 日志'; Pattern = '(?i)\bfatal(?:\s+error)?\b' }
+        [pscustomobject]@{ Label = 'fatal 日志'; Pattern = '(?i)\bfatal(?:\s+error)?\b' },
+        [pscustomobject]@{ Label = 'fallback 失败'; Pattern = '(?i)\bfallback\b[^\r\n]{0,160}(fail|failed|failure|error|exception|失败|异常|abort|aborted|terminat|终止)' },
+        [pscustomobject]@{ Label = 'no-pack baseline 失败'; Pattern = '(?i)no-pack baseline[^\r\n]{0,160}(fail|failed|failure|error|exception|失败|异常|abort|aborted|terminat|终止)' },
+        [pscustomobject]@{ Label = 'CompatPack 包加载降级'; Pattern = '(?i)\[LOAD\]\s+CompatPack\s+disabled' }
     )
     $violations = @()
     foreach ($log in $runLogs) {
@@ -363,25 +370,107 @@ function Test-AndroidEvidence {
         }
     }
     if ($violations.Count -eq 0) {
-        Write-GateCheck -Name '日志无未处理 plan hash / ALC 失败 / fatal' -Passed $true -Detail ''
+        Write-GateCheck -Name '日志无未处理 plan hash / ALC / fatal / fallback 失败 / 包降级' -Passed $true -Detail ''
     }
     else {
-        Write-GateCheck -Name '日志无未处理 plan hash / ALC 失败 / fatal' -Passed $false -Detail ($violations -join ' ; ')
+        Write-GateCheck -Name '日志无未处理 plan hash / ALC / fatal / fallback 失败 / 包降级' -Passed $false -Detail ($violations -join ' ; ')
     }
 
-    # ---- fallback 目标基线 ----
+    # ---- 至少一个真实 pack 成功加载（spec §9 Gate 1） ----
+    # 只有 "[LOAD] CompatPack enabled: id=... contractAbi=... engineApi=..." 才算
+    # 真实 pack 加载成功；baseline-only / disabled / 只有 [LOAD] 的日志不满足 Gate 1。
+    $enabledPattern = '(?i)\[LOAD\]\s+CompatPack enabled:\s*(?<body>.+)$'
+    $versionPattern = '^\d+\.\d+$'
+    $enabledRecords = @()
+    $enabledIssues = @()
+    foreach ($log in $runLogs) {
+        foreach ($line in ($log.Text -split '\r?\n')) {
+            $enabledMatch = [regex]::Match($line, $enabledPattern)
+            if (-not $enabledMatch.Success) { continue }
+            $body = $enabledMatch.Groups['body'].Value
+            $idMatch = [regex]::Match($body, '(?i)(?:^|\s)id=(?<value>\S+)')
+            $contractMatch = [regex]::Match($body, '(?i)(?:^|\s)contractAbi=(?<value>\S+)')
+            $engineMatch = [regex]::Match($body, '(?i)(?:^|\s)engineApi=(?<value>\S+)')
+            $packId = ''
+            if ($idMatch.Success) { $packId = $idMatch.Groups['value'].Value }
+            $contractAbi = ''
+            if ($contractMatch.Success) { $contractAbi = $contractMatch.Groups['value'].Value }
+            $engineApi = ''
+            if ($engineMatch.Success) { $engineApi = $engineMatch.Groups['value'].Value }
+            $recordIssues = @()
+            if ([string]::IsNullOrWhiteSpace($packId)) { $recordIssues += '缺少 id' }
+            if ([string]::IsNullOrWhiteSpace($contractAbi)) { $recordIssues += '缺少 contractAbi' }
+            elseif ($contractAbi -notmatch $versionPattern) { $recordIssues += ('contractAbi 非 major.minor: ' + $contractAbi) }
+            if ([string]::IsNullOrWhiteSpace($engineApi)) { $recordIssues += '缺少 engineApi' }
+            elseif ($engineApi -notmatch $versionPattern) { $recordIssues += ('engineApi 非 major.minor: ' + $engineApi) }
+            $enabledRecords += [pscustomobject]@{
+                Scenario    = $log.Scenario
+                PackId      = $packId
+                ContractAbi = $contractAbi
+                EngineApi   = $engineApi
+            }
+            foreach ($recordIssue in $recordIssues) {
+                $enabledIssues += ("场景 {0} enabled 行: {1}" -f $log.Scenario, $recordIssue)
+            }
+        }
+    }
+    if ($enabledRecords.Count -eq 0) {
+        Write-GateCheck -Name '至少一个真实 pack 成功加载（[LOAD] CompatPack enabled）' -Passed $false -Detail '三场景日志均未出现 [LOAD] CompatPack enabled；纯 baseline / disabled / 只有 [LOAD] 的日志不能通过 Gate 1（spec §9 Gate 1 要求至少一个真实 pack）'
+    }
+    elseif ($enabledIssues.Count -gt 0) {
+        Write-GateCheck -Name '至少一个真实 pack 成功加载（[LOAD] CompatPack enabled）' -Passed $false -Detail ($enabledIssues -join ' ; ')
+    }
+    else {
+        $enabledDetail = @($enabledRecords | ForEach-Object { "id=$($_.PackId) contractAbi=$($_.ContractAbi) engineApi=$($_.EngineApi)" }) -join ' ; '
+        Write-GateCheck -Name '至少一个真实 pack 成功加载（[LOAD] CompatPack enabled）' -Passed $true -Detail $enabledDetail
+    }
+
+    # ---- fallback：只接受“成功回退到无包基线” ----
+    # 成功标记固定为 "[LOAD] CompatPack projection failed; fallback to no-pack baseline"。
+    # 同一个日志在成功标记之后若再次出现 fail/error/exception/fatal/失败/异常/终止，
+    # 说明回退后仍失败，必须 FAIL；"fallback failed" 行本身由 forbiddenRules 拦截。
+    $fallbackMarkerPattern = '(?i)\[LOAD\]\s+CompatPack projection failed;\s*fallback to no-pack baseline'
+    $postFallbackFailurePattern = '(?i)(\bfail(?:ed|ure)?\b|\berror\b|\bexception\b|\bfatal\b|失败|异常|终止)'
     $fallbackIssues = @()
     $declaredFallbackTarget = [string](Get-JsonField -Object $evidence -Name 'fallbackTargetBaseline')
     $fallbackSeen = $false
     foreach ($log in $runLogs) {
-        if (-not [regex]::IsMatch($log.Text, '(?i)\bfallback\b')) { continue }
-        $fallbackSeen = $true
-        $targetOk = [regex]::IsMatch($log.Text, '(?i)\bfallback\b[^\r\n]*(no-pack baseline|no-pack composition|v24pure|snake|erafl|erablue|megaten|v18)')
-        if (-not $targetOk -and -not [string]::IsNullOrWhiteSpace($declaredFallbackTarget)) {
-            $targetOk = $log.Text.IndexOf($declaredFallbackTarget, [StringComparison]::OrdinalIgnoreCase) -ge 0
+        $lines = $log.Text -split '\r?\n'
+        $fallbackLineCount = 0
+        $markerIndex = -1
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -notmatch '(?i)\bfallback\b') { continue }
+            $fallbackSeen = $true
+            $fallbackLineCount++
+            if ($markerIndex -lt 0 -and [regex]::IsMatch($lines[$i], $fallbackMarkerPattern)) {
+                $markerIndex = $i
+                continue
+            }
+            # 成功标记自身包含 no-pack baseline，不需要再查目标；其它 fallback 行必须
+            # 写明目标基线，否则视为未声明的静默回退。
+            $targetOk = [regex]::IsMatch($lines[$i], '(?i)\bfallback\b[^\r\n]*(no-pack baseline|no-pack composition|v24pure|snake|erafl|erablue|megaten|v18)')
+            if (-not $targetOk -and -not [string]::IsNullOrWhiteSpace($declaredFallbackTarget)) {
+                $targetOk = $lines[$i].IndexOf($declaredFallbackTarget, [StringComparison]::OrdinalIgnoreCase) -ge 0
+            }
+            if (-not $targetOk) {
+                $snippet = $lines[$i].Trim()
+                if ($snippet.Length -gt 180) { $snippet = $snippet.Substring(0, 180) + '...' }
+                $fallbackIssues += ("场景 {0} 出现 fallback，但日志未包含目标基线: {1}" -f $log.Scenario, $snippet)
+            }
         }
-        if (-not $targetOk) {
-            $fallbackIssues += ("场景 {0} 出现 fallback，但日志未包含目标基线（请提供 fallbackTargetBaseline，或在同一日志写明 no-pack baseline / v24pure 等）" -f $log.Scenario)
+        if ($fallbackLineCount -gt 0 -and $markerIndex -lt 0) {
+            $fallbackIssues += ("场景 {0} 出现 fallback，但未找到成功回退标记（[LOAD] CompatPack projection failed; fallback to no-pack baseline）；fallback 失败/终止行不能算合法回退" -f $log.Scenario)
+        }
+        if ($markerIndex -ge 0) {
+            for ($i = $markerIndex + 1; $i -lt $lines.Count; $i++) {
+                # 再次出现成功标记不算失败（标记本身含 "projection failed"）。
+                if ([regex]::IsMatch($lines[$i], $fallbackMarkerPattern)) { continue }
+                if ([regex]::IsMatch($lines[$i], $postFallbackFailurePattern)) {
+                    $snippet = $lines[$i].Trim()
+                    if ($snippet.Length -gt 180) { $snippet = $snippet.Substring(0, 180) + '...' }
+                    $fallbackIssues += ("场景 {0} 成功回退后仍出现失败/异常: {1}" -f $log.Scenario, $snippet)
+                }
+            }
         }
     }
     $fallbackUsed = Get-JsonField -Object $evidence -Name 'fallbackUsed'
@@ -389,10 +478,10 @@ function Test-AndroidEvidence {
         $fallbackIssues += 'evidence 声明 fallbackUsed=true，但三场景日志均未出现 fallback'
     }
     if ($fallbackIssues.Count -eq 0) {
-        Write-GateCheck -Name 'fallback 日志包含目标基线（未发生 fallback 时自动通过）' -Passed $true -Detail ''
+        Write-GateCheck -Name 'fallback 仅接受成功回退到无包基线（未发生 fallback 时自动通过）' -Passed $true -Detail ''
     }
     else {
-        Write-GateCheck -Name 'fallback 日志包含目标基线' -Passed $false -Detail ($fallbackIssues -join ' ; ')
+        Write-GateCheck -Name 'fallback 仅接受成功回退到无包基线' -Passed $false -Detail ($fallbackIssues -join ' ; ')
     }
 
     # ---- evidence 汇总布尔 ----
@@ -513,8 +602,10 @@ function Test-SixGameEvidence {
         if ([string]::IsNullOrWhiteSpace($resultValue)) {
             $issues += '缺少/空字段 result'
         }
-        elseif ($resultValue -ne 'PASS') {
-            $issues += ('result 必须为 PASS（实际: {0}）' -f $resultValue)
+        elseif ($resultValue -cne 'PASS') {
+            # 文档口径：只接受字面量大写 PASS；PowerShell 的 -ne 不区分大小写，
+            # 必须用 -cne，否则 "pass" 会被误判为通过（review Minor #3）。
+            $issues += ('result 必须为字面量大写 PASS（实际: {0}）' -f $resultValue)
         }
 
         if (-not [string]::IsNullOrWhiteSpace($logPathRaw)) {

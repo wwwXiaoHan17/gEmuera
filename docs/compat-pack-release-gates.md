@@ -91,6 +91,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\compat-pack\Test-Compa
 }
 ```
 
+> Gate 1 的“真实 pack”要求以日志为准：三份日志中至少一份必须包含
+> `[LOAD] CompatPack enabled: id=... version=... contractAbi=<major.minor> engineApi=<major.minor> ...`。
+> 只有 `[LOAD]`、`[LOAD] CompatPack disabled (...)` 或纯 baseline 日志都不能通过 Gate 1（spec §9 Gate 1 要求放入至少一个真实 pack）。
+
 字段说明：
 
 | 字段 | 必需 | 校验 |
@@ -101,8 +105,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\compat-pack\Test-Compa
 | loadLogFound | 是 | 必须是 JSON true |
 | fatalErrorFound | 是 | 必须是 JSON false |
 | apkPath | 否 | 缺省按同目录唯一 *.apk 解析 |
-| fallbackUsed | 否 | 若为 true，日志中必须出现 fallback |
-| fallbackTargetBaseline | fallback 且日志未写明目标时必需 | 回退目标基线；日志同一行出现 no-pack baseline / no-pack composition / v24pure 等也算写明目标 |
+| fallbackUsed | 否 | 若为 true，日志中必须出现 fallback；fallback 必须是成功回退标记（见 3.2） |
+| fallbackTargetBaseline | fallback 且日志未写明目标时必需 | 回退目标基线；日志同一行出现 no-pack baseline / no-pack composition / v24pure 等也算写明目标。成功回退标记自带 no-pack baseline，无需再填 |
 | commit / capturedAt | 否 | 建议记录，便于归档追溯；脚本当前只做结构校验，不校验值 |
 
 ### 3.2 校验规则（缺一 exit 1）
@@ -110,9 +114,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\compat-pack\Test-Compa
 - evidence JSON 存在且可解析。
 - APK 文件存在；SHA256 与 apkSha256 匹配。
 - 设备型号、Android 版本、ABI 非空。
-- 三场景日志都存在、非空；每条日志都包含 [LOAD]。
-- 日志中不得出现未处理的 plan hash 失败（plan hash ... fail/mismatch/does not match/不匹配/失败 等）、ALC 失败（ALC/AssemblyLoadContext ... fail/error/exception/未回收 等）、Unhandled exception 或 fatal 标记。
-- 出现 fallback 时，日志必须写明回退目标基线；evidence 声明 fallbackUsed=true 但日志无 fallback 也判失败。
+- 三场景日志都存在、非空；每条日志都包含 `[LOAD]`。
+- 三份日志中**至少一份**包含 `[LOAD] CompatPack enabled: id=... contractAbi=<major.minor> engineApi=<major.minor> ...`，且 contractAbi / engineApi 各自是 `major.minor`。只有 `[LOAD]`、纯 baseline 或 `[LOAD] CompatPack disabled (...)` 的日志不能通过 Gate 1。
+- 日志中不得出现 `[LOAD] CompatPack disabled (...)`（load rejected / game identity mismatch / assembly rejected / unexpected failure 等包加载降级），也不得出现未处理的 plan hash 失败（plan hash ... fail/mismatch/does not match/不匹配/失败 等）、ALC 失败（ALC/AssemblyLoadContext ... fail/error/exception/未回收 等）、Unhandled exception 或 fatal 标记。
+- `fallback` 只接受成功回退标记 `[LOAD] CompatPack projection failed; fallback to no-pack baseline`，且该行之后不得再出现 fail/error/exception/fatal/失败/异常/终止；`... fallback failed`、`... no-pack baseline bind failed` 等失败/终止行直接判失败。出现 fallback 但找不到成功标记、或 evidence 声明 fallbackUsed=true 但日志无 fallback，也判失败。
 - loadLogFound 必须为 true，fatalErrorFound 必须为 false。
 
 > 守卫只能校验证据文本与已知失败模式，不能证明日志一定来自真机。发布评审仍须人工核对归档、设备信息与 APK 哈希。
@@ -130,13 +135,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\compat-pack\Test-Compa
    adb shell getprop ro.build.version.release
    adb shell getprop ro.product.cpu.abi
    ```
-   把游戏放到启动器扫描根（Android：/storage/emulated/0/emuera/），需要时把真实 pack 放到 /storage/emulated/0/emuera/packs/。
+   把游戏放到启动器扫描根（Android：/storage/emulated/0/emuera/），并把至少一个真实 pack 放到 /storage/emulated/0/emuera/packs/；Gate 1 要求日志出现 enabled 行，纯 baseline 启动不算通过。
 3. 逐场景采集日志（三份都要保留原始文本）：
    - **start**：adb logcat -c 后从启动器冷启动游戏，等待输入等待，执行 adb logcat -d -v threadtime > logs\start.log。
    - **back-restart**：使用应用内 Back→Restart（或系统返回键退出后**不 force-stop 进程**立即重新进入），跑到输入等待，保存 logs\back-restart.log。
    - **second-start**：同一进程内再次启动同一游戏，跑到输入等待，保存 logs\second-start.log。
 4. 若 adb logcat 中没有 [LOAD]，开启运行时诊断文件 sink（user://gemuera_runtime_*.log）并用 debug 包 run-as 或应用内诊断导出取回，写入对应 log 文件；不要用截图代替日志。
-5. 人工检查每份日志：[LOAD]、contractAbi、engineApi、plan hash、fallback 路径；失败时确认用户可见状态，不得静默回退到未声明 profile。
+5. 人工检查每份日志：[LOAD]、[LOAD] CompatPack enabled 的 pack id/contractAbi/engineApi、plan hash、fallback 路径；失败时确认用户可见状态，不得静默回退到未声明 profile。
 6. 写 evidence JSON，运行：
    ```powershell
    powershell -NoProfile -ExecutionPolicy Bypass -File tools\compat-pack\Test-CompatPackReleaseGate.ps1 -ProjectRoot . -RequireAndroid -AndroidEvidencePath reports\compatpack\android-evidence.json
@@ -161,7 +166,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\compat-pack\Test-Compa
 - profile：本次会话实际使用的 profile。
 - baseProfile：目标基线；P-D 后为 v24pure，P-D 前允许与 profile 相同。
 - packIds：实际加载的包 id 列表；纯内置 profile 会话允许 []。P-D 发布证据应列出第一方包。
-- result：只接受字面量 PASS。
+- result：只接受字面量大写 PASS；小写 pass 不接受。
 - keyOutput：人工核对过的标题/首屏/关键输出（例如首行标题、首个输入等待）。
 - logPath：该次无头运行的日志文件；必须存在且非空。
 
@@ -190,7 +195,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\compat-pack\Test-Compa
 
 - JSON 可解析；顶层为数组或含 games 数组。
 - 记录数恰好 6；gameId 不得重复。
-- 每条记录包含非空 gameId / profile / baseProfile / keyOutput / logPath，且 result 严格等于 PASS。
+- 每条记录包含非空 gameId / profile / baseProfile / keyOutput / logPath，且 result 严格等于字面量大写 PASS（小写 pass 不接受）。
 - packIds 字段必须存在；可以是 []（纯基线）或包 id 列表。Windows PowerShell 5.1 的 ConvertFrom-Json 会把单元素数组折叠成字符串、把 [] 折叠成 null，脚本已兼容这两种形态；不要因此写非数组 JSON。
 - logPath 文件必须存在且非空。
 
@@ -222,7 +227,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\legacy-runner\Invoke-L
 覆盖内容：
 - ALC 回收用真实 loader/session 持有包，Dispose 后对 ALC 与入口实例做 WeakReference + 多轮 GC 断言，并检查静态字段残留。
 - 旧包夹具覆盖 facade 预载/未预载、TypeForwardedTo 通道、失败时的可定位 ABI 错误与 baseSurfaceHash 一致性。
-- Gate 3 还建议在 Android 真机重复一次 ALC 回收；该项当前未编码进 Android evidence schema，发布评审需单独归档结果。
+- Gate 3 的 Android 真机重复是 spec 的“最好”项：建议在同一 APK 上重复一次并人工归档结果；该项当前未编码进 Android evidence schema，gate 不校验，不计入自动门禁。
 
 ## 6. Gate 5/6：契约测试与治理入口
 
@@ -237,9 +242,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\legacy-runner\Invoke-L
 1. **Gate 6 桌面档先绿**：在待发布 commit 上跑 Test-CompatPackReleaseGate.ps1 -ProjectRoot . 与 Test-Governance.ps1，归档完整输出。
 2. **Gate 1 Android APK e2e**：真实设备安装同一 APK，至少重复 2 次；保存三场景日志、设备信息、APK SHA256；带 -RequireAndroid 跑证据档。
 3. **Gate 2 六游戏矩阵**：六个游戏按正确 profile / pack / 依赖组合无头跑到输入等待，关键输出核对为 PASS；带 -RequireSixGame 跑证据档。
-4. **Gate 3 真实 ALC 回收**：桌面结果 + Android 真机至少一次；证据归档。
+4. **Gate 3 真实 ALC 回收**：桌面测试必跑；Android 真机重复一次为建议项（人工归档，gate 不校验，不作为自动门禁条件）。
 5. **Gate 4 旧包兼容夹具**：v1 Emuera.CompatPack 包与旧 AssemblyRef=Emuera facade 包在干净/预载两类环境均通过。
-6. **Gate 5 版本与组合契约**：桌面测试全绿，无跳过/无过滤遗漏。
+6. **Gate 5 版本与组合契约**：桌面测试全绿；版本/组合契约用例无跳过、无过滤遗漏。Core 中 1 个 symlink 环境能力用例会按环境 Skip（见 §1 实测基线），不计入通过，也不属于 Gate 5 契约用例。
 7. **Gate 7 才允许 P-D**：Gate 1-6 全绿；六游戏映射已进入运行时代码；每个待退役 profile 有 v24pure + 包 的逐名等价 golden；legacy-runner 三 profile 无头冒烟通过；Android 至少一个真实 APK 用例通过。满足后才按 docs/plans/2026-10-03-pd-module-retirement-spec.md 的步序退役。
 
 P-D/发布用的证据档命令：
@@ -271,7 +276,7 @@ reports/compatpack/
 - evidence JSON 记录 commit（git rev-parse HEAD）与 capturedAt；APK/日志必须来自同一 commit，commit 变化后重采。
 - 归档实际命令、退出码、测试计数、APK SHA256、设备信息；不要只留"全绿"结论。
 - 发布前由评审抽查日志与设备信息；gate 通过不等于证据真实，人工核对仍是必要环节。
-- 任何官方包走 legacy 路径都视为发布门禁失败。
+- 任何官方包走 legacy 路径都视为发布门禁失败（人工评审项；gate 当前不自动拦截 `[LOAD] CompatPack legacy targetEngineApi mapped` 行）。
 
 ## 9. 当前状态与已知限制（2026-11-03）
 
@@ -282,4 +287,7 @@ reports/compatpack/
 - PowerShell 5.1 兼容性：脚本保存为 UTF-8 BOM；用 edit 等工具改动后若 BOM 丢失，中文会按 ANSI 解析并可能直接语法报错。提交前用字节检查前 3 字节为 EF BB BF。
 - PowerShell 5.1 的 ConvertFrom-Json 会折叠单元素数组与空数组：本 gate 对 packIds 做了兼容；六游戏/games 的其它数组字段若未来新增，需同样处理。
 - gate 只校验证据结构与已知失败模式，不执行 APK 安装、不自动跑六游戏；这些仍由发布任务执行并归档。
+- Android Gate 1 以日志中的 `[LOAD] CompatPack enabled` 行作为“真实 pack 成功加载”的证据；gate 不验证 APK 内 pack 文件内容，发布评审仍须核对 pack id、版本轴与归档日志一致。
+- fallback 只接受成功回退标记；fallback 失败/终止行、以及成功回退后再次出现 fail/error/exception/fatal 的日志均判失败。
+- 六游戏 result 使用大小写敏感比较；`pass` / `Pass` 均不接受。
 - fatal 是保留的阻断词：日志出现 non-fatal 之类措辞也可能被拦截；如属正常文案，应改日志或调整规则后再发布。
