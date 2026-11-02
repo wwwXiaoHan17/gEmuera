@@ -582,7 +582,9 @@ static class Program
             ",",
             GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.RequiredCapabilityIds
                 .Select(id => "\"" + id + "\""));
+        // I1：variantSelections 非空 → 必须声明基线表面哈希（与规则层/宿主同源现算）。
         string smokeJson = "{\"packId\":\"smoke.pack\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1,"
+            + "\"baseSurfaceHash\":\"" + PackValidationContext().BaselineSurfaceHash + "\","
             + "\"capabilities\":[" + snakeCapabilities + ",\"display.extended-history.v1\"],"
             + "\"variantSelections\":{\"SETBGIMAGE\":\"builtin:snake\"}}";
         var manifest = CompatPackManifest.TryParse(smokeJson, out var parsed, out var manifestErrors)

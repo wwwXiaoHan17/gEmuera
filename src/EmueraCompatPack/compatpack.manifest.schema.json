@@ -104,8 +104,8 @@
         "string",
         "null"
       ],
-      "pattern": "^[0-9a-f]{8,64}$",
-      "description": "可选（官方包必填）。声明基于哪个 v24 基线表面语义快照（profile/engineApi/指令与函数描述符/内置变体/capability 的规范化 SHA256，算法见 docs/designs/compat-pack-interface.md §12.9 / LegacySurfaceHash.ComputeV24SurfaceHash(SurfaceHashInput)）；声明非空且与当前引擎基线不一致即拒载（v1 精确对账），不声明则不校验。"
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "声明基于哪个 v24 基线表面语义快照（profile/engineApi/指令与函数描述符/METHOD 投影/内置变体/capability 的规范化 SHA256，恰好 64 位小写十六进制；算法见 docs/designs/compat-pack-interface.md §12.9 / LegacySurfaceHash.ComputeV24SurfaceHash(SurfaceHashInput)）。有非空 surface（任一 add/hide 列表非空）或非空 variantSelections 时必填（schema 的 if/then 与运行期规则双重强制）；纯 capability 包与空 surface 对象可省略。声明值必须与当前引擎基线一致，否则拒载。"
     },
     "capabilities": {
       "type": [
@@ -250,6 +250,79 @@
         }
       }
     }
+  },
+  "if": {
+    "description": "有表面差量或变体选择的包必须提供基线锚点：surface 任一 add/hide 数组非空，或 variantSelections 非空。",
+    "anyOf": [
+      {
+        "required": [
+          "surface"
+        ],
+        "properties": {
+          "surface": {
+            "type": "object",
+            "anyOf": [
+              {
+                "required": [
+                  "addInstructions"
+                ],
+                "properties": {
+                  "addInstructions": {
+                    "minItems": 1
+                  }
+                }
+              },
+              {
+                "required": [
+                  "hideInstructions"
+                ],
+                "properties": {
+                  "hideInstructions": {
+                    "minItems": 1
+                  }
+                }
+              },
+              {
+                "required": [
+                  "addFunctions"
+                ],
+                "properties": {
+                  "addFunctions": {
+                    "minItems": 1
+                  }
+                }
+              },
+              {
+                "required": [
+                  "hideFunctions"
+                ],
+                "properties": {
+                  "hideFunctions": {
+                    "minItems": 1
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "required": [
+          "variantSelections"
+        ],
+        "properties": {
+          "variantSelections": {
+            "type": "object",
+            "minProperties": 1
+          }
+        }
+      }
+    ]
+  },
+  "then": {
+    "required": [
+      "baseSurfaceHash"
+    ]
   },
   "oneOf": [
     {

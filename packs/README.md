@@ -49,12 +49,12 @@ packs/
 legacy `targetEngineApi: 1`（映射为 1.0/1.0），但官方包必须已完成迁移（不得再携带），
 新包应直接使用双轴字段，且不得与双轴字段混用。
 
-常用可选字段（未知字段一律整体拒载，防止拼写错误静默失效）：
+常用字段（`baseSurfaceHash` 在带 surface/variant 时必填，其余可选；未知字段一律整体拒载，防止拼写错误静默失效）：
 
 | 字段 | 说明 |
 | ---- | ---- |
 | `baseProfileId` | 包叠加的基线 profile，缺省 `v24pure`；v1 只支持 v24pure，与实际会话基线不一致拒载 |
-| `baseSurfaceHash` | 语义级基线表面快照（64 位小写十六进制，算法见设计 §12.9）；官方 v18 包与模板必填。声明非空且与当前引擎基线哈希不一致即拒载；带 surface/variant 的包建议一并声明 |
+| `baseSurfaceHash` | 语义级基线表面快照（**恰好 64 位小写十六进制**，算法见设计 §12.9）。**带非空 `surface`（任一 add/hide 列表非空）或非空 `variantSelections` 的包必填**；纯 capability 包与空 surface 对象可省略。声明非空且与当前引擎基线哈希不一致即拒载；官方 v18 包与模板必须声明 |
 | `surface.addInstructions` | 新增可见指令名（Trim+Upper；必须有真实引擎 handler，且不得与基线同名） |
 | `surface.hideInstructions` | 隐藏的 v24 基线指令名（基线没有的名字拒载） |
 | `surface.addFunctions` / `hideFunctions` | 表达式函数增删，规则同上；新增函数返回类型由引擎清单解析 |
@@ -115,9 +115,10 @@ dotnet build packs/CommunityPackTemplate/CommunityPackTemplate.csproj -c Release
 gameIdentity 不匹配……）= 整包拒载；一次会话启用多包时全有或全无**——任一包失败，
 本次会话回退到纯 v24 基线启动，绝不半加载。
 
-- `baseSurfaceHash` 由 `LegacySurfaceHash.BuildV24SurfaceHashInput` 的同一输入构造计算，
-  官方 v18 包由 `tools/compat-pack/Generate-V18PackManifest` 生成写入（禁止手写）；
-  禁止把名字-only 的旧哈希当作安全等价。
+- `baseSurfaceHash` 由 `LegacySurfaceHash.BuildV24SurfaceHashInput` 的同一输入构造计算
+  （profile/engineApi/指令与函数描述符/METHOD 投影/内置变体/capability），官方 v18 包由
+  `tools/compat-pack/Generate-V18PackManifest` 生成写入（禁止手写）；有表面差量或变体选择
+  却省略该字段的包直接拒载，禁止把名字-only 的旧哈希当作安全等价（旧值需按新算法重算）。
 - `PackSha256` 覆盖主程序集 + 内嵌清单原始字节 + 依赖闭包（文件名/长度/字节）；替换包
   目录里的任一依赖 DLL 都会改变包内容哈希。
 

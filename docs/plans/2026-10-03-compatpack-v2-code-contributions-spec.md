@@ -502,7 +502,7 @@ public interface ICompatPolicyAdapter
 
 ## 7. 问题四：v2 fail-closed 校验规则与版本门槛（裁定）
 
-### 7.1 版本门槛：`targetEngineApi` 升级为 major.minor 双段
+### 7.1 版本门槛：`contractAbi` + `engineApi` 双轴（历史：`targetEngineApi` 单轴）
 
 > 2026-11-03 更新：`contractAbi` + `engineApi` 双轴已在 v1.1（2026-11-02 spec / Task 1-7）
 > 落地；本节原 v2 门槛内容保留为设计记录，v2 接线沿用既有双轴比较，不再重复升级。
@@ -582,7 +582,7 @@ public interface ICompatPolicyAdapter
 
 - **夹具包工程**（新增，独立 csproj，不入主编译闭包，与 `tools/dialect-inventory/*` 同惯例）：
   `tools/legacy-runner/fixtures/CompatPackV2FixturePack/`——引用 `src/EmueraFacade` 契约工程；
-  manifest：`targetEngineApi: "2.0"`、`baseProfileId: "v24pure"`；
+  manifest：`contractAbi: "2.0"` + `engineApi: "2.0"`（双轴；legacy `targetEngineApi` 仅迁移窗口内接受值 1）、`baseProfileId: "v24pure"`；
   贡献 = `IInstructionVariantContribution` 绑定基线指令（选无副作用指令，如 `DRAWLINE`）→
   adapter（`Execute` = `Console.Print("PACK_V2_HANDLER_HIT")` 等确定性标记输出）。
 - **夹具游戏根**：由 harness 脚本 `tools/legacy-runner/Invoke-CompatPackV2Fixture.ps1`
@@ -643,7 +643,7 @@ DOTNET_ROLL_FORWARD=Major dotnet run --project tools/core-contracts/CoreContract
 - [ ] §5.2 factory map 走 profile 构造参数（不引入 process-wide 静态）
 - [ ] §5.4 投影缓存驱逐为 v2 接线前置工作项
 - [ ] §6.2 新增 `EnginePolicyBindingV2` + `IPolicyContributionV2`（不改 v1 记录、不原地扩参）；不引入策略工厂
-- [ ] §7.1 `targetEngineApi` 升级 major.minor 双段；三项破坏一次性结算
+- [ ] §7.1 双轴门槛已由 v1.1 落地，v2 只保留历史记录、不重复升级；三项破坏一次性结算
 - [ ] §7.2 校验规则增删清单（含贡献变体进 plan 哈希）
 - [ ] §8 测试三层方案与 fixture 落点（`tools/legacy-runner/fixtures/CompatPackV2FixturePack/`）
 - [ ] §10 开放问题 1-5 的处置方向

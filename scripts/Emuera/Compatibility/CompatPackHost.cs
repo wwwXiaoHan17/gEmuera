@@ -74,7 +74,7 @@ internal static CompatPackValidationContext BuildValidationContext(string baseli
                         new HashSet<string>(LegacyDialectInventories.MethodProjectedInstructionNames, StringComparer.Ordinal),
                         baselineProfileId,
                         // T7 语义级基线表面快照哈希（baseSurfaceHash 精确对账基准）：覆盖
-                        // profile/engineApi/描述符/变体/capability。构造点与官方包生成器共用
+                        // profile/engineApi/描述符/METHOD 投影/变体/capability。构造点与官方包生成器共用
                         // LegacySurfaceHash.BuildV24SurfaceHashInput（R3），显式传入而非依赖缺省——
                         // 宿主是语义校验输入的唯一提供方，缺省仅留给测试场景。
                         LegacySurfaceHash.ComputeV24SurfaceHash(BuildSurfaceHashInput(baselineProfileId)));

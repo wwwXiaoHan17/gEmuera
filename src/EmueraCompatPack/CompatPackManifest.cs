@@ -74,8 +74,10 @@ namespace Emuera.Compatibility.Packs
 			"^[a-z0-9][a-z0-9.\\-]*$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
 		private static readonly Regex SemverPattern = new(
 			"^[0-9]+\\.[0-9]+\\.[0-9]+$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
+		// baseSurfaceHash 是 SHA256 小写十六进制：恰好 64 位（宽进 8-64 会让包作者以为
+		// 短哈希合法，实际对账必然失败——schema/parser 与契约文档统一收紧）。
 		private static readonly Regex LowerHexPattern = new(
-			"^[0-9a-f]{8,64}$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
+			"^[0-9a-f]{64}$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
 		// 与 Core 的 SemanticVersionRange 同语义（契约程序集不能引用 Core，故在此等价实现）：
 		// 精确 x.y.z 或 [min,max) / (min,max] / [min,max] / (min,max)；min==max 仅双闭合法。
 		private static readonly Regex VersionRangePattern = new(
@@ -131,10 +133,11 @@ namespace Emuera.Compatibility.Packs
 		public string BaseProfileId { get; }
 		/// <summary>manifest 静态表面（空 = 仅 capability/variant 声明）。</summary>
 		public CompatPackSurface Surface { get; }
-		/// <summary>可选：声明基于哪个 v24 基线表面语义快照（profile/engineApi/指令与函数描述符/
-		/// 内置变体/capability 的规范化 SHA256，算法见 docs/designs/compat-pack-interface.md §12.9，
-		/// 由 Core <c>LegacySurfaceHash.ComputeV24SurfaceHash(SurfaceHashInput)</c> 计算；官方包必填）。
-		/// 精确对账：声明非空且与当前引擎基线不一致即拒载（加载器/规则层执行）；不声明则不触发该校验。</summary>
+		/// <summary>声明基于哪个 v24 基线表面语义快照（profile/engineApi/指令与函数描述符/
+		/// METHOD 投影/内置变体/capability 的规范化 SHA256，算法见 docs/designs/compat-pack-interface.md §12.9，
+		/// 由 Core <c>LegacySurfaceHash.ComputeV24SurfaceHash(SurfaceHashInput)</c> 计算）。
+		/// 带非空 surface（任一 add/hide 列表非空）或 variantSelections 的包必填（纯 capability
+		/// 包与空 surface 对象可省略）；声明非空且与当前引擎基线不一致即拒载（加载器/规则层执行）。</summary>
 		public string? BaseSurfaceHash { get; }
 		public IReadOnlyList<string> Capabilities { get; }
 		public string? SaveProfileId { get; }
@@ -199,7 +202,7 @@ namespace Emuera.Compatibility.Packs
 					RequireVersionAxes(root, collected);
 				string baseProfileId = OptionalIdOrDefault(root, "baseProfileId", "v24pure", collected);
 				CompatPackSurface surface = RequireSurface(root, collected);
-				string? baseSurfaceHash = Optional(root, "baseSurfaceHash", collected, LowerHexPattern, "小写十六进制哈希（8-64 位）");
+				string? baseSurfaceHash = Optional(root, "baseSurfaceHash", collected, LowerHexPattern, "小写十六进制 SHA256（恰好 64 位）");
 				IReadOnlyList<string> capabilities = RequireStringArray(root, "capabilities", collected, required: false);
 				string? saveProfileId = RequireId(root, "saveProfileId", collected, required: false);
 				IReadOnlyDictionary<string, string> variantSelections = RequireVariantSelections(root, collected);

@@ -8,20 +8,21 @@ namespace GEmuera.Core.Tests;
 /// <summary>
 /// 语义级 v24 基线表面哈希（<see cref="LegacySurfaceHash.ComputeV24SurfaceHash(SurfaceHashInput)"/>）
 /// 的稳定性与覆盖度钉子：哈希必须覆盖 profile / engineApi / 指令与函数描述符 /
-/// 内置变体映射 / capability 目录；仓内固定常量在生成清单或任一输入漂移时先红，
-/// 强制重走生成器/版本轴迁移流程。
+/// METHOD 投影集合 / 内置变体映射 / capability 目录；仓内固定常量在生成清单或任一输入
+/// 漂移时先红，强制重走生成器/版本轴迁移流程。
 /// </summary>
 public class LegacySurfaceHashTests
 {
     // 由当前 LegacyDialectInventories + EngineCapabilityCatalog + canonical 变体映射计算后钉住。
-    const string PinnedV24SemanticSurfaceHash = "c0e85a8ce5fc1990e5aa05fa5303663c09f6d8befbaaddd261b0ea955acda7c6";
+    const string PinnedV24SemanticSurfaceHash = "950dbeb9028a8a2fc73ac3699411a05b8e367458219b40bd862066c8902888c9";
 
     static SurfaceHashInput BuildInput(
         CompatVersion? engineApi = null,
         IReadOnlyDictionary<string, string>? instructionDescriptors = null,
         IReadOnlyDictionary<string, string>? functionDescriptors = null,
         IReadOnlyDictionary<string, IReadOnlySet<string>>? builtinVariants = null,
-        IReadOnlyDictionary<string, CapabilityDescriptor>? capabilities = null)
+        IReadOnlyDictionary<string, CapabilityDescriptor>? capabilities = null,
+        IReadOnlySet<string>? methodProjectedInstructionNames = null)
     {
         SurfaceHashInput canonical = LegacySurfaceHash.BuildV24SurfaceHashInput("v24pure");
         return canonical with
@@ -31,6 +32,8 @@ public class LegacySurfaceHashTests
             FunctionDescriptors = functionDescriptors ?? canonical.FunctionDescriptors,
             BuiltinVariants = builtinVariants ?? canonical.BuiltinVariants,
             Capabilities = capabilities ?? canonical.Capabilities,
+            MethodProjectedInstructionNames =
+                methodProjectedInstructionNames ?? canonical.MethodProjectedInstructionNames,
         };
     }
 
@@ -99,6 +102,22 @@ public class LegacySurfaceHashTests
     }
 
     [Fact]
+    public void V24Hash_ChangesWhenMethodProjectionChanges()
+    {
+        // spec §5.4：hash 必须覆盖"指令到 METHOD 投影的条件"——同一指令/函数描述符下，
+        // 某函数是否被投影成同名 METHOD 指令变化也必须改变基线哈希。
+        SurfaceHashInput baseline = BuildInput();
+        var changed = new HashSet<string>(
+            baseline.MethodProjectedInstructionNames, StringComparer.Ordinal);
+        Assert.True(changed.Remove("ABS"));
+
+        Assert.NotEqual(
+            LegacySurfaceHash.ComputeV24SurfaceHash(baseline),
+            LegacySurfaceHash.ComputeV24SurfaceHash(
+                BuildInput(methodProjectedInstructionNames: changed)));
+    }
+
+    [Fact]
     public void V24Hash_ChangesWhenInstructionDescriptorChanges()
     {
         SurfaceHashInput baseline = BuildInput();
@@ -139,6 +158,9 @@ public class LegacySurfaceHashTests
             variants["builtin:v24"].Order(StringComparer.Ordinal).ToArray());
         Assert.Equal(new[] { "FOR", "SETBGIMAGE" },
             variants["builtin:snake"].Order(StringComparer.Ordinal).ToArray());
+        // M6：canonical 表不可变（FrozenSet），调用方无法强转 HashSet 污染静态输入。
+        Assert.IsNotType<HashSet<string>>(variants["builtin:v24"]);
+        Assert.IsNotType<HashSet<string>>(variants["builtin:snake"]);
     }
 
     [Fact]
@@ -152,6 +174,7 @@ public class LegacySurfaceHashTests
         Assert.DoesNotContain("\r", text);
         Assert.Contains("\ninstruction=ABS|legacy|CoreImmediate|gemuera.v24\n", text);
         Assert.Contains("\nfunction=ABS|legacy|Integer|gemuera.v24\n", text);
+        Assert.Contains("\nmethodProjection=ABS\n", text);
         Assert.Contains("\nvariant=SETBGIMAGE|builtin:snake\n", text);
         Assert.Contains(
             "\ncapability=math.times-clamp.v1|Wired|ISnakeCompatibilityPolicy.UsesTimesClamp|1.0\n",
@@ -159,5 +182,59 @@ public class LegacySurfaceHashTests
         // 不包含绝对路径/时间戳/进程相关值（只允许契约字段）。
         Assert.DoesNotContain(":\\", text);
         Assert.DoesNotContain("/", text);
+    }
+
+    [Fact]
+    public void CanonicalText_HandcraftedVector_MatchesIndependentHash()
+    {
+        // 独立小向量（手工构造输入 + 手写完整规范文本 + 仓外计算的 SHA256 字面量）：
+        // 不经过 BuildV24SurfaceHashInput，避免"用同一构造自证"；第三方可按本文本复算。
+        var input = new SurfaceHashInput(
+            "v24pure",
+            new CompatVersion(1, 0),
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["PRINT"] = "PRINT|legacy|CoreImmediate|gemuera.v24",
+                ["ABS"] = "ABS|legacy|CoreImmediate|gemuera.v24",
+            },
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["ABS"] = "ABS|legacy|Integer|gemuera.v24",
+            },
+            new Dictionary<string, IReadOnlySet<string>>(StringComparer.Ordinal)
+            {
+                ["builtin:snake"] = new HashSet<string>(
+                    new[] { "SETBGIMAGE", "FOR" }, StringComparer.Ordinal),
+            },
+            new Dictionary<string, CapabilityDescriptor>(StringComparer.Ordinal)
+            {
+                ["math.times-clamp.v1"] = new(
+                    "math.times-clamp.v1",
+                    CapabilityStatus.Wired,
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    "ISnakeCompatibilityPolicy.UsesTimesClamp",
+                    new CompatVersion(1, 0)),
+            },
+            new HashSet<string>(new[] { "EXISTVAR", "ABS" }, StringComparer.Ordinal));
+
+        const string expectedText =
+            "profile=v24pure\n"
+            + "engineApi=1.0\n"
+            + "instruction=ABS|legacy|CoreImmediate|gemuera.v24\n"
+            + "instruction=PRINT|legacy|CoreImmediate|gemuera.v24\n"
+            + "function=ABS|legacy|Integer|gemuera.v24\n"
+            + "methodProjection=ABS\n"
+            + "methodProjection=EXISTVAR\n"
+            + "variant=FOR|builtin:snake\n"
+            + "variant=SETBGIMAGE|builtin:snake\n"
+            + "capability=math.times-clamp.v1|Wired|ISnakeCompatibilityPolicy.UsesTimesClamp|1.0\n";
+
+        Assert.Equal(expectedText, LegacySurfaceHash.BuildCanonicalText(input));
+        // SHA256(expectedText) 由独立工具（Node.js crypto）计算后钉住。
+        Assert.Equal(
+            "76820ba7e6f75667e14ea8f6befbf7e22b628b94dafa8837d5bc1882ac1ecada",
+            LegacySurfaceHash.ComputeV24SurfaceHash(input));
     }
 }

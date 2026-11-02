@@ -358,13 +358,14 @@ public class CompatPackLoaderTests
     [Fact]
     public void ManifestOnlyPack_WithManifestSurface_ValidatesThroughCombinedContributions()
     {
+        var context = RealContext();
         string json = "{\"packId\":\"test.data-surface\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1,"
             + "\"baseProfileId\":\"v24pure\","
+            + "\"baseSurfaceHash\":\"" + context.BaselineSurfaceHash + "\","
             + "\"surface\":{\"addInstructions\":[\"SETANIMETIMER\"],\"hideInstructions\":[\"CALLSHARP\"],"
             + "\"addFunctions\":[\"SQL_CONNECT\"],\"hideFunctions\":[\"EXISTVAR\"]}}";
         var manifest = CompatPackManifest.TryParse(json, out var parsed, out var parseErrors)
             ? parsed! : throw new InvalidOperationException(string.Join("; ", parseErrors));
-        var context = RealContext();
         ICompatPack pack = new ManifestOnlyCompatPack(manifest);
         IReadOnlyList<ICompatPackContribution> manifestContributions =
             CompatPackLoader.CreateManifestContributions(manifest, context);

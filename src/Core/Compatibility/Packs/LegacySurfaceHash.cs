@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Collections.ObjectModel;
 using System.Security.Cryptography;
 using System.Text;
@@ -7,9 +8,10 @@ namespace GEmuera.Core.Compatibility.Packs;
 
 /// <summary>
 /// 语义级基线表面哈希的完整输入（T7）：profile、engineApi、指令/函数描述符、
-/// 内置变体映射与 capability 目录。指令/函数描述符串由调用方按
+/// METHOD 投影名集合、内置变体映射与 capability 目录。指令/函数描述符串由调用方按
 /// <c>name|signature|completion|module</c> / <c>name|signature|returnType|module</c>
-/// 构造（字典键 = name）；哈希文本规范见 <see cref="LegacySurfaceHash.BuildCanonicalText"/>。
+/// 构造（字典键 = name）；METHOD 投影集合决定"函数可见 → 同名 METHOD 指令"的条件，
+/// 必须进入哈希（spec §5.4）。哈希文本规范见 <see cref="LegacySurfaceHash.BuildCanonicalText"/>。
 /// </summary>
 public sealed record SurfaceHashInput(
     string BaseProfileId,
@@ -17,14 +19,21 @@ public sealed record SurfaceHashInput(
     IReadOnlyDictionary<string, string> InstructionDescriptors,
     IReadOnlyDictionary<string, string> FunctionDescriptors,
     IReadOnlyDictionary<string, IReadOnlySet<string>> BuiltinVariants,
-    IReadOnlyDictionary<string, CapabilityDescriptor> Capabilities);
+    IReadOnlyDictionary<string, CapabilityDescriptor> Capabilities,
+    IReadOnlySet<string> MethodProjectedInstructionNames);
 
 /// <summary>
 /// v24 基线表面快照哈希（v1.1 语义级，T7）：把基线 profile 的指令/函数描述符、
-/// engineApi、内置变体映射与 capability 目录折叠成一个确定性 SHA256 指纹，供兼容包
-/// manifest 的 <c>baseSurfaceHash</c> 精确对账（声明非空且不等于当前基线即拒载）。
-/// 与旧版"只哈希名字/返回类型"不同，签名、completion mode、module、变体组合与
-/// capability 接线状态/版本都进入哈希——任何一项漂移都会改变哈希值。
+/// engineApi、METHOD 投影条件、内置变体映射与 capability 目录折叠成一个确定性 SHA256
+/// 指纹，供兼容包 manifest 的 <c>baseSurfaceHash</c> 精确对账（声明非空且不等于当前
+/// 基线即拒载）。与旧版"只哈希名字/返回类型"不同，签名、completion mode、module、
+/// METHOD 投影集合、变体组合与 capability 接线状态/版本都进入哈希——任何一项漂移都会
+/// 改变哈希值。
+///
+/// <para><b>哈希规范 v1（2026-11-03 修订）</b>：在 T7 首版基础上新增
+/// <c>methodProjection=&lt;name&gt;</c> 段（Ordinal 排序、每行 <c>\n</c> 结尾）。该修订属于
+/// hash 规范 v1 的语义补全（spec §5.4 要求覆盖"指令到 METHOD 投影的条件"），不是新
+/// 版本轴；因此所有已发布/仓内 <c>baseSurfaceHash</c> 都必须按本规范重算。</para>
 /// 宿主的 <see cref="SurfaceHashInput"/> 构造与官方包生成器共用
 /// <see cref="BuildV24SurfaceHashInput(string, CompatVersion, IReadOnlyDictionary{string, IReadOnlySet{string}}?)"/>，
 /// 禁止两处手写 hash（R3）；引擎侧变体注册表与本类
@@ -50,7 +59,9 @@ public static class LegacySurfaceHash
     /// <summary>
     /// 按基线 profile + 显式 engineApi 构造语义哈希输入。指令/函数描述符来自
     /// <see cref="BuiltInDialectCatalog.CreateLegacySessionPlan(string)"/> 的 dialect 投影
-    ///（唯一事实源：生成清单 → 模块声明 → 描述符）；变体表缺省用 Core canonical 映射。
+    ///（唯一事实源：生成清单 → 模块声明 → 描述符）；METHOD 投影集合固定取自生成清单
+    /// <see cref="LegacyDialectInventories.MethodProjectedInstructionNames"/>（与宿主
+    /// validation context 同源）；变体表缺省用 Core canonical 映射。
     /// 宿主传入引擎导出的 <c>BuiltinCompatPackVariants.SupportedSelections()</c>，
     /// 生成器使用本方法的 canonical 缺省值。
     /// </summary>
@@ -88,7 +99,11 @@ public static class LegacySurfaceHash
             instructionDescriptors,
             functionDescriptors,
             builtinVariants ?? CanonicalVariants,
-            EngineCapabilityCatalog.All);
+            EngineCapabilityCatalog.All,
+            // METHOD 投影条件的唯一事实源：生成清单的六 profile 并集（宿主 validation
+            // context 传入同一数组）。生成器/上下文缺省/宿主三处同源，禁止各自手写名单。
+            new HashSet<string>(
+                LegacyDialectInventories.MethodProjectedInstructionNames, StringComparer.Ordinal));
     }
 
     /// <summary>
@@ -116,6 +131,7 @@ public static class LegacySurfaceHash
     /// engineApi=&lt;major.minor&gt;
     /// instruction=&lt;name&gt;|&lt;signature&gt;|&lt;completion&gt;|&lt;module&gt;
     /// function=&lt;name&gt;|&lt;signature&gt;|&lt;returnType&gt;|&lt;module&gt;
+    /// methodProjection=&lt;name&gt;
     /// variant=&lt;instruction&gt;|&lt;variant&gt;
     /// capability=&lt;id&gt;|&lt;status&gt;|&lt;consumerContractId&gt;|&lt;introducedInEngineApi&gt;
     /// </code>
@@ -129,6 +145,7 @@ public static class LegacySurfaceHash
             throw new ArgumentException("SurfaceHashInput.BaseProfileId 不能为空。", nameof(input));
         ArgumentNullException.ThrowIfNull(input.InstructionDescriptors);
         ArgumentNullException.ThrowIfNull(input.FunctionDescriptors);
+        ArgumentNullException.ThrowIfNull(input.MethodProjectedInstructionNames);
         ArgumentNullException.ThrowIfNull(input.BuiltinVariants);
         ArgumentNullException.ThrowIfNull(input.Capabilities);
 
@@ -147,6 +164,12 @@ public static class LegacySurfaceHash
         {
             RequireKey(entry.Key, nameof(input.FunctionDescriptors));
             AppendLine(builder, "function=" + entry.Value);
+        }
+        foreach (string name in input.MethodProjectedInstructionNames.Order(StringComparer.Ordinal))
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                throw new ArgumentException("METHOD 投影指令名不能为空。", nameof(input));
+            AppendLine(builder, "methodProjection=" + name);
         }
 
         var variantLines = new List<(string Instruction, string Variant)>();
@@ -209,10 +232,12 @@ public static class LegacySurfaceHash
 
     static IReadOnlyDictionary<string, IReadOnlySet<string>> BuildCanonicalVariants()
     {
+        // FrozenSet 同时满足 IReadOnlySet 且不可被调用方强转为可变集合后污染静态 canonical
+        // 表（HashSet 的强转修改是旧实现的 Minor 缺口）。
         var map = new Dictionary<string, IReadOnlySet<string>>(StringComparer.Ordinal)
         {
-            ["builtin:v24"] = new HashSet<string>(new[] { "FOR", "SETBGIMAGE" }, StringComparer.Ordinal),
-            ["builtin:snake"] = new HashSet<string>(new[] { "FOR", "SETBGIMAGE" }, StringComparer.Ordinal),
+            ["builtin:v24"] = new[] { "FOR", "SETBGIMAGE" }.ToFrozenSet(StringComparer.Ordinal),
+            ["builtin:snake"] = new[] { "FOR", "SETBGIMAGE" }.ToFrozenSet(StringComparer.Ordinal),
         };
         return new ReadOnlyDictionary<string, IReadOnlySet<string>>(map);
     }

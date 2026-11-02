@@ -13,8 +13,10 @@ namespace GEmuera.Core.Tests;
 /// </summary>
 public class CompatPackRulesTests
 {
-    const string ManifestJson =
+    // variantSelections 非空 → I1 要求声明 baseSurfaceHash；Context() 的缺省基线与之同源。
+    static readonly string ManifestJson =
         "{\"packId\":\"test.rules\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1,"
+        + "\"baseSurfaceHash\":\"" + LegacySurfaceHash.ComputeV24SurfaceHash() + "\","
         + "\"capabilities\":[\"math.times-clamp.v1\"],"
         + "\"variantSelections\":{\"SETBGIMAGE\":\"builtin:snake\"}}";
 
@@ -129,6 +131,7 @@ public class CompatPackRulesTests
     public void Validate_SelectionKeyOutsideBaseline_Rejects()
     {
         string json = "{\"packId\":\"test.rules\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1,"
+            + "\"baseSurfaceHash\":\"" + LegacySurfaceHash.ComputeV24SurfaceHash() + "\","
             + "\"variantSelections\":{\"NOSUCH\":\"builtin:snake\"}}";
         var manifest = CompatPackManifest.TryParse(json, out var m, out _)
             ? m! : throw new InvalidOperationException();
@@ -149,6 +152,7 @@ public class CompatPackRulesTests
     {
         // 直测入口：夹具贡献 + 手工清单（不含 gameIdentity，表面动作同 HelloCompatPack）。
         string json = "{\"packId\":\"test.hello-pack\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1,"
+            + "\"baseSurfaceHash\":\"" + LegacySurfaceHash.ComputeV24SurfaceHash() + "\","
             + "\"variantSelections\":{\"SETBGIMAGE\":\"builtin:snake\"}}";
         var manifest = CompatPackManifest.TryParse(json, out var m, out var errors)
             ? m! : throw new InvalidOperationException(string.Join("; ", errors));
@@ -208,6 +212,7 @@ public class CompatPackRulesTests
     public void Validate_NonBuiltinVariantSelection_Rejects()
     {
         string json = "{\"packId\":\"test.rules\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1,"
+            + "\"baseSurfaceHash\":\"" + LegacySurfaceHash.ComputeV24SurfaceHash() + "\","
             + "\"variantSelections\":{\"SETBGIMAGE\":\"custom-fancy\"}}";
         var manifest = CompatPackManifest.TryParse(json, out var m, out _)
             ? m! : throw new InvalidOperationException();
@@ -244,6 +249,7 @@ public class CompatPackRulesTests
     {
         // builtin:snake 只注册了 SETBGIMAGE/FOR 的 handler 变体；选 PRINT 必须在校验段拒载。
         string json = "{\"packId\":\"test.rules\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1,"
+            + "\"baseSurfaceHash\":\"" + LegacySurfaceHash.ComputeV24SurfaceHash() + "\","
             + "\"variantSelections\":{\"PRINT\":\"builtin:snake\"}}";
         var manifest = CompatPackManifest.TryParse(json, out var m, out _)
             ? m! : throw new InvalidOperationException();
@@ -454,7 +460,8 @@ public class CompatPackRulesTests
     public void Validate_BaseSurfaceHashMismatch_Rejects()
     {
         // 精确对账（E2-R6 / T7 语义级）：manifest 声明非空 baseSurfaceHash 且与当前基线语义快照不一致
-        // → 拒载（错误文案含 baseSurfaceHash）；声明与基线一致 → 放行；不声明 → 不触发本规则。
+        // → 拒载（错误文案含 baseSurfaceHash）；声明与基线一致 → 放行。本用例清单无 surface/
+        // variantSelections（纯 capability 形态），因此"不声明"只在这里不触发 I1 强制规则。
         string mismatchJson = "{\"packId\":\"test.hash\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1,"
             + "\"baseSurfaceHash\":\"" + new string('0', 64) + "\"}";
         var mismatchManifest = CompatPackManifest.TryParse(mismatchJson, out var parsed, out var parseErrors)
@@ -471,10 +478,65 @@ public class CompatPackRulesTests
             string.Join("; ", matchErrors));
     }
 
+    // —— I1（spec §5.2/R7）：带非空 surface 或 variantSelections 的包必须声明
+    //    baseSurfaceHash；纯 capability 包与空 surface 对象仍可省略。 ——
+
+    static CompatPackManifest ParseRulesManifest(string json)
+        => CompatPackManifest.TryParse(json, out var manifest, out var errors)
+            ? manifest! : throw new InvalidOperationException(string.Join("; ", errors));
+
+    [Fact]
+    public void Validate_SurfaceWithoutBaseSurfaceHash_Rejects()
+    {
+        // hideInstructions 非空 = 有表面差量；缺少基线锚点必须拒载，文案点名字段与条件。
+        CompatPackManifest manifest = ParseRulesManifest(
+            "{\"packId\":\"test.hash-required\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1,"
+            + "\"surface\":{\"hideInstructions\":[\"CALLSHARP\"]}}");
+
+        Assert.False(CompatPackRules.Validate(manifest, Array.Empty<ICompatPackContribution>(), Context(), out var errors));
+        Assert.Contains(errors, e => e.Contains("baseSurfaceHash")
+            && e.Contains("surface")
+            && e.Contains("test.hash-required"));
+    }
+
+    [Fact]
+    public void Validate_VariantSelectionsWithoutBaseSurfaceHash_Rejects()
+    {
+        // variantSelections 非空同样要求基线锚点（变体映射依赖基线指令面）。
+        CompatPackManifest manifest = ParseRulesManifest(
+            "{\"packId\":\"test.hash-variant\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1,"
+            + "\"variantSelections\":{\"SETBGIMAGE\":\"builtin:snake\"}}");
+
+        Assert.False(CompatPackRules.Validate(manifest, Array.Empty<ICompatPackContribution>(), Context(), out var errors));
+        Assert.Contains(errors, e => e.Contains("baseSurfaceHash")
+            && e.Contains("variantSelections")
+            && e.Contains("test.hash-variant"));
+    }
+
+    [Fact]
+    public void Validate_EmptySurfaceOrPureCapability_WithoutBaseSurfaceHash_Allowed()
+    {
+        // 空 surface 对象（四个数组都空）与纯 capability 包没有表面差量，省略 hash 合法。
+        CompatPackManifest emptySurface = ParseRulesManifest(
+            "{\"packId\":\"test.hash-empty\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1,"
+            + "\"surface\":{}}");
+        Assert.True(CompatPackRules.Validate(
+            emptySurface, Array.Empty<ICompatPackContribution>(), Context(), out var emptyErrors),
+            string.Join("; ", emptyErrors));
+
+        CompatPackManifest capabilityOnly = ParseRulesManifest(
+            "{\"packId\":\"test.hash-capability\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1,"
+            + "\"capabilities\":[\"math.times-clamp.v1\"]}");
+        Assert.True(CompatPackRules.Validate(
+            capabilityOnly, Array.Empty<ICompatPackContribution>(), Context(), out var capabilityErrors),
+            string.Join("; ", capabilityErrors));
+    }
+
     [Fact]
     public void Validate_ManifestSurfaceFunctionWithoutReturnTypeMetadata_Rejects()
     {
         string json = "{\"packId\":\"test.surface-return\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1,"
+            + "\"baseSurfaceHash\":\"" + LegacySurfaceHash.ComputeV24SurfaceHash() + "\","
             + "\"surface\":{\"addFunctions\":[\"SQL_CONNECT\"]}}";
         var manifest = CompatPackManifest.TryParse(json, out var parsed, out var parseErrors)
             ? parsed! : throw new InvalidOperationException(string.Join("; ", parseErrors));

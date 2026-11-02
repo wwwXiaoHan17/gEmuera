@@ -206,6 +206,10 @@ public class CompatPackManifestTests
         Assert.False(CompatPackManifest.TryParse(WithField("\"saveProfileId\"", "\"UPPER\""), out _, out _));
         // 大写十六进制不接受：哈希一律小写。
         Assert.False(CompatPackManifest.TryParse(WithField("\"baseSurfaceHash\"", "\"ABCDEF0123\""), out _, out _));
+        // 宽度必须是 SHA256 的恰好 64 位（旧 8-64 宽进已收紧；schema 同步）。
+        Assert.False(CompatPackManifest.TryParse(WithField("\"baseSurfaceHash\"", "\"01234567\""), out _, out _));
+        Assert.False(CompatPackManifest.TryParse(
+            WithField("\"baseSurfaceHash\"", "\"" + new string('a', 63) + "\""), out _, out _));
     }
 
     [Fact]
@@ -421,6 +425,28 @@ public class CompatPackManifestTests
         Assert.Equal("instruction:SETANIMETIMER", manifest!.Overrides[0].Symbol);
         Assert.Equal("function:sql_connect", manifest.Overrides[1].Symbol);
         Assert.Equal("variant:SETBGIMAGE", manifest.Overrides[2].Symbol);
+    }
+
+    [Fact]
+    public void Schema_RequiresBaseSurfaceHashForSurfaceOrVariants()
+    {
+        string path = Path.Combine(
+            FindRepositoryRoot(), "src", "EmueraCompatPack", "compatpack.manifest.schema.json");
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
+        JsonElement root = document.RootElement;
+
+        // M1：hash 形态与 parser/文档一致，恰好 64 位小写十六进制。
+        Assert.Equal(
+            "^[0-9a-f]{64}$",
+            root.GetProperty("properties").GetProperty("baseSurfaceHash").GetProperty("pattern").GetString());
+
+        // I1：draft-07 if/then —— 非空 surface 或 variantSelections → required baseSurfaceHash。
+        JsonElement condition = root.GetProperty("if");
+        Assert.Equal(2, condition.GetProperty("anyOf").GetArrayLength());
+        JsonElement then = root.GetProperty("then");
+        Assert.Contains(
+            "baseSurfaceHash",
+            then.GetProperty("required").EnumerateArray().Select(item => item.GetString()));
     }
 
     [Fact]

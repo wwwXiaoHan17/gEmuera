@@ -37,7 +37,7 @@ public class CompatPackLegacyFacadeTests
 {
     const string FacadePackId = "community.legacy-facade";
     const string ExpectedSurfaceHash =
-        "c0e85a8ce5fc1990e5aa05fa5303663c09f6d8befbaaddd261b0ea955acda7c6";
+        "950dbeb9028a8a2fc73ac3699411a05b8e367458219b40bd862066c8902888c9";
 
     static string FixturePath => typeof(LegacyFacadePack).Assembly.Location;
 

@@ -78,11 +78,32 @@ public static class CompatPackRules
                 + " 与当前会话基线 " + context.BaselineProfileId + " 不一致（v1 包只允许叠加 v24pure 基线）。");
         }
 
+        // baseSurfaceHash 强制声明（spec §5.2/R7，v1.1 硬要求）：
+        // 带非空 surface（add/hide 任一列表非空）或非空 variantSelections 的包必须声明
+        // 当前基线表面快照——否则 add/hide 与变体选择没有任何基线锚点，语义级对账对社区
+        // 包失效。纯 capability 包与空 surface 对象没有表面差量，仍可省略。
+        bool hasSurfaceDelta = manifest.Surface.AddInstructions.Count > 0
+            || manifest.Surface.HideInstructions.Count > 0
+            || manifest.Surface.AddFunctions.Count > 0
+            || manifest.Surface.HideFunctions.Count > 0;
+        bool hasVariantSelections = manifest.VariantSelections.Count > 0;
+        if ((hasSurfaceDelta || hasVariantSelections) && string.IsNullOrWhiteSpace(manifest.BaseSurfaceHash))
+        {
+            var triggers = new List<string>();
+            if (hasSurfaceDelta)
+                triggers.Add("surface（指令/函数 add/hide 任一列表非空）");
+            if (hasVariantSelections)
+                triggers.Add("variantSelections（非空）");
+            collected.Add("包 " + manifest.PackId + " 带有非空 " + string.Join(" 与 ", triggers)
+                + "，但未声明 baseSurfaceHash：有表面差量或变体选择的包必须声明当前基线表面快照"
+                + "（字段：baseSurfaceHash；纯 capability 包可省略）。");
+        }
+
         // baseSurfaceHash 精确对账（E2-R6 / T7 语义级）：manifest 声明非空 baseSurfaceHash
         // 时必须等于当前基线表面快照（<see cref="CompatPackValidationContext.BaselineSurfaceHash"/>，
-        // profile/engineApi/指令与函数描述符/内置变体/capability 的规范化 SHA256）——
+        // profile/engineApi/指令与函数描述符/METHOD 投影/内置变体/capability 的规范化 SHA256）——
         // 包声称"基于某表面"而引擎表面已漂移时，其 add/hide 差量前提即失效，
-        // 静默错叠比拒载更危险。不声明（null，可选字段）不触发本规则。
+        // 静默错叠比拒载更危险。纯 capability 包不声明（null）时不触发本规则。
         if (manifest.BaseSurfaceHash is not null
             && !string.Equals(manifest.BaseSurfaceHash, context.BaselineSurfaceHash, StringComparison.Ordinal))
         {

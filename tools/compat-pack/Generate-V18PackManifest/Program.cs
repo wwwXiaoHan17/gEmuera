@@ -22,7 +22,7 @@ using GEmuera.Core.Compatibility.Packs;
 // 版本轴：新格式双轴 contractAbi/engineApi（格式 major.minor），不再输出 legacy
 // targetEngineApi（加载器仍接受其迁移映射，但官方包必须已完成迁移）。
 // baseSurfaceHash：与宿主共用 Core LegacySurfaceHash 的语义输入构造（profile/engineApi/
-// 指令与函数描述符/内置变体/capability），禁止手写；重跑本工具即恢复。
+// 指令与函数描述符/METHOD 投影/内置变体/capability），禁止手写；重跑本工具即恢复。
 // 生成物禁止手改：清单漂移由 GEmuera.Core.Tests/V18PackManifestTests 门禁拦截，
 // 重跑本工具即可恢复。
 //
