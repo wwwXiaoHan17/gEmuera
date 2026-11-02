@@ -60,12 +60,21 @@ Assert-Governance (Test-Path -LiteralPath $lifecycleGuard -PathType Leaf) 'Compa
 & powershell -NoProfile -ExecutionPolicy Bypass -File $lifecycleGuard -ProjectRoot $ProjectRoot
 Assert-Governance ($LASTEXITCODE -eq 0) 'CompatPack lifecycle guard failed.'
 
-# CompatPack v1 发布门禁桌面档（2026-11，Task 9）：
+# CompatPack v1 发布门禁（2026-11，Task 9；2026-11-03 final fix wave 加自测）：
 # 汇总 Core/Facade/ABI xUnit、Surface/Runtime/CoreContract 三冒烟与 lifecycle 守卫；
 # 日常 CI 只跑桌面档。P-D/社区包发布任务必须另行以 -RequireAndroid -RequireSixGame
 # 调用同一脚本，校验真实设备与六游戏证据（见 docs/compat-pack-release-gates.md）。
 $releaseGate = Join-Path $ProjectRoot 'tools\compat-pack\Test-CompatPackReleaseGate.ps1'
 Assert-Governance (Test-Path -LiteralPath $releaseGate -PathType Leaf) 'CompatPack release gate script is missing.'
+
+# 发布门禁自测（I2）：用提交在案的合成夹具验证 Gate 1 判定逻辑本身（plan 哈希正向校验、
+# 复数错误计数、terminated/aborted、fallback 后续失败）。自测模式不跑桌面命令，与下面的
+# 桌面档无递归。
+$releaseGateSelfTestRoot = Join-Path $ProjectRoot 'tools\compat-pack\gate-self-test'
+Assert-Governance (Test-Path -LiteralPath $releaseGateSelfTestRoot -PathType Container) 'CompatPack release gate self-test fixtures are missing.'
+& powershell -NoProfile -ExecutionPolicy Bypass -File $releaseGate -SelfTest
+Assert-Governance ($LASTEXITCODE -eq 0) 'CompatPack release gate self-test failed.'
+
 & powershell -NoProfile -ExecutionPolicy Bypass -File $releaseGate -ProjectRoot $ProjectRoot
 Assert-Governance ($LASTEXITCODE -eq 0) 'CompatPack release gate failed (desktop gate).'
 

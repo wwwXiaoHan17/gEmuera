@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "1.0.0",
+  "apkPath": "../fake.apk",
+  "apkSha256": "4e316b56fbe090e30735fc33dfc47a7a9767174b9a1cc2e95f12785d01dcfd99",
+  "deviceModel": "gate-self-test",
+  "androidVersion": "14",
+  "abi": "arm64-v8a",
+  "planHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "runs": [
+    {
+      "scenario": "start",
+      "log": "session.log"
+    },
+    {
+      "scenario": "back-restart",
+      "log": "session.log"
+    },
+    {
+      "scenario": "second-start",
+      "log": "session.log"
+    }
+  ],
+  "loadLogFound": true,
+  "fatalErrorFound": false,
+  "fallbackUsed": false,
+  "fallbackTargetBaseline": "v24pure"
+}

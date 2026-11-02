@@ -31,15 +31,30 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\compat-pack\Test-Compa
 - 每条检查打印 [PASS] 或 [FAIL]；失败时追加 command:、退出码、摘要与输出尾部（最多 20 行）。
 - 最后一行固定为 === 结果: PASS ... === 或 === 结果: FAIL ... ===；退出码 0/1。
 
-### 2026-11-03 本机实测基线
+### 门禁自测（`-SelfTest`，2026-11-03 起）
+
+发布门禁的判定逻辑本身有一组提交在案的合成夹具（`tools/compat-pack/gate-self-test/`：
+fake.apk + 每例一份 android-evidence.json 与日志），验证"合法 PASS / 合规 fallback PASS /
+2 Errors / Failures: 1 / terminated / aborted / 缺 plan 哈希 / fallback 后续失败"各自得到
+预期结论（9 例）：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\compat-pack\Test-CompatPackReleaseGate.ps1 -SelfTest
+```
+
+`tools/governance/Test-Governance.ps1` 在桌面档之前自动跑自测（自测模式只校验夹具，不跑
+桌面命令，与桌面档无递归）。夹具与日志**不是**发布证据，不得进入发布归档。
+
+### 2026-11-03 本机实测基线（final fix wave 后）
 
 以下计数来自实际运行，仅用于当天回归对照；测试增删后以脚本输出为准，不要手抄过期数字。
 
 | 项目 | 实测结果 |
 | --- | --- |
-| Core xUnit | 267 passed / 1 skipped / 0 failed（总 268） |
+| Core xUnit | 278 passed / 1 skipped / 0 failed（总 279） |
 | Facade xUnit | 78 passed / 0 failed |
 | Plugin ABI xUnit | 4 passed / 0 failed |
+| 门禁自测（-SelfTest） | 9/9 用例符合预期（合法 PASS×3 + 预期 FAIL×6） |
 | 三冒烟 | Surface / Runtime / CoreContract 全 PASS |
 | lifecycle 守卫 | 4/4 检查通过 |
 | 宿主构建 dotnet build gemuera-c#.csproj -nodeReuse:false -m:1 | 0 error / 4 个既有 warning（KoujouPrefetchCache CS8600 ×1、AgentLlmMethods CS8632 ×3） |
@@ -56,7 +71,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\compat-pack\Test-Compa
 ```
 
 行为：
-1. 先校验证据（APK/SHA256、设备、三场景日志、六游戏六条记录），**证据不完整立即 exit 1，不进入桌面档**，避免"没跑"被误报成"通过"。
+1. 先校验证据（APK/SHA256、设备、三场景日志 + plan 哈希、六游戏六条记录 + 每条 planHash），**证据不完整立即 exit 1，不进入桌面档**，避免"没跑"被误报成"通过"。
 2. 证据通过后再跑第 1 节的 7 条桌面命令。
 3. 任一证据项或桌面命令失败均为 exit 1；只有全部通过才 exit 0。
 
@@ -79,6 +94,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\compat-pack\Test-Compa
   "deviceModel": "<ro.product.model>",
   "androidVersion": "<ro.build.version.release>",
   "abi": "arm64-v8a",
+  "planHash": "<64 位小写十六进制，日志 [LOAD] CompatibilityPlan= 的值>",
   "runs": [
     { "scenario": "start", "log": "logs/start.log" },
     { "scenario": "back-restart", "log": "logs/back-restart.log" },
@@ -101,6 +117,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\compat-pack\Test-Compa
 | --- | --- | --- |
 | apkSha256 | 是 | 64 位十六进制，且与 APK 实际 SHA256 逐字匹配 |
 | deviceModel / androidVersion / abi | 是 | 非空字符串；abi 建议 arm64-v8a |
+| planHash | 是 | 64 位**小写**十六进制；三场景日志都必须出现 `[LOAD] CompatibilityPlan=<hash>` 且唯一值与它一致（Gate 1 的 plan 哈希正向证据） |
 | runs | 是 | 必须覆盖 start / back-restart / second-start 三场景；每条 log 文件存在且非空 |
 | loadLogFound | 是 | 必须是 JSON true |
 | fatalErrorFound | 是 | 必须是 JSON false |
@@ -116,8 +133,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\compat-pack\Test-Compa
 - 设备型号、Android 版本、ABI 非空。
 - 三场景日志都存在、非空；每条日志都包含 `[LOAD]`。
 - 三份日志中**至少一份**包含 `[LOAD] CompatPack enabled: id=... contractAbi=<major.minor> engineApi=<major.minor> ...`，且 contractAbi / engineApi 各自是 `major.minor`。只有 `[LOAD]`、纯 baseline 或 `[LOAD] CompatPack disabled (...)` 的日志不能通过 Gate 1。
-- 日志中不得出现 `[LOAD] CompatPack disabled (...)`（load rejected / game identity mismatch / assembly rejected / unexpected failure 等包加载降级），也不得出现未处理的 plan hash 失败（plan hash ... fail/mismatch/does not match/不匹配/失败 等）、ALC 失败（ALC/AssemblyLoadContext ... fail/error/exception/未回收 等）、Unhandled exception 或 fatal 标记。
-- `fallback` 只接受成功回退标记 `[LOAD] CompatPack projection failed; fallback to no-pack baseline`，且该行之后不得再出现 fail/error/exception/fatal/失败/异常/终止；`... fallback failed`、`... no-pack baseline bind failed` 等失败/终止行直接判失败。出现 fallback 但找不到成功标记、或 evidence 声明 fallbackUsed=true 但日志无 fallback，也判失败。
+- **plan 哈希正向校验**：每份日志都必须出现 `[LOAD] CompatibilityPlan=<64 位小写十六进制>`（Process.Initialize 对每个已绑定计划都会打印）；三份日志的哈希必须唯一且等于 evidence 的 `planHash`。缺行、格式不符或不一致均 FAIL。
+- 日志中不得出现 `[LOAD] CompatPack disabled (...)`（load rejected / game identity mismatch / assembly rejected / unexpected failure 等包加载降级），也不得出现未处理的 plan hash 失败（plan hash ... fail/mismatch/does not match/不匹配/失败 等）、ALC 失败（ALC/AssemblyLoadContext ... fail/error/exception/未回收 等）、Unhandled exception 或 fatal 标记，以及**非零错误计数**（`2 Errors`、`Failures: 1`、`Exceptions=3` 等；`0 Errors` 不算失败）。
+- `fallback` 只接受成功回退标记 `[LOAD] CompatPack projection failed; fallback to no-pack baseline`，且该行之后不得再出现 fail/failed/failure(s)/error(s)/exception(s)/fatal/terminated/aborted/失败/异常/错误/终止/中止（复数与终止态于 2026-11-03 补齐）；`... fallback failed`、`... no-pack baseline bind failed` 等失败/终止行直接判失败。出现 fallback 但找不到成功标记、或 evidence 声明 fallbackUsed=true 但日志无 fallback，也判失败。
 - loadLogFound 必须为 true，fatalErrorFound 必须为 false。
 
 > 守卫只能校验证据文本与已知失败模式，不能证明日志一定来自真机。发布评审仍须人工核对归档、设备信息与 APK 哈希。
@@ -141,7 +159,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\compat-pack\Test-Compa
    - **back-restart**：使用应用内 Back→Restart（或系统返回键退出后**不 force-stop 进程**立即重新进入），跑到输入等待，保存 logs\back-restart.log。
    - **second-start**：同一进程内再次启动同一游戏，跑到输入等待，保存 logs\second-start.log。
 4. 若 adb logcat 中没有 [LOAD]，开启运行时诊断文件 sink（user://gemuera_runtime_*.log）并用 debug 包 run-as 或应用内诊断导出取回，写入对应 log 文件；不要用截图代替日志。
-5. 人工检查每份日志：[LOAD]、[LOAD] CompatPack enabled 的 pack id/contractAbi/engineApi、plan hash、fallback 路径；失败时确认用户可见状态，不得静默回退到未声明 profile。
+5. 人工检查每份日志：[LOAD]、[LOAD] CompatPack enabled 的 pack id/contractAbi/engineApi、`[LOAD] CompatibilityPlan=<planHash>`、fallback 路径；失败时确认用户可见状态，不得静默回退到未声明 profile。三份日志的 plan 哈希应与 evidence.planHash 相同（gate 会自动核对）。
 6. 写 evidence JSON，运行：
    ```powershell
    powershell -NoProfile -ExecutionPolicy Bypass -File tools\compat-pack\Test-CompatPackReleaseGate.ps1 -ProjectRoot . -RequireAndroid -AndroidEvidencePath reports\compatpack\android-evidence.json
@@ -181,6 +199,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\compat-pack\Test-Compa
       "profile": "v18",
       "baseProfile": "v24pure",
       "packIds": ["pack.gemuera.v18"],
+      "planHash": "<64 位小写十六进制，该次运行的 plan 哈希>",
       "result": "PASS",
       "keyOutput": "标题 + 首屏 + 输入等待",
       "logPath": "six-game/logs/eramaou.log"
@@ -195,7 +214,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\compat-pack\Test-Compa
 
 - JSON 可解析；顶层为数组或含 games 数组。
 - 记录数恰好 6；gameId 不得重复。
-- 每条记录包含非空 gameId / profile / baseProfile / keyOutput / logPath，且 result 严格等于字面量大写 PASS（小写 pass 不接受）。
+- 每条记录包含非空 gameId / profile / baseProfile / keyOutput / logPath / planHash，且 result 严格等于字面量大写 PASS（小写 pass 不接受）。
+- planHash 必须是 64 位小写十六进制；日志文件若包含 `[LOAD] CompatibilityPlan=` 行，其哈希必须与记录的 planHash 一致（runner 日志没有该行时只做格式校验）。
 - packIds 字段必须存在；可以是 []（纯基线）或包 id 列表。Windows PowerShell 5.1 的 ConvertFrom-Json 会把单元素数组折叠成字符串、把 [] 折叠成 null，脚本已兼容这两种形态；不要因此写非数组 JSON。
 - logPath 文件必须存在且非空。
 
@@ -232,7 +252,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\legacy-runner\Invoke-L
 ## 6. Gate 5/6：契约测试与治理入口
 
 - Gate 5（版本/组合契约）已由 Core/Facade/ABI 测试与 Surface/Runtime 冒烟覆盖：双轴比较、legacy targetEngineApi 迁移、非法组合拒载、依赖/冲突/覆盖/优先级、plan hash 稳定性、符号双形态闭包、plan/registry 精确一致。
-- Gate 6（治理与 CI）：tools/governance/Test-Governance.ps1 先做 work-package schema 往返，再跑 lifecycle 守卫，最后调用发布门禁桌面档；任一失败 throw。日常 CI 不带 -RequireAndroid / -RequireSixGame；P-D/发布任务另行运行证据档并归档日志。
+- Gate 6（治理与 CI）：tools/governance/Test-Governance.ps1 先做 work-package schema 往返，再跑 lifecycle 守卫，然后跑发布门禁自测（`-SelfTest`）与桌面档；任一失败 throw。日常 CI 不带 -RequireAndroid / -RequireSixGame；P-D/发布任务另行运行证据档并归档日志。
 - 文档与报告中的测试计数必须来自实际运行；不要手写未实测数字。
 
 ## 7. P-D 解锁顺序（Gate 1-7）
@@ -280,7 +300,10 @@ reports/compatpack/
 
 ## 9. 当前状态与已知限制（2026-11-03）
 
-- 桌面门禁：PASS（7/7 命令；Core 267 passed / 1 skipped、Facade 78 passed、ABI 4 passed；三冒烟与 lifecycle 4/4 全绿）。
+- 桌面门禁：PASS（7/7 命令；Core 278 passed / 1 skipped、Facade 78 passed、ABI 4 passed；三冒烟与 lifecycle 4/4 全绿；门禁自测 9/9）。
+- Gate 1 现在强制 plan 哈希：三份日志都必须出现 `[LOAD] CompatibilityPlan=<64 位小写 hex>` 且与 evidence.planHash 一致；早于 2026-11-03 的旧证据需要按新 schema 补 planHash 后重采。
+- 六游戏证据每条新增 `planHash`（必填，格式 + 与日志对账）。
+- 门禁判定逻辑本身由提交在案的合成夹具（tools/compat-pack/gate-self-test/，9 例）与 governance 自动自测覆盖；夹具不是发布证据。
 - 宿主构建：0 error / 4 个既有 warning。
 - 本机**没有**真实 Android 设备与六游戏运行证据：-RequireAndroid / -RequireSixGame 会明确 FAIL（缺 APK/设备/日志/六游戏记录），不得假绿；这不代表产品失败，只代表发布验收尚未完成。
 - 合成 self-test 夹具（fake.apk / 合成日志）只用于验证门禁逻辑，**不是**发布证据，不得放入发布归档。

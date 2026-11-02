@@ -32,7 +32,10 @@ param(
     [string]$AndroidEvidencePath = '',
     [string]$SixGameEvidencePath = '',
     [switch]$RequireAndroid,
-    [switch]$RequireSixGame
+    [switch]$RequireSixGame,
+    # 门禁自测：用提交在案的合成夹具（gate-self-test/）验证 Gate 1 判定逻辑本身，
+    # 不跑桌面命令、不产生发布证据。governance 每次桌面门禁前自动调用。
+    [switch]$SelfTest
 )
 
 Set-StrictMode -Version Latest
@@ -342,6 +345,49 @@ function Test-AndroidEvidence {
         Write-GateCheck -Name '三场景日志均包含 [LOAD]' -Passed $false -Detail ($loadIssues -join ' ; ')
     }
 
+    # ---- plan 哈希正向校验（spec §9 Gate 1；final whole-branch review I2） ----
+    # Process.Initialize 对每个已绑定计划都会打印 "[LOAD] CompatibilityPlan=<64 位小写 hex>"。
+    # 每个场景都必须出现该行，且三份日志的哈希必须唯一、与 evidence.planHash 一致；否则
+    # "没有 plan 哈希（或哈希对不上）"的日志会被误当成通过。
+    $planHashPattern = '\[LOAD\]\s+CompatibilityPlan=(?<hash>[0-9a-f]{64})(?:\s|$)'
+    $evidencePlanHash = [string](Get-JsonField -Object $evidence -Name 'planHash')
+    $planIssues = @()
+    if ([string]::IsNullOrWhiteSpace($evidencePlanHash)) {
+        $planIssues += 'evidence 缺少 planHash（Gate 1 要求记录 plan 哈希）'
+    }
+    elseif ($evidencePlanHash -notmatch '^[0-9a-f]{64}$') {
+        $planIssues += ('planHash 必须是 64 位小写十六进制: ' + $evidencePlanHash)
+    }
+    $observedPlanHashes = @{}
+    foreach ($log in $runLogs) {
+        $planMatches = [regex]::Matches($log.Text, $planHashPattern)
+        if ($planMatches.Count -eq 0) {
+            $planIssues += ("场景 {0} 日志缺少 [LOAD] CompatibilityPlan=<64 位小写 hex>: {1}" -f $log.Scenario, $log.Path)
+            continue
+        }
+        foreach ($planMatch in $planMatches) {
+            $observedPlanHashes[$planMatch.Groups['hash'].Value] = $true
+        }
+    }
+    if ($runLogs.Count -eq 0) {
+        $planIssues += '没有可检查 plan 哈希的日志（三场景日志缺失）'
+    }
+    if ($observedPlanHashes.Count -gt 1) {
+        $planIssues += ('三场景日志的 plan 哈希不一致: ' + (($observedPlanHashes.Keys | Sort-Object) -join ', '))
+    }
+    if ((-not [string]::IsNullOrWhiteSpace($evidencePlanHash)) -and ($observedPlanHashes.Count -eq 1)) {
+        $observedPlanHash = @($observedPlanHashes.Keys)[0]
+        if (-not [string]::Equals($observedPlanHash, $evidencePlanHash, [StringComparison]::Ordinal)) {
+            $planIssues += ("planHash 与日志不一致: evidence={0} log={1}" -f $evidencePlanHash, $observedPlanHash)
+        }
+    }
+    if ($planIssues.Count -eq 0) {
+        Write-GateCheck -Name '三场景日志均含 plan 哈希且与 evidence.planHash 一致' -Passed $true -Detail ('plan=' + $evidencePlanHash)
+    }
+    else {
+        Write-GateCheck -Name '三场景日志均含 plan 哈希且与 evidence.planHash 一致' -Passed $false -Detail ($planIssues -join ' ; ')
+    }
+
     # ---- 未处理失败：plan hash / ALC / unhandled / fatal / 包加载降级 / fallback 失败 ----
     # fallback 失败行必须单独拦截：它们同时包含 "fallback" 与 "no-pack baseline"，
     # 旧规则只校验目标基线和 fatal，会把 "fallback failed" 当成合法回退（review I1）。
@@ -354,7 +400,10 @@ function Test-AndroidEvidence {
         [pscustomobject]@{ Label = 'fatal 日志'; Pattern = '(?i)\bfatal(?:\s+error)?\b' },
         [pscustomobject]@{ Label = 'fallback 失败'; Pattern = '(?i)\bfallback\b[^\r\n]{0,160}(fail|failed|failure|error|exception|失败|异常|abort|aborted|terminat|终止)' },
         [pscustomobject]@{ Label = 'no-pack baseline 失败'; Pattern = '(?i)no-pack baseline[^\r\n]{0,160}(fail|failed|failure|error|exception|失败|异常|abort|aborted|terminat|终止)' },
-        [pscustomobject]@{ Label = 'CompatPack 包加载降级'; Pattern = '(?i)\[LOAD\]\s+CompatPack\s+disabled' }
+        [pscustomobject]@{ Label = 'CompatPack 包加载降级'; Pattern = '(?i)\[LOAD\]\s+CompatPack\s+disabled' },
+        # 非零错误计数（I2）："2 Errors" / "Failures: 1" / "Exceptions=3" 一律拦截；
+        # "0 Errors" 不算失败（模式要求非零数字，避免误伤汇总行）。
+        [pscustomobject]@{ Label = '非零错误计数'; Pattern = '(?i)(\b[1-9][0-9]*\s*(?:errors?|failures?|exceptions?)\b|(?:errors?|failures?|exceptions?)\s*[:=]\s*[1-9][0-9]*\b)' }
     )
     $violations = @()
     foreach ($log in $runLogs) {
@@ -430,7 +479,9 @@ function Test-AndroidEvidence {
     # 同一个日志在成功标记之后若再次出现 fail/error/exception/fatal/失败/异常/终止，
     # 说明回退后仍失败，必须 FAIL；"fallback failed" 行本身由 forbiddenRules 拦截。
     $fallbackMarkerPattern = '(?i)\[LOAD\]\s+CompatPack projection failed;\s*fallback to no-pack baseline'
-    $postFallbackFailurePattern = '(?i)(\bfail(?:ed|ure)?\b|\berror\b|\bexception\b|\bfatal\b|失败|异常|终止)'
+    # I2：复数 Errors/Failures/Exceptions、terminated/aborted 与"错误/终止/中止"都必须拦截；
+    # 前置零计数的行（"0 Errors"/"0 Failures"）不误伤。
+    $postFallbackFailurePattern = '(?i)((?<!\b0\s)\bfail(?:ed|ure|ures)?\b|(?<!\b0\s)\berrors?\b|(?<!\b0\s)\bexceptions?\b|\bfatal\b|\bterminat(?:ed|ing|ion)\b|\babort(?:ed|ing|ion)\b|失败|异常|错误|终止|中止)'
     $fallbackIssues = @()
     $declaredFallbackTarget = [string](Get-JsonField -Object $evidence -Name 'fallbackTargetBaseline')
     $fallbackSeen = $false
@@ -566,7 +617,7 @@ function Test-SixGameEvidence {
         $keyOutput = [string](Get-JsonField -Object $record -Name 'keyOutput')
         $logPathRaw = [string](Get-JsonField -Object $record -Name 'logPath')
 
-        foreach ($fieldName in @('gameId', 'profile', 'baseProfile', 'keyOutput', 'logPath')) {
+        foreach ($fieldName in @('gameId', 'profile', 'baseProfile', 'keyOutput', 'logPath', 'planHash')) {
             $fieldValue = Get-JsonField -Object $record -Name $fieldName
             if (-not (Test-NonEmptyText -Value $fieldValue)) {
                 $issues += ('缺少/空字段 ' + $fieldName)
@@ -608,16 +659,37 @@ function Test-SixGameEvidence {
             $issues += ('result 必须为字面量大写 PASS（实际: {0}）' -f $resultValue)
         }
 
+        $planHashRaw = [string](Get-JsonField -Object $record -Name 'planHash')
+        if ((-not [string]::IsNullOrWhiteSpace($planHashRaw)) -and ($planHashRaw -notmatch '^[0-9a-f]{64}$')) {
+            $issues += ('planHash 必须是 64 位小写十六进制: ' + $planHashRaw)
+        }
+
         if (-not [string]::IsNullOrWhiteSpace($logPathRaw)) {
             $logPath = Resolve-GatePath -PathValue $logPathRaw -BaseDirectory $evidenceDirectory
             if (-not (Test-Path -LiteralPath $logPath -PathType Leaf)) {
                 $issues += ('logPath 文件不存在: ' + $logPath)
             }
             else {
+                $logText = $null
                 try {
                     $logInfo = Get-Item -LiteralPath $logPath
                     if ($logInfo.Length -le 0) {
                         $issues += ('logPath 文件为空: ' + $logPath)
+                    }
+                    elseif ($planHashRaw -match '^[0-9a-f]{64}$') {
+                        # M12：日志若记录了 plan 哈希，必须与 evidence 的 planHash 一致
+                        #（spec §9 Gate 2 要求记录 hash；runner 日志没有该行时只做格式校验）。
+                        $logText = Read-Utf8Text -Path $logPath
+                        $gamePlanMatches = [regex]::Matches(
+                            $logText, '\[LOAD\]\s+CompatibilityPlan=(?<hash>[0-9a-f]{64})(?:\s|$)')
+                        if ($gamePlanMatches.Count -gt 0) {
+                            $matchedPlan = @($gamePlanMatches | Where-Object {
+                                [string]::Equals($_.Groups['hash'].Value, $planHashRaw, [StringComparison]::Ordinal)
+                            })
+                            if ($matchedPlan.Count -eq 0) {
+                                $issues += ('planHash 与日志中的 CompatibilityPlan 不一致: ' + $planHashRaw)
+                            }
+                        }
                     }
                 }
                 catch {
@@ -650,8 +722,85 @@ function Test-SixGameEvidence {
 }
 
 # -----------------------------------------------------------------------------
+# 门禁自测（-SelfTest）：用提交在案的合成夹具验证 Gate 1 判定逻辑本身
+# -----------------------------------------------------------------------------
+# 依据 spec §9 Gate 1 与 final whole-branch review I2：发布门禁是"发布硬门"，它的
+# 判定逻辑本身必须有可重复的负向证据。夹具位于 tools/compat-pack/gate-self-test/
+# （fake.apk + 每例一份 android-evidence.json 与日志），只验证脚本逻辑，**不是**发布证据。
+# 覆盖：合法 PASS、0 Errors 不误伤、合法 fallback PASS、2 Errors、Failures: 1、
+# terminated、aborted、缺 plan 哈希、fallback 后续失败。
+
+function Invoke-GateSelfTest {
+    $fixtureRoot = Join-Path $PSScriptRoot 'gate-self-test'
+    if (-not (Test-Path -LiteralPath $fixtureRoot -PathType Container)) {
+        Write-Output ("[FAIL] 门禁自测夹具目录不存在: {0}" -f $fixtureRoot)
+        $script:FailureCount++
+        return
+    }
+    $cases = @(
+        [pscustomobject]@{ Name = '合法 PASS'; Dir = 'pass'; ExpectPass = $true; ExpectLabel = '' },
+        [pscustomobject]@{ Name = '0 Errors 不误伤'; Dir = 'pass-zero-errors'; ExpectPass = $true; ExpectLabel = '' },
+        [pscustomobject]@{ Name = '合法 fallback PASS'; Dir = 'pass-fallback'; ExpectPass = $true; ExpectLabel = '' },
+        [pscustomobject]@{ Name = '2 Errors 必须 FAIL'; Dir = 'fail-errors'; ExpectPass = $false; ExpectLabel = '非零错误计数' },
+        [pscustomobject]@{ Name = 'Failures: 1 必须 FAIL'; Dir = 'fail-failures'; ExpectPass = $false; ExpectLabel = '非零错误计数' },
+        [pscustomobject]@{ Name = 'terminated 必须 FAIL'; Dir = 'fail-terminated'; ExpectPass = $false; ExpectLabel = '成功回退后仍出现失败/异常' },
+        [pscustomobject]@{ Name = 'aborted 必须 FAIL'; Dir = 'fail-aborted'; ExpectPass = $false; ExpectLabel = '成功回退后仍出现失败/异常' },
+        [pscustomobject]@{ Name = '缺 plan 哈希必须 FAIL'; Dir = 'fail-no-plan-hash'; ExpectPass = $false; ExpectLabel = 'plan 哈希' },
+        [pscustomobject]@{ Name = 'fallback 后续失败必须 FAIL'; Dir = 'fail-fallback-then-failure'; ExpectPass = $false; ExpectLabel = '成功回退后仍出现失败/异常' }
+    )
+    foreach ($case in $cases) {
+        $evidencePath = Join-Path (Join-Path $fixtureRoot $case.Dir) 'android-evidence.json'
+        if (-not (Test-Path -LiteralPath $evidencePath -PathType Leaf)) {
+            Write-Output ("[FAIL] 自测夹具缺失: {0}" -f $evidencePath)
+            $script:FailureCount++
+            continue
+        }
+        $failureBefore = $script:FailureCount
+        $captured = @(Test-AndroidEvidence -EvidencePath $evidencePath)
+        $actualFailed = ($script:FailureCount -gt $failureBefore)
+        $expectedText = 'PASS'
+        if (-not $case.ExpectPass) { $expectedText = 'FAIL' }
+        $actualText = 'PASS'
+        if ($actualFailed) { $actualText = 'FAIL' }
+        $caseOk = ($actualFailed -eq (-not $case.ExpectPass))
+        if ($caseOk -and (-not $case.ExpectPass) -and (-not [string]::IsNullOrWhiteSpace($case.ExpectLabel))) {
+            $caseOk = (($captured -join "`n").IndexOf($case.ExpectLabel, [StringComparison]::Ordinal) -ge 0)
+        }
+        # 证据检查在"预期 FAIL"的用例里必然累加 FailureCount；自测的判据是"是否符合预期"，
+        # 因此逐例回滚计数，另用 SelfTestFailures 统计不符合预期的用例。
+        $script:FailureCount = $failureBefore
+        if ($caseOk) {
+            Write-Output ("[PASS] 自测: {0}（期望 {1}）" -f $case.Name, $expectedText)
+        }
+        else {
+            $script:SelfTestFailures++
+            Write-Output ("[FAIL] 自测: {0}（期望 {1}，实际 {2}）" -f $case.Name, $expectedText, $actualText)
+            if (-not [string]::IsNullOrWhiteSpace($case.ExpectLabel)) {
+                Write-Output ("       期望失败标签: {0}" -f $case.ExpectLabel)
+            }
+            foreach ($capturedLine in @($captured | Where-Object { $_ -match '^\[FAIL\]' })) {
+                Write-Output ("       | {0}" -f $capturedLine)
+            }
+        }
+    }
+}
+
+# -----------------------------------------------------------------------------
 # 主流程
 # -----------------------------------------------------------------------------
+
+if ($SelfTest) {
+    Write-Output '=== CompatPack 发布门禁自测（合成夹具，不是发布证据） ==='
+    $script:SelfTestFailures = 0
+    Invoke-GateSelfTest
+    Write-Output ''
+    if ($script:SelfTestFailures -gt 0) {
+        Write-Output ("=== 结果: FAIL（门禁自测 {0} 项不符合预期） ===" -f $script:SelfTestFailures)
+        exit 1
+    }
+    Write-Output '=== 结果: PASS（门禁自测全部符合预期） ==='
+    exit 0
+}
 
 if (-not (Test-Path -LiteralPath $ProjectRoot -PathType Container)) {
     Write-Output ("[FAIL] 项目根不存在: {0}" -f $ProjectRoot)
