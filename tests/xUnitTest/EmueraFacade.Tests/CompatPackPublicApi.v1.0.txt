@@ -4,16 +4,16 @@ public-types=17
 type=Emuera.Compatibility.Packs.CompatPackDependency|public sealed record class|base=System.Object|interfaces=System.IEquatable<Emuera.Compatibility.Packs.CompatPackDependency>
   positional=System.String PackId, System.String VersionRange
   ctor=.ctor(System.String PackId, System.String VersionRange)
-  property=System.String PackId {get,set}
-  property=System.String VersionRange {get,set}
+  property=System.String PackId {get,init}
+  property=System.String VersionRange {get,init}
   method=Emuera.Compatibility.Packs.CompatPackDependency <Clone>$()
-  method=System.Boolean Equals(Emuera.Compatibility.Packs.CompatPackDependency other)
-  method=System.Boolean Equals(System.Object obj)
-  method=System.Int32 GetHashCode()
-  method=System.String ToString()
   method=System.Void Deconstruct(out System.String PackId, out System.String VersionRange)
+  method=override System.Boolean Equals(System.Object obj)
+  method=override System.Int32 GetHashCode()
+  method=override System.String ToString()
   method=static System.Boolean op_Equality(Emuera.Compatibility.Packs.CompatPackDependency left, Emuera.Compatibility.Packs.CompatPackDependency right)
   method=static System.Boolean op_Inequality(Emuera.Compatibility.Packs.CompatPackDependency left, Emuera.Compatibility.Packs.CompatPackDependency right)
+  method=virtual System.Boolean Equals(Emuera.Compatibility.Packs.CompatPackDependency other)
 type=Emuera.Compatibility.Packs.CompatPackGameIdentity|public sealed class|base=System.Object|interfaces=<none>
   property=System.String GameCode {get}
   property=System.String Version {get}
@@ -40,16 +40,16 @@ type=Emuera.Compatibility.Packs.CompatPackManifest|public sealed class|base=Syst
 type=Emuera.Compatibility.Packs.CompatPackOverride|public sealed record class|base=System.Object|interfaces=System.IEquatable<Emuera.Compatibility.Packs.CompatPackOverride>
   positional=System.String Symbol, System.Int32 Priority
   ctor=.ctor(System.String Symbol, System.Int32 Priority)
-  property=System.Int32 Priority {get,set}
-  property=System.String Symbol {get,set}
+  property=System.Int32 Priority {get,init}
+  property=System.String Symbol {get,init}
   method=Emuera.Compatibility.Packs.CompatPackOverride <Clone>$()
-  method=System.Boolean Equals(Emuera.Compatibility.Packs.CompatPackOverride other)
-  method=System.Boolean Equals(System.Object obj)
-  method=System.Int32 GetHashCode()
-  method=System.String ToString()
   method=System.Void Deconstruct(out System.String Symbol, out System.Int32 Priority)
+  method=override System.Boolean Equals(System.Object obj)
+  method=override System.Int32 GetHashCode()
+  method=override System.String ToString()
   method=static System.Boolean op_Equality(Emuera.Compatibility.Packs.CompatPackOverride left, Emuera.Compatibility.Packs.CompatPackOverride right)
   method=static System.Boolean op_Inequality(Emuera.Compatibility.Packs.CompatPackOverride left, Emuera.Compatibility.Packs.CompatPackOverride right)
+  method=virtual System.Boolean Equals(Emuera.Compatibility.Packs.CompatPackOverride other)
 type=Emuera.Compatibility.Packs.CompatPackSurface|public sealed class|base=System.Object|interfaces=<none>
   property=System.Collections.Generic.IReadOnlyList<System.String> AddFunctions {get}
   property=System.Collections.Generic.IReadOnlyList<System.String> AddInstructions {get}
@@ -59,29 +59,29 @@ type=Emuera.Compatibility.Packs.CompatPackSurface|public sealed class|base=Syste
 type=Emuera.Compatibility.Packs.CompatVersion|public readonly record struct|base=System.ValueType|interfaces=System.IEquatable<Emuera.Compatibility.Packs.CompatVersion>
   positional=System.Int32 Major, System.Int32 Minor
   ctor=.ctor(System.Int32 Major, System.Int32 Minor)
-  property=System.Int32 Major {get,set}
-  property=System.Int32 Minor {get,set}
+  property=System.Int32 Major {get,init}
+  property=System.Int32 Minor {get,init}
   method=System.Boolean CanRunOn(Emuera.Compatibility.Packs.CompatVersion engineVersion)
-  method=System.Boolean Equals(Emuera.Compatibility.Packs.CompatVersion other)
-  method=System.Boolean Equals(System.Object obj)
-  method=System.Int32 GetHashCode()
-  method=System.String ToString()
   method=System.Void Deconstruct(out System.Int32 Major, out System.Int32 Minor)
+  method=override System.Boolean Equals(System.Object obj)
+  method=override System.Int32 GetHashCode()
+  method=override System.String ToString()
   method=static System.Boolean TryParse(System.String value, out Emuera.Compatibility.Packs.CompatVersion version)
   method=static System.Boolean op_Equality(Emuera.Compatibility.Packs.CompatVersion left, Emuera.Compatibility.Packs.CompatVersion right)
   method=static System.Boolean op_Inequality(Emuera.Compatibility.Packs.CompatVersion left, Emuera.Compatibility.Packs.CompatVersion right)
+  method=virtual System.Boolean Equals(Emuera.Compatibility.Packs.CompatVersion other)
 type=Emuera.Compatibility.Packs.EnginePolicyBinding|public sealed record class|base=System.Object|interfaces=System.IEquatable<Emuera.Compatibility.Packs.EnginePolicyBinding>
   positional=System.String CapabilityId
   ctor=.ctor(System.String CapabilityId)
-  property=System.String CapabilityId {get,set}
+  property=System.String CapabilityId {get,init}
   method=Emuera.Compatibility.Packs.EnginePolicyBinding <Clone>$()
-  method=System.Boolean Equals(Emuera.Compatibility.Packs.EnginePolicyBinding other)
-  method=System.Boolean Equals(System.Object obj)
-  method=System.Int32 GetHashCode()
-  method=System.String ToString()
   method=System.Void Deconstruct(out System.String CapabilityId)
+  method=override System.Boolean Equals(System.Object obj)
+  method=override System.Int32 GetHashCode()
+  method=override System.String ToString()
   method=static System.Boolean op_Equality(Emuera.Compatibility.Packs.EnginePolicyBinding left, Emuera.Compatibility.Packs.EnginePolicyBinding right)
   method=static System.Boolean op_Inequality(Emuera.Compatibility.Packs.EnginePolicyBinding left, Emuera.Compatibility.Packs.EnginePolicyBinding right)
+  method=virtual System.Boolean Equals(Emuera.Compatibility.Packs.EnginePolicyBinding other)
 type=Emuera.Compatibility.Packs.ICapabilityContribution|public interface|base=<none>|interfaces=Emuera.Compatibility.Packs.ICompatPackContribution
   property=System.Collections.Generic.IReadOnlyList<System.String> CapabilityIds {get}
 type=Emuera.Compatibility.Packs.ICompatInstructionFactory|public interface|base=<none>|interfaces=<none>
@@ -106,13 +106,13 @@ type=Emuera.Compatibility.Packs.ISurfaceContribution|public interface|base=<none
 type=Emuera.Compatibility.Packs.InstructionVariantBinding|public sealed record class|base=System.Object|interfaces=System.IEquatable<Emuera.Compatibility.Packs.InstructionVariantBinding>
   positional=System.String InstructionName, Emuera.Compatibility.Packs.ICompatInstructionFactory Factory
   ctor=.ctor(System.String InstructionName, Emuera.Compatibility.Packs.ICompatInstructionFactory Factory)
-  property=Emuera.Compatibility.Packs.ICompatInstructionFactory Factory {get,set}
-  property=System.String InstructionName {get,set}
+  property=Emuera.Compatibility.Packs.ICompatInstructionFactory Factory {get,init}
+  property=System.String InstructionName {get,init}
   method=Emuera.Compatibility.Packs.InstructionVariantBinding <Clone>$()
-  method=System.Boolean Equals(Emuera.Compatibility.Packs.InstructionVariantBinding other)
-  method=System.Boolean Equals(System.Object obj)
-  method=System.Int32 GetHashCode()
-  method=System.String ToString()
   method=System.Void Deconstruct(out System.String InstructionName, out Emuera.Compatibility.Packs.ICompatInstructionFactory Factory)
+  method=override System.Boolean Equals(System.Object obj)
+  method=override System.Int32 GetHashCode()
+  method=override System.String ToString()
   method=static System.Boolean op_Equality(Emuera.Compatibility.Packs.InstructionVariantBinding left, Emuera.Compatibility.Packs.InstructionVariantBinding right)
   method=static System.Boolean op_Inequality(Emuera.Compatibility.Packs.InstructionVariantBinding left, Emuera.Compatibility.Packs.InstructionVariantBinding right)
+  method=virtual System.Boolean Equals(Emuera.Compatibility.Packs.InstructionVariantBinding other)

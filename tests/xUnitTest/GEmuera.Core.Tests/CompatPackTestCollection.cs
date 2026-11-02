@@ -10,7 +10,8 @@ namespace GEmuera.Core.Tests;
 /// （真实契约夹具 DLL），加载到错误清单/哈希而偶发假红。因此凡调用 TryLoad /
 /// TryLoadSet 或触碰 CompatPackLoader 静态成员的测试类必须挂入本集合串行执行：
 /// CompatPackLoaderTests、CompatPackAssemblyTests、V18PackManifestTests、
-/// CommunityPackTemplateTests、CompatPackAlcIsolationTests。
+/// CommunityPackTemplateTests、CompatPackAlcIsolationTests、CompatPackSessionTests（T8）、
+/// CompatPackLegacyFacadeTests（T8）、CompatPackAlcReclamationTests（T8）。
 /// </summary>
 [CollectionDefinition("CompatPack", DisableParallelization = true)]
 public sealed class CompatPackTestCollection

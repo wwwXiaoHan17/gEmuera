@@ -11,6 +11,9 @@ namespace EmueraFacade.Tests;
 /// 渲染规范文本：assembly 身份 + 全部 public type/基类/接口/record 位置参数/字段/构造器/
 /// 属性/事件/方法。排序一律 Ordinal，文本只用 LF，不含路径/时间/哈希等环境噪声，
 /// 因此任何 public 面删除、签名或 record 位置参数变化都会让本用例变红。
+/// 渲染覆盖（T8 fix）：init-only setter（{get,init} 与 {get,set} 不再混同）、readonly 字段、
+/// virtual/abstract/override 成员、参数默认值、enum 底层类型与成员值——补掉 review 指出的
+/// 未来假绿盲区；这些维度当前契约大多没有成员，故基线只在 init 标注处变化。
 /// 基线文件由 csproj 复制到测试输出目录；首次运行（文件缺失）会把 actual 写到输出目录
 /// 并失败，提示人工核对后提交为 CompatPackPublicApi.v1.0.txt。
 /// </summary>
@@ -73,6 +76,21 @@ internal static class CompatPackPublicApiSnapshot
             + "|" + DescribeTypeKind(type)
             + "|base=" + (type.BaseType is null ? "<none>" : TypeName(type.BaseType))
             + "|interfaces=" + FormatInterfaces(type));
+
+        if (type.IsEnum)
+        {
+            // 枚举的底层类型与成员数值是 ABI 的一部分（序列化/整数转换依赖），
+            // 不能只靠"成员名存在"判断兼容。
+            Append(builder, "  enum-underlying=" + TypeName(Enum.GetUnderlyingType(type)));
+            foreach (FieldInfo member in type
+                .GetFields(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly)
+                .OrderBy(member => member.Name, StringComparer.Ordinal))
+            {
+                Append(builder, "  enum-member=" + member.Name + " = "
+                    + FormatLiteralValue(member.GetRawConstantValue()));
+            }
+            return;
+        }
 
         if (TryGetRecordPositionalParameters(type, out ParameterInfo[]? positional))
             Append(builder, "  positional=" + FormatParameters(positional));
@@ -187,6 +205,8 @@ internal static class CompatPackPublicApiSnapshot
     private static string DescribeField(FieldInfo field)
     {
         string modifier = field.IsLiteral ? "const " : field.IsStatic ? "static " : "";
+        if (!field.IsLiteral && field.IsInitOnly)
+            modifier += "readonly ";
         string value = field.IsLiteral ? " = " + FormatLiteralValue(field.GetRawConstantValue()) : "";
         return modifier + TypeName(field.FieldType) + " " + field.Name + value;
     }
@@ -206,14 +226,15 @@ internal static class CompatPackPublicApiSnapshot
 
     private static string DescribeProperty(PropertyInfo property)
     {
-        string modifier = property.GetMethod?.IsStatic == true || property.SetMethod?.IsStatic == true
+        bool isStatic = property.GetMethod?.IsStatic == true || property.SetMethod?.IsStatic == true;
+        string modifier = isStatic
             ? "static "
-            : "";
+            : DescribeMemberModifiers(property.GetMethod ?? property.SetMethod);
         var accessors = new List<string>(2);
         if (property.GetMethod is not null && property.GetMethod.IsPublic)
             accessors.Add("get");
         if (property.SetMethod is not null && property.SetMethod.IsPublic)
-            accessors.Add("set");
+            accessors.Add(IsInitOnlySetter(property.SetMethod) ? "init" : "set");
         string indexer = property.GetIndexParameters() is { Length: > 0 } indexParameters
             ? "[" + FormatParameters(indexParameters) + "]"
             : "";
@@ -229,9 +250,7 @@ internal static class CompatPackPublicApiSnapshot
 
     private static string DescribeMethod(MethodInfo method)
     {
-        string modifier = method.IsStatic ? "static " : "";
-        if (method.IsAbstract && !method.DeclaringType!.IsInterface)
-            modifier += "abstract ";
+        string modifier = method.IsStatic ? "static " : DescribeMemberModifiers(method);
         string genericArguments = method.IsGenericMethodDefinition
             ? "<" + string.Join(", ", method.GetGenericArguments().Select(argument => argument.Name)) + ">"
             : "";
@@ -251,10 +270,32 @@ internal static class CompatPackPublicApiSnapshot
                 direction = parameter.IsOut ? "out " : "ref ";
                 parameterType = parameterType.GetElementType()!;
             }
-            parts.Add(direction + TypeName(parameterType) + " " + (parameter.Name ?? "arg" + parts.Count));
+            // 参数默认值是调用方可见的契约：改默认值不得静默通过基线。
+            string defaultValue = parameter.HasDefaultValue
+                ? " = " + FormatLiteralValue(parameter.DefaultValue)
+                : "";
+            parts.Add(direction + TypeName(parameterType) + " " + (parameter.Name ?? "arg" + parts.Count)
+                + defaultValue);
         }
         return string.Join(", ", parts);
     }
+
+    /// <summary>virtual/abstract/override 修饰符；接口成员隐式 abstract，不重复渲染。</summary>
+    private static string DescribeMemberModifiers(MethodInfo? method)
+    {
+        if (method is null || method.IsStatic || method.DeclaringType?.IsInterface == true)
+            return "";
+        if (method.IsAbstract)
+            return "abstract ";
+        if (method.IsVirtual && method.GetBaseDefinition().DeclaringType != method.DeclaringType)
+            return method.IsFinal ? "sealed override " : "override ";
+        return method.IsVirtual ? "virtual " : "";
+    }
+
+    /// <summary>record/init 属性的 setter 带 modreq(IsExternalInit)；与普通 set 区分开。</summary>
+    private static bool IsInitOnlySetter(MethodInfo setter)
+        => setter.ReturnParameter.GetRequiredCustomModifiers().Any(modifier =>
+            modifier.FullName == "System.Runtime.CompilerServices.IsExternalInit");
 
     private static string TypeName(Type type)
     {

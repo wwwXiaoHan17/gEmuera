@@ -17,8 +17,10 @@ namespace GEmuera.Core.Tests;
 /// 重复三轮（每轮新加载）证明回收不是一次性的 GC 巧合；最后检查 loader/session 静态面
 /// 无残留（BytesReaderOverrideForTest 必须为 null，静态字段不得持有 ALC/租约/句柄），
 /// 以及 AppDomain 中不再存在来自包 ALC 的（Location 为空的）夹具程序集。
-/// 说明：引擎侧 Program 类型属 Scripts/（Core 测试不可达），静态残留检查落在
-/// session/loader/handle/load-context 这四个 Core 侧类型上。
+/// 说明：引擎侧 Program.m1CompatPackSession 属 Scripts/（Core 测试不可达），其清零点由
+/// governance 静态守卫 tools/compat-pack/Test-CompatPackLifecycle.ps1 检查
+/// （DisposeCompatPackSession 必须先置 null 再 session.Dispose()）；本类的静态残留
+/// 检查落在 session/loader/handle/load-context 这四个 Core 侧类型上。
 /// </summary>
 [Collection("CompatPack")]
 public class CompatPackAlcReclamationTests
@@ -59,9 +61,19 @@ public class CompatPackAlcReclamationTests
         Assert.True(
             CompatPackLoader.TryLoad(packPath, CompatPackCompositionTestData.Context(), out var handle, out var errors),
             string.Join("; ", errors));
+        // 成功路径只允许 session.Dispose() 释放租约：若 finally 也兜底 Unload，即使
+        // session.Dispose() 完全不卸载，WeakReference 仍会死，核心断言就失去区分力。
+        // 因此 finally 只在创建/Dispose 失败（sessionDisposed == false）时清理。
+        bool sessionDisposed = false;
         try
         {
             Assert.Equal("test.hello-pack", handle!.Manifest.PackId);
+            // WeakReference 只能证明“ALC 最终不可达”：可回收 ALC 在无人引用时也可能被
+            // GC 顺手回收，无法区分 session 是否真的调用了 Unload。Unloading 事件只由
+            // AssemblyLoadContext.Unload() 触发，是“session 主动卸载”的直接证据
+            // （T8 review Important #1 的 RED 判据）。
+            var unloadObserved = new StrongBox<bool>(false);
+            handle.LoadContext.Unloading += _ => unloadObserved.Value = true;
             var plan = BuiltInDialectCatalog.CreateLegacySessionPlan("v24pure");
             var session = new CompatPackSession(plan, new[] { handle });
             var alcReference = new WeakReference(handle.LoadContext);
@@ -69,14 +81,22 @@ public class CompatPackAlcReclamationTests
             Assert.Same(handle, Assert.Single(session.Handles));
             Assert.False(session.IsDisposed);
             session.Dispose();
+            // 必须在 session.Dispose() 返回后立即断言：finally 的兜底（失败路径）不得参与。
+            Assert.True(
+                unloadObserved.Value,
+                "session.Dispose() 未触发 handle.LoadContext.Unloading：会话没有主动卸载包 ALC。");
+            sessionDisposed = true;
             Assert.True(session.IsDisposed);
             session.Dispose(); // Interlocked 幂等：第二次不得再次 Unload。
             return (alcReference, packReference);
         }
         finally
         {
-            // 断言失败时确定性回收，避免把半加载 ALC 留给后续用例（幂等，成功路径重复调用安全）。
-            handle?.Unload();
+            // 仅异常/失败路径兜底：断言失败时确定性回收半加载 ALC，避免污染后续用例。
+            // 成功路径不执行——否则“session 拥有并卸载 ALC”的断言会被 finally 的
+            // 显式 Unload 掩盖（T8 review Important #1）。
+            if (!sessionDisposed)
+                handle?.Unload();
         }
     }
 

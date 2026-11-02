@@ -10,8 +10,13 @@
 # 检查项（exit 0 = 全部通过；exit 1 = 任一失败）：
 #   1. scripts/EmueraMain.cs 的 StopLegacySession 方法体内不得出现
 #      `IsRunning` 条件早退（if 条件含 IsRunning 且守卫语句 return）。
-#   2. scripts/GodotHost/LegacySessionBackend.cs 的 StopLegacyBaselineAsync
-#      方法体必须调用 ClearCompatibilityPlan。
+#   2. 会话拆除路径必须确定性释放包租约：
+#      a. scripts/GodotHost/LegacySessionBackend.cs 的 StopLegacyBaselineAsync
+#         方法体必须调用 ClearCompatibilityPlan；
+#      b. scripts/Emuera/Program.cs 的 ClearCompatibilityPlan() 必须调用
+#         DisposeCompatPackSession；
+#      c. DisposeCompatPackSession 必须**先**把静态字段 m1CompatPackSession 置 null、
+#         **后**调用 session.Dispose()（残留静态字段会让包 ALC 永不回收，brief T8 Step 3）。
 #   3. scripts/Emuera/Compatibility/CompatPackHost.cs 不得再出现
 #      ActivePackModuleIds / ActiveVariantSelections / ResetActiveSessionProjection
 #      （投影数据已内聚进 DialectPlan，禁止 process-wide 静态回潮）。
@@ -190,6 +195,7 @@ Write-Output ""
 
 $emueraMainText = Read-SourceText 'scripts/EmueraMain.cs'
 $backendText    = Read-SourceText 'scripts/GodotHost/LegacySessionBackend.cs'
+$programText    = Read-SourceText 'scripts/Emuera/Program.cs'
 $hostText       = Read-SourceText 'scripts/Emuera/Compatibility/CompatPackHost.cs'
 $dialectText    = Read-SourceText 'src/Core/Compatibility/DialectRuntime.cs'
 
@@ -216,23 +222,55 @@ else {
     }
 }
 
-# ---- 检查 2：StopLegacyBaselineAsync 必须调用 ClearCompatibilityPlan ---------
-$check2Name = '检查2/4: StopLegacyBaselineAsync 必须调用 ClearCompatibilityPlan（scripts/GodotHost/LegacySessionBackend.cs）'
+# ---- 检查 2：会话拆除路径必须确定性释放包租约 --------------------------------
+$check2Name = '检查2/4: 会话拆除路径必须调用 ClearCompatibilityPlan，且 DisposeCompatPackSession 先清 m1CompatPackSession 再 session.Dispose()（LegacySessionBackend.cs + Emuera/Program.cs）'
+$check2Issues = @()
 if ($null -eq $backendText) {
-    Write-CheckResult -Name $check2Name -Passed $false -Detail '文件缺失: scripts/GodotHost/LegacySessionBackend.cs'
+    $check2Issues += '文件缺失: scripts/GodotHost/LegacySessionBackend.cs'
 }
 else {
-    $stripped = Remove-CsCommentsAndLiterals -Text $backendText
-    $body = Get-CsBracedBody -StrippedText $stripped -SignaturePattern 'ValueTask\s+StopLegacyBaselineAsync\s*\('
-    if ($null -eq $body) {
-        Write-CheckResult -Name $check2Name -Passed $false -Detail '未找到 StopLegacyBaselineAsync 方法体（可能被重命名或移动，需人工确认）'
+    $strippedBackend = Remove-CsCommentsAndLiterals -Text $backendText
+    $backendBody = Get-CsBracedBody -StrippedText $strippedBackend -SignaturePattern 'ValueTask\s+StopLegacyBaselineAsync\s*\('
+    if ($null -eq $backendBody) {
+        $check2Issues += '未找到 StopLegacyBaselineAsync 方法体（可能被重命名或移动，需人工确认）'
     }
-    elseif ([regex]::IsMatch($body, '\bClearCompatibilityPlan\s*\(')) {
-        Write-CheckResult -Name $check2Name -Passed $true -Detail '已调用 ClearCompatibilityPlan，plan 绑定随会话拆除清理'
+    elseif (-not [regex]::IsMatch($backendBody, '\bClearCompatibilityPlan\s*\(')) {
+        $check2Issues += 'StopLegacyBaselineAsync 方法体内未调用 ClearCompatibilityPlan —— 会话拆除不清 plan 绑定，同进程下一次启动 hash 防御失败（设计 §13.6 P0）'
+    }
+}
+if ($null -eq $programText) {
+    $check2Issues += '文件缺失: scripts/Emuera/Program.cs'
+}
+else {
+    $strippedProgram = Remove-CsCommentsAndLiterals -Text $programText
+    $clearPlanBody = Get-CsBracedBody -StrippedText $strippedProgram -SignaturePattern 'void\s+ClearCompatibilityPlan\s*\(\s*\)'
+    if (($null -eq $clearPlanBody) -or (-not [regex]::IsMatch($clearPlanBody, '\bDisposeCompatPackSession\s*\('))) {
+        $check2Issues += 'Program.ClearCompatibilityPlan() 未调用 DisposeCompatPackSession —— 会话拆除非单点释放包租约（设计 §5.4）'
+    }
+    $disposeBody = Get-CsBracedBody -StrippedText $strippedProgram -SignaturePattern 'void\s+DisposeCompatPackSession\s*\('
+    if ($null -eq $disposeBody) {
+        $check2Issues += '未找到 Program.DisposeCompatPackSession 方法体（可能被重命名或移动，需人工确认）'
     }
     else {
-        Write-CheckResult -Name $check2Name -Passed $false -Detail 'StopLegacyBaselineAsync 方法体内未调用 ClearCompatibilityPlan —— 会话拆除不清 plan 绑定，同进程下一次启动 hash 防御失败（设计 §13.6 P0）'
+        # 允许两种等价清零点：Volatile.Write(ref m1CompatPackSession, null) 或 m1CompatPackSession = null;
+        $clearMatch = [regex]::Match($disposeBody, '(Volatile\s*\.\s*Write\s*\(\s*ref\s+m1CompatPackSession\s*,\s*null\s*\)|m1CompatPackSession\s*=\s*null\s*;)')
+        $disposeMatch = [regex]::Match($disposeBody, '\bsession\s*\.\s*Dispose\s*\(\s*\)')
+        if (-not $clearMatch.Success) {
+            $check2Issues += 'DisposeCompatPackSession 未把 Program.m1CompatPackSession 置 null —— 静态字段残留会让包 ALC 永不回收（brief T8 Step 3）'
+        }
+        elseif (-not $disposeMatch.Success) {
+            $check2Issues += 'DisposeCompatPackSession 未调用 session.Dispose()'
+        }
+        elseif ($clearMatch.Index -gt $disposeMatch.Index) {
+            $check2Issues += 'DisposeCompatPackSession 顺序错误：先 session.Dispose() 后清 m1CompatPackSession —— Dispose 抛异常时静态字段残留，必须“先清后放”'
+        }
     }
+}
+if ($check2Issues.Count -eq 0) {
+    Write-CheckResult -Name $check2Name -Passed $true -Detail '会话拆除路径无条件调用 ClearCompatibilityPlan；DisposeCompatPackSession 先清 m1CompatPackSession 再 session.Dispose()'
+}
+else {
+    Write-CheckResult -Name $check2Name -Passed $false -Detail ($check2Issues -join ' ; ')
 }
 
 # ---- 检查 3：CompatPackHost 不得再现投影静态 --------------------------------

@@ -1,4 +1,5 @@
 using System.Runtime.Loader;
+using System.Text;
 using Emuera.Compatibility.Packs;
 using GEmuera.Core.Compatibility;
 using GEmuera.Core.Compatibility.Packs;
@@ -17,6 +18,8 @@ public static class Program
 {
     public static int Main(string[] args)
     {
+        // 调用方按 UTF-8 解码 stdout；显式固定编码，避免中文错误文案随平台代码页漂移。
+        Console.OutputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
         if (args.Length != 1)
         {
             Console.Error.WriteLine("usage: CompatPackLegacyFacadeProbe <legacy-pack.dll>");

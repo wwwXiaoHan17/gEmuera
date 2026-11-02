@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Reflection;
 using System.Reflection.Metadata;
@@ -68,7 +69,9 @@ public class CompatPackLegacyFacadeTests
         Assert.Contains("Emuera.CompatPack", LegacyPackBinary.ReferencedAssemblyNames(directory.MainAssemblyPath));
         LegacyPackBinary.RewriteBindingToFacade(directory.MainAssemblyPath);
         IReadOnlyList<string> references = LegacyPackBinary.ReferencedAssemblyNames(directory.MainAssemblyPath);
-        Assert.Contains("Emuera", references);
+        // 拆分前旧包只按 'Emuera' 绑定：恰好一条，避免未来夹具新增真实 facade 引用后
+        // 出现两条同名 AssemblyRef 而 Contains 仍然通过（T8 review Minor #6）。
+        Assert.Equal(1, references.Count(name => string.Equals(name, "Emuera", StringComparison.Ordinal)));
         Assert.DoesNotContain("Emuera.CompatPack", references);
         // 拆分前旧包引用的 facade 身份是 1.824.0.0（不是契约程序集的 1.0.0.0）。
         Assert.Contains(
@@ -111,6 +114,21 @@ public class CompatPackLegacyFacadeTests
         {
             handle?.Unload();
         }
+    }
+
+    [Fact]
+    public void FacadeFixtureSurfaceHash_MatchesEngineAndManifest()
+    {
+        // 三处重复值（夹具 manifest 字面量、本类 ExpectedSurfaceHash、
+        // LegacySurfaceHashTests 的 pinned 常量）必须一致。T7 的算法/投影变更曾让三者
+        // 同时漂移（review Concern ④），这里把"三处同值"本身钉成测试，而不是靠人工同步。
+        Assert.Equal(ExpectedSurfaceHash, LegacySurfaceHash.ComputeV24SurfaceHash());
+
+        Assert.True(
+            CompatPackManifest.TryLoadFromAssembly(
+                typeof(LegacyFacadePack).Assembly, out CompatPackManifest? manifest, out IReadOnlyList<string> errors),
+            string.Join("; ", errors));
+        Assert.Equal(ExpectedSurfaceHash, manifest!.BaseSurfaceHash);
     }
 
     [Fact]
@@ -159,6 +177,9 @@ public class CompatPackLegacyFacadeTests
             FileName = DotnetHost(),
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            // 两端显式 UTF-8：探针输出含中文错误文案，默认代码页会让断言随平台漂移。
+            StandardOutputEncoding = Utf8NoBom,
+            StandardErrorEncoding = Utf8NoBom,
             UseShellExecute = false,
             CreateNoWindow = true,
         };
@@ -170,17 +191,45 @@ public class CompatPackLegacyFacadeTests
         startInfo.ArgumentList.Add(probePath);
         startInfo.ArgumentList.Add(packPath);
 
-        using Process process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("无法启动干净进程探针。");
-        string stdout = process.StandardOutput.ReadToEnd();
-        string stderr = process.StandardError.ReadToEnd();
-        if (!process.WaitForExit(120_000))
+        Process process;
+        try
         {
-            process.Kill(entireProcessTree: true);
-            Assert.Fail("干净进程探针超时：" + packPath);
+            process = Process.Start(startInfo)
+                ?? throw new InvalidOperationException("无法启动干净进程探针。");
         }
-        return new ProbeResult(process.ExitCode, stdout, stderr);
+        catch (Win32Exception exception)
+        {
+            // 缺 dotnet / DOTNET_HOST_PATH 时给出可操作的失败原因，而不是裸 Win32Exception
+            //（review Minor #1）。不静默 skip：探针是干净进程唯一证据，缺运行时应显式红。
+            throw new InvalidOperationException(
+                "无法启动干净进程探针（dotnet host = '" + startInfo.FileName + "'）：" + exception.Message
+                + "。请安装 .NET 8+ 运行时并把 dotnet 加入 PATH，或设置 DOTNET_HOST_PATH 指向 dotnet 可执行文件。",
+                exception);
+        }
+
+        using (process)
+        {
+            // 先启动异步读取再等待退出：ReadToEnd() 先于 WaitForExit 时，子进程写满
+            // 管道会与父进程互等，120s 超时永远走不到（review Minor #1）。
+            Task<string> stdout = process.StandardOutput.ReadToEndAsync();
+            Task<string> stderr = process.StandardError.ReadToEndAsync();
+            if (!process.WaitForExit(120_000))
+            {
+                process.Kill(entireProcessTree: true);
+                process.WaitForExit(5_000);
+                Task.WaitAll(new Task[] { stdout, stderr }, TimeSpan.FromSeconds(5));
+                Assert.Fail("干净进程探针超时（120s）：" + packPath);
+            }
+            // WaitForExit(int) 返回时异步流可能仍在刷新；无参重载等到输出完全排空。
+            process.WaitForExit();
+            return new ProbeResult(
+                process.ExitCode,
+                stdout.GetAwaiter().GetResult(),
+                stderr.GetAwaiter().GetResult());
+        }
     }
+
+    static readonly Encoding Utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
     static string DotnetHost()
     {

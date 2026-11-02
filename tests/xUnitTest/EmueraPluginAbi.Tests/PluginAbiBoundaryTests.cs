@@ -70,9 +70,10 @@ public class PluginAbiBoundaryTests
         // 不变量（T8）：facade 的 TypeForwardedTo 集合 == 契约程序集全 public 类型。
         // 契约程序集新增类型而漏补转发时，拆分前编译的包按 'Emuera' 绑定会解析失败；
         // 多转发 facade 不存在的类型则说明转发列表腐化。两个方向都由集合相等钉住。
+        // GetExportedTypes() 的语义是"程序集外可见类型"（含 nested public），不要再加
+        // type.IsPublic 过滤——那会漏掉 nested public 类型（review Minor #3）。
         Type[] contractTypes = typeof(Emuera.Compatibility.Packs.ICompatPack).Assembly
             .GetExportedTypes()
-            .Where(type => type.IsPublic)
             .OrderBy(type => type.FullName, StringComparer.Ordinal)
             .ToArray();
         Type[] forwarded = FacadeAssembly.GetForwardedTypes()
