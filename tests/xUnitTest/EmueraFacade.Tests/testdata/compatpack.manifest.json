@@ -3,7 +3,7 @@
   "packVersion": "1.0.0",
   "contractAbi": "1.0",
   "engineApi": "1.0",
-  "baseSurfaceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "baseSurfaceHash": "950dbeb9028a8a2fc73ac3699411a05b8e367458219b40bd862066c8902888c9",
   "capabilities": ["input.pointer-button.v1", "startup.continue-after-fault.v1"],
   "saveProfileId": "gemuera.hello",
   "variantSelections": { "SETBGIMAGE": "builtin:snake" },
