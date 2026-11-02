@@ -451,12 +451,24 @@ public class CompatPackManifestTests
         Assert.Equal(
             "^[a-z0-9][a-z0-9.\\-]*$",
             requiresItem.GetProperty("properties").GetProperty("packId").GetProperty("pattern").GetString());
-        Assert.True(requiresItem.GetProperty("properties").GetProperty("versionRange")
-            .TryGetProperty("pattern", out _));
+        string versionRangePattern = requiresItem.GetProperty("properties").GetProperty("versionRange")
+            .GetProperty("pattern").GetString()!;
+        // 与运行期 IsValidVersionRange 对齐：合法精确 SemVer 或四种区间；退化区间
+        //（min==max 但非双闭）由 schema 预先拒绝（运行期仍做语义比较兜底）。
+        Assert.Matches(versionRangePattern, "1.0.0");
+        Assert.Matches(versionRangePattern, "[1.0.0,2.0.0)");
+        Assert.Matches(versionRangePattern, "(1.0.0,2.0.0]");
+        Assert.Matches(versionRangePattern, "[1.0.0,2.0.0]");
+        Assert.Matches(versionRangePattern, "(1.0.0,2.0.0)");
+        Assert.Matches(versionRangePattern, "[1.0.0,1.0.0]");
+        Assert.DoesNotMatch(versionRangePattern, "[1.0.0,1.0.0)");
+        Assert.DoesNotMatch(versionRangePattern, "(1.0.0,1.0.0]");
+        Assert.DoesNotMatch(versionRangePattern, "(1.0.0,1.0.0)");
 
         JsonElement conflictItem = conflicts.GetProperty("properties").GetProperty("packs").GetProperty("items");
         Assert.Equal("^[a-z0-9][a-z0-9.\\-]*$", conflictItem.GetProperty("pattern").GetString());
 
+        Assert.True(overrides.GetProperty("uniqueItems").GetBoolean());
         JsonElement overrideItem = overrides.GetProperty("items");
         Assert.False(overrideItem.GetProperty("additionalProperties").GetBoolean());
         Assert.Equal(

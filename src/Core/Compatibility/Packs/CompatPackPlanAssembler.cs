@@ -30,6 +30,8 @@ public static class CompatPackPlanAssembler
     /// 宿主校验上下文（与加载期同一份事实源）：resolver 用它做 capability 闭包、v24 基线
     /// 保护与 METHOD 双形态闭包。选择显式传参而非内部自建 catalog：宿主在加载前已构造
     /// 该上下文（含 handler/变体/基线表面等真实引擎事实），内部重建会与加载期输入漂移。
+    /// 契约：<see cref="CompatPackValidationContext.BaselineProfileId"/> 必须等于
+    /// <see cref="CompatibilityPlan.ProfileId"/>（由同一会话基线构造），否则拒载。
     /// </param>
     public static bool TryAssemble(
         CompatibilityPlan baseline,
@@ -50,6 +52,18 @@ public static class CompatPackPlanAssembler
             assembled = baseline;
             errors = collected;
             return true;
+        }
+
+        // 组装上下文必须与会话基线同源：profile 身份漂移（如 v18 基线 + v24pure 上下文）
+        // 会让 resolver 用错误的基线事实裁决，属接线错误，fail-closed。空包集已在上方
+        // 原样返回基线（不消费 context），因此不受该约束影响。
+        if (!string.Equals(baseline.ProfileId, context.BaselineProfileId, StringComparison.Ordinal))
+        {
+            collected.Add("组装上下文与基线 profile 不一致：基线 " + baseline.ProfileId
+                + "，上下文 " + context.BaselineProfileId
+                + "（context 必须由同一会话基线构造）。");
+            errors = collected;
+            return false;
         }
 
         // resolver 先行：依赖/冲突/override/capability/双形态全部在这里定稿；组装器只读结果。

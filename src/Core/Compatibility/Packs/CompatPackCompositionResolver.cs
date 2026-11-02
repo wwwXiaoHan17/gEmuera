@@ -80,12 +80,15 @@ internal sealed class CompatSymbolKeyComparer : IComparer<CompatSymbolKey>
 ///   5. 合并 symbol states：同一最终状态可合并，不同最终状态必须有显式 override；
 ///   6. 显式 override/priority：只有声明 override 的包可覆盖；多个 override 取 priority 唯一
 ///      最高者，同 priority 拒载；override 目标必须是本次组合真实存在的符号，且不得覆盖
-///      v24 基线 instruction/function handler；
+///      v24 基线 instruction/function handler。priority 只在真实冲突需要仲裁时参与：多包
+///      最终状态一致（都 Hidden / 变体同值）按同态合并，owner 取 packId Ordinal 最小者；
 ///   7. 冲突检测：manifest conflicts 声明的包同时启用即拒载（priority 不能覆盖冲突）；
 ///   8. 无效果包：无任何 symbol/capability/variant 贡献的包不得进入最终组合（bundle 不在 v1）；
-///   9. 双形态闭包：METHOD 投影名在 instruction/function 两侧的最终状态必须一致
+///   9. 跨 kind 闭包：最终 Hidden 的指令（含 METHOD 投影的函数侧隐藏）不得与同名变体选择
+///      共存——隐藏后变体运行期静默无效果，且跨 kind 没有 override 仲裁通道，只能整组拒载；
+///  10. 双形态闭包：METHOD 投影名在 instruction/function 两侧的最终状态必须一致
 ///      （见 <see cref="ValidateDualFormClosure"/> 的拒载理由）；
-///  10. CompositionHash：有序 packId/version/PackSha256 + capability 闭包 + 最终 symbol 状态。
+///  11. CompositionHash：有序 packId/version/PackSha256 + capability 闭包 + 最终 symbol 状态。
 /// 本类不执行任何包贡献对象（只读 ValidatedDelta 与 manifest 声明）。
 /// </summary>
 public static class CompatPackCompositionResolver
@@ -132,6 +135,13 @@ public static class CompatPackCompositionResolver
                 collected.Add("包 " + manifest.PackId + " 的冻结差量 packId 与清单不一致："
                     + delta.PackId + "。");
             }
+            // 依赖版本匹配读 delta.PackVersion，CompositionHash/pack 行读 manifest.PackVersion：
+            // 两者漂移会让"被校验的版本"与"入账的版本"不同，必须在组合入口拒载。
+            if (!string.Equals(delta.PackVersion, manifest.PackVersion, StringComparison.Ordinal))
+            {
+                collected.Add("包 " + manifest.PackId + " 的冻结差量 packVersion 与清单不一致："
+                    + delta.PackVersion + " 与 " + manifest.PackVersion + "。");
+            }
             if (!byId.TryAdd(handle.PackId, handle))
             {
                 collected.Add("packId 重复：" + handle.PackId + "（同一包不能在一次组合中启用两次）。");
@@ -177,7 +187,10 @@ public static class CompatPackCompositionResolver
         Dictionary<CompatSymbolKey, CompatSymbolState> finalStates =
             MergeSymbolStates(claimsBySymbol, validOverrides, collected);
 
-        // 9. 双形态闭包（METHOD 投影名两侧同态；override 破坏镜像即拒载，见方法注释）。
+        // 9. 跨 kind 闭包（隐藏的指令 × 同名变体选择，跨包/跨 kind 无 override 通道）。
+        ValidateHideVariantCrossKind(finalStates, claimsBySymbol, context, collected);
+
+        // 10. 双形态闭包（METHOD 投影名两侧同态；override 破坏镜像即拒载，见方法注释）。
         ValidateDualFormClosure(finalStates, context, collected);
 
         if (collected.Count > 0)
@@ -189,7 +202,7 @@ public static class CompatPackCompositionResolver
         // 4. 拓扑排序：依赖先于依赖者，同层按 packId Ordinal（深度 = 最长依赖路径）。
         List<CompatPackHandle> orderedPacks = OrderPacks(packs, dependencies, hasCycle);
 
-        // 10. CompositionHash（有序 pack 身份 + capability 闭包 + 最终符号状态）。
+        // 11. CompositionHash（有序 pack 身份 + capability 闭包 + 最终符号状态）。
         string compositionHash = ComputeCompositionHash(orderedPacks, capabilityIds, finalStates);
         result = new CompatPackCompositionResult(orderedPacks, capabilityIds, finalStates.Values, compositionHash);
         errors = collected;
@@ -653,6 +666,76 @@ public static class CompatPackCompositionResolver
         TryResolveConflict(key, claims, validOverrides, finalStates, errors, message);
     }
 
+    /// <summary>
+    /// 跨 kind 闭包（T6 fix I-2）：变体选择以指令 handler 为消费目标，指令被隐藏后该选择
+    /// 在运行期静默零效果（plan 有选择、运行期无对象）。单包层 <see cref="CompatPackRules"/>
+    /// 已对同一组合 fail-closed；组合层对跨包组合同样拒载——跨 kind 没有 override 仲裁通道，
+    /// 唯一正确结果是整组拒绝。函数侧沿用规则层语义：METHOD 投影名的函数隐藏镜像为指令
+    /// 不可见（双形态闭包），因此以 effective hidden instruction 集合判断。
+    /// </summary>
+    static void ValidateHideVariantCrossKind(
+        IReadOnlyDictionary<CompatSymbolKey, CompatSymbolState> finalStates,
+        IReadOnlyDictionary<CompatSymbolKey, List<Claim>> claimsBySymbol,
+        CompatPackValidationContext context,
+        List<string> errors)
+    {
+        var hiddenInstructions = new HashSet<string>(StringComparer.Ordinal);
+        foreach (KeyValuePair<CompatSymbolKey, CompatSymbolState> entry in finalStates)
+        {
+            if (entry.Value.Kind != CompatSymbolStateKind.Hidden)
+                continue;
+            if (entry.Key.Kind == CompatSymbolKind.Instruction
+                || (entry.Key.Kind == CompatSymbolKind.Function
+                    && context.MethodProjectedInstructionNames.Contains(entry.Key.Name)))
+            {
+                hiddenInstructions.Add(entry.Key.Name);
+            }
+        }
+        if (hiddenInstructions.Count == 0)
+            return;
+
+        foreach (KeyValuePair<CompatSymbolKey, CompatSymbolState> entry in finalStates
+            .Where(pair => pair.Key.Kind == CompatSymbolKind.Variant)
+            .OrderBy(pair => pair.Key.Name, StringComparer.Ordinal))
+        {
+            string name = entry.Key.Name;
+            if (!hiddenInstructions.Contains(name))
+                continue;
+
+            var hideOwners = new SortedSet<string>(StringComparer.Ordinal);
+            AddOwners(claimsBySymbol,
+                new CompatSymbolKey(CompatSymbolKind.Instruction, name), CompatSymbolStateKind.Hidden, hideOwners);
+            if (context.MethodProjectedInstructionNames.Contains(name))
+            {
+                AddOwners(claimsBySymbol,
+                    new CompatSymbolKey(CompatSymbolKind.Function, name), CompatSymbolStateKind.Hidden, hideOwners);
+            }
+            var selectionOwners = new SortedSet<string>(StringComparer.Ordinal);
+            AddOwners(claimsBySymbol, entry.Key, CompatSymbolStateKind.VariantSelection, selectionOwners);
+
+            errors.Add("组合跨 kind 冲突：指令 " + name
+                + " 被包 " + string.Join("、", hideOwners) + " 隐藏，但同一组合仍声明变体选择 "
+                + entry.Key.ToContractString() + " = " + entry.Value.BuiltinVariant
+                + "（包 " + string.Join("、", selectionOwners)
+                + "）；hide 与 variant 选择不可共存（隐藏后变体在运行期静默无效果），整组拒载。");
+        }
+    }
+
+    static void AddOwners(
+        IReadOnlyDictionary<CompatSymbolKey, List<Claim>> claimsBySymbol,
+        CompatSymbolKey key,
+        CompatSymbolStateKind stateKind,
+        ISet<string> owners)
+    {
+        if (!claimsBySymbol.TryGetValue(key, out List<Claim>? claims))
+            return;
+        foreach (Claim claim in claims)
+        {
+            if (claim.State.Kind == stateKind)
+                owners.Add(claim.PackId);
+        }
+    }
+
     static bool TryResolveConflict(
         CompatSymbolKey key,
         List<Claim> claims,
@@ -661,6 +744,10 @@ public static class CompatPackCompositionResolver
         List<string> errors,
         string conflictMessage)
     {
+        // priority 只在"确实需要仲裁"时参与（评审 M-1 的文档边界）：同最终状态的多包声明
+        // 在 MergeSymbolStates 已按同态合并（owner 取 packId Ordinal 最小），不比较 priority；
+        // 只有 Present 多 owner / Present×Hidden / 变体异值这些真实冲突才检查最高 priority
+        // 唯一性，并列即拒载。两种口径都确定（合并 owner 仍进 CompositionHash）。
         if (!validOverrides.TryGetValue(key, out List<OverrideClaim>? overrides) || overrides.Count == 0)
         {
             errors.Add(conflictMessage);

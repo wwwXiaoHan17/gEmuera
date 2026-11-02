@@ -19,8 +19,9 @@ public class CompatPackAssemblyTests
     static string PackPath => typeof(HelloCompatPackFixture.HelloCompatPack).Assembly.Location;
 
     static CompatPackValidationContext Context(
-        IReadOnlyDictionary<string, CapabilityDescriptor>? capabilities = null)
-        => CompatPackCompositionTestData.Context(capabilities);
+        IReadOnlyDictionary<string, CapabilityDescriptor>? capabilities = null,
+        string? baselineProfileId = null)
+        => CompatPackCompositionTestData.Context(capabilities, baselineProfileId: baselineProfileId);
 
     static CompatibilityPlan Baseline() => BuiltInDialectCatalog.CreateLegacySessionPlan("v24pure");
 
@@ -354,13 +355,32 @@ public class CompatPackAssemblyTests
 
         var handle = ManualHandle("test.hide-noop", CompatPackCompositionTestData.ShaOf('c'),
             surfaceStates: new[] { HiddenInstruction("SETBGIMAGE") });
+        // context 必须与基线同源（profile 身份一致）：v18 基线配 v18 标签，v24 规则事实
+        // 仍由测试夹具提供（隐藏目标合法性由 v24 清单对账）。
         Assert.True(CompatPackPlanAssembler.TryAssemble(
-                v18, new[] { handle }, Context(), out var assembled, out var errors),
+                v18, new[] { handle }, Context(baselineProfileId: "v18"), out var assembled, out var errors),
             string.Join("; ", errors));
         Assert.False(assembled!.Dialect.TryGetInstruction("SETBGIMAGE", out _));
         // 表面与 v18 基线一致，但哈希计入隐藏差量（区别于未声明该隐藏的同字节包）。
         Assert.Equal(v18.Dialect.Instructions.Count, assembled.Dialect.Instructions.Count);
         Assert.NotEqual(v18.CanonicalHash, assembled.CanonicalHash);
+    }
+
+    [Fact]
+    public void Assemble_ContextBaselineProfileMismatch_Rejects()
+    {
+        // context 必须由同一会话基线构造：v18 基线 + 默认 v24pure 上下文会让 resolver 用
+        // 错误的基线事实裁决（profile 身份漂移属接线错误），组装期 fail-closed。
+        CompatibilityPlan v18 = BuiltInDialectCatalog.CreateLegacySessionPlan("v18");
+        var handle = ManualHandle("test.profile", CompatPackCompositionTestData.ShaOf('p'),
+            capabilityIds: new[] { "math.times-clamp.v1" });
+
+        Assert.False(CompatPackPlanAssembler.TryAssemble(
+            v18, new[] { handle }, Context(), out var assembled, out var errors));
+
+        Assert.Null(assembled);
+        Assert.Contains(errors!, error => error.Contains("profile")
+            && error.Contains("v18") && error.Contains("v24pure"));
     }
 
     [Fact]

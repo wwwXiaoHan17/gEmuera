@@ -395,6 +395,75 @@ public class CompatPackCompositionResolverTests
     }
 
     [Fact]
+    public void Resolve_CrossPackHideInstructionAndVariantSelection_Fails()
+    {
+        // 跨 kind 死契约：A 隐藏 instruction:X、B 选择 variant:X 时，plan 会同时含"X 不可见"
+        // 与"变体选择"，运行期变体静默无效果。单包层已由 CompatPackRules 拒载，组合层必须同判。
+        var hider = Handle("community.hider", 'h',
+            states: new[] { Hidden("SETBGIMAGE", "community.hider") });
+        var selector = CompatPackCompositionTestData.Handle(
+            "community.selector", CompatPackCompositionTestData.ShaOf('s'),
+            surfaceStates: new[]
+            {
+                CompatPackCompositionTestData.VariantSelection(
+                    "SETBGIMAGE", "builtin:snake", "community.selector"),
+            });
+
+        Assert.False(Resolve(new[] { hider, selector }, out var result, out var errors));
+
+        Assert.Null(result);
+        Assert.Contains(errors, error => error.Contains("SETBGIMAGE")
+            && error.Contains("community.hider")
+            && error.Contains("community.selector")
+            && error.Contains("不可共存"));
+    }
+
+    [Fact]
+    public void Resolve_CrossPackHideMethodProjectedFunctionAndVariantSelection_Fails()
+    {
+        // 函数侧语义与规则层一致：METHOD 投影名的 function 隐藏镜像为 instruction 不可见，
+        // 因而同样让同名变体选择成为死契约（双形态闭包也会独立报错，两条错误都保留）。
+        var context = Context(methodProjectedInstructionNames: new HashSet<string>(StringComparer.Ordinal)
+        {
+            "EXISTVAR",
+        });
+        var hider = Handle("community.hider", 'h',
+            states: new[] { CompatPackCompositionTestData.HiddenFunction("EXISTVAR", "community.hider") });
+        var selector = CompatPackCompositionTestData.Handle(
+            "community.selector", CompatPackCompositionTestData.ShaOf('s'),
+            surfaceStates: new[]
+            {
+                CompatPackCompositionTestData.VariantSelection(
+                    "EXISTVAR", "builtin:snake", "community.selector"),
+            });
+
+        Assert.False(Resolve(new[] { hider, selector }, out var result, out var errors, context));
+
+        Assert.Null(result);
+        Assert.Contains(errors, error => error.Contains("EXISTVAR")
+            && error.Contains("community.hider")
+            && error.Contains("community.selector")
+            && error.Contains("不可共存"));
+    }
+
+    [Fact]
+    public void Resolve_DeltaPackVersionMismatch_Fails()
+    {
+        // 防御性对账：依赖版本匹配/哈希用 manifest.PackVersion，若冻结差量版本漂移，
+        // "被校验的版本"与"入账的版本"会不同；必须在组合入口拒载。
+        var handle = CompatPackCompositionTestData.Handle(
+            "community.version", CompatPackCompositionTestData.ShaOf('v'),
+            new[] { CompatPackCompositionTestData.PresentInstruction("TEST_VERSION", "community.version") },
+            deltaPackVersion: "2.0.0");
+
+        Assert.False(Resolve(new[] { handle }, out var result, out var errors));
+
+        Assert.Null(result);
+        Assert.Contains(errors, error => error.Contains("packVersion")
+            && error.Contains("2.0.0") && error.Contains("1.0.0"));
+    }
+
+    [Fact]
     public void InvalidVersionRange_IsRejectedAtManifestParse_BeforeResolution()
     {
         // 版本范围在清单解析段即 fail-closed（与 Core SemanticVersionRange 同语义），非法范围

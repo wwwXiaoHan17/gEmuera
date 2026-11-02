@@ -430,8 +430,10 @@ public static class CompatPackRules
         // 供句柄携带、组装器消费（同内容同状态序列，诊断可复现）。同一符号被多条贡献
         // 以同一状态重复声明时只保留一条（如 hide 指令 ABS 与显式 hide 函数 ABS 都
         // 镜像出 function:ABS Hidden）；同键异态（Present vs Hidden）保留——单包内的
-        // add/hide 冲突已由上面的基线规则收集错误，跨包时由组装器先应用 remove、
-        // 再应用 add 折叠，即 Present 恒胜（CompatPackPlanAssembler 的折叠顺序）。
+        // add/hide 冲突已由上面的基线规则收集错误。T6 起跨包不再做 remove/add 折叠：
+        // 不同最终状态必须由显式 override 唯一最高 priority 仲裁，无 override 或
+        // priority 并列即整组拒载（CompatPackCompositionResolver）；不存在"Present
+        // 恒胜"（CompatPackPlanAssembler 只读 resolver 的最终状态）。
         var uniqueStates = new HashSet<(CompatSymbolKey Key, CompatSymbolStateKind Kind)>();
         var frozenStates = new List<CompatSymbolState>(states.Count);
         foreach (CompatSymbolState state in states

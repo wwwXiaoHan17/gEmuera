@@ -15,7 +15,8 @@ internal static class CompatPackCompositionTestData
 {
     public static CompatPackValidationContext Context(
         IReadOnlyDictionary<string, CapabilityDescriptor>? capabilities = null,
-        IReadOnlySet<string>? methodProjectedInstructionNames = null)
+        IReadOnlySet<string>? methodProjectedInstructionNames = null,
+        string? baselineProfileId = null)
         => new(
             new CompatVersion(1, 0),
             new CompatVersion(1, 0),
@@ -28,7 +29,8 @@ internal static class CompatPackCompositionTestData
             knownFunctionHandlers: EngineFunctionHandlers(),
             methodProjectedInstructionNames: methodProjectedInstructionNames
                 ?? new HashSet<string>(
-                    LegacyDialectInventories.MethodProjectedInstructionNames, StringComparer.Ordinal));
+                    LegacyDialectInventories.MethodProjectedInstructionNames, StringComparer.Ordinal),
+            baselineProfileId: baselineProfileId);
 
     public static HashSet<string> EngineInstructionHandlers()
     {
@@ -105,13 +107,14 @@ internal static class CompatPackCompositionTestData
         IEnumerable<CompatPackDependency>? requires = null,
         IEnumerable<string>? conflicts = null,
         IEnumerable<CompatPackOverride>? overrides = null,
-        string? saveProfileId = null)
+        string? saveProfileId = null,
+        string? deltaPackVersion = null)
     {
         var manifest = Manifest(
             packId, packVersion, requires, conflicts, overrides, variantSelections, saveProfileId);
         var delta = new ValidatedPackDelta(
             packId,
-            packVersion,
+            deltaPackVersion ?? packVersion,
             packSha256,
             capabilityIds ?? Array.Empty<string>(),
             surfaceStates ?? Array.Empty<CompatSymbolState>(),
