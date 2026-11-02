@@ -27,8 +27,9 @@ public class V18PackManifestTests
     public void GeneratedManifest_ReproducesBuiltinV18Surface()
     {
         string packPath = typeof(GemueraV18Pack.GemueraV18PackMarker).Assembly.Location;
+        using var directory = new IsolatedPackDirectory(packPath);
 
-        Assert.True(CompatPackLoader.TryLoad(packPath, V18PackContext(), out var handle, out var errors),
+        Assert.True(CompatPackLoader.TryLoad(directory.MainAssemblyPath, V18PackContext(), out var handle, out var errors),
             string.Join("; ", errors));
         Assert.Empty(errors);
         // 身份与差量方向自检：包只隐藏（v18 ⊆ v24 由生成清单取证），不声明 capability。

@@ -553,14 +553,46 @@ static class Program
             + "\"variantSelections\":{\"SETBGIMAGE\":\"builtin:snake\"}}";
         var manifest = CompatPackManifest.TryParse(smokeJson, out var parsed, out var manifestErrors)
             ? parsed! : throw new InvalidOperationException(string.Join("; ", manifestErrors));
+        // T5：手工句柄也必须携带冻结差量——先经规则层回放贡献一次并冻结，再构造句柄；
+        // 组装器此后只读 delta，不会二次执行 SmokeSurfaceContribution。
+        var pack = new ManualCompatPack(manifest, new ICompatPackContribution[] { new SmokeSurfaceContribution() });
+        if (!CompatPackLoader.ValidatePackEntry(
+                pack, manifest, PackValidationContext(), out _, out var validationErrors, out _, out var delta,
+                packSha256: new string('a', 64)))
+            throw new InvalidOperationException("smoke.pack validation failed: " + string.Join("; ", validationErrors));
         return new CompatPackHandle(
-            manifest, null!, "Z:/smoke-pack.dll", new string('a', 64), new string('a', 64),
-            new ISurfaceContribution[] { new SmokeSurfaceContribution() },
-            Array.Empty<ICapabilityContribution>(),
-            Array.Empty<IInstructionVariantContribution>(),
-            Array.Empty<IPolicyContribution>(),
-            new CompatPackLoadContext("Z:/smoke-pack.dll"));
+            manifest, pack, "Z:/smoke-pack.dll", new string('a', 64), delta!,
+            Array.Empty<CompatPackDependencyInfo>(),
+            new CompatPackLoadContext("Z:/smoke-pack.dll", new Dictionary<string, byte[]>()));
     }
+
+    /// <summary>手工 ICompatPack（不经 ALC）：仅用于冒烟夹具直接把贡献交给规则层冻结差量。</summary>
+    private sealed class ManualCompatPack : ICompatPack
+    {
+        public ManualCompatPack(CompatPackManifest manifest, IReadOnlyList<ICompatPackContribution> contributions)
+        {
+            Manifest = manifest;
+            Contributions = contributions;
+        }
+
+        public CompatPackManifest Manifest { get; }
+        public IReadOnlyList<ICompatPackContribution> Contributions { get; }
+    }
+
+    /// <summary>冒烟手工包/真实包的校验上下文（与宿主 BuildValidationContext 同口径的最小集）。</summary>
+    private static CompatPackValidationContext PackValidationContext() => new(
+        currentContractAbi: new CompatVersion(1, 0),
+        currentEngineApi: new CompatVersion(1, 0),
+        capabilities: GEmuera.Core.Compatibility.EngineCapabilityCatalog.All,
+        knownBuiltinVariantNames: new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
+        baselineInstructions: new HashSet<string>(
+            GEmuera.Core.Compatibility.LegacyDialectInventories.V24InstructionNames, StringComparer.Ordinal),
+        baselineFunctions: new HashSet<string>(
+            GEmuera.Core.Compatibility.LegacyDialectInventories.V24Functions.Select(entry => entry.Name),
+            StringComparer.Ordinal),
+        methodProjectedInstructionNames: new HashSet<string>(
+            GEmuera.Core.Compatibility.LegacyDialectInventories.MethodProjectedInstructionNames,
+            StringComparer.Ordinal));
 
     private static CompatibilityPlan AssembleSmokePackPlan()
     {
@@ -751,13 +783,15 @@ static class Program
         string json = "{\"packId\":\"" + packId + "\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1}";
         var manifest = CompatPackManifest.TryParse(json, out var parsed, out var manifestErrors)
             ? parsed! : throw new InvalidOperationException(string.Join("; ", manifestErrors));
+        var pack = new ManualCompatPack(manifest, new ICompatPackContribution[] { surface });
+        if (!CompatPackLoader.ValidatePackEntry(
+                pack, manifest, PackValidationContext(), out _, out var validationErrors, out _, out var delta,
+                packSha256: new string(shaFill, 64)))
+            throw new InvalidOperationException("multi-pack validation failed: " + string.Join("; ", validationErrors));
         return new CompatPackHandle(
-            manifest, null!, "Z:/" + packId + ".dll", new string(shaFill, 64), new string(shaFill, 64),
-            new[] { surface },
-            Array.Empty<ICapabilityContribution>(),
-            Array.Empty<IInstructionVariantContribution>(),
-            Array.Empty<IPolicyContribution>(),
-            new CompatPackLoadContext("Z:/" + packId + ".dll"));
+            manifest, pack, "Z:/" + packId + ".dll", new string(shaFill, 64), delta!,
+            Array.Empty<CompatPackDependencyInfo>(),
+            new CompatPackLoadContext("Z:/" + packId + ".dll", new Dictionary<string, byte[]>()));
     }
 
     private static void AssertMultiPackSurfaceReplay()

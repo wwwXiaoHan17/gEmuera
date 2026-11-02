@@ -1,6 +1,5 @@
 using System.Security.Cryptography;
 using System.Text;
-using Emuera.Compatibility.Packs;
 using GEmuera.Core.Runtime;
 
 namespace GEmuera.Core.Compatibility.Packs;
@@ -37,11 +36,9 @@ public static class CompatPackPlanAssembler
             return true;
         }
 
-        // 回放每个包的表面贡献，收集 register/hide（贡献确定性，校验期已回放过一次）。
-        // 二轮回放与校验期同纪律：包作者代码（getter / Apply）抛异常一律转为组装错误条目
-        // （含包 id + 贡献 id + 异常消息）并 fail-closed 返回 false——本类契约与加载器的
-        // "任何输入都不允许异常逃逸"对齐，不依赖宿主 ConfigureForLaunch 的顶层 catch。
-        // 非幂等包可能在校验期首轮回放通过、组装期第二轮抛异常，此处是最后一道防线。
+        // T5：表面差量、能力账本与变体选择全部读校验期冻结的 ValidatedPackDelta——贡献对象
+        // 只在规则层回放一次（ValidatePackEntry），组装期不再执行包作者代码。跨包冲突
+        //（同名注册、变体选择同键异值、save profile 同键异值）仍在本类按 fail-closed 汇总。
         var addedInstructions = new Dictionary<string, (string PackId, string Name)>(StringComparer.Ordinal);
         var addedFunctions = new Dictionary<string, (string PackId, string Name, string ReturnType)>(StringComparer.Ordinal);
         var removedInstructions = new HashSet<string>(StringComparer.Ordinal);
@@ -58,60 +55,18 @@ public static class CompatPackPlanAssembler
                 continue;
             }
 
+            // T5：组装器只读校验期冻结的 ValidatedPackDelta，不再回放包作者的贡献对象
+            //（设计 §6.6：校验一次、组装只读冻结 delta）。能力账本同样取 closure 展开结果。
+            ValidatedPackDelta delta = pack.ValidatedDelta;
             // 合成模块快照的 ModuleApiVersion 取包的 engineApi major：双轴模型下 engineApi 取代
             // 旧的 targetEngineApi（DialectModuleSnapshot 只有 int 字段；完整双轴版本由 manifest 承载）。
-            packModules.Add(new DialectModuleSnapshot(pack.Manifest.PackId, pack.Manifest.PackVersion, pack.Manifest.EngineApi.Major));
-            packHashLines.Add((pack.Manifest.PackId, pack.PackSha256));
+            packModules.Add(new DialectModuleSnapshot(delta.PackId, delta.PackVersion, pack.Manifest.EngineApi.Major));
+            packHashLines.Add((delta.PackId, delta.PackSha256));
 
-            foreach (string capability in pack.Manifest.Capabilities)
+            foreach (string capability in delta.CapabilityIds)
                 capabilities.Add(capability);
-            foreach (ICapabilityContribution contribution in pack.Capabilities)
-            {
-                if (contribution is null)
-                {
-                    collected.Add("包 " + pack.Manifest.PackId + " 的能力贡献列表含 null 元素。");
-                    continue;
-                }
-                try
-                {
-                    if (contribution.CapabilityIds is null)
-                        continue; // 规则校验已拒载此类包；此处防御性跳过
-                    foreach (string capability in contribution.CapabilityIds)
-                        capabilities.Add(capability);
-                }
-                catch (Exception exception)
-                {
-                    collected.Add("包 " + pack.Manifest.PackId + " 能力贡献 '" + DescribeContribution(contribution)
-                        + "' CapabilityIds 回放抛出异常：" + exception.Message);
-                }
-            }
-            foreach (IPolicyContribution contribution in pack.Policies)
-            {
-                if (contribution is null)
-                {
-                    collected.Add("包 " + pack.Manifest.PackId + " 的策略贡献列表含 null 元素。");
-                    continue;
-                }
-                try
-                {
-                    if (contribution.Policies is null)
-                        continue;
-                    foreach (EnginePolicyBinding binding in contribution.Policies)
-                        capabilities.Add(binding.CapabilityId);
-                }
-                catch (Exception exception)
-                {
-                    collected.Add("包 " + pack.Manifest.PackId + " 策略贡献 '" + DescribeContribution(contribution)
-                        + "' Policies 回放抛出异常：" + exception.Message);
-                }
-            }
 
-            // 表面差量只消费校验期冻结的规范化状态（含双形态镜像），不再回放包贡献对象
-            //（设计 §6.6：校验一次、组装只读冻结 delta）。手工构造的旧式句柄
-            //（SurfaceStates == null）保留一次兼容回放，仅测试/迁移期使用。
-            IReadOnlyList<CompatSymbolState> surfaceStates = pack.SurfaceStates
-                ?? ReplaySurfaceStatesForLegacyHandle(pack, collected);
-            foreach (CompatSymbolState state in surfaceStates)
+            foreach (CompatSymbolState state in delta.SurfaceStates)
             {
                 switch (state.Key.Kind)
                 {
@@ -120,9 +75,9 @@ public static class CompatPackPlanAssembler
                         {
                             if (addedInstructions.TryGetValue(state.Key.Name, out var instructionOwner))
                                 collected.Add("指令 " + state.Key.Name + " 被多个包注册："
-                                    + instructionOwner.PackId + " 与 " + pack.Manifest.PackId + "。");
+                                    + instructionOwner.PackId + " 与 " + delta.PackId + "。");
                             else
-                                addedInstructions[state.Key.Name] = (pack.Manifest.PackId, state.Key.Name);
+                                addedInstructions[state.Key.Name] = (delta.PackId, state.Key.Name);
                         }
                         else if (state.Kind == CompatSymbolStateKind.Hidden)
                         {
@@ -134,10 +89,10 @@ public static class CompatPackPlanAssembler
                         {
                             if (addedFunctions.TryGetValue(state.Key.Name, out var functionOwner))
                                 collected.Add("函数 " + state.Key.Name + " 被多个包注册："
-                                    + functionOwner.PackId + " 与 " + pack.Manifest.PackId + "。");
+                                    + functionOwner.PackId + " 与 " + delta.PackId + "。");
                             else
                                 addedFunctions[state.Key.Name] = (
-                                    pack.Manifest.PackId,
+                                    delta.PackId,
                                     state.Key.Name,
                                     string.IsNullOrWhiteSpace(state.ReturnType) ? "Unknown" : state.ReturnType);
                         }
@@ -147,8 +102,8 @@ public static class CompatPackPlanAssembler
                         }
                         break;
                     case CompatSymbolKind.Variant:
-                        // 变体选择沿用 manifest 的跨包合并语义（CollectVariantSelections）；
-                        // VariantSelection 状态作为 T5 ValidatedPackDelta 的冻结载体保留。
+                        // 变体选择从 delta.VariantSelections 合并（CollectVariantSelections）；
+                        // VariantSelection 状态仅为冻结载体保留，不在此二次登记。
                         break;
                 }
             }
@@ -225,91 +180,17 @@ public static class CompatPackPlanAssembler
         return true;
     }
 
-    /// <summary>
-    /// 旧式手工句柄（无校验期冻结状态）的一次性兼容回放：仅测试/迁移期路径，
-    /// 加载器产出的句柄恒携带 <see cref="CompatPackHandle.SurfaceStates"/>。回放语义与
-    /// T4 之前逐字等价（含"所有注册函数无条件镜像指令侧"），避免手工夹具的行为漂移；
-    /// T5 的 ValidatedPackDelta 接线后删除本方法。
-    /// </summary>
-    static IReadOnlyList<CompatSymbolState> ReplaySurfaceStatesForLegacyHandle(
-        CompatPackHandle pack,
-        List<string> collected)
-    {
-        var recorder = new AssemblySurfaceRecorder(collected, pack.Manifest.PackId);
-        foreach (ISurfaceContribution contribution in pack.Surface)
-        {
-            if (contribution is null)
-            {
-                collected.Add("包 " + pack.Manifest.PackId + " 的表面贡献列表含 null 元素。");
-                continue;
-            }
-            try
-            {
-                contribution.Apply(recorder.Instructions, recorder.Functions);
-            }
-            catch (Exception exception)
-            {
-                collected.Add("包 " + pack.Manifest.PackId + " 表面贡献 '" + DescribeContribution(contribution)
-                    + "' Apply 回放抛出异常：" + exception.Message);
-            }
-        }
-
-        var states = new List<CompatSymbolState>();
-        foreach (string name in recorder.RegisteredInstructions.Keys)
-        {
-            states.Add(new CompatSymbolState(
-                new CompatSymbolKey(CompatSymbolKind.Instruction, name),
-                CompatSymbolStateKind.Present, pack.Manifest.PackId, null, null));
-        }
-        foreach (KeyValuePair<string, string> entry in recorder.RegisteredFunctions)
-        {
-            states.Add(new CompatSymbolState(
-                new CompatSymbolKey(CompatSymbolKind.Function, entry.Key),
-                CompatSymbolStateKind.Present, pack.Manifest.PackId, entry.Value, null));
-            // 旧语义：函数注册无条件镜像指令侧声明（METHOD 投影的最宽口径）。
-            states.Add(new CompatSymbolState(
-                new CompatSymbolKey(CompatSymbolKind.Instruction, entry.Key),
-                CompatSymbolStateKind.Present, pack.Manifest.PackId, null, null));
-        }
-        foreach (string name in recorder.HiddenInstructions)
-        {
-            states.Add(new CompatSymbolState(
-                new CompatSymbolKey(CompatSymbolKind.Instruction, name),
-                CompatSymbolStateKind.Hidden, pack.Manifest.PackId, null, null));
-        }
-        foreach (string name in recorder.HiddenFunctions)
-        {
-            states.Add(new CompatSymbolState(
-                new CompatSymbolKey(CompatSymbolKind.Function, name),
-                CompatSymbolStateKind.Hidden, pack.Manifest.PackId, null, null));
-        }
-        return states;
-    }
-
-    /// <summary>
-    /// 错误文案兜底：贡献 id 本身也是包作者代码，取 id 抛异常时降级为占位描述——
-    /// 保证组装失败路径（构建错误条目时）不会再抛，fail-closed 止步于"返回 false + 错误清单"。
-    /// </summary>
-    static string DescribeContribution(ICompatPackContribution contribution)
-    {
-        try
-        {
-            return contribution.ContributionId ?? "";
-        }
-        catch (Exception exception)
-        {
-            return "<贡献 id 访问抛异常：" + exception.Message + ">";
-        }
-    }
-
-    static IReadOnlyDictionary<string, string> CollectVariantSelections(IReadOnlyList<CompatPackHandle> packs, List<string> errors)
+    static IReadOnlyDictionary<string, string> CollectVariantSelections(
+        IReadOnlyList<CompatPackHandle> packs,
+        List<string> errors)
     {
         // 同键同值幂等放行；同键不同值是跨包冲突，收集错误整体拒载——不做静默仲裁
         // （fail-closed；否则包排列顺序会影响组装哈希，破坏「同启用集同哈希」）。
+        // T5：变体选择读冻结 delta（manifest 副本已随校验冻结，组装期不再回看清单）。
         var selections = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (CompatPackHandle pack in packs)
         {
-            foreach (KeyValuePair<string, string> selection in pack.Manifest.VariantSelections)
+            foreach (KeyValuePair<string, string> selection in pack.ValidatedDelta.VariantSelections)
             {
                 if (selections.TryGetValue(selection.Key, out string? existing))
                 {
@@ -399,73 +280,4 @@ public static class CompatPackPlanAssembler
 
     static string Hash(string text)
         => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
-
-    /// <summary>组装期表面回放录制器：与校验期录制同语义，但把注册项归到包 id 名下。</summary>
-    sealed class AssemblySurfaceRecorder
-    {
-        readonly List<string> errors;
-        readonly string packId;
-
-        public AssemblySurfaceRecorder(List<string> errors, string packId)
-        {
-            this.errors = errors;
-            this.packId = packId;
-        }
-
-        public IInstructionSurfaceRegistry Instructions => new InstructionRecorder(this);
-        public IFunctionSurfaceRegistry Functions => new FunctionRecorder(this);
-
-        public Dictionary<string, string> RegisteredInstructions { get; } = new(StringComparer.Ordinal);
-        public Dictionary<string, string> RegisteredFunctions { get; } = new(StringComparer.Ordinal);
-        public HashSet<string> HiddenInstructions { get; } = new(StringComparer.Ordinal);
-        public HashSet<string> HiddenFunctions { get; } = new(StringComparer.Ordinal);
-
-        string Normalize(string name)
-        {
-            string normalized = (name ?? "").Trim().ToUpperInvariant();
-            if (normalized.Length == 0)
-                errors.Add("包 " + packId + " 表面贡献存在空名。");
-            return normalized;
-        }
-
-        sealed class InstructionRecorder : IInstructionSurfaceRegistry
-        {
-            readonly AssemblySurfaceRecorder owner;
-            public InstructionRecorder(AssemblySurfaceRecorder owner) => this.owner = owner;
-
-            public void RegisterInstruction(string name)
-            {
-                string normalized = owner.Normalize(name);
-                if (normalized.Length > 0)
-                    owner.RegisteredInstructions[normalized] = owner.packId;
-            }
-
-            public void HideInstruction(string name)
-            {
-                string normalized = owner.Normalize(name);
-                if (normalized.Length > 0)
-                    owner.HiddenInstructions.Add(normalized);
-            }
-        }
-
-        sealed class FunctionRecorder : IFunctionSurfaceRegistry
-        {
-            readonly AssemblySurfaceRecorder owner;
-            public FunctionRecorder(AssemblySurfaceRecorder owner) => this.owner = owner;
-
-            public void RegisterFunction(string name, string returnType)
-            {
-                string normalized = owner.Normalize(name);
-                if (normalized.Length > 0)
-                    owner.RegisteredFunctions[normalized] = string.IsNullOrWhiteSpace(returnType) ? "Unknown" : returnType;
-            }
-
-            public void HideFunction(string name)
-            {
-                string normalized = owner.Normalize(name);
-                if (normalized.Length > 0)
-                    owner.HiddenFunctions.Add(normalized);
-            }
-        }
-    }
 }

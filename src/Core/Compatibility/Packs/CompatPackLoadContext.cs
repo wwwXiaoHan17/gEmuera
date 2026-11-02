@@ -15,11 +15,14 @@ namespace GEmuera.Core.Compatibility.Packs;
 ///       去磁盘探测 Emuera.dll（那会重开信任边界缺口）；
 ///   2. netstandard/System.*/Microsoft.* → 宿主已加载的同名框架程序集（不在回调里发起
 ///      绑定；未命中返回 null 由运行时默认解析接手，BCL 名字无宿主泄露面）；
-///   3. 其余名字 → 包目录探测 &lt;name&gt;.dll，命中即仅在本 ALC 内加载；
+///   3. 其余名字 → 只从加载器传入的依赖字节图（file name → bytes）取；
+///      命中即 <see cref="AssemblyLoadContext.LoadFromStream"/> 仅在本 ALC 内加载；
 ///   4. 仍未命中 → 抛出 FileLoadException，不再返回 null 落回运行时默认解析（默认解析
 ///      可见宿主全部已加载程序集，等于信任边界 §6 的"可见面"约束失效）。
 ///   宿主内部程序集（如 GEmuera.Core）对包不可见：包需要 Core 数据类型时必须经契约
 ///   程序集暴露或签新契约，不允许 ALC 回落（2026-10-03 硬化，探针测试钉住）。
+/// T5 起依赖只从字节图装载（禁止在 Load() 中按路径二次读盘）：加载器在进入 ALC 之前
+/// 一次性读入包目录顶层全部 *.dll，哈希与装载因此共享同一份字节（TOCTOU 不变量）。
 /// </summary>
 internal sealed class CompatPackLoadContext : AssemblyLoadContext
 {
@@ -27,12 +30,14 @@ internal sealed class CompatPackLoadContext : AssemblyLoadContext
 
     static readonly string contractAssemblyName = contractAssembly.GetName().Name ?? "Emuera.CompatPack";
 
-    readonly string packDirectory;
+    readonly IReadOnlyDictionary<string, byte[]> dependencyBytes;
 
-    public CompatPackLoadContext(string packAssemblyPath)
+    public CompatPackLoadContext(
+        string packAssemblyPath,
+        IReadOnlyDictionary<string, byte[]> dependencyBytes)
         : base(name: "CompatPack:" + Path.GetFileNameWithoutExtension(packAssemblyPath), isCollectible: true)
     {
-        packDirectory = Path.GetDirectoryName(Path.GetFullPath(packAssemblyPath)) ?? string.Empty;
+        this.dependencyBytes = dependencyBytes ?? throw new ArgumentNullException(nameof(dependencyBytes));
     }
 
     protected override Assembly? Load(AssemblyName assemblyName)
@@ -65,14 +70,39 @@ internal sealed class CompatPackLoadContext : AssemblyLoadContext
             }
             return null;
         }
-        string candidate = Path.Combine(packDirectory, name + ".dll");
-        if (File.Exists(candidate))
-            return LoadFromAssemblyPath(candidate);
+
+        string fileName = name + ".dll";
+        if (TryGetDependencyBytes(fileName, out byte[] bytes))
+        {
+            // 每次装载必须使用新的 MemoryStream：同一个流不能被两个 Assembly 共享。
+            return LoadFromStream(new MemoryStream(bytes, writable: false));
+        }
         throw new FileLoadException(
             "兼容包绑定了允许清单之外的程序集 '" + name + "'：包只允许引用契约程序集"
             + "（" + contractAssemblyName + "；历史名 Emuera 经 facade TypeForwardedTo 兼容）、"
-            + "BCL（netstandard/System.*/Microsoft.*）与包目录内的依赖程序集；"
-            + "宿主内部程序集（如 GEmuera.Core）对包不可见。需要 Core 数据类型时请经契约程序集"
-            + "暴露或另签契约（docs/designs/compat-pack-interface.md §5.2）。", name);
+            + "BCL（netstandard/System.*/Microsoft.*）与包目录内的依赖程序集（按加载器读入的"
+            + "依赖字节图装载；宿主内部程序集如 GEmuera.Core 对包不可见）。需要 Core 数据类型时"
+            + "请经契约程序集暴露或另签契约（docs/designs/compat-pack-interface.md §5.2）。", name);
+    }
+
+    bool TryGetDependencyBytes(string fileName, out byte[] bytes)
+    {
+        if (dependencyBytes.TryGetValue(fileName, out byte[]? found) && found is not null)
+        {
+            bytes = found;
+            return true;
+        }
+        // Windows 文件系统大小写不敏感：依赖程序集名与文件名的 casing 可能不同，
+        // 回退到 OrdinalIgnoreCase 扫描（包目录通常只有少量 dll）。
+        foreach (KeyValuePair<string, byte[]> entry in dependencyBytes)
+        {
+            if (string.Equals(entry.Key, fileName, StringComparison.OrdinalIgnoreCase))
+            {
+                bytes = entry.Value;
+                return true;
+            }
+        }
+        bytes = null!;
+        return false;
     }
 }

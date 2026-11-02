@@ -3,9 +3,13 @@ using Emuera.Compatibility.Packs;
 namespace GEmuera.Core.Compatibility.Packs;
 
 /// <summary>
-/// 一次成功加载的不可变结果：清单、入口实例、分类贡献与哈希。AssemblySha256 是包程序集
-/// 文件字节哈希；PackSha256 在其上叠加内嵌清单原始字节（file‖resource），供 DOD-3 组装期
-/// 并入 CompatibilityPlan 哈希链——同包内容必同哈希（诊断可复现）。
+/// 一次成功加载的不可变结果：清单、入口实例、冻结差量、依赖闭包与哈希。
+/// <see cref="AssemblySha256"/> 是包程序集文件字节哈希；<see cref="PackSha256"/> 是加载器按
+/// "主程序集 + 内嵌清单原始字节 + 依赖闭包"计算的包内容哈希（规范格式见
+/// <see cref="CompatPackLoader"/>），供组装期并入 CompatibilityPlan 哈希链——同包内容必同哈希
+///（诊断可复现）。
+/// T5 起句柄不再保存"可再次执行的贡献对象"：组装器只读 <see cref="ValidatedDelta"/>，
+/// 校验期回放的贡献实例不会在组装期第二次执行。
 /// </summary>
 public sealed class CompatPackHandle : ICompatPackLease
 {
@@ -14,43 +18,38 @@ public sealed class CompatPackHandle : ICompatPackLease
         ICompatPack pack,
         string packAssemblyPath,
         string assemblySha256,
-        string packSha256,
-        IReadOnlyList<ISurfaceContribution> surface,
-        IReadOnlyList<ICapabilityContribution> capabilities,
-        IReadOnlyList<IInstructionVariantContribution> variants,
-        IReadOnlyList<IPolicyContribution> policies,
-        CompatPackLoadContext loadContext,
-        IReadOnlyList<CompatSymbolState>? surfaceStates = null)
+        ValidatedPackDelta validatedDelta,
+        IReadOnlyList<CompatPackDependencyInfo> dependencyClosure,
+        CompatPackLoadContext loadContext)
     {
         Manifest = manifest;
         Pack = pack;
         PackAssemblyPath = packAssemblyPath;
         AssemblySha256 = assemblySha256;
-        PackSha256 = packSha256;
-        Surface = surface;
-        Capabilities = capabilities;
-        Variants = variants;
-        Policies = policies;
+        ValidatedDelta = validatedDelta ?? throw new ArgumentNullException(nameof(validatedDelta));
+        Dependencies = dependencyClosure ?? Array.Empty<CompatPackDependencyInfo>();
         LoadContext = loadContext;
-        SurfaceStates = surfaceStates;
     }
 
     public CompatPackManifest Manifest { get; }
     public ICompatPack Pack { get; }
     public string PackAssemblyPath { get; }
     public string AssemblySha256 { get; }
-    public string PackSha256 { get; }
-    public IReadOnlyList<ISurfaceContribution> Surface { get; }
-    public IReadOnlyList<ICapabilityContribution> Capabilities { get; }
-    public IReadOnlyList<IInstructionVariantContribution> Variants { get; }
-    public IReadOnlyList<IPolicyContribution> Policies { get; }
+
+    /// <summary>包内容哈希（<see cref="ValidatedPackDelta.PackSha256"/> 的转发，组装期一等输入）。</summary>
+    public string PackSha256 => ValidatedDelta.PackSha256;
 
     /// <summary>
-    /// 校验期冻结的规范化表面状态（双形态闭包后的 Present/Hidden/VariantSelection）。
-    /// 加载器路径（<see cref="CompatPackLoader"/>）必然携带；手工构造的句柄可为 null，
-    /// 组装器对 null 保留一次旧式回放（仅测试/迁移期兼容，T5 的 ValidatedPackDelta 将移除）。
+    /// 校验期冻结的包差量：能力闭包、规范化表面状态、变体选择与语义哈希。组装器唯一输入；
+    /// 加载器产出的句柄必然非 null。
     /// </summary>
-    public IReadOnlyList<CompatSymbolState>? SurfaceStates { get; }
+    public ValidatedPackDelta ValidatedDelta { get; }
+
+    /// <summary>
+    /// 加载期依赖闭包诊断（不含主程序集；只含文件基名 + SHA256，不含完整路径），
+    /// 宿主写 <c>[LOAD]</c> 日志时据此复现包部署内容。
+    /// </summary>
+    public IReadOnlyList<CompatPackDependencyInfo> Dependencies { get; }
 
     internal CompatPackLoadContext LoadContext { get; }
 
@@ -67,6 +66,12 @@ public sealed class CompatPackHandle : ICompatPackLease
         }
     }
 }
+
+/// <summary>
+/// 加载期依赖闭包的一项诊断记录：文件基名 + 内容 SHA256。只记录 basename（不含完整路径），
+/// 供 <c>[LOAD]</c> 日志复现包部署内容；主程序集不进本列表（其哈希是 AssemblySha256）。
+/// </summary>
+public sealed record CompatPackDependencyInfo(string FileName, string Sha256);
 
 /// <summary>一次会话启用包集合的全量结果（全部成功才存在；任一包失败则整体为 null 并回退纯 v24）。</summary>
 public sealed class CompatPackSet : ICompatPackLease

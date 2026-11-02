@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- 负向夹具：入口类继承该依赖程序集的基类，依赖缺失/损坏时类型枚举必然失败。 -->
+    <ProjectReference Include="..\CompatPackTypeLoadDependency\CompatPackTypeLoadDependency.csproj" />
+    <ProjectReference Include="..\..\..\src\EmueraCompatPack\EmueraCompatPack.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="compatpack.manifest.json" LogicalName="compatpack.manifest.json" />
+  </ItemGroup>
+</Project>

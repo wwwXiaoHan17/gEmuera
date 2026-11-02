@@ -1,12 +1,15 @@
 using Emuera.Compatibility.Packs;
 
-namespace GEmuera.Core.Tests;
+namespace HelloCompatPackFixture;
 
 /// <summary>
-/// 测试用兼容包入口：本测试程序集内嵌 compatpack.manifest.json（见 csproj），由加载器
-/// 经独立 ALC 加载本程序集文件充当"真实包样本"。贡献集合只保留 v1 宿主真实消费的两类
-/// （表面 + 能力声明），且表面动作同时含"基线外注册"（SETANIMETIMER/SQL_CONNECT）与
-/// "基线内隐藏"（CALLSHARP/EXISTVAR）两向，供校验矩阵用真实 v24 基线做正反向断言。
+/// 测试用兼容包入口：本夹具程序集内嵌 compatpack.manifest.json（见 csproj），由加载器
+/// 经独立 ALC 加载本程序集文件充当"真实包样本"。T5 起测试程序集不再兼任包样本——
+/// 测试程序集引用 xunit/Core，其无关类型在隔离 ALC 中会触发 ReflectionTypeLoadException，
+/// 而加载器对该异常改为 fail-closed（包必须完整可枚举）。
+/// 贡献集合只保留 v1 宿主真实消费的两类（表面 + 能力声明），且表面动作同时含
+/// "基线外注册"（SETANIMETIMER/SQL_CONNECT）与"基线内隐藏"（CALLSHARP/EXISTVAR）两向，
+/// 供校验矩阵用真实 v24 基线做正反向断言。
 /// IInstructionVariantContribution/IPolicyContribution 为 v1 死契约（宿主零消费、加载即拒载，
 /// v2 预留），正向夹具不得携带——本文件保留 HelloVariantFactory/HelloPolicyContribution
 /// 仅供拒载向测试直接构造使用。

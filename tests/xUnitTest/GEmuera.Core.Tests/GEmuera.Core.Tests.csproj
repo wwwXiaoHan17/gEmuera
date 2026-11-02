@@ -25,12 +25,14 @@
     <ProjectReference Include="..\..\..\packs\gemuera.v18\gemuera.v18.csproj" />
     <!-- 契约夹具：只引用 Emuera 契约程序集的最小 ICompatPack 样本（ALC 正向用例复用）。 -->
     <ProjectReference Include="..\CompatPackContractOnlyFixture\CompatPackContractOnlyFixture.csproj" />
+    <!-- 加载器全链路夹具（T5 起测试程序集不再兼任包样本）：入口类 + 表面/能力贡献，
+         程序集只引用契约程序集，隔离目录加载时 GetTypes 可完整枚举。 -->
+    <ProjectReference Include="..\HelloCompatPackFixture\HelloCompatPackFixture.csproj" />
+    <!-- 类型加载失败负向夹具：入口类继承坏依赖基类，坏依赖字节导致 GetTypes 失败。 -->
+    <ProjectReference Include="..\CompatPackTypeLoadFixture\CompatPackTypeLoadFixture.csproj" />
     <!-- 宿主绑定探针（负向夹具）：故意引用 GEmuera.Core，钉住 ALC 允许清单 fail-closed 拒载。 -->
     <ProjectReference Include="..\CompatPackHostBindingProbe\CompatPackHostBindingProbe.csproj" />
   </ItemGroup>
-  <ItemGroup>
-    <!-- 本测试程序集兼任加载器测试的"真实包样本"：以规范资源名内嵌合法清单，
-         HelloCompatPack 实现契约入口，加载器经独立 ALC 加载本程序集文件验证全链路。 -->
-    <EmbeddedResource Include="testdata\compatpack.manifest.json" LogicalName="compatpack.manifest.json" />
-  </ItemGroup>
+  <!-- T5 起测试程序集不再兼任"包样本"（内嵌清单已移入 HelloCompatPackFixture）：
+       测试程序集引用 xunit/Core，隔离 ALC 的 GetTypes 会因无关类型加载失败而触发 fail-closed。 -->
 </Project>

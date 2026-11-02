@@ -32,7 +32,8 @@ public class CommunityPackTemplateTests
     public void ManifestOnlyTemplate_LoadsAndValidates()
     {
         string packPath = typeof(CommunityPackTemplate.CommunityPackTemplateMarker).Assembly.Location;
-        Assert.True(CompatPackLoader.TryLoad(packPath, CommunityContext(), out var handle, out var errors),
+        using var directory = new IsolatedPackDirectory(packPath);
+        Assert.True(CompatPackLoader.TryLoad(directory.MainAssemblyPath, CommunityContext(), out var handle, out var errors),
             string.Join("; ", errors));
 
         Assert.Empty(errors);
@@ -42,7 +43,7 @@ public class CommunityPackTemplateTests
         Assert.Equal(new CompatVersion(1, 0), handle.Manifest.EngineApi);
         Assert.False(handle.Manifest.UsedLegacyTargetEngineApi);
         Assert.IsType<ManifestOnlyCompatPack>(handle.Pack);
-        Assert.NotEmpty(handle.Surface);
+        Assert.NotEmpty(handle.ValidatedDelta.SurfaceStates);
         handle.Unload();
     }
 
@@ -50,16 +51,20 @@ public class CommunityPackTemplateTests
     public void ContractOnlyFixture_LoadsAndSurfaceApplies()
     {
         string packPath = typeof(CompatPackContractOnlyFixture.ContractOnlyPack).Assembly.Location;
-        Assert.True(CompatPackLoader.TryLoad(packPath, CommunityContext(), out var handle, out var errors),
+        using var directory = new IsolatedPackDirectory(packPath);
+        Assert.True(CompatPackLoader.TryLoad(directory.MainAssemblyPath, CommunityContext(), out var handle, out var errors),
             string.Join("; ", errors));
 
         Assert.Empty(errors);
         // 有入口类的包不走 manifest-only 分叉；表面贡献来自入口类代码而非清单合成。
         Assert.IsNotType<ManifestOnlyCompatPack>(handle!.Pack);
         // 包程序集被加载进独立 ALC，其自带类型与测试工程静态引用的同名类型不是同一 Type，
-        // 只能按包内唯一 ContributionId 断言入口贡献确实进入表面集合（契约类型跨 ALC 统一）。
-        var surface = Assert.Single(handle.Surface);
-        Assert.Equal("community.contract-fixture.surface", surface.ContributionId);
+        // 只能按冻结差量里的 (Key, State, OwnerPackId) 断言入口贡献确实进入表面集合
+        //（契约类型跨 ALC 统一；T5 起句柄不再保存可回放的贡献对象）。
+        Assert.Contains(handle.ValidatedDelta.SurfaceStates, state =>
+            state.Key == new CompatSymbolKey(CompatSymbolKind.Instruction, "SETANIMETIMER")
+            && state.Kind == CompatSymbolStateKind.Present
+            && state.OwnerPackId == "community.contract-fixture");
         handle.Unload();
     }
 }

@@ -6,14 +6,16 @@ using Xunit;
 namespace GEmuera.Core.Tests;
 
 /// <summary>
-/// DOD-3 hello-world 端到端（Core 层）：显式启用（加载测试程序集兼任的包）→ 表面变化 →
+/// DOD-3 hello-world 端到端（Core 层）：显式启用（加载 HelloCompatPackFixture）→ 表面变化 →
 /// plan 哈希变化 → 禁用（空包集）后与纯 v24 基线逐字节等价（同实例同哈希）。
+/// T5 起组装器只读句柄内的 ValidatedPackDelta（不再回放贡献对象）；手工句柄用例直接构造
+/// 冻结差量，钉住哈希组成/闭包账本/跨包冲突等分支。
 /// 引擎侧投影接线（handler/变体生效于解析器）不在本层，属宿主接线增量。
 /// </summary>
 [Collection("CompatPack")]
 public class CompatPackAssemblyTests
 {
-    static string PackPath => typeof(CompatPackAssemblyTests).Assembly.Location;
+    static string PackPath => typeof(HelloCompatPackFixture.HelloCompatPack).Assembly.Location;
 
     static CompatPackValidationContext Context() => new(
         new CompatVersion(1, 0),
@@ -60,7 +62,8 @@ public class CompatPackAssemblyTests
     public void EndToEnd_EnabledPack_ChangesSurfacePlanAndHash()
     {
         var baseline = Baseline();
-        Assert.True(CompatPackLoader.TryLoad(PackPath, Context(), out var handle, out var loadErrors),
+        using var directory = new IsolatedPackDirectory(PackPath);
+        Assert.True(CompatPackLoader.TryLoad(directory.MainAssemblyPath, Context(), out var handle, out var loadErrors),
             string.Join("; ", loadErrors));
         try
         {
@@ -117,8 +120,9 @@ public class CompatPackAssemblyTests
     public void EndToEnd_SamePackContent_SameAssembledHash()
     {
         // 同包内容同哈希（PackSha256 进哈希链；诊断可复现）。
-        Assert.True(CompatPackLoader.TryLoad(PackPath, Context(), out var first, out _));
-        Assert.True(CompatPackLoader.TryLoad(PackPath, Context(), out var second, out _));
+        using var directory = new IsolatedPackDirectory(PackPath);
+        Assert.True(CompatPackLoader.TryLoad(directory.MainAssemblyPath, Context(), out var first, out _));
+        Assert.True(CompatPackLoader.TryLoad(directory.MainAssemblyPath, Context(), out var second, out _));
         var baseline = Baseline();
         try
         {
@@ -150,7 +154,8 @@ public class CompatPackAssemblyTests
     {
         // 完整生命周期：启用 → 哈希变化 → 卸载 → 重新组装空集 → 回到基线哈希。
         var baseline = Baseline();
-        Assert.True(CompatPackLoader.TryLoad(PackPath, Context(), out var handle, out _));
+        using var directory = new IsolatedPackDirectory(PackPath);
+        Assert.True(CompatPackLoader.TryLoad(directory.MainAssemblyPath, Context(), out var handle, out _));
         Assert.True(CompatPackPlanAssembler.TryAssemble(baseline, new[] { handle! }, out var enabled, out _));
         Assert.NotEqual(baseline.CanonicalHash, enabled!.CanonicalHash);
 
@@ -163,8 +168,9 @@ public class CompatPackAssemblyTests
     public void Assemble_DuplicateRegistrationAcrossPacks_Rejects()
     {
         // 两个同包句柄（模拟两包注册同名指令）：跨包对账拒载。
-        Assert.True(CompatPackLoader.TryLoad(PackPath, Context(), out var first, out _));
-        Assert.True(CompatPackLoader.TryLoad(PackPath, Context(), out var second, out _));
+        using var directory = new IsolatedPackDirectory(PackPath);
+        Assert.True(CompatPackLoader.TryLoad(directory.MainAssemblyPath, Context(), out var first, out _));
+        Assert.True(CompatPackLoader.TryLoad(directory.MainAssemblyPath, Context(), out var second, out _));
         try
         {
             Assert.False(CompatPackPlanAssembler.TryAssemble(Baseline(), new[] { first!, second! }, out var assembled, out var errors));
@@ -186,16 +192,15 @@ public class CompatPackAssemblyTests
         Assert.Contains(errors!, e => e.Contains("null 元素"));
     }
 
-    // —— 以下用手工句柄（internal 构造点，经 InternalsVisibleTo）直接钉哈希组成与
-    //    跨包变体对账，不依赖程序集加载路径 ——
+    // —— 以下用手工句柄（internal 构造点，经 InternalsVisibleTo）直接钉哈希组成、
+    //    冻结差量账本与跨包对账，不依赖程序集加载路径 ——
 
     static CompatPackHandle ManualHandle(
         string packId,
         string packSha256,
         IReadOnlyDictionary<string, string>? variantSelections = null,
-        IReadOnlyList<ISurfaceContribution>? surface = null,
-        IReadOnlyList<ICapabilityContribution>? capabilities = null,
-        IReadOnlyList<IPolicyContribution>? policies = null,
+        IReadOnlyList<CompatSymbolState>? surfaceStates = null,
+        IReadOnlyList<string>? capabilityIds = null,
         string? saveProfileId = null)
     {
         // CompatPackManifest 的构造器在 Emuera 契约程序集内为 internal（测试程序集无
@@ -210,12 +215,26 @@ public class CompatPackAssemblyTests
         string json = "{\"packId\":\"" + packId + "\",\"packVersion\":\"1.0.0\",\"targetEngineApi\":1" + variantsJson + saveJson + "}";
         var manifest = CompatPackManifest.TryParse(json, out var parsed, out var parseErrors)
             ? parsed! : throw new InvalidOperationException(string.Join("; ", parseErrors));
+        var delta = new ValidatedPackDelta(
+            packId,
+            manifest.PackVersion,
+            packSha256,
+            capabilityIds ?? Array.Empty<string>(),
+            surfaceStates ?? Array.Empty<CompatSymbolState>(),
+            variantSelections ?? new Dictionary<string, string>(StringComparer.Ordinal));
         return new CompatPackHandle(
-            manifest, null!, "Z:/manual/" + packId + ".dll", packSha256, packSha256,
-            surface ?? Array.Empty<ISurfaceContribution>(), capabilities ?? Array.Empty<ICapabilityContribution>(),
-            Array.Empty<IInstructionVariantContribution>(), policies ?? Array.Empty<IPolicyContribution>(),
-            new CompatPackLoadContext("Z:/manual/" + packId + ".dll"));
+            manifest, null!, "Z:/manual/" + packId + ".dll", packSha256, delta,
+            Array.Empty<CompatPackDependencyInfo>(),
+            new CompatPackLoadContext("Z:/manual/" + packId + ".dll", new Dictionary<string, byte[]>()));
     }
+
+    static CompatSymbolState PresentInstruction(string name) => new(
+        new CompatSymbolKey(CompatSymbolKind.Instruction, name),
+        CompatSymbolStateKind.Present, "test.pack", null, null);
+
+    static CompatSymbolState HiddenInstruction(string name) => new(
+        new CompatSymbolKey(CompatSymbolKind.Instruction, name),
+        CompatSymbolStateKind.Hidden, "test.pack", null, null);
 
     static string ShaOf(char fill) => new(fill, 64);
 
@@ -266,14 +285,21 @@ public class CompatPackAssemblyTests
         Assert.NotEqual(planPlain!.CanonicalHash, planSelected!.CanonicalHash);
     }
 
-    // —— hide 基线不对称（P2-G）：v24 清单内、当前 profile 基线缺席的隐藏名 = 良性 no-op ——
-
-    sealed class HideSetBgImageSurface : ISurfaceContribution
+    [Fact]
+    public void Assemble_FrozenDeltaCapabilityIds_IncludeClosureExpansion()
     {
-        public string ContributionId => "test.hide-noop.surface";
-        public void Apply(IInstructionSurfaceRegistry instructions, IFunctionSurfaceRegistry functions)
-            => instructions.HideInstruction("SETBGIMAGE");
+        // T5：组装器只并集 delta.CapabilityIds（闭包展开已在规则层完成），不再回放贡献。
+        var handle = ManualHandle(
+            "test.closure", ShaOf('c'),
+            capabilityIds: new[] { "root.v1", "implied.v1" });
+
+        Assert.True(CompatPackPlanAssembler.TryAssemble(Baseline(), new[] { handle }, out var assembled, out var errors),
+            string.Join("; ", errors));
+        Assert.Contains("root.v1", assembled!.CapabilityIds);
+        Assert.Contains("implied.v1", assembled.CapabilityIds);
     }
+
+    // —— hide 基线不对称（P2-G）：v24 清单内、当前 profile 基线缺席的隐藏名 = 良性 no-op ——
 
     [Fact]
     public void Assemble_HideNameAbsentFromSessionBaseline_IsBenignNoOp()
@@ -283,7 +309,9 @@ public class CompatPackAssemblyTests
         CompatibilityPlan v18 = BuiltInDialectCatalog.CreateLegacySessionPlan("v18");
         Assert.False(v18.Dialect.TryGetInstruction("SETBGIMAGE", out _), "前置：SETBGIMAGE 不在 v18 基线。");
 
-        var handle = ManualHandle("test.hide-noop", ShaOf('c'), surface: new[] { new HideSetBgImageSurface() });
+        var handle = ManualHandle(
+            "test.hide-noop", ShaOf('c'),
+            surfaceStates: new[] { HiddenInstruction("SETBGIMAGE") });
         Assert.True(CompatPackPlanAssembler.TryAssemble(v18, new[] { handle }, out var assembled, out var errors),
             string.Join("; ", errors));
         Assert.False(assembled!.Dialect.TryGetInstruction("SETBGIMAGE", out _));
@@ -292,77 +320,6 @@ public class CompatPackAssemblyTests
         Assert.NotEqual(v18.CanonicalHash, assembled.CanonicalHash);
     }
 
-    // —— 组装段二轮回放异常安全（P1-2a）：校验期首轮回放通过、组装期第二轮抛异常的
-    //    非幂等贡献——TryAssemble 自身契约必须是"返回 false + 错误清单"而非抛异常，
-    //    不依赖宿主 ConfigureForLaunch 的顶层 catch ——
-    //    经手工句柄（internal 构造点，InternalsVisibleTo）构造，不经程序集加载路径。
-
-    sealed class ThrowingSurfaceContribution : ISurfaceContribution
-    {
-        public string ContributionId => "test.replay-throw.surface";
-        public void Apply(IInstructionSurfaceRegistry instructions, IFunctionSurfaceRegistry functions)
-            => throw new InvalidOperationException("surface-replay-boom");
-    }
-
-    sealed class ThrowingCapabilityContribution : ICapabilityContribution
-    {
-        public string ContributionId => "test.replay-throw.capability";
-        public IReadOnlyList<string> CapabilityIds => throw new InvalidOperationException("capability-replay-boom");
-    }
-
-    sealed class ThrowingPolicyContribution : IPolicyContribution
-    {
-        public string ContributionId => "test.replay-throw.policy";
-        public IReadOnlyList<EnginePolicyBinding> Policies => throw new InvalidOperationException("policy-replay-boom");
-    }
-
-    [Fact]
-    public void Assemble_SurfaceApplyThrows_RejectsWithoutExceptionEscaping()
-    {
-        var handle = ManualHandle("test.replay-throw", ShaOf('d'), surface: new[] { new ThrowingSurfaceContribution() });
-
-        var exception = Record.Exception(() =>
-        {
-            Assert.False(CompatPackPlanAssembler.TryAssemble(Baseline(), new[] { handle }, out var assembled, out var errors));
-            Assert.Null(assembled);
-            // 文案三要素：包 id + 贡献 id + 异常消息。
-            Assert.Contains(errors!, e => e.Contains("test.replay-throw")
-                && e.Contains("test.replay-throw.surface") && e.Contains("surface-replay-boom"));
-        });
-        Assert.Null(exception);
-    }
-
-    [Fact]
-    public void Assemble_CapabilityGetterThrows_RejectsWithoutExceptionEscaping()
-    {
-        var handle = ManualHandle("test.replay-throw", ShaOf('d'), capabilities: new[] { new ThrowingCapabilityContribution() });
-
-        var exception = Record.Exception(() =>
-        {
-            Assert.False(CompatPackPlanAssembler.TryAssemble(Baseline(), new[] { handle }, out var assembled, out var errors));
-            Assert.Null(assembled);
-            Assert.Contains(errors!, e => e.Contains("test.replay-throw")
-                && e.Contains("test.replay-throw.capability") && e.Contains("capability-replay-boom"));
-        });
-        Assert.Null(exception);
-    }
-
-    [Fact]
-    public void Assemble_PolicyGetterThrows_RejectsWithoutExceptionEscaping()
-    {
-        // 策略贡献经加载器路径已不可能到达组装段（v1 未接线、加载即拒载），本用例钉住
-        // 手工句柄/二轮回放路径的防御性契约（异常仍不得逃逸）。
-        var handle = ManualHandle("test.replay-throw", ShaOf('d'), policies: new[] { new ThrowingPolicyContribution() });
-
-        var exception = Record.Exception(() =>
-        {
-            Assert.False(CompatPackPlanAssembler.TryAssemble(Baseline(), new[] { handle }, out var assembled, out var errors));
-            Assert.Null(assembled);
-            Assert.Contains(errors!, e => e.Contains("test.replay-throw")
-                && e.Contains("test.replay-throw.policy") && e.Contains("policy-replay-boom"));
-        });
-        Assert.Null(exception);
-    }
     [Fact]
     public void Assemble_PackModuleIdsVariantsAndSaveProfile_AreCarriedInPlan()
     {
@@ -390,5 +347,4 @@ public class CompatPackAssemblyTests
         Assert.Null(assembled);
         Assert.Contains(errors!, e => e.Contains("saveProfileId 冲突"));
     }
-
 }

@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- 加载器全链路夹具：只引用契约程序集（包作者可见面），入口类 + 表面/能力贡献。
+         独立工程的意义（T5）：测试程序集自身引用 xunit/Core，若继续兼任"包样本"，
+         GetTypes 会因无关类型加载失败而触发 fail-closed；夹具工程只有契约依赖。 -->
+    <ProjectReference Include="..\..\..\src\EmueraCompatPack\EmueraCompatPack.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="compatpack.manifest.json" LogicalName="compatpack.manifest.json" />
+  </ItemGroup>
+</Project>

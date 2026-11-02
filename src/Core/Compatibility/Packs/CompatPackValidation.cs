@@ -6,6 +6,8 @@ namespace GEmuera.Core.Compatibility.Packs;
 /// 加载器校验所需的宿主输入（fail-closed 语义校验的数据源）。结构校验在契约程序集的
 /// CompatPackManifest 内完成；本上下文由宿主在会话组装期提供：engine capability 目录、
 /// 内置变体名录、v24 基线表面（对账用）、引擎 handler 名全集（register 对账用）。
+/// T5：包内容哈希（PackSha256）由加载器在进入语义校验前按依赖闭包计算，并随
+/// <see cref="ValidatedPackDelta"/> 冻结；本上下文只承载"引擎侧事实"，不承载包字节/路径。
 /// </summary>
 public sealed class CompatPackValidationContext
 {

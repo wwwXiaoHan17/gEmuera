@@ -224,9 +224,16 @@ internal static CompatPackLaunchResult ConfigureForLaunch(CompatibilityPlan base
                                                 + " contractAbi=" + handle.Manifest.ContractAbi
                                                 + " engineApi=" + handle.Manifest.EngineApi);
                                 }
+                                // T5 依赖闭包诊断：只记文件基名 + SHA256（不记完整路径），
+                                // 让发布门禁/联调据 [LOAD] 日志复现"加载的到底是哪些包文件"。
+                                string dependencyClosure = handle.Dependencies.Count == 0
+                                        ? "[]"
+                                        : "[" + string.Join(",", handle.Dependencies.Select(
+                                                dependency => dependency.FileName + ":" + dependency.Sha256)) + "]";
                                 global::GenericUtils.Info(
                                         $"[LOAD] CompatPack enabled: id={handle.Manifest.PackId} version={handle.Manifest.PackVersion} "
-                                        + $"contractAbi={handle.Manifest.ContractAbi} engineApi={handle.Manifest.EngineApi} sha256={handle.PackSha256}");
+                                        + $"contractAbi={handle.Manifest.ContractAbi} engineApi={handle.Manifest.EngineApi} sha256={handle.PackSha256} "
+                                        + $"dependencies={dependencyClosure}");
                         }
                         // 计划自身已携带 pack 模块白名单与 variantSelections；包程序集的存活
                         // 移交 CompatPackSession（随计划绑定会话，Stop/替换时确定性 UnloadAll）。

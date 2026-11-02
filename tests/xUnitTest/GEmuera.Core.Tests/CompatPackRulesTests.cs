@@ -1,6 +1,7 @@
 using Emuera.Compatibility.Packs;
 using GEmuera.Core.Compatibility;
 using GEmuera.Core.Compatibility.Packs;
+using HelloCompatPackFixture;
 using Xunit;
 
 namespace GEmuera.Core.Tests;
@@ -562,8 +563,8 @@ public class CompatPackRulesTests
         Assert.Contains(errors, e => e.Contains("conflict", StringComparison.OrdinalIgnoreCase));
     }
 
-    // —— R18：capability 闭包输出尚未接入 v1 组装器。规则层解析出 Require/Implies
-    //    展开的 id 后必须拒载，否则"规则通过、plan 缺 id"会静默漂移。——
+    // —— T5：capability closure（Requires/Implies 展开）结果直接冻结进
+    //    ValidatedPackDelta.CapabilityIds；R18 的"未显式声明即拒载"随组装器接线移除。——
 
     static CompatPackValidationContext ClosureContext()
     {
@@ -597,22 +598,29 @@ public class CompatPackRulesTests
     }
 
     [Fact]
-    public void Validate_ImpliesClosureNotWiredIntoV1Assembler_Rejects()
+    public void Validate_ImpliesClosure_ExpandsIntoValidatedDelta()
     {
-        // root.v1 implies implied.v1，但包里只显式写了 root.v1：解析结果会多出 implied.v1，
-        // 而 CompatPackPlanAssembler 只并集显式声明的 id → 必须拒载（fail-closed）。
-        Assert.False(CompatPackRules.Validate(
+        // root.v1 implies implied.v1，包里只显式写 root.v1：闭包结果必须进 delta（T5 起
+        // 组装器只并集 delta.CapabilityIds，不再要求作者重复声明）。
+        Assert.True(CompatPackRules.Validate(
             ManifestWithCapabilities("root.v1"),
             Array.Empty<ICompatPackContribution>(),
             ClosureContext(),
-            out var errors));
-        Assert.Contains(errors, e => e.Contains("implied.v1") && e.Contains("Implies 闭包输出"));
+            out var errors,
+            out _,
+            out var delta,
+            packSha256: new string('a', 64)), string.Join("; ", errors));
+
+        Assert.NotNull(delta);
+        Assert.Equal(new[] { "implied.v1", "root.v1" }, delta!.CapabilityIds.ToArray());
+        Assert.Equal(new string('a', 64), delta.PackSha256);
+        Assert.Matches("^[0-9a-f]{64}$", delta.DeltaSemanticHash);
     }
 
     [Fact]
-    public void Validate_RequiresClosureNotWiredIntoV1Assembler_Rejects()
+    public void Validate_RequiresClosure_ExpandsIntoValidatedDelta()
     {
-        // Requires 展开同理：required.v1 不会自动进 plan，必须显式声明。
+        // Requires 展开同理：required.v1 由闭包进入 delta，无需作者显式重复。
         var catalog = new Dictionary<string, CapabilityDescriptor>(StringComparer.Ordinal)
         {
             ["root-requires.v1"] = new(
@@ -628,23 +636,32 @@ public class CompatPackRulesTests
             new HashSet<string>(StringComparer.Ordinal),
             new HashSet<string>(StringComparer.Ordinal));
 
-        Assert.False(CompatPackRules.Validate(
+        Assert.True(CompatPackRules.Validate(
             ManifestWithCapabilities("root-requires.v1"),
             Array.Empty<ICompatPackContribution>(),
             context,
-            out var errors));
-        Assert.Contains(errors, e => e.Contains("required.v1") && e.Contains("闭包输出"));
+            out var errors,
+            out _,
+            out var delta), string.Join("; ", errors));
+
+        Assert.NotNull(delta);
+        Assert.Equal(new[] { "required.v1", "root-requires.v1" }, delta!.CapabilityIds.ToArray());
     }
 
     [Fact]
-    public void Validate_ExpandedCapabilityExplicitlyDeclared_Succeeds()
+    public void Validate_ExplicitAndExpandedCapability_Deduplicates()
     {
-        // 显式写出闭包 id 后，v1 组装器并集即可得到完整集合 → 放行。
+        // 显式写出的闭包 id 与展开结果重复时只入账一次（Ordinal 排序、不可变副本）。
         Assert.True(CompatPackRules.Validate(
             ManifestWithCapabilities("root.v1", "implied.v1"),
             Array.Empty<ICompatPackContribution>(),
             ClosureContext(),
-            out var errors), string.Join("; ", errors));
+            out var errors,
+            out _,
+            out var delta), string.Join("; ", errors));
+
+        Assert.NotNull(delta);
+        Assert.Equal(new[] { "implied.v1", "root.v1" }, delta!.CapabilityIds.ToArray());
     }
 
     // —— 双轴版本模型（contractAbi / engineApi）：major 必须相等、包 minor <= 引擎 minor，
@@ -838,4 +855,102 @@ public class CompatPackRulesTests
         Assert.Contains(errors, e => e.Contains("baseProfileId") && e.Contains("v24pure"));
     }
 
+    // —— T5：ValidatedPackDelta 组成与规范哈希 ——
+
+    [Fact]
+    public void Validate_ProducesFrozenValidatedDelta()
+    {
+        var surface = new StubSurfaceDo
+        {
+            Do = (instructions, functions) =>
+            {
+                instructions.RegisterInstruction("SETANIMETIMER");
+                functions.RegisterFunction("SQL_CONNECT", "Int64");
+                instructions.HideInstruction("CALLSHARP");
+            },
+        };
+        var capability = new StubCapability { CapabilityIds = new[] { "input.pointer-button.v1" } };
+        string sha = new string('c', 64);
+
+        Assert.True(
+            CompatPackRules.Validate(
+                Manifest(),
+                new ICompatPackContribution[] { surface, capability },
+                Context(),
+                out var errors,
+                out _,
+                out var delta,
+                packSha256: sha),
+            string.Join("; ", errors));
+
+        Assert.NotNull(delta);
+        Assert.Equal("test.rules", delta!.PackId);
+        Assert.Equal("1.0.0", delta.PackVersion);
+        Assert.Equal(sha, delta.PackSha256);
+        // CapabilityIds = 清单 + 贡献（本题无 Requires/Implies 展开），Ordinal 排序。
+        Assert.Equal(new[] { "input.pointer-button.v1", "math.times-clamp.v1" }, delta.CapabilityIds.ToArray());
+        Assert.Contains(delta.SurfaceStates, state =>
+            state.Key == new CompatSymbolKey(CompatSymbolKind.Instruction, "SETANIMETIMER")
+            && state.Kind == CompatSymbolStateKind.Present);
+        Assert.Contains(delta.SurfaceStates, state =>
+            state.Key == new CompatSymbolKey(CompatSymbolKind.Function, "SQL_CONNECT")
+            && state.Kind == CompatSymbolStateKind.Present
+            && state.ReturnType == "Int64");
+        Assert.Contains(delta.SurfaceStates, state =>
+            state.Key == new CompatSymbolKey(CompatSymbolKind.Instruction, "CALLSHARP")
+            && state.Kind == CompatSymbolStateKind.Hidden);
+        Assert.Equal("builtin:snake", delta.VariantSelections["SETBGIMAGE"]);
+        Assert.Matches("^[0-9a-f]{64}$", delta.DeltaSemanticHash);
+    }
+
+    [Fact]
+    public void Validate_Failure_ReturnsNullValidatedDelta()
+    {
+        // 能力目录为空 → 清单声明的 capability 未知 → 拒载；失败时不得产出半成品 delta。
+        var context = new CompatPackValidationContext(
+            new CompatVersion(1, 0),
+            new CompatVersion(1, 0),
+            new Dictionary<string, CapabilityDescriptor>(StringComparer.Ordinal),
+            new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
+            new HashSet<string>(StringComparer.Ordinal),
+            new HashSet<string>(StringComparer.Ordinal));
+
+        Assert.False(
+            CompatPackRules.Validate(
+                Manifest(), Array.Empty<ICompatPackContribution>(), context, out var errors, out _, out var delta));
+        Assert.NotEmpty(errors);
+        Assert.Null(delta);
+    }
+
+    [Fact]
+    public void ValidatedPackDelta_SemanticHash_IsOrderIndependent_AndFieldSensitive()
+    {
+        var stateA = new CompatSymbolState(
+            new CompatSymbolKey(CompatSymbolKind.Instruction, "SETANIMETIMER"),
+            CompatSymbolStateKind.Present, "test.delta", null, null);
+        var stateB = new CompatSymbolState(
+            new CompatSymbolKey(CompatSymbolKind.Function, "SQL_CONNECT"),
+            CompatSymbolStateKind.Present, "test.delta", "Int64", null);
+        var selections = new Dictionary<string, string>(StringComparer.Ordinal) { ["SETBGIMAGE"] = "builtin:snake" };
+        string sha = new string('d', 64);
+
+        var first = new ValidatedPackDelta(
+            "test.delta", "1.0.0", sha, new[] { "math.times-clamp.v1", "input.pointer-button.v1" },
+            new[] { stateB, stateA }, selections);
+        var second = new ValidatedPackDelta(
+            "test.delta", "1.0.0", sha, new[] { "input.pointer-button.v1", "math.times-clamp.v1" },
+            new[] { stateA, stateB }, selections);
+
+        Assert.Equal(first.DeltaSemanticHash, second.DeltaSemanticHash);
+        Assert.Equal(new[] { "input.pointer-button.v1", "math.times-clamp.v1" }, first.CapabilityIds.ToArray());
+        // 同语义、不同 PackSha256 / 表面状态 / 变体选择 → 语义哈希必须改变。
+        Assert.NotEqual(first.DeltaSemanticHash, new ValidatedPackDelta(
+            "test.delta", "1.0.0", new string('e', 64), first.CapabilityIds, first.SurfaceStates, selections)
+            .DeltaSemanticHash);
+        Assert.NotEqual(first.DeltaSemanticHash, new ValidatedPackDelta(
+            "test.delta", "1.0.0", sha, first.CapabilityIds, new[] { stateA }, selections).DeltaSemanticHash);
+        Assert.NotEqual(first.DeltaSemanticHash, new ValidatedPackDelta(
+            "test.delta", "1.0.0", sha, first.CapabilityIds, first.SurfaceStates,
+            new Dictionary<string, string>(StringComparer.Ordinal)).DeltaSemanticHash);
+    }
 }

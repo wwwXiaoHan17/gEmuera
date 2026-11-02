@@ -22,8 +22,7 @@ public static class CompatPackRules
     /// <summary>
     /// 清单与贡献的完整语义校验，并在通过时产出冻结的规范化表面状态
     /// （<see cref="CompatSymbolState"/>：双形态闭包后的 Present/Hidden/变体选择）。
-    /// 加载器把 <paramref name="surfaceStates"/> 放进 <see cref="CompatPackHandle"/>，
-    /// 组装器只消费它；校验失败的输入仍会返回已收集到的状态供诊断（调用方必须按 false 拒载）。
+    /// 校验失败的输入仍会返回已收集到的状态供诊断（调用方必须按 false 拒载）。
     /// </summary>
     public static bool Validate(
         CompatPackManifest manifest,
@@ -31,6 +30,27 @@ public static class CompatPackRules
         CompatPackValidationContext context,
         out IReadOnlyList<string> errors,
         out IReadOnlyList<CompatSymbolState> surfaceStates)
+        => Validate(manifest, contributions, context, out errors, out surfaceStates, out _);
+
+    /// <summary>
+    /// 清单与贡献的完整语义校验，并在通过时冻结 <see cref="ValidatedPackDelta"/>：
+    ///   - <see cref="ValidatedPackDelta.CapabilityIds"/> = 清单 + 贡献显式声明经 engine
+    ///     capability closure（Requires 递归、Implies 自动加入、ConflictsWith 拒载）后的结果；
+    ///   - <see cref="ValidatedPackDelta.SurfaceStates"/> = T4 双形态闭包后的规范态；
+    ///   - <see cref="ValidatedPackDelta.VariantSelections"/> = 清单变体选择的不可变副本；
+    ///   - <see cref="ValidatedPackDelta.DeltaSemanticHash"/> = 上述字段的规范文本哈希。
+    /// 校验失败时 <paramref name="validatedDelta"/> 为 null（调用方必须按 false 拒载）。
+    /// <paramref name="packSha256"/> 由加载器在语义校验前算好传入（含依赖闭包）；规则层直测
+    /// 未提供时为空串，表示"该哈希不由本层计算"。
+    /// </summary>
+    public static bool Validate(
+        CompatPackManifest manifest,
+        IReadOnlyList<ICompatPackContribution> contributions,
+        CompatPackValidationContext context,
+        out IReadOnlyList<string> errors,
+        out IReadOnlyList<CompatSymbolState> surfaceStates,
+        out ValidatedPackDelta? validatedDelta,
+        string? packSha256 = null)
     {
         ArgumentNullException.ThrowIfNull(manifest);
         ArgumentNullException.ThrowIfNull(contributions);
@@ -216,29 +236,15 @@ public static class CompatPackRules
         // capability 闭包（设计 §6.3）：Requires 递归存在且 Wired、Implies 自动加入、
         // ConflictsWith 任一出现即拒载。只对上方已验证为已知 Wired 的集合解析——未知/
         // DiagnosticOnly 已逐项收集，避免重复噪音；闭包失败同样 fail-closed。
-        if (!EngineCapabilityCatalog.TryResolveForPack(
-                context.Capabilities,
-                requestedCapabilities,
-                out CapabilityResolution closure,
-                out IReadOnlyList<string> closureErrors))
-        {
+        bool capabilityClosureResolved = EngineCapabilityCatalog.TryResolveForPack(
+            context.Capabilities,
+            requestedCapabilities,
+            out CapabilityResolution capabilityClosure,
+            out IReadOnlyList<string> closureErrors);
+        if (!capabilityClosureResolved)
             collected.AddRange(closureErrors);
-        }
-        else
-        {
-            // R18 fail-closed：v1 组装器（CompatPackPlanAssembler）只并集 manifest/贡献
-            // 显式声明的 id，闭包输出尚未接线。若解析结果里有未显式声明的 id（Requires/
-            // Implies 展开），规则会放行但 plan 缺该 id → 静默漂移，必须拒载；作者把 id
-            // 显式写进清单/贡献即可通过（闭包语义与 v1 组装器等价）。
-            foreach (string expandedId in closure.OrderedCapabilityIds)
-            {
-                if (requestedCapabilities.Contains(expandedId))
-                    continue;
-                collected.Add("包 " + manifest.PackId + " 的 capability 闭包展开出未显式声明的 id："
-                    + expandedId + "；v1 组装器尚未接线 Implies 闭包输出（Requires 展开同样不会进入 plan），"
-                    + "请在 manifest 或 capability 贡献中显式声明该 id。");
-            }
-        }
+        // T5：闭包输出不再要求作者显式重复声明（R18 已随组装器接线移除）——Requires/Implies
+        // 展开出的 id 直接冻结进 ValidatedPackDelta.CapabilityIds，组装器只并集这个冻结集合。
 
         // 变体选择对账：清单 variantSelections 的 builtin 值必须在内置变体名录；
         // 非 builtin 值 v1 不支持（自带变体贡献 v1 未接线、携带即拒载，v2 预留）；
@@ -432,6 +438,19 @@ public static class CompatPackRules
                 frozenStates.Add(state);
         }
         surfaceStates = frozenStates;
+
+        // T5：校验通过即冻结差量。CapabilityIds 取 capability closure 结果（含 Requires/
+        // Implies 展开；解析失败时退回显式集合，但 collected 已非空 → delta 恒为 null）。
+        // 失败时 validatedDelta = null：调用方必须按 false 拒载，不得使用半成品差量。
+        validatedDelta = collected.Count == 0
+            ? new ValidatedPackDelta(
+                manifest.PackId,
+                manifest.PackVersion,
+                packSha256 ?? string.Empty,
+                capabilityClosureResolved ? capabilityClosure.OrderedCapabilityIds : requestedCapabilities,
+                frozenStates,
+                manifest.VariantSelections)
+            : null;
 
         errors = collected;
         return collected.Count == 0;
