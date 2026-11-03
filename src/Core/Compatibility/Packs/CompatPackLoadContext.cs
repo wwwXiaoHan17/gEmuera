@@ -22,7 +22,9 @@ namespace GEmuera.Core.Compatibility.Packs;
 ///   宿主内部程序集（如 GEmuera.Core）对包不可见：包需要 Core 数据类型时必须经契约
 ///   程序集暴露或签新契约，不允许 ALC 回落（2026-10-03 硬化，探针测试钉住）。
 /// T5 起依赖只从字节图装载（禁止在 Load() 中按路径二次读盘）：加载器在进入 ALC 之前
-/// 一次性读入包目录顶层全部 *.dll，哈希与装载因此共享同一份字节（TOCTOU 不变量）。
+/// 按主程序集真实 AssemblyRef 递归推导包目录内的依赖闭包（主 DLL + 被引用到的同目录
+/// DLL），只读入这些文件的字节；哈希与装载因此共享同一份字节（TOCTOU 不变量）。目录内
+/// 未被引用的 DLL 由加载器按一包一目录拒载（I1），不会进入本 ALC 的依赖字节图。
 /// </summary>
 internal sealed class CompatPackLoadContext : AssemblyLoadContext
 {

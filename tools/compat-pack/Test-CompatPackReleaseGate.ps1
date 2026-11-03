@@ -35,7 +35,11 @@ param(
     [switch]$RequireSixGame,
     # 门禁自测：用提交在案的合成夹具（gate-self-test/）验证 Gate 1 判定逻辑本身，
     # 不跑桌面命令、不产生发布证据。governance 每次桌面门禁前自动调用。
-    [switch]$SelfTest
+    [switch]$SelfTest,
+    # 仅自测内部使用：把夹具根指到临时副本（"缺证据必须 exit 1"自身自检用）。
+    [string]$SelfTestFixtureRoot = '',
+    # 仅自测内部使用：嵌套自检子进程跳过自身探针，避免无限递归。
+    [switch]$SkipSelfTestProbe
 )
 
 Set-StrictMode -Version Latest
@@ -731,10 +735,18 @@ function Test-SixGameEvidence {
 # terminated、aborted、缺 plan 哈希、fallback 后续失败。
 
 function Invoke-GateSelfTest {
+    param([string]$FixtureRootOverride = '')
     $fixtureRoot = Join-Path $PSScriptRoot 'gate-self-test'
+    if (-not [string]::IsNullOrWhiteSpace($FixtureRootOverride)) {
+        $fixtureRoot = $FixtureRootOverride
+    }
     if (-not (Test-Path -LiteralPath $fixtureRoot -PathType Container)) {
         Write-Output ("[FAIL] 门禁自测夹具目录不存在: {0}" -f $fixtureRoot)
+        # B（final fix review 新破坏 2）：夹具级失败必须让 -SelfTest 退出码为 1，不能只
+        # 累加 FailureCount 后打印 PASS。SelfTestFailures 与 FailureCount 同时累加，
+        # 主分支对两个计数统一判定（fail-closed）。
         $script:FailureCount++
+        $script:SelfTestFailures++
         return
     }
     $cases = @(
@@ -752,7 +764,9 @@ function Invoke-GateSelfTest {
         $evidencePath = Join-Path (Join-Path $fixtureRoot $case.Dir) 'android-evidence.json'
         if (-not (Test-Path -LiteralPath $evidencePath -PathType Leaf)) {
             Write-Output ("[FAIL] 自测夹具缺失: {0}" -f $evidencePath)
+            # 同上：case 级夹具缺失也计入 SelfTestFailures，否则缺失证据会假绿。
             $script:FailureCount++
+            $script:SelfTestFailures++
             continue
         }
         $failureBefore = $script:FailureCount
@@ -783,6 +797,51 @@ function Invoke-GateSelfTest {
             }
         }
     }
+    if (-not $SkipSelfTestProbe) {
+        Invoke-GateSelfTestMissingCaseProbe -FixtureRoot $fixtureRoot
+    }
+}
+
+# -----------------------------------------------------------------------------
+# 自测的 fail-closed 自检（B）：删掉一个 case 的 evidence 后，-SelfTest 必须 exit 1。
+# 复制夹具到临时目录 → 子进程跑 -SelfTest（-SkipSelfTestProbe 防递归）→ 断言退出码为 1
+# 且输出含"自测夹具缺失"。只在临时目录操作，不改动入库夹具，也不产生发布证据。
+# -----------------------------------------------------------------------------
+function Invoke-GateSelfTestMissingCaseProbe {
+    param([string]$FixtureRoot)
+    $probeParent = Join-Path ([System.IO.Path]::GetTempPath()) ('compatpack-selftest-missing-' + [Guid]::NewGuid().ToString('N'))
+    $probeRoot = Join-Path $probeParent 'gate-self-test'
+    $output = ''
+    $exitCode = -1
+    try {
+        New-Item -ItemType Directory -Path $probeParent -Force | Out-Null
+        Copy-Item -LiteralPath $FixtureRoot -Destination $probeRoot -Recurse -Force
+        Remove-Item -LiteralPath (Join-Path (Join-Path $probeRoot 'fail-errors') 'android-evidence.json') -Force
+        $scriptPath = $PSCommandPath
+        if ([string]::IsNullOrWhiteSpace($scriptPath)) {
+            $scriptPath = Join-Path $PSScriptRoot 'Test-CompatPackReleaseGate.ps1'
+        }
+        $output = (& powershell -NoProfile -ExecutionPolicy Bypass -File $scriptPath -SelfTest -SelfTestFixtureRoot $probeRoot -SkipSelfTestProbe 2>&1 | Out-String)
+        $exitCode = $LASTEXITCODE
+    }
+    catch {
+        $output = $_.Exception.Message
+        $exitCode = -1
+    }
+    finally {
+        Remove-Item -LiteralPath $probeParent -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    $failClosed = ($exitCode -eq 1) -and ($output.IndexOf('自测夹具缺失', [StringComparison]::Ordinal) -ge 0) -and ($output.IndexOf('=== 结果: FAIL', [StringComparison]::Ordinal) -ge 0)
+    if ($failClosed) {
+        Write-Output '[PASS] 自测: case evidence 缺失 → exit 1（fail-closed 生效）'
+    }
+    else {
+        $script:SelfTestFailures++
+        Write-Output ("[FAIL] 自测: case evidence 缺失未按 fail-closed 退出（exit={0}）" -f $exitCode)
+        foreach ($line in @($output -split "\r?\n" | Select-Object -First 20)) {
+            Write-Output ("       | {0}" -f $line)
+        }
+    }
 }
 
 # -----------------------------------------------------------------------------
@@ -792,10 +851,12 @@ function Invoke-GateSelfTest {
 if ($SelfTest) {
     Write-Output '=== CompatPack 发布门禁自测（合成夹具，不是发布证据） ==='
     $script:SelfTestFailures = 0
-    Invoke-GateSelfTest
+    Invoke-GateSelfTest -FixtureRootOverride $SelfTestFixtureRoot
     Write-Output ''
-    if ($script:SelfTestFailures -gt 0) {
-        Write-Output ("=== 结果: FAIL（门禁自测 {0} 项不符合预期） ===" -f $script:SelfTestFailures)
+    # B：case/夹具级失败同时累加 SelfTestFailures 与 FailureCount；两个计数任一非零都
+    # 必须 exit 1（避免"打印 [FAIL] 却 PASS"的假绿）。
+    if (($script:SelfTestFailures -gt 0) -or ($script:FailureCount -gt 0)) {
+        Write-Output ("=== 结果: FAIL（门禁自测 {0} 项不符合预期，累计失败 {1}） ===" -f $script:SelfTestFailures, $script:FailureCount)
         exit 1
     }
     Write-Output '=== 结果: PASS（门禁自测全部符合预期） ==='

@@ -866,9 +866,11 @@ public static class CompatPackLoader
     /// &lt;依赖原始字节&gt;
     /// </code>
     /// 所有段都有显式长度前缀，因此 name/bytes 中出现 ':'、换行等字符也不会产生歧义；
-    /// 依赖闭包（而非仅主 DLL）入哈希，使"换掉包目录里的依赖"必然改变 PackSha256。
+    /// 依赖闭包（而非仅主 DLL）入哈希，使"换掉包目录里的依赖"必然改变 PackSha256；
+    /// 依赖按文件基名 Ordinal 排序、主 DLL 按 <paramref name="mainFileName"/> 排除，
+    /// 因此哈希与闭包枚举顺序无关（internal 供单元测试直接钉住该性质）。
     /// </summary>
-    static string ComputePackHash(
+    internal static string ComputePackHash(
         byte[] assemblyBytes,
         byte[] manifestBytes,
         IReadOnlyDictionary<string, byte[]> dependencyBytes,

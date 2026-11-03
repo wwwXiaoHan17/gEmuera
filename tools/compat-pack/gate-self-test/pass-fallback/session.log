@@ -1,0 +1,5 @@
+[LOAD] CompatPack enabled: id=pack.gemuera.v18 version=1.0.0 contractAbi=1.0 engineApi=1.0 sha256=abababababababababababababababababababababababababababababababab dependencies=[]
+[LOAD] CompatibilityPlan=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+[LOAD] Initialization complete, starting TITLE
+[LOAD] CompatPack projection failed; fallback to no-pack baseline
+[LOAD] CompatPack session unloaded after projection rollback: count=1

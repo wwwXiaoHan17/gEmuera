@@ -1,0 +1,7 @@
+# 本目录是"门禁判定逻辑"的合成测试夹具，必须随仓库提交（clean checkout 可复跑）。
+# 根 .gitignore 的 *.apk / *.log / logs/ 面向构建产物与运行日志；这里的例外只作用于
+# 本目录，不放宽全局规则。夹具（fake.apk + 合成日志）不是发布证据，不得进入发布归档。
+!fake.apk
+!*/session.log
+!pass/logs/
+!pass/logs/*.log

@@ -103,15 +103,18 @@ dotnet build packs/CommunityPackTemplate/CommunityPackTemplate.csproj -c Release
   `res://compat_packs` 调试根）。注意不是"每个游戏根目录下的 compat_packs"。
 - Android 端：`/storage/emulated/0/emuera/packs/`。
 
-启动器扫描安装根**顶层**与**每个一级子目录**里的 `*.dll`（不递归更深的层级、不联网
-下载）；在启动器中勾选后，所选路径经环境变量 `GEMUERA_COMPAT_PACKS`（分号分隔）传给
-引擎加载。
+v1 启动器**只扫描安装根顶层**的 `*.dll`（不递归子目录、不联网下载）；在启动器中勾选后，
+所选路径经环境变量 `GEMUERA_COMPAT_PACKS`（分号分隔）传给引擎加载。
 
 **每包独立目录（唯一支持的部署形态）**：把每个包（主 DLL + 它引用的私有依赖）放进
 安装根下的独立子目录 `<安装根>/<packId>/<你的包>.dll`。安装根顶层**只允许放一个包**的
 DLL——两个包同处一个目录时，两个包都会因"目录内含未被引用的 DLL"被拒载（fail-closed，
-不会静默挑一个哈希/依赖面）。也可用启动器的"手动路径/浏览"（或直接编辑 launcher.cfg 的
-`[compat_packs]` 节）指向子目录里的主 DLL。
+不会静默挑一个哈希/依赖面）。
+
+> **启动器扫描边界（2026-11-03）**：v1 启动器**不枚举一级子目录**，因此按
+> `<安装根>/<packId>/` 摆放的包不会出现在默认勾选列表里。请用启动器的"手动路径/浏览…"
+> （Android 可手输完整路径；或直接编辑 launcher.cfg 的 `[compat_packs]` 节）指向子目录
+> 里的主 DLL。一级子目录自动发现属于后续启动器增强，不是 v1 部署契约。
 
 > 升级提示：旧的"把多个单文件包平铺在安装根"的部署会在加载期被拒载。请按
 > `<安装根>/<packId>/` 分目录摆放；包内容哈希 `PackSha256` 只覆盖本包闭包，不再随

@@ -553,6 +553,54 @@ public class CompatPackLoaderTests
         }
     }
 
+    [Fact]
+    public void ComputePackHash_TwoDependencies_IsIndependentOfClosureEnumerationOrder()
+    {
+        // I1 的 AssemblyRef 闭包规则下，旧"两个无引用 dummy 依赖"的端到端夹具不再合法
+        // （未被引用的顶层 DLL 一律拒载），两依赖顺序无关属性改为直接钉规范哈希：
+        // 同一组依赖以不同插入/枚举顺序传入（模拟闭包发现顺序变化）必须得到同一
+        // PackSha256，且与独立规范推演（ExpectedPackSha256）逐字一致。
+        Assembly mainAssembly = typeof(CompatPackTypeLoadFixture.TypeLoadFailingPack).Assembly;
+        byte[] mainBytes = File.ReadAllBytes(mainAssembly.Location);
+        byte[] manifestBytes = EmbeddedManifestBytes(mainAssembly);
+        byte[] dependencyA = File.ReadAllBytes(
+            typeof(CompatPackTypeLoadDependency.TypeLoadDependencyBase).Assembly.Location);
+        byte[] dependencyB = File.ReadAllBytes(typeof(ICompatPack).Assembly.Location);
+        const string dependencyAName = "CompatPackTypeLoadDependency.dll";
+        const string dependencyBName = "Emuera.CompatPack.dll";
+        string mainName = Path.GetFileName(mainAssembly.Location);
+
+        var forward = new Dictionary<string, byte[]>(StringComparer.Ordinal)
+        {
+            [mainName] = mainBytes,
+            [dependencyAName] = dependencyA,
+            [dependencyBName] = dependencyB,
+        };
+        var reverse = new Dictionary<string, byte[]>(StringComparer.Ordinal)
+        {
+            [dependencyBName] = dependencyB,
+            [dependencyAName] = dependencyA,
+            [mainName] = mainBytes,
+        };
+
+        string first = CompatPackLoader.ComputePackHash(mainBytes, manifestBytes, forward, mainName);
+        string second = CompatPackLoader.ComputePackHash(mainBytes, manifestBytes, reverse, mainName);
+
+        Assert.Equal(first, second);
+        Assert.Equal(
+            ExpectedPackSha256(mainBytes, (dependencyAName, dependencyA), (dependencyBName, dependencyB)),
+            first);
+    }
+
+    static byte[] EmbeddedManifestBytes(Assembly assembly)
+    {
+        using Stream? stream = assembly.GetManifestResourceStream(CompatPackManifest.ManifestResourceName);
+        Assert.NotNull(stream);
+        using var memory = new MemoryStream();
+        stream!.CopyTo(memory);
+        return memory.ToArray();
+    }
+
     static string Sha256Reference(byte[] bytes)
         => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant();
 

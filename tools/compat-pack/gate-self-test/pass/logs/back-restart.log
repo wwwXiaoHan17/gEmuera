@@ -1,0 +1,4 @@
+[LOAD] CompatPack enabled: id=pack.gemuera.v18 version=1.0.0 contractAbi=1.0 engineApi=1.0 sha256=abababababababababababababababababababababababababababababababab dependencies=[]
+[LOAD] CompatibilityPlan=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+[LOAD] Initialization complete, starting TITLE
+[LOAD] session restart complete

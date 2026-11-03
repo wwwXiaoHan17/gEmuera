@@ -34,9 +34,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\compat-pack\Test-Compa
 ### 门禁自测（`-SelfTest`，2026-11-03 起）
 
 发布门禁的判定逻辑本身有一组提交在案的合成夹具（`tools/compat-pack/gate-self-test/`：
-fake.apk + 每例一份 android-evidence.json 与日志），验证"合法 PASS / 合规 fallback PASS /
+fake.apk + 每例一份 android-evidence.json 与日志；根 `.gitignore` 的 `*.apk`/`*.log`/`logs/`
+由该目录的例外 `.gitignore` 局部放开，不改全局规则），验证"合法 PASS / 合规 fallback PASS /
 2 Errors / Failures: 1 / terminated / aborted / 缺 plan 哈希 / fallback 后续失败"各自得到
-预期结论（9 例）：
+预期结论（9 个证据用例 + 1 个"某 case 的 android-evidence.json 缺失 → 自测必须 exit 1"
+的 fail-closed 自检，共 10 项）：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File tools\compat-pack\Test-CompatPackReleaseGate.ps1 -SelfTest
@@ -51,10 +53,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\compat-pack\Test-Compa
 
 | 项目 | 实测结果 |
 | --- | --- |
-| Core xUnit | 278 passed / 1 skipped / 0 failed（总 279） |
+| Core xUnit | 279 passed / 1 skipped / 0 failed（总 280） |
 | Facade xUnit | 78 passed / 0 failed |
 | Plugin ABI xUnit | 4 passed / 0 failed |
-| 门禁自测（-SelfTest） | 9/9 用例符合预期（合法 PASS×3 + 预期 FAIL×6） |
+| 门禁自测（-SelfTest） | 10/10 项符合预期（合法 PASS×3 + 预期 FAIL×6 + 缺 case evidence 必须 exit 1×1） |
 | 三冒烟 | Surface / Runtime / CoreContract 全 PASS |
 | lifecycle 守卫 | 4/4 检查通过 |
 | 宿主构建 dotnet build gemuera-c#.csproj -nodeReuse:false -m:1 | 0 error / 4 个既有 warning（KoujouPrefetchCache CS8600 ×1、AgentLlmMethods CS8632 ×3） |
@@ -153,7 +155,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\compat-pack\Test-Compa
    adb shell getprop ro.build.version.release
    adb shell getprop ro.product.cpu.abi
    ```
-   把游戏放到启动器扫描根（Android：/storage/emulated/0/emuera/），并把至少一个真实 pack 放到 /storage/emulated/0/emuera/packs/；Gate 1 要求日志出现 enabled 行，纯 baseline 启动不算通过。
+   把游戏放到启动器扫描根（Android：/storage/emulated/0/emuera/），并把至少一个真实 pack 放到 /storage/emulated/0/emuera/packs/；Gate 1 要求日志出现 enabled 行，纯 baseline 启动不算通过。按一包一目录摆放（`packs/<packId>/`）时，v1 启动器不扫描一级子目录，需在启动器"手动路径"里填主 DLL 全路径（Android 可手输）；gate 只认日志中的 enabled 行。
 3. 逐场景采集日志（三份都要保留原始文本）：
    - **start**：adb logcat -c 后从启动器冷启动游戏，等待输入等待，执行 adb logcat -d -v threadtime > logs\start.log。
    - **back-restart**：使用应用内 Back→Restart（或系统返回键退出后**不 force-stop 进程**立即重新进入），跑到输入等待，保存 logs\back-restart.log。
@@ -300,10 +302,10 @@ reports/compatpack/
 
 ## 9. 当前状态与已知限制（2026-11-03）
 
-- 桌面门禁：PASS（7/7 命令；Core 278 passed / 1 skipped、Facade 78 passed、ABI 4 passed；三冒烟与 lifecycle 4/4 全绿；门禁自测 9/9）。
+- 桌面门禁：PASS（7/7 命令；Core 279 passed / 1 skipped、Facade 78 passed、ABI 4 passed；三冒烟与 lifecycle 4/4 全绿；门禁自测 10/10）。
 - Gate 1 现在强制 plan 哈希：三份日志都必须出现 `[LOAD] CompatibilityPlan=<64 位小写 hex>` 且与 evidence.planHash 一致；早于 2026-11-03 的旧证据需要按新 schema 补 planHash 后重采。
 - 六游戏证据每条新增 `planHash`（必填，格式 + 与日志对账）。
-- 门禁判定逻辑本身由提交在案的合成夹具（tools/compat-pack/gate-self-test/，9 例）与 governance 自动自测覆盖；夹具不是发布证据。
+- 门禁判定逻辑本身由提交在案的合成夹具（tools/compat-pack/gate-self-test/，9 个证据用例 + 1 个缺证据 fail-closed 自检）与 governance 自动自测覆盖；夹具不是发布证据。
 - 宿主构建：0 error / 4 个既有 warning。
 - 本机**没有**真实 Android 设备与六游戏运行证据：-RequireAndroid / -RequireSixGame 会明确 FAIL（缺 APK/设备/日志/六游戏记录），不得假绿；这不代表产品失败，只代表发布验收尚未完成。
 - 合成 self-test 夹具（fake.apk / 合成日志）只用于验证门禁逻辑，**不是**发布证据，不得放入发布归档。

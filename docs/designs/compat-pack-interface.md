@@ -200,7 +200,7 @@ per-game 启用配置（launcher 侧：游戏 → 包列表）给出**包文件�
 ## 10. 开放问题（需裁定，不阻塞本文评审）
 
 1. ~~契约落点：EmueraFacade（推荐）vs src/Core 弱类型桥~~ **已裁定并落地：EmueraFacade**（§4 推荐项，PR #12 起实施）；**2026-10-03 起契约拆分至独立程序集 `Emuera.CompatPack`（src/EmueraCompatPack），facade 保留 TypeForwardedTo 兼容旧包**（§4 更新与拆分 ADR `docs/plans/2026-10-03-compatpack-contract-assembly-split-adr.md`）。
-2. 包安装位置约定：候选 `compat/packs/<packId>/`（桌面）与 `/storage/emulated/0/emuera/packs/`（Android）；**不得**放 export/（那是导出工作区）。**v1 启动器实现取 exe 同级 `compat_packs/`（桌面，另加编辑器 `res://compat_packs` 调试根）与 `/storage/emulated/0/emuera/packs/`（Android）为扫描根**，扫描顶层 `*.dll` 与一级子目录；**部署契约为一包一目录**（`<安装根>/<packId>/`，含私有依赖），加载器按"主 DLL + 真实 AssemblyRef 递归引用"推导闭包，目录内未被引用的 DLL 一律拒载（2026-11-03 I1 硬化）。与本条原候选的路径差异（compat_packs vs compat/packs）在第一方包分发定稿时统一。
+2. 包安装位置约定：候选 `compat/packs/<packId>/`（桌面）与 `/storage/emulated/0/emuera/packs/`（Android）；**不得**放 export/（那是导出工作区）。**v1 启动器实现取 exe 同级 `compat_packs/`（桌面，另加编辑器 `res://compat_packs` 调试根）与 `/storage/emulated/0/emuera/packs/`（Android）为扫描根**，只扫描顶层 `*.dll`（v1 不枚举一级子目录；一包一目录的主 DLL 须经启动器手动路径/浏览选择，子目录自动发现留待后续启动器增强）；**部署契约为一包一目录**（`<安装根>/<packId>/`，含私有依赖），加载器按"主 DLL + 真实 AssemblyRef 递归引用"推导闭包，目录内未被引用的 DLL 一律拒载（2026-11-03 I1 硬化）。与本条原候选的路径差异（compat_packs vs compat/packs）在第一方包分发定稿时统一。
 3. ~~launcher UI 的按游戏包选择交互~~ **已落地**：扫描候选 + 勾选（CheckButton 48px 触控行）+ 手动路径合并 + 桌面 FileDialog；默认推荐映射（六游戏矩阵 profile→包）仍待第一方包迁移（P-A 起）。
 4. v18 壳包是否携带全量清单于 manifest（417 指令/160 函数的单文件体积可接受性）。
 
@@ -242,12 +242,12 @@ per-game 启用配置（launcher 侧：游戏 → 包列表）给出**包文件�
 
 ### 12.10 2026-11-03 final fix wave（整支 final review 后的唯一修复轮）
 
-1. **依赖闭包按真实 AssemblyRef 推导（I1）**：`CompatPackLoader` 只把主程序集 + 它递归引用到的同目录顶层 DLL 纳入依赖字节图/ALC/`PackSha256`；目录顶层未被引用的 DLL 一律拒载（"包目录必须自包含且只含本包程序集"）。部署契约 = 一包一目录；共享扫描根里的邻居不再污染哈希/ALC，不能借 ALC 解析未启用包。`packs/README` 与 §10.2 同步改写，启动器候选扫描覆盖一级子目录但主 DLL 选择仍可走手动路径。
+1. **依赖闭包按真实 AssemblyRef 推导（I1）**：`CompatPackLoader` 只把主程序集 + 它递归引用到的同目录顶层 DLL 纳入依赖字节图/ALC/`PackSha256`；目录顶层未被引用的 DLL 一律拒载（"包目录必须自包含且只含本包程序集"）。部署契约 = 一包一目录；共享扫描根里的邻居不再污染哈希/ALC，不能借 ALC 解析未启用包。`packs/README` 与 §10.2 同步改写；v1 启动器候选扫描**只覆盖安装根顶层**，一包一目录的主 DLL 仍须经手动路径/浏览选择（与 README 的扫描边界说明一致）。
 2. **§6.7 fallback 双向（I3）**：`Process.Initialize` 把 Bind 与 Consume 收进 `Process.TryProjectCompatibilityPlanWithFallback` 的同一 fallback scope（先 Bind 再 Consume；Consume 抛错同样降级），反向 mismatch 不再在回退路径之前终止会话；失败异常携带 plan hash / profile / symbol。`ParserMediator.ConsumeCompatibilityPlan` 改为显式接收 plan（不再读进程静态）。
 3. **fallback 状态等价（M4/M5）**：`RebindProfileRegistries` 按 `UsesFloatTypeSystem` 裁剪 `varTokenDic`（RESULTF 等 capability 门控变量名不残留）；`ConfigureCompatibilityPlan` 的防守 catch 释放包 session、打同一条成功回退标记，并在 profile 创建成功后补 `[LOAD] CompatPack projection applied` 行。
 4. **空描述符计划 fail-closed（M6）**：`IdentifierDictionary.BindCompatibilityPlan` 对零 descriptor 计划返回 false（不再静默回退全量 registry）；需要无限制查找的旧调用点必须显式 `UnbindCompatibilityPlan()`。
 5. **单包自相矛盾与符号键（M7/M11）**：规则层拒载同一包对同一符号（含 METHOD 镜像形态）同时 add+hide；`CompatSymbolKey` 构造器与 `TryParse` 同一套归一/校验（拒绝 ':' 与内部空白），契约串恒可逆。
-6. **门禁证据（I2/M12）**：Gate 1 正向要求三份日志都含 `[LOAD] CompatibilityPlan=<64 位小写 hex>` 且与 `evidence.planHash` 一致；负向模式补复数 Errors/Failures/Exceptions（非零计数）与 terminated/aborted；自测夹具 `tools/compat-pack/gate-self-test/` 由 `-SelfTest` 与 governance 自动跑（9 例）。六游戏证据新增每条 `planHash`（格式 + 与日志对账）。
+6. **门禁证据（I2/M12）**：Gate 1 正向要求三份日志都含 `[LOAD] CompatibilityPlan=<64 位小写 hex>` 且与 `evidence.planHash` 一致；负向模式补复数 Errors/Failures/Exceptions（非零计数）与 terminated/aborted；自测夹具 `tools/compat-pack/gate-self-test/` 由 `-SelfTest` 与 governance 自动跑（9 个证据用例 + 1 个"case evidence 缺失必须 exit 1"自检，共 10 项；夹具经目录级 `.gitignore` 例外入库）。六游戏证据新增每条 `planHash`（格式 + 与日志对账）。
 7. **M8（capability Requires/Implies/ConflictsWith 入 baseSurfaceHash）park**：会再次改变 hash 规范并重算官方 hash，且当前 catalog 三个边集合生产数据为空；留待 engineApi minor 增强时连同 hash 规范标记一起做。
 
 ## 13. v1.1 实施增补（2026-10-02：数据包 + 会话所有权 + capability 激活解耦）
