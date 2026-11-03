@@ -92,6 +92,10 @@ Emuera 核心编译器以 C# 编写，为减少开发成本、方便 AI 对接�
 - **PowerShell 函数/别名命名避开内置别名**：别名解析优先于函数，`function Rd {...}` 会静默
   变成 `Remove-Item`。危险名至少包括 `rd`/`del`/`rm`/`mv`/`cp`/`ls`/`cd`/`cat`/`sc`/`gc`；
   脚本内联 `[IO.File]::ReadAllText(...)`，不要包成短名函数。
+- **GDScript / 独立 addon 验证**：纯 GDScript 逻辑（如 `addons/markdownlabel/`）用自建契约测试跑
+  `Godot --headless --path <项目根> --script res://tools/<suite>/run_tests.gd`（SceneTree 脚本，有失败 `quit(1)`；
+  参考 `tools/markdownlabel-tests/`，2026-11-03 起）；RichTextLabel/UI 布局类改动必须再用**窗口模式**脚本截图核对
+  （`--headless` 无渲染；用 `root.get_texture().get_image().save_png(...)` 生成 PNG 后人工查看），不要只信无头输出。
 - Android 相关结论必须以 APK 实测为准；桌面端仅用于调试。
 
 ## 架构速览

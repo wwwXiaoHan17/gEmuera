@@ -80,10 +80,7 @@ layout_mode = 2
 bbcode_enabled = true
 fit_content = true
 script = ExtResource("2_opcio")
-markdown_text = "This is a **test** of a simple [color=green]*MarkdownLabel*[/color] [u]set in the editor[/u]. Below is a MarkdownLabel displaying a text read from a file.
-
----
-"
+markdown_text = "This is a **test** of a simple [color=green]*MarkdownLabel*[/color] [u]set in the editor[/u]. Below is a MarkdownLabel displaying the file `example.md`.\n\n> Blockquotes are now supported!\n\n| Feature | Status |\n| :------ | -----: |\n| Tables | **OK** |\n| Quotes | **OK** |\n\n- [ ] Click this checkbox, then look at the file label below\n"
 h1 = SubResource("Resource_s4fot")
 h2 = SubResource("Resource_qroun")
 h3 = SubResource("Resource_dgj8w")
