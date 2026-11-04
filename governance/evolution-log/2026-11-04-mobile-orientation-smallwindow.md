@@ -9,8 +9,8 @@
 成果（截至记录时）：
 - [实测] Phase 1 GDUnit 取证确认 Godot 4.7 ScrollContainer 的 largest_child_min_size 缓存机制：子节点 custom_minimum_size 变化不刷新缓存 → vbar range 停留旧值 → 写 ScrollVertical 被钳到旧上限（child 4000 而 range 仍 400；显式 get_combined_minimum_size()/update_minimum_size()+queue_sort() 后 range=3400 可滚到底）。
 - 实现：视口变化收敛为单一 deferred 布局入口 + 强制刷新滚动范围缓存 + 真实 vbar range 对账（纯数学在 src/Core/Ui/ContentScrollReconciliation.cs，xUnit 15 例）；小窗方向控制器（Autoload，isInMultiWindowMode → 请求 SensorLandscape / 恢复 Sensor，纯策略 WindowOrientationPolicy xUnit 5 例）；布局诊断日志/状态面板 + 游戏内/启动器设置页开关（四语）。
-- [实测] 桌面/无头：dotnet build 0 error；Godot headless 启动 exit 0；GDUnit 12/12；xUnit Core 299 通过/1 跳过/300 总（基线 279+1 + 20 新增：ContentScroll 15 + WindowOrientation 5）、Facade 78、PluginAbi 4；governance 4/4 + 发布门禁 7/7；legacy 契约 6/6。
-- [实测] APK：`export/releases/gemuera-1.10.0-dev-20261104-debug.apk`（74,927,890 bytes；aapt2：versionCode=11、versionName=1.10.0-dev-20261104、screenOrientation=13/fullUser 阶段一不变；SHA256 `C3460FE97AA812794DF4F7DF24B48268B5A62C3CA97052B912BF3F5C6CAA8BAD`）。
+- [实测] 桌面/无头（复审返工后）：dotnet build 0 error；Godot headless 启动 exit 0；GDUnit 12/12（断言已强化为可失败）；xUnit Core 303 通过/1 跳过/304 总（基线 279+1 + 24 新增：ContentScroll 15 + WindowOrientation 9）、Facade 78、PluginAbi 4；governance 4/4 + 发布门禁 7/7；legacy 契约 6/6。
+- [实测] APK：`export/releases/gemuera-1.10.0-dev-20261104-debug.apk`（**75,057,090 bytes，复审返工后重新导出**；aapt2：versionCode=11、versionName=1.10.0-dev-20261104、screenOrientation=13/fullUser 阶段一不变；SHA256 `5EC9F6C445DC15D6BF30112FB8AAFA1114B516D336862935CEFEDAE12EF10D00`）。
 - [未验证] 真机行为（用户小米/Redmi HyperOS 3 / Android 16 待测）：滚动是否落底、小窗是否默认横屏、[ORIENTATION] result status=changed|ignored。
 
 ## 现象与根因
@@ -31,11 +31,26 @@
 
 - [实测] 基线（2026-11-05 00:1x）：构建 DLL 0:11:19；三冒烟 pass（CoreContractSmoke 需 DOTNET_ROLL_FORWARD=Major）；xUnit 280/78/4；governance 4/4 + 发布门禁 7/7；legacy 契约 6/6；legacy-runner v24pure Passed、semanticSha 4859125d3f984f087eb143dd83fa54f3b754055187cb87a9e6b166d4505754a1。
 - [实测] Phase 1 GDUnit：tests/GDUnit4Test/Layout/GodotScrollRangeBehaviorTest.gd 8/8；关键数值见 E:\tmp\gemuera-mobile-orientation\phase1-engine.md。
-- [实测] xUnit 新增：ContentScrollReconciliation 15/15、WindowOrientationPolicy 5/5；全量 Core 299 通过/1 跳过/300 总。
+- [实测] xUnit 新增：ContentScrollReconciliation 15/15、WindowOrientationPolicy 9/9；全量 Core 303 通过/1 跳过/304 总。
 - [实测] dotnet build 0 error（多次）；Godot headless --quit-after 120 exit 0（含 Autoload 控制器）。
 - [实测] GDUnit 全量 12/12（PrototypeHost 4 + Layout 8）。
 - [实测] legacy-runner v24pure 终验：status=Passed、semanticSha256=`4859125d3f984f087eb143dd83fa54f3b754055187cb87a9e6b166d4505754a1`（与基线一致，未破坏游戏启动链路）。
 - [未验证] 真机（小米/Redmi HyperOS 3）：旋转/小窗/落底/诊断面板；APK aapt2 待本次导出后复核。
+
+
+## 复审与返工（requesting-code-review + executing-plans 单次 fix pass）
+
+- 复审结论：**With fixes**，无 Critical；5 Important + 3 Minor。已按 executing-plans 做单次 fix pass，每项修复以 xUnit/GDUnit 或编译验证收口：
+  1. [Important] 方向结果判定不可靠（ScreenGetOrientation 在 Android 是 requestedOrientation 映射）→ 新增纯函数 `WindowOrientationPolicy.ClassifyLandscapeRequest` 按窗口宽高比判定 changed/already/ignored；TDD RED（CS0246）→ GREEN 4 例；控制器结果日志改用窗口 before/after 宽高。
+  2. [Important] 旋转未清普通拖拽状态 → `MarkViewportLayoutDirty` 调用既有 `ResetContentDragState()`（含按钮选中/输入/画布视觉复位）。
+  3. [Important] deferred 入口未显式布局 → 入口在 `ApplyContentScaleTransform` 后显式 `UpdateScaleBounds()`（幂等），再刷新滚动范围缓存。
+  4. [Important] GDUnit 8 例中 6 例弱断言（assert true）→ 全部改为具体数值断言（range 400 / 3400、scroll 400 / 3400、child 尺寸），引擎行为变化会红；**集成冒烟另见遗留 P1**：legacy-runner 不实例化 EmueraContent，直接运行 main.tscn 到 TITLE 但未捕获 [VIEWPORT]/[SCROLL] 日志（[未验证]，由首版 APK 真机日志覆盖）。
+  5. [Important] Java 异常被当 Fullscreen → `TryQueryMultiWindow` 检查 `JavaClassWrapper.GetException()` 与返回 Nil，异常按查询失败计（不计入成功、保留告警限流）。
+  6. [Minor] `UpdateScaleBounds` 内刷新缓存按 `layoutChanged` 门控，避免 pendingScroll 每帧循环/pinch 每事件触发布局。
+  7. [Minor] 旋转前在 `MarkViewportLayoutDirty` 快照当时 scroll/max（`layoutSnapshotScrollY/Max`），对账不再用 stale 的上一轮值。
+  8. [Minor] 面板开关即时生效（设置 setter → `EmueraContent.ApplyMobileLayoutPanelSetting`）、隐藏时不刷新、诊断关闭不拼字符串（`Wanted` 门控）、日志文案改中文符合 logging-convention。
+- 返工验证：xUnit Core 304 总 / 303 通过（新增 4 例）；GDUnit 12/12；dotnet build 0 error；APK 重新导出并复核 aapt2/hash（见上）。
+- 复审中「无法在桌面自证」的诚实结论：GDUnit 已把引擎缓存行为钉死为可失败断言，但产品级旋转路径仍需真机诊断日志确认（遗留 P1），不在本轮伪造证据。
 
 ## AI 表现复盘
 
