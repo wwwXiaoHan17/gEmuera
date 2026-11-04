@@ -51,6 +51,7 @@
   8. [Minor] 面板开关即时生效（设置 setter → `EmueraContent.ApplyMobileLayoutPanelSetting`）、隐藏时不刷新、诊断关闭不拼字符串（`Wanted` 门控）、日志文案改中文符合 logging-convention。
 - 返工验证：xUnit Core 304 总 / 303 通过（新增 4 例）；GDUnit 12/12；dotnet build 0 error；APK 重新导出并复核 aapt2/hash（见上）。
 - 复审中「无法在桌面自证」的诚实结论：GDUnit 已把引擎缓存行为钉死为可失败断言，但产品级旋转路径仍需真机诊断日志确认（遗留 P1），不在本轮伪造证据。
+- P1 补测（2026-11-05 01:45，fix 后、DLL 01:21:40）：临时 `level=info/file_sink=true` + 临时 launcher.cfg 指向 eratoho + `GEMUERA_FORCE_MOBILE_VIEWPORT=1` 窗口化运行 `main.tscn`（1280x720, 1800 帧）：进程 exit 0、游戏日志到 `total-before-title`（54 行），**仍未捕获 `[VIEWPORT]/[SCROLL]`**；随后立即还原 config.toml 与用户 launcher/settings（备份于 `E:\tmp\gemuera-mobile-orientation\userdata-backup-2`）。结论：**P1 保持未闭合**，原因疑似主场景直启时 `StartLegacySessionAsync` 之后的时间窗/日志 flush 未覆盖，真机诊断日志将提供首次产品级端到端证据。
 
 ## AI 表现复盘
 
