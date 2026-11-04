@@ -678,38 +678,18 @@ public partial class EmueraContent : Control
 		return false;
 	}
 
-	// 移动端画布：沿用游戏 emuera.config 的逻辑宽高，物理屏幕只做等比
-	// fit（宽度和高度同时约束）。旋转只重算缩放，不改变逻辑行宽/行高。
+	// 移动端画布入口：沿用游戏 emuera.config 的逻辑宽高，物理屏幕只做等比 fit。
+	// 具体布局统一走 ApplyViewportLayoutDeferred（单一布局入口），这里只标记 dirty，
+	// 避免「旋转帧内用过渡态 limit 同步写死滚动范围」。
+	// 调试：环境变量 GEMUERA_FORCE_MOBILE_VIEWPORT=1 时桌面也走移动端 fit 路径。
 	public void ApplyMobileViewportPolicy()
 	{
-		if (!IsMobilePlatform)
+		if (!IsMobilePlatform && !ForceMobileViewportForDiagnostics)
 			return;
 		if (Config.WindowX <= 0 || Config.WindowY <= 0)
 			return;
-
-		ApplySafeAreaLayout();
-
-		// 移动端沿用游戏 emuera.config 的逻辑画布尺寸，只按当前物理屏幕做
-		// 等比 fit（宽度和高度同时约束），不再把逻辑画布强制改成竖屏宽高。
-		// 这样桌面/手机的界面比例一致，横屏也不会被压成一条竖屏画布。
-		if (!contentScaleUserAdjusted
-			&& ContentSafeWidth > 0
-			&& ContentSafeHeight > 0
-			&& Config.DrawableWidth > 0
-			&& Config.WindowY > 0)
-		{
-			float fitWidth = ContentSafeWidth / (float)Config.DrawableWidth;
-			float fitHeight = ContentSafeHeight / (float)Config.WindowY;
-			float fit = Mathf.Clamp(Mathf.Min(fitWidth, fitHeight), 0.35f, 1.0f);
-			if (Mathf.Abs(fit - contentScale) > 0.001f)
-			{
-				ApplyContentScaleValue(fit);
-				UpdateScaleBounds();
-				ApplyContentScaleTransform();
-			}
-		}
-		QueueScaleBoundsUpdate();
-		consoleRenderSurface?.MarkDirty();
+		MarkViewportLayoutDirty();
+		ScheduleViewportLayoutApply();
 	}
 
 	// Drag sensitivity shared by the main console and quick-button panel. It is
@@ -3774,6 +3754,9 @@ public partial class EmueraContent : Control
 		scaledContentRoot.Position = Vector2.Zero;
 		scaledContentRoot.CustomMinimumSize = scaledSize;
 		scaledContentRoot.Size = scaledSize;
+		// Phase 1 取证：只改子节点 min size 不会刷新 ScrollContainer 的最小尺寸缓存，
+		// 必须显式刷新，否则 vbar 范围停留旧值、滚动被钳到旧上限。
+		RefreshScrollRangeCache();
 		SyncContentVerticalScrollRange();
 
 		if (scrollContainer != null)
@@ -6515,14 +6498,12 @@ public partial class EmueraContent : Control
 	}
 
 	// React to orientation/resolution changes. Android exports can resize when
-	// system UI or rotation changes.
+	// system UI or rotation changes. 只标记 dirty；安全区/缩放/滚动范围统一在
+	// deferred 单入口里按「先刷新引擎最小尺寸缓存，再用真实 range 对账」完成。
 	void OnViewportSizeChanged()
 	{
-		ApplyMobileViewportPolicy();
-		ApplySafeAreaLayout();
-		VirtualMouse.Active?.RefreshViewportBounds();
-		QueueScaleBoundsUpdate();
-		consoleRenderSurface?.MarkDirty();
+		MarkViewportLayoutDirty();
+		ScheduleViewportLayoutApply();
 	}
 
 	// Public scale entry point used by Scalepad. It keeps the viewport center
@@ -7721,6 +7702,9 @@ public partial class EmueraContent : Control
 	// This is especially important after button rendering on Android.
 	void ProcessContentScrollCorrection()
 	{
+		// 布局未稳定期间禁止用过渡态 limit 回写滚动目标（否则会把正确目标钳小）。
+		if (viewportLayoutDirty)
+			return;
 		if (scrollContainer == null || !desiredContentScrollValid || pendingScroll || contentDragActive || contentInertiaActive)
 			return;
 		if (scrollContainer.ScrollHorizontal == desiredContentScrollHorizontal && scrollContainer.ScrollVertical == desiredContentScrollVertical)
