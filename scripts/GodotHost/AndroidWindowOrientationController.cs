@@ -45,7 +45,7 @@ public partial class AndroidWindowOrientationController : Node
 		}
 		catch (Exception ex)
 		{
-			GenericUtils.Warn(EmueraLogCategory.UI, () => "[ORIENTATION] restore failed -> " + ex.GetType().Name + ": " + ex.Message);
+			MobileLayoutDiagnostics.Warn("[ORIENTATION] restore failed -> " + ex.GetType().Name + ": " + ex.Message);
 		}
 	}
 
@@ -62,13 +62,14 @@ public partial class AndroidWindowOrientationController : Node
 		if (!TryQueryMultiWindow(out bool isMultiWindow))
 		{
 			if (failureWarnings++ < MaxFailureWarnings)
-				GenericUtils.Warn(EmueraLogCategory.UI, () => "[ORIENTATION] query failed -> AndroidRuntime/getActivity/isInMultiWindowMode unavailable");
+				MobileLayoutDiagnostics.Warn("[ORIENTATION] query failed -> AndroidRuntime/getActivity/isInMultiWindowMode unavailable");
 			return;
 		}
 		failureWarnings = 0;
 		WindowLayoutKind current = isMultiWindow ? WindowLayoutKind.MultiWindow : WindowLayoutKind.Fullscreen;
 		OrientationRequest request = WindowOrientationPolicy.Decide(previous, current);
 		previous = current;
+		MobileLayoutDiagnostics.Trace("[ORIENTATION] state -> multiWindow=" + isMultiWindow);
 		if (request == OrientationRequest.None)
 			return;
 		RequestOrientation(request, isMultiWindow ? "enter_multi_window" : "exit_multi_window");
@@ -87,12 +88,11 @@ public partial class AndroidWindowOrientationController : Node
 		}
 		catch (Exception ex)
 		{
-			GenericUtils.Warn(EmueraLogCategory.UI, () => "[ORIENTATION] request failed -> reason=" + reason + " " + ex.GetType().Name + ": " + ex.Message);
+			MobileLayoutDiagnostics.Warn("[ORIENTATION] request failed -> reason=" + reason + " " + ex.GetType().Name + ": " + ex.Message);
 			return;
 		}
 		lastRequestedLandscape = request == OrientationRequest.SensorLandscape;
-		GenericUtils.Info(EmueraLogCategory.UI, () =>
-			"[ORIENTATION] request -> reason=" + reason
+		MobileLayoutDiagnostics.PublishOrientation("[ORIENTATION] request -> reason=" + reason
 			+ " target=" + target
 			+ " before=" + before
 			+ " window=" + windowBefore);
@@ -107,8 +107,7 @@ public partial class AndroidWindowOrientationController : Node
 		int after = (int)DisplayServer.ScreenGetOrientation();
 		Vector2I windowAfter = DisplayServer.WindowGetSize();
 		string status = after == (int)target ? "changed" : "ignored";
-		GenericUtils.Info(EmueraLogCategory.UI, () =>
-			"[ORIENTATION] result -> reason=" + reason
+		MobileLayoutDiagnostics.PublishOrientation("[ORIENTATION] result -> reason=" + reason
 			+ " target=" + target
 			+ " after=" + after
 			+ " window=" + windowAfter

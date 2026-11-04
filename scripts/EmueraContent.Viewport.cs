@@ -20,6 +20,7 @@ public partial class EmueraContent : Control
 	bool viewportLayoutApplyScheduled;
 	ulong viewportLayoutSerial;
 	int lastViewportScrollMax = -1;
+	MobileLayoutStatePanel mobileLayoutStatePanel;
 
 	// 视口/安全区/方向变化时立即调用：重置进行中的触摸/惯性状态，标记 dirty。
 	void MarkViewportLayoutDirty()
@@ -60,6 +61,7 @@ public partial class EmueraContent : Control
 		if (!GodotObject.IsInstanceValid(this) || serial != viewportLayoutSerial)
 			return;
 		ReconcileContentScrollAfterLayout();
+		RefreshMobileLayoutPanel();
 		VirtualMouse.Active?.RefreshViewportBounds();
 		consoleRenderSurface?.MarkDirty();
 		viewportLayoutDirty = false;
@@ -116,12 +118,10 @@ public partial class EmueraContent : Control
 		scrollContainer.ScrollVertical = target;
 		RememberDesiredContentScroll(targetHorizontal, target);
 		lastViewportScrollMax = nextMax;
-		GenericUtils.Info(EmueraLogCategory.UI, () =>
-			"[VIEWPORT] apply -> window=" + DisplayServer.WindowGetSize()
+		MobileLayoutDiagnostics.PublishLayout("[VIEWPORT] apply -> window=" + DisplayServer.WindowGetSize()
 			+ " viewport=" + scrollContainer.Size + " safe=" + ContentSafeRect
 			+ " scale=" + contentScale.ToString("0.###"));
-		GenericUtils.Info(EmueraLogCategory.UI, () =>
-			"[SCROLL] reconcile -> layoutY=" + layoutY
+		MobileLayoutDiagnostics.PublishScroll("[SCROLL] reconcile -> layoutY=" + layoutY
 			+ " scaledExtentY=" + scaledExtentY
 			+ " viewportY=" + viewportY
 			+ " engineMax=" + engineMax
@@ -129,5 +129,18 @@ public partial class EmueraContent : Control
 			+ " target=" + target
 			+ " atBottom=" + wasAtBottom
 			+ " status=" + (target == nextMax || !wasAtBottom ? "ok" : "short"));
+	}
+
+	// 排障面板：设置开启时挂一个左上角浮层（默认不创建、不渲染、不改布局）。
+	void RefreshMobileLayoutPanel()
+	{
+		bool enabled = MobileLayoutDiagnosticsSettings.PanelEnabled;
+		if (enabled && (mobileLayoutStatePanel == null || !GodotObject.IsInstanceValid(mobileLayoutStatePanel)))
+		{
+			mobileLayoutStatePanel = new MobileLayoutStatePanel { Name = "MobileLayoutStatePanel" };
+			AddChild(mobileLayoutStatePanel);
+		}
+		if (mobileLayoutStatePanel != null && GodotObject.IsInstanceValid(mobileLayoutStatePanel))
+			mobileLayoutStatePanel.Visible = enabled;
 	}
 }
