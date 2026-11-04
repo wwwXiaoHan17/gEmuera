@@ -52,7 +52,7 @@ Run: `$GODOT --headless --path . --build-solutions --quit`（按 Global Constrai
 Expected: `.godot/mono/temp/bin/Debug/gemuera-c#.dll` 时间戳更新；输出 `baseline\build.txt`。
 
 - [ ] **Step 3: 跑三冒烟并记录**
-Run: `dotnet run --project tools/dialect-inventory/LegacyDialectSurfaceSmoke`、`dotnet run --project tools/dialect-inventory/LegacyDialectRuntimeSmoke`、`dotnet run --project tools/core-contracts/CoreContractSmoke.csproj`
+Run: `dotnet run --project tools/dialect-inventory/LegacyDialectSurfaceSmoke`、`dotnet run --project tools/dialect-inventory/LegacyDialectRuntimeSmoke`、`$env:DOTNET_ROLL_FORWARD='Major'; dotnet run --project tools/core-contracts/CoreContractSmoke.csproj`（CoreContractSmoke 目标 net9.0，桌面只装 net8 运行时，必须 RollForward；缺失时报 `You must install or update .NET`，exit=-2147450730）
 Expected: 三条 exit 0；输出合并写入 `baseline\smoke.txt`。
 
 - [ ] **Step 4: 跑 xUnit 基线**
@@ -174,8 +174,9 @@ public class ContentScrollReconciliationTests
         => Assert.Equal(expected, ContentScrollReconciliation.ComputeScrollMax(extent, viewport));
 
     [Theory]
-    [InlineData(100, 120, true)]
-    [InlineData(0, 120, false)]
+    [InlineData(120, 120, true)]
+    [InlineData(118, 120, true)]
+    [InlineData(100, 120, false)]
     [InlineData(0, 0, true)]
     public void IsAtBottom_uses_tolerance(int scroll, int max, bool expected)
         => Assert.Equal(expected, ContentScrollReconciliation.IsAtBottom(scroll, max));
@@ -189,8 +190,12 @@ public class ContentScrollReconciliationTests
         => Assert.Equal(600, ContentScrollReconciliation.ComputeTargetScrollY(100, 120, 600, true));
 
     [Fact]
-    public void TargetScroll_never_exceeds_next_max_for_stale_previous()
-        => Assert.Equal(60, ContentScrollReconciliation.ComputeTargetScrollY(590, 120, 600, false));
+    public void TargetScroll_clamps_stale_previous_to_old_max()
+        => Assert.Equal(600, ContentScrollReconciliation.ComputeTargetScrollY(590, 120, 600, false));
+
+    [Fact]
+    public void TargetScroll_zero_when_next_max_zero()
+        => Assert.Equal(0, ContentScrollReconciliation.ComputeTargetScrollY(0, 0, 0, false));
 }
 ```
 
