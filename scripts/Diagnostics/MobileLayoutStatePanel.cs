@@ -40,6 +40,8 @@ public partial class MobileLayoutStatePanel : Control
 
 	public override void _Process(double delta)
 	{
+		if (!Visible)
+			return;
 		elapsed += delta;
 		if (elapsed < 0.5)
 			return;

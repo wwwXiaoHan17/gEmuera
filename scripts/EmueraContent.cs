@@ -3756,7 +3756,9 @@ public partial class EmueraContent : Control
 		scaledContentRoot.Size = scaledSize;
 		// Phase 1 取证：只改子节点 min size 不会刷新 ScrollContainer 的最小尺寸缓存，
 		// 必须显式刷新，否则 vbar 范围停留旧值、滚动被钳到旧上限。
-		RefreshScrollRangeCache();
+		// 仅在尺寸真的变化时刷新，避免 pendingScroll 每帧循环/pinch 每事件触发无谓 layout。
+		if (layoutChanged)
+			RefreshScrollRangeCache();
 		SyncContentVerticalScrollRange();
 
 		if (scrollContainer != null)

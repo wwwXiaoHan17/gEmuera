@@ -62,7 +62,7 @@ public partial class AndroidWindowOrientationController : Node
 		if (!TryQueryMultiWindow(out bool isMultiWindow))
 		{
 			if (failureWarnings++ < MaxFailureWarnings)
-				MobileLayoutDiagnostics.Warn("[ORIENTATION] query failed -> AndroidRuntime/getActivity/isInMultiWindowMode unavailable");
+				MobileLayoutDiagnostics.Warn("[ORIENTATION] 多窗口检测失败 → AndroidRuntime/getActivity/isInMultiWindowMode 不可用");
 			return;
 		}
 		failureWarnings = 0;
@@ -91,26 +91,40 @@ public partial class AndroidWindowOrientationController : Node
 			MobileLayoutDiagnostics.Warn("[ORIENTATION] request failed -> reason=" + reason + " " + ex.GetType().Name + ": " + ex.Message);
 			return;
 		}
-		lastRequestedLandscape = request == OrientationRequest.SensorLandscape;
-		MobileLayoutDiagnostics.PublishOrientation("[ORIENTATION] request -> reason=" + reason
+		bool landscapeRequest = request == OrientationRequest.SensorLandscape;
+		lastRequestedLandscape = landscapeRequest;
+		MobileLayoutDiagnostics.PublishOrientation("[ORIENTATION] 请求方向 → reason=" + reason
 			+ " target=" + target
-			+ " before=" + before
-			+ " window=" + windowBefore);
-		// 结果观测：2 秒后记录系统是否真的改变了请求方向（changed|ignored）。
-		GetTree().CreateTimer(2.0).Timeout += () => ReportResult(reason, target);
+			+ " requestedBefore=" + before
+			+ " windowBefore=" + windowBefore);
+		// 结果观测：2 秒后按窗口真实宽高比判定（ScreenGetOrientation 在 Android 只是请求值映射）。
+		GetTree().CreateTimer(2.0).Timeout += () => ReportResult(reason, windowBefore, landscapeRequest);
 	}
 
-	void ReportResult(string reason, DisplayServer.ScreenOrientation target)
+	void ReportResult(string reason, Vector2I windowBefore, bool landscapeRequest)
 	{
 		if (!GodotObject.IsInstanceValid(this))
 			return;
-		int after = (int)DisplayServer.ScreenGetOrientation();
+		int requestedAfter = (int)DisplayServer.ScreenGetOrientation();
 		Vector2I windowAfter = DisplayServer.WindowGetSize();
-		string status = after == (int)target ? "changed" : "ignored";
-		MobileLayoutDiagnostics.PublishOrientation("[ORIENTATION] result -> reason=" + reason
-			+ " target=" + target
-			+ " after=" + after
-			+ " window=" + windowAfter
+		string status;
+		if (landscapeRequest)
+		{
+			OrientationChangeResult result = WindowOrientationPolicy.ClassifyLandscapeRequest(
+				windowBefore.X, windowBefore.Y, windowAfter.X, windowAfter.Y);
+			status = result == OrientationChangeResult.Changed ? "changed"
+				: result == OrientationChangeResult.Already ? "already"
+				: "ignored";
+		}
+		else
+		{
+			// 退出小窗恢复可旋转：不再判定成败，只记录窗口事实。
+			status = windowAfter.X > windowAfter.Y ? "restored_landscape" : "restored_portrait";
+		}
+		MobileLayoutDiagnostics.PublishOrientation("[ORIENTATION] 请求结果 → reason=" + reason
+			+ " windowBefore=" + windowBefore
+			+ " windowAfter=" + windowAfter
+			+ " requestedAfter=" + requestedAfter
 			+ " status=" + status);
 	}
 
@@ -126,6 +140,12 @@ public partial class AndroidWindowOrientationController : Node
 			if (activity == null)
 				return false;
 			Variant result = activity.Call("isInMultiWindowMode");
+			// Java 方法抛异常时 Call 返回 Nil，且异常存于 JavaClassWrapper；必须按失败计，
+			// 否则会被误判为 Fullscreen 让横屏请求永不发生。
+			if (JavaClassWrapper.GetException() != null)
+				return false;
+			if (result.VariantType == Variant.Type.Nil)
+				return false;
 			isInMultiWindow = result.AsBool();
 			return true;
 		}

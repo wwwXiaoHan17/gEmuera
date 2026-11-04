@@ -42,7 +42,9 @@ func test_resize_same_frame_is_stale_characterization() -> void:
 	root.size = Vector2(600, 300)
 	var vbar: VScrollBar = scroll.get_v_scroll_bar()
 	print("[phase1-characterization] same_frame child_size=", child.size, " scroll_size=", scroll.size, " vbar_range=", vbar.max_value - vbar.page)
-	assert_bool(true).is_true()
+	# 断言引擎真实时序：同帧 child 已按新 min size 布局，但 vbar range 仍按旧视口高算（1400 而不是 1700）。
+	assert_float(child.size.y).is_equal_approx(2000.0, 0.5)
+	assert_float(vbar.max_value - vbar.page).is_equal_approx(1400.0, 0.5)
 
 
 func test_scroll_vertical_is_clamped_to_range() -> void:
@@ -70,7 +72,10 @@ func test_growing_child_min_size_same_frame_range_may_be_stale() -> void:
 	for i in range(1, 7):
 		await get_tree().process_frame
 		print("[phase1-characterization] frame+", i, " range=", vbar.max_value - vbar.page, " child_size=", child.size, " scroll_y=", scroll.scroll_vertical)
-	assert_bool(true).is_true()
+	# 关键断言：只改子节点 min size、不刷新缓存时，child 尺寸已变但 range 永不更新，且 scroll 被钳在旧上限。
+	assert_float(vbar.max_value - vbar.page).is_equal_approx(400.0, 0.5)
+	assert_int(scroll.scroll_vertical).is_equal(400)
+	assert_float(child.size.y).is_equal_approx(4000.0, 0.5)
 
 
 func test_queue_sort_after_min_size_change_updates_range() -> void:
@@ -83,7 +88,8 @@ func test_queue_sort_after_min_size_change_updates_range() -> void:
 	scroll.queue_sort()
 	await get_tree().process_frame
 	print("[phase1-characterization] queue_sort range=", vbar.max_value - vbar.page, " child_size=", child.size)
-	assert_bool(true).is_true()
+	# 断言：仅 queue_sort 不会刷新 minimum size 缓存，range 仍为旧值。
+	assert_float(vbar.max_value - vbar.page).is_equal_approx(400.0, 0.5)
 
 
 func test_direct_child_size_set_updates_range() -> void:
@@ -95,7 +101,9 @@ func test_direct_child_size_set_updates_range() -> void:
 	child.size = Vector2(600, 4000)
 	await get_tree().process_frame
 	print("[phase1-characterization] direct_size range=", vbar.max_value - vbar.page, " child_size=", child.size)
-	assert_bool(true).is_true()
+	# 断言：直接改 child.size 同样不刷新 range 缓存。
+	assert_float(vbar.max_value - vbar.page).is_equal_approx(400.0, 0.5)
+	assert_float(child.size.y).is_equal_approx(4000.0, 0.5)
 
 
 func test_refresh_minimum_size_cache_then_range_updates() -> void:
@@ -113,7 +121,9 @@ func test_refresh_minimum_size_cache_then_range_updates() -> void:
 	print("[phase1-characterization] refresh_min_cache combined=", combined, " range=", vbar.max_value - vbar.page, " child_size=", child.size)
 	scroll.scroll_vertical = 999999
 	print("[phase1-characterization] refresh_min_cache assigned_999999 scroll_y=", scroll.scroll_vertical)
-	assert_bool(true).is_true()
+	# 断言修复杠杆：强制刷新最小尺寸缓存后 range=4000-600=3400，scroll 可落底。
+	assert_float(vbar.max_value - vbar.page).is_equal_approx(3400.0, 0.5)
+	assert_int(scroll.scroll_vertical).is_equal(3400)
 
 
 func test_update_minimum_size_then_range_updates() -> void:
@@ -127,4 +137,5 @@ func test_update_minimum_size_then_range_updates() -> void:
 	scroll.queue_sort()
 	await get_tree().process_frame
 	print("[phase1-characterization] update_min_size range=", vbar.max_value - vbar.page, " child_size=", child.size)
-	assert_bool(true).is_true()
+	# 断言 UpdateMinimumSize + QueueSort 同样能刷新 range（产品代码采用的杠杆）。
+	assert_float(vbar.max_value - vbar.page).is_equal_approx(3400.0, 0.5)

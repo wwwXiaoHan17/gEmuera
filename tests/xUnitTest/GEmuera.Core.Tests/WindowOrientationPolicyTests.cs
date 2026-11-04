@@ -32,4 +32,14 @@ public class WindowOrientationPolicyTests
         Assert.Equal(OrientationRequest.None, WindowOrientationPolicy.Decide(WindowLayoutKind.MultiWindow, WindowLayoutKind.MultiWindow));
         Assert.Equal(OrientationRequest.None, WindowOrientationPolicy.Decide(WindowLayoutKind.Unknown, WindowLayoutKind.Unknown));
     }
+
+
+    [Theory]
+    [InlineData(1080, 2400, 2400, 1080, OrientationChangeResult.Changed)]
+    [InlineData(1080, 2400, 1080, 2400, OrientationChangeResult.Ignored)]
+    [InlineData(2400, 1080, 2400, 1080, OrientationChangeResult.Already)]
+    [InlineData(2400, 1080, 1080, 2400, OrientationChangeResult.Ignored)]
+    public void ClassifyLandscapeRequest_uses_window_aspect_not_requested_orientation(
+        int beforeW, int beforeH, int afterW, int afterH, OrientationChangeResult expected)
+        => Assert.Equal(expected, WindowOrientationPolicy.ClassifyLandscapeRequest(beforeW, beforeH, afterW, afterH));
 }

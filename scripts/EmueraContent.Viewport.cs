@@ -19,7 +19,8 @@ public partial class EmueraContent : Control
 	bool viewportLayoutDirty;
 	bool viewportLayoutApplyScheduled;
 	ulong viewportLayoutSerial;
-	int lastViewportScrollMax = -1;
+	int layoutSnapshotScrollY;
+	int layoutSnapshotScrollMax = -1;
 	MobileLayoutStatePanel mobileLayoutStatePanel;
 
 	// 视口/安全区/方向变化时立即调用：重置进行中的触摸/惯性状态，标记 dirty。
@@ -27,7 +28,18 @@ public partial class EmueraContent : Control
 	{
 		viewportLayoutDirty = true;
 		viewportLayoutSerial++;
+		// 先快照当时的滚动位置/范围，供 deferred 对账使用（输出增长后旧字段会 stale）。
+		if (scrollContainer != null)
+		{
+			layoutSnapshotScrollY = desiredContentScrollValid ? desiredContentScrollVertical : scrollContainer.ScrollVertical;
+			var bar = scrollContainer.GetVScrollBar();
+			layoutSnapshotScrollMax = bar != null
+				? Mathf.RoundToInt(Mathf.Max(0.0f, bar.MaxValue - bar.Page))
+				: -1;
+		}
+		// 旋转可能不派发 release/cancel：pinch、普通 drag、惯性全部清空，避免下次按下被旧状态吞掉。
 		ResetContentTouchGestureState();
+		ResetContentDragState();
 		StopContentInertia();
 	}
 
@@ -51,6 +63,9 @@ public partial class EmueraContent : Control
 		ApplySafeAreaLayout();
 		ApplyOrientationAwareScale();
 		ApplyContentScaleTransform();
+		// 显式落一次尺寸/滚动范围：ApplySafeAreaLayout 只在安全区变化时 queue，
+		// 启动或仅缩放变化时可能没有待处理更新（幂等）。
+		UpdateScaleBounds();
 		RefreshScrollRangeCache();
 		for (int attempt = 0; attempt < 2; attempt++)
 			await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -106,8 +121,8 @@ public partial class EmueraContent : Control
 		int scaledExtentY = Mathf.RoundToInt(Mathf.Max(scaledContentRoot.Size.Y, layoutY * contentScale));
 		int nextMax = ContentScrollReconciliation.ComputeScrollMax(scaledExtentY, viewportY);
 		int engineMax = Mathf.RoundToInt(Mathf.Max(0.0f, vbar.MaxValue - vbar.Page));
-		int previousScrollY = desiredContentScrollValid ? desiredContentScrollVertical : scrollContainer.ScrollVertical;
-		int previousMax = lastViewportScrollMax >= 0 ? lastViewportScrollMax : engineMax;
+		int previousScrollY = layoutSnapshotScrollY;
+		int previousMax = layoutSnapshotScrollMax >= 0 ? layoutSnapshotScrollMax : engineMax;
 		bool wasAtBottom = pendingScroll
 			|| ContentScrollReconciliation.IsAtBottom(previousScrollY, previousMax);
 		int target = ContentScrollReconciliation.ComputeTargetScrollY(previousScrollY, previousMax, nextMax, wasAtBottom);
@@ -117,18 +132,20 @@ public partial class EmueraContent : Control
 		scrollContainer.ScrollHorizontal = targetHorizontal;
 		scrollContainer.ScrollVertical = target;
 		RememberDesiredContentScroll(targetHorizontal, target);
-		lastViewportScrollMax = nextMax;
-		MobileLayoutDiagnostics.PublishLayout("[VIEWPORT] apply -> window=" + DisplayServer.WindowGetSize()
-			+ " viewport=" + scrollContainer.Size + " safe=" + ContentSafeRect
-			+ " scale=" + contentScale.ToString("0.###"));
-		MobileLayoutDiagnostics.PublishScroll("[SCROLL] reconcile -> layoutY=" + layoutY
-			+ " scaledExtentY=" + scaledExtentY
-			+ " viewportY=" + viewportY
-			+ " engineMax=" + engineMax
-			+ " nextMax=" + nextMax
-			+ " target=" + target
-			+ " atBottom=" + wasAtBottom
-			+ " status=" + (target == nextMax || !wasAtBottom ? "ok" : "short"));
+		if (MobileLayoutDiagnostics.Wanted)
+		{
+			MobileLayoutDiagnostics.PublishLayout("[VIEWPORT] 视口应用 → window=" + DisplayServer.WindowGetSize()
+				+ " viewport=" + scrollContainer.Size + " safe=" + ContentSafeRect
+				+ " scale=" + contentScale.ToString("0.###"));
+			MobileLayoutDiagnostics.PublishScroll("[SCROLL] 滚动对账 → layoutY=" + layoutY
+				+ " scaledExtentY=" + scaledExtentY
+				+ " viewportY=" + viewportY
+				+ " engineMax=" + engineMax
+				+ " nextMax=" + nextMax
+				+ " target=" + target
+				+ " atBottom=" + wasAtBottom
+				+ " status=" + (target == nextMax || !wasAtBottom ? "ok" : "short"));
+		}
 	}
 
 	// 排障面板：设置开启时挂一个左上角浮层（默认不创建、不渲染、不改布局）。
@@ -141,6 +158,12 @@ public partial class EmueraContent : Control
 			AddChild(mobileLayoutStatePanel);
 		}
 		if (mobileLayoutStatePanel != null && GodotObject.IsInstanceValid(mobileLayoutStatePanel))
+		{
 			mobileLayoutStatePanel.Visible = enabled;
+			mobileLayoutStatePanel.SetProcess(enabled);
+		}
 	}
+
+	// 设置页切换面板开关后立即生效（无需等待下一次视口变化）。
+	public void ApplyMobileLayoutPanelSetting() => RefreshMobileLayoutPanel();
 }

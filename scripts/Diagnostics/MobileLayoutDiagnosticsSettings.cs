@@ -23,7 +23,7 @@ public static class MobileLayoutDiagnosticsSettings
 	public static bool PanelEnabled
 	{
 		get { if (panelEnabled == null) panelEnabled = Load(PanelKey); return panelEnabled.Value; }
-		set { panelEnabled = value; Save(PanelKey, value); }
+		set { panelEnabled = value; Save(PanelKey, value); EmueraContent.instance?.ApplyMobileLayoutPanelSetting(); }
 	}
 
 	static bool Load(string key)

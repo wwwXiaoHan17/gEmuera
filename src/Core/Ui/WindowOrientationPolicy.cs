@@ -16,6 +16,14 @@ public enum OrientationRequest
     Sensor = 2,
 }
 
+/// <summary>横屏请求的结果判定（按窗口真实宽高比，而非 ScreenGetOrientation）。</summary>
+public enum OrientationChangeResult
+{
+    Changed = 0,
+    Already = 1,
+    Ignored = 2,
+}
+
 /// <summary>
 /// 系统浮动小窗方向策略：只在窗口形态发生边沿变化时产生请求。
 /// - 全屏启动（Unknown→Fullscreen）不请求，避免冷启动可见跳变；
@@ -35,5 +43,20 @@ public static class WindowOrientationPolicy
         return current == WindowLayoutKind.MultiWindow
             ? OrientationRequest.SensorLandscape
             : OrientationRequest.Sensor;
+    }
+
+    /// <summary>
+    /// 判定「请求横屏」是否真的生效：只看窗口宽高比。Android 上
+    /// ScreenGetOrientation() 返回的是 requestedOrientation 的映射值，不能证明 OEM
+    /// 是否真的转了窗口；宽高比才是用户可见事实。
+    /// </summary>
+    public static OrientationChangeResult ClassifyLandscapeRequest(
+        int beforeWidth, int beforeHeight, int afterWidth, int afterHeight)
+    {
+        bool beforeLandscape = beforeWidth > beforeHeight;
+        bool afterLandscape = afterWidth > afterHeight;
+        if (afterLandscape == beforeLandscape)
+            return beforeLandscape ? OrientationChangeResult.Already : OrientationChangeResult.Ignored;
+        return afterLandscape ? OrientationChangeResult.Changed : OrientationChangeResult.Ignored;
     }
 }
