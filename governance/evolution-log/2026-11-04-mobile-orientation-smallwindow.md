@@ -34,6 +34,7 @@
 - [实测] xUnit 新增：ContentScrollReconciliation 15/15、WindowOrientationPolicy 5/5；全量 Core 299 通过/1 跳过/300 总。
 - [实测] dotnet build 0 error（多次）；Godot headless --quit-after 120 exit 0（含 Autoload 控制器）。
 - [实测] GDUnit 全量 12/12（PrototypeHost 4 + Layout 8）。
+- [实测] legacy-runner v24pure 终验：status=Passed、semanticSha256=`4859125d3f984f087eb143dd83fa54f3b754055187cb87a9e6b166d4505754a1`（与基线一致，未破坏游戏启动链路）。
 - [未验证] 真机（小米/Redmi HyperOS 3）：旋转/小窗/落底/诊断面板；APK aapt2 待本次导出后复核。
 
 ## AI 表现复盘
