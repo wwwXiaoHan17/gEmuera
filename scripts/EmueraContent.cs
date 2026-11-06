@@ -647,6 +647,12 @@ public partial class EmueraContent : Control
 		if (control == null)
 			return;
 		control.SetAnchorsPreset(LayoutPreset.TopLeft);
+		// 顺序不能反：Control.Size 的 setter 会把请求值钳到当前 CustomMinimumSize。
+		// 竖屏(2357高)→横屏(648高)时，先写 Size 会被旧的 2357 min 钳住、缩不回去，
+		// rootContent 保持竖屏高度 → scrollContainer 也保持竖屏高度 → 可滚动范围被算小，
+		// 底部内容永远到不了（2026-11-06 真机日志 + 桌面 resize 复现均为该现象）。
+		// 先把 min 降到目标（或升高），再写 Size，最后保持 min=目标尺寸。
+		control.CustomMinimumSize = rect.Size;
 		control.Position = rect.Position;
 		control.Size = rect.Size;
 		control.CustomMinimumSize = rect.Size;

@@ -101,3 +101,29 @@
 - 用户确认当前**剩余问题只有**「横屏/竖屏切换后滑不到底」；小窗默认竖屏本轮未再报（待下一轮日志确认）。
 - 用户已授权：若新日志显示小窗请求 `status=ignored`，可直接进入阶段二（manifest 默认横屏 + 全屏恢复 Sensor；冷启动竖持会一次可见跳变）。
 - 下一轮真机需要：装 20261106 包 → 复现旋转/小窗 → 保存日志；判据：含 `UI.LAYOUT.BOOT build=mobile-layout-20261106`、旋转后 `[SCROLL] 滚动对账` 的 engineMax/nextMax/status、拖动结束的 vbarMax/mathMaxY/atBottom。
+---
+
+## 补遗 2（2026-11-06 第二轮真机日志）：底部滑不到底的真根因——`ApplySafeRect` 的 Size/min 顺序
+
+### 真机证据（`gemuera_20261106-225033.log`，42 条 UI.LAYOUT 事件）
+- 诊断链路已修复：[实测] 日志含 `UI.LAYOUT.BOOT build=mobile-layout-20261106`、`UI.LAYOUT.VIEWPORT/SCROLL/TRACE` 共 42 条，说明 20261106 包与诊断通道均生效。
+- 旋转后 `[VIEWPORT] 视口应用` 的关键数值：`window=(2772,1280)`（横屏）、`safe=(76.9,0),(1326,648)`（横屏安全区），但 `scroll=(1783,2357.244)` / `viewportY=2357`——**ScrollContainer 高度仍是竖屏的 2357**；`[SCROLL] 滚动对账 → layoutY=4579 scaledExtentY=3709 viewportY=2357 engineMax=1352 nextMax=1352 target=1352 status=ok`。横屏真实可视高只有 648，正确 `nextMax` 应为 `3709-648=3061`，实际被算成 1352 → 底部约 1709px 内容永远不可达。
+- 小窗方向本轮未测（整段 `multiWindow=False`），用户本轮只报「横竖屏切换后滑不到底」。
+
+### 根因（桌面窗口 resize 复现，[实测]）
+- `ApplySafeRect(control, rect)` 原实现顺序：`SetAnchorsPreset(TopLeft)` → `Position` → `Size = rect.Size` → `CustomMinimumSize = rect.Size`。
+- Godot `Control.Size` 的 setter 会把请求值**钳到当前 `CustomMinimumSize`**。竖屏时 rootContent 的 min 被设为 2357；旋转回横屏时先写 `Size=648` 会被旧 min 2357 钳住、缩不回去，随后写 min=648 也不会把 size 拉回 → `rootContent` 高度停在 2357 → 子节点 `scrollContainer` 高度也是 2357 → `update_scale_bounds`/对账用错误视口高算滚动范围。
+- 复现手段：桌面窗口化 + `GEMUERA_FORCE_MOBILE_VIEWPORT=1` + Win32 `MoveWindow` 从 1280x720 → 720x1280 → 1280x720（用 EnumWindows 按 PID 找 HWND；Godot `_console.exe` 的窗口属于子进程，`MainWindowHandle` 为 0）。修复前最终横屏 apply：`self=(1202,648) root=(1202,2030) scroll=(2000,2030) viewportY=2030`；修复后：`self=(1202,648) root=(1202,648) scroll=(2160,648) viewportY=648`。
+
+### 修复
+- `ApplySafeRect` 改为：先 `CustomMinimumSize = rect.Size`（先降/升 min）→ `Position` → `Size` → 再写回 `CustomMinimumSize`（保持 min=目标尺寸）。
+- 新增 GDUnit 取证回归：`test_control_size_shrink_is_clamped_by_stale_custom_minimum_size`（13/13 通过），把「Size 被旧 min 钳住」这一引擎行为钉成可失败断言，防止此顺序回归。
+
+### 验证
+- [实测] GDUnit 13/13；xUnit Core 303 通过/1 跳过/304 总。
+- [实测] 桌面 resize 复现：修复前后尺寸链日志如上，`viewportY` 2357/2030 → 648。
+- [未验证] 真机：等 20261106b 包安装后复测旋转落底；小窗方向仍待测（若 ignored，用户已授权阶段二）。
+- [观察] 修复后仍可见 `scroll=(2160,648)` 宽度大于视口（横向滚动模式 Disabled 时 ScrollContainer 最小宽度=内容宽）；它不影响纵向落底，但横向内容超宽时的表现另记 P2，不在本轮扩大范围。
+
+### 交付
+- APK：`export/releases/gemuera-1.10.0-dev-20261106b-debug.apk`（75,144,260 bytes；versionName `1.10.0-dev-20261106b`、versionCode `13`、screenOrientation=13 阶段一不变；SHA256 `F4B062BA51E3B574E07ECA820C576D054898E77530BDAD4CF9102428A1044262`）。

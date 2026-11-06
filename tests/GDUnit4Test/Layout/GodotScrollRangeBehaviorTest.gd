@@ -139,3 +139,19 @@ func test_update_minimum_size_then_range_updates() -> void:
 	print("[phase1-characterization] update_min_size range=", vbar.max_value - vbar.page, " child_size=", child.size)
 	# 断言 UpdateMinimumSize + QueueSort 同样能刷新 range（产品代码采用的杠杆）。
 	assert_float(vbar.max_value - vbar.page).is_equal_approx(3400.0, 0.5)
+
+func test_control_size_shrink_is_clamped_by_stale_custom_minimum_size() -> void:
+	# 取证 2026-11-06 真机根因：Control.Size 的 setter 会钳到当前 CustomMinimumSize。
+	# 若先写 Size 再写 CustomMinimumSize，从竖屏高度缩回横屏会失败（rootContent 卡在竖屏高度）。
+	var c := Control.new()
+	add_child(c)
+	auto_free(c)
+	c.custom_minimum_size = Vector2(400, 2357)
+	c.size = Vector2(400, 2357)
+	# 旧顺序：直接缩 Size → 被旧 min 钳住，缩不回去。
+	c.size = Vector2(400, 648)
+	assert_float(c.size.y).is_equal_approx(2357.0, 0.5)
+	# 正确顺序：先降 min，再缩 Size → 成功。
+	c.custom_minimum_size = Vector2(400, 648)
+	c.size = Vector2(400, 648)
+	assert_float(c.size.y).is_equal_approx(648.0, 0.5)
