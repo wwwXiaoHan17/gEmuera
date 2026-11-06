@@ -118,3 +118,105 @@ Facade 79、ABI 4；三冒烟全绿；governance PASS。**本分支不可发布*
   不在本任务门禁集内，记 P2。
 - 复审：独立 result-review 子代理已派发；得分/P0-P2 处置见下节（若本段末尾尚无分数，说明复审未回，
   不得把本分支当已复审通过）。
+
+
+## 9. 独立复审（G7）与处置（2026-11-07 补遗）
+
+- 独立 result-review 子代理（fresh context，只读）已回报告：**首轮 90/100**（G7 要求 ≥98，未达线），
+  P0=0、P1=2、P2=9、其余环境项 [未验证]。复审确认了 v24 哈希/表面不变、五 profile 不可达且包等价、
+  contractAbi 1.1 语义、installer 规则、runner 翻译、无悬空旧类引用。
+- **P1-1（FirstWindow 退役兜底）已修**：`RetiredLauncherProfiles` 补 `CoreProfileSnake`（5 项）；
+  `TryGetMappedPackPath` 在映射缺失/损坏且 profile 已退役时返回 warning（不再静默）。见
+  `scripts/FirstWindow.cs` 的 `IsRetiredLauncherProfile`/`RetiredLauncherProfiles`。
+- **P1-2（runner 假绿）已修**：`Invoke-LegacyRunner.ps1` 在正向 `[LOAD] CompatPack enabled` 断言之外，
+  增加负向断言——日志出现 `CompatPack projection failed` / `fallback to no-pack baseline` 即抛
+  （enabled 后被投影失败回退的场景不再假绿）。
+- **P2 已修**：bootstrap 移到 `ScanGames` 开头（先于 `ResolveStartupGamePath` 的映射预检）；
+  `PrototypeRuntimeNode` 调试轮换只保留 v24pure；`CompatPackRules` 拒载 `addInstructionCollisions` +
+  contractAbi<1.1；runner 翻译改用 `-ProjectRoot`（不再依赖 `$PSScriptRoot/../..`）；
+  snake 下拉文案补"（兼容包）"；`CompatPackHost` 的"六 profile 并集/内置模块"注释改为冻结表面；
+  installer 同字节 skip 只在记录变化时写状态。
+- **P2 未修（登记）**：P2-5 DIA-11 `DialectProfileSelection.psm1` 仍断言退役前 snake 选择契约
+  （该 DIA 静态链在 Task 1 已裁定为预存在红、G3 由静态 v24 哈希钉扎替代，不在本轮门禁集；重写成本 > 收益）；
+  P2-6 `requiredPackVersion` 未消费（若要校验须读取 DLL 内嵌清单 packVersion；当前版本不符由引擎加载期拒载 +
+  launcher 回退文案覆盖；列 P2 待后续）。
+- **计数更正（推翻上文数字）**：Core xUnit 实际为 **327 passed / 1 skipped（328 total）**——上文 §3 与
+  §8 写的 314 是加入 `CompatPackBundleInstallerTests` 13 例之前的旧值；最终 HEAD 重跑为 327/1。
+- **G7 状态**：复审已返回 **90（<98）**；P0=0、P1 已全部修复、P2 已修 7/9。修复后尚未再次派独立复审，
+  因此**不得声称 G7 已通过**；若需要 ≥98 的正式结论，应在最终树再派一次只读复审并复评。本分支仍
+  **不可发布**（真机/六游戏证据缺失）。
+- [未验证]（复审判定，不扣分）：Android 真机权限/释放、APK 内 staging 实际打包、六游戏矩阵、
+  legacy-runner 执行级（无 Godot 4.7/设备）。
+
+
+## 10. 第二轮独立复审（83/100）与修复（2026-11-07 补遗）
+
+第二轮独立只读复审（HEAD 3b0a7c2 + 未提交修复）返回：**83/100**（阈值 98；P0=0、P1=3、P2=10）。
+扣分全部来自 P1×3（12 分）与 P2×10（5 分）；复审方明确"清掉 3 个 P1 与 P2-1..5 后可回到 98+"。
+核心工程核对（v18/snake 等价交集、v24 561/266、哈希钉扎、分发/门禁）均被判成立，环境项 [未验证] 不扣分。
+
+### P1 清零
+
+1. **P1-1 下拉重复 snake（工作树新引入）**：`FirstWindow.cs` 原第 625 行 snake 无后缀、630 行又追加带后缀项，
+   第 6 项落 default → 静默 v24pure。修复：625 行改为 `CoreProfileSnake + "（兼容包）"` 并删除重复行；
+   `OnManualProfileSelected` 的 0..5 索引映射不变。**已修**。
+2. **P1-2 cross-aba 退役 profile 不可用**：修复：
+   - `Invoke-LegacyRunner.ps1` 的 base/alternate 包不同时报可操作错误（明确 `GEMUERA_COMPAT_PACKS` 进程级、
+     建议两侧传同一退役 profile 或都 v24pure）；
+   - `summary.json` 的 `alternateSession` 增 `baseProfile`/`engineProfile`；
+   - `Invoke-SessionIsolationInProcessCrossAba.ps1` 默认 `AlternateProfile=v24pure`（保持可执行），
+     断言改用 `alternateSession.baseProfile`，指纹/commit 序列用引擎 profile 比较；
+   - `tools/legacy-runner/README.md` 更新命令与限制说明。**已修**。
+3. **P1-3 测试诚信回退**：从父提交恢复三个被删测试
+   （`Validate_ProducesFrozenValidatedDelta` / `Validate_Failure_ReturnsNullValidatedDelta` /
+   `ValidatedPackDelta_SemanticHash_IsOrderIndependent_AndFieldSensitive`）；
+   恢复 `Validate_BaseProfileNotV24Pure_Rejects` 的实际断言；
+   `LegacyDialectSurfaceSmoke` 的恒真断言改为真实断言（CALLSTR 经第一方包归属提示
+   = `pack.gemuera.snake`，不再 `|| true`）。**已修**；Core 从 327 增至 **330 passed / 1 skipped**（328→331 total）。
+
+### P2 处置
+
+- **P2-1 数字不一致**：本轮实测 Core **330/1**；a375a57..HEAD 提交数按实际（本轮后再 +1）；release-gates §10 已把 314 改 327，
+  本段再更正为 330（复审时 327 是恢复测试前的值）。
+- **P2-2 packs/README 矛盾**：146 行改为"安装根一层（顶层 DLL + 一级子目录）"。**已修**。
+- **P2-3 模板字段不一致**：packId 允许字符改"小写字母/数字/点/连字符（不允许下划线）"；示例 contractAbi 改 1.0
+  与模板 manifest 对齐（1.1 仅在需要碰撞字段时使用，另见 packs/README）。**已修**。
+- **P2-4 示例映射过期**：四条 note 从"示例占位：…退役步产出"改为"已落地：pack.gemuera.*"。**已修**。
+- **P2-5 测试覆盖缺口**：生产映射测试循环补 snake（现 5 项）；`RetiredLauncherProfiles` 完整性与 Program P0
+  回退回归测试需要 host/Godot 测试工程（当前无该测试面），**登记 P2**；v18 等价由 V18PackManifestTests 承担的注释保留。
+- **P2-6 C# 直跑 runner 假绿**：`legacy-runner-config.schema.json` 已收录脚本写入的
+  `baseProfile/engineProfile/packIds/packPaths`；C# 校验仍以引擎 profile 为输入（PS 包装器负责翻译+guard），
+  直接 C# 路径的强制 pack 断言**登记 P2**（执行级无 Godot 无法验证）。
+- **P2-7 i18n**：CompatPack key 补齐属独立 i18n 任务，**登记 P2**（当前中文硬编码回退提示保持）。
+- **P2-8 生成器偏差**：设计 §14 与包 README 已如实写"仅 v18 生成、其余人工 + 等价测试 golden"；扩生成器**登记 P2**。
+- **P2-9 文档卫生**：design §14 中旧 `packs/gemuera.v18/` 已改 `packs/pack.gemuera.v18/`；
+  PLAN 末尾已有"历史计划"注记；旧 dialect-registry-snapshots.json 属 G3 预存在红（静态哈希钉扎替代），**登记 P2**。
+- **P2-10 诊断 hint/staging 依赖**：Compose 把 snake 专有名字的隐藏归属记为 `pack.gemuera.snake`（未选中会话
+  仍有可操作提示，SurfaceSmoke 真实断言）；release-gates §10 已写明"日常 governance 也必须先跑 staging 脚本"。
+  **已修**（诊断归属部分）。
+
+### 验证与 G7 状态
+
+- [实测] build 0 error；Core **330 passed / 1 skipped**；SurfaceSmoke exit 0；runner/cross 脚本 parser OK；
+  release gate 与 governance 在修复后重跑（结果见本轮最终门禁日志）。
+- [实测] `Build-FirstPartyPacks.ps1` 可重复执行；staging 集合与生产映射 5 条一致。
+- **G7**：第二轮复审 83/100，低于 98；P0=0、3 个 P1 已全部清零、P2-1..5 按复审方公式已清零。
+  按复审方给出的评分公式可达 ≥98，但**修复后尚未再次派独立复审**，故不宣布 G7 正式通过；
+  最终树如需正式 ≥98 结论，应再派一次只读复审。
+- [未验证]（环境）：Android 真机释放/权限、APK PCK 内 staging、六游戏证据、legacy-runner 执行级。
+
+
+### 补遗（第二轮修复后的最终树，2026-11-07）
+
+- [实测] 修复后最终门禁：release gate **PASS（8 项检查；桌面命令 7/7）**；governance **PASS**。
+- [实测] Core xUnit **330 passed / 1 skipped（331 total）**（P1-3 恢复 3 个测试后的计数；此前 314/327 均为历史值）；
+  Facade 79 / ABI 4 不变；SurfaceSmoke（含新增 launcher 静态断言）exit 0。
+- **P1-1 的回归测试**：SurfaceSmoke 新增 `AssertFirstWindowLauncherProfileTable`，静态断言
+  `RetiredLauncherProfiles` 含 5 个退役 profile、snake 下拉项恰好 1 个、snake 索引映射存在。
+- **P2-5 部分清零**：生产映射测试循环补 snake（5 项）；launcher 退役表/下拉由上述 Smoke 断言覆盖；
+  Program P0 回退回归测试仍缺 host 测试面，**登记 P2**。
+- **P2-6 部分清零**：`legacy-runner-config.schema.json` 已收录包装器写入的
+  `baseProfile/engineProfile/packIds/packPaths`；C# 直跑强制 pack 断言仍未实现（无 Godot 执行级验证），**登记 P2**。
+- **P2-7/8/9 未做**：i18n key、通用清单生成器、旧快照/PLAN 历史行——均登记 P2（超出本轮质量-成本线）。
+- **G7 状态**：第二轮复审 83/100；按复审方公式，P1×3 与 P2-1..5 清零应回到 98+，但**本轮未再派独立复审**，
+  因此仍不宣布 G7 正式通过；最终树已重跑 build/全量 xUnit/三冒烟/门禁/governance 并全绿。

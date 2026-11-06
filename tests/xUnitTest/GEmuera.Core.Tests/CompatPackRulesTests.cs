@@ -949,6 +949,9 @@ public class CompatPackRulesTests
         CompatPackManifest manifest = CompatPackManifest.TryParse(json, out var parsed, out var parseErrors)
             ? parsed! : throw new InvalidOperationException(string.Join("; ", parseErrors));
         var context = AxesContext(new CompatVersion(1, 0), new CompatVersion(1, 0), baselineProfileId: "snake");
+
+        Assert.False(CompatPackRules.Validate(manifest, Array.Empty<ICompatPackContribution>(), context, out var errors));
+        Assert.Contains(errors, e => e.Contains("baseProfileId") && e.Contains("v24pure"));
     }
 
     [Fact]
@@ -993,4 +996,101 @@ public class CompatPackRulesTests
         Assert.Contains(unpairedErrors, error => error.Contains("必须同时出现在 hideFunctions"));
     }
 
+
+    [Fact]
+    public void Validate_ProducesFrozenValidatedDelta()
+    {
+        var surface = new StubSurfaceDo
+        {
+            Do = (instructions, functions) =>
+            {
+                instructions.RegisterInstruction("SETANIMETIMER");
+                functions.RegisterFunction("SQL_CONNECT", "Int64");
+                instructions.HideInstruction("CALLSHARP");
+            },
+        };
+        var capability = new StubCapability { CapabilityIds = new[] { "input.pointer-button.v1" } };
+        string sha = new string('c', 64);
+
+        Assert.True(
+            CompatPackRules.Validate(
+                Manifest(),
+                new ICompatPackContribution[] { surface, capability },
+                Context(),
+                out var errors,
+                out _,
+                out var delta,
+                packSha256: sha),
+            string.Join("; ", errors));
+
+        Assert.NotNull(delta);
+        Assert.Equal("test.rules", delta!.PackId);
+        Assert.Equal("1.0.0", delta.PackVersion);
+        Assert.Equal(sha, delta.PackSha256);
+        // CapabilityIds = 清单 + 贡献（本题无 Requires/Implies 展开），Ordinal 排序。
+        Assert.Equal(new[] { "input.pointer-button.v1", "math.times-clamp.v1" }, delta.CapabilityIds.ToArray());
+        Assert.Contains(delta.SurfaceStates, state =>
+            state.Key == new CompatSymbolKey(CompatSymbolKind.Instruction, "SETANIMETIMER")
+            && state.Kind == CompatSymbolStateKind.Present);
+        Assert.Contains(delta.SurfaceStates, state =>
+            state.Key == new CompatSymbolKey(CompatSymbolKind.Function, "SQL_CONNECT")
+            && state.Kind == CompatSymbolStateKind.Present
+            && state.ReturnType == "Int64");
+        Assert.Contains(delta.SurfaceStates, state =>
+            state.Key == new CompatSymbolKey(CompatSymbolKind.Instruction, "CALLSHARP")
+            && state.Kind == CompatSymbolStateKind.Hidden);
+        Assert.Equal("builtin:snake", delta.VariantSelections["SETBGIMAGE"]);
+        Assert.Matches("^[0-9a-f]{64}$", delta.DeltaSemanticHash);
+    }
+
+    [Fact]
+    public void Validate_Failure_ReturnsNullValidatedDelta()
+    {
+        // 能力目录为空 → 清单声明的 capability 未知 → 拒载；失败时不得产出半成品 delta。
+        var context = new CompatPackValidationContext(
+            new CompatVersion(1, 0),
+            new CompatVersion(1, 0),
+            new Dictionary<string, CapabilityDescriptor>(StringComparer.Ordinal),
+            new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
+            new HashSet<string>(StringComparer.Ordinal),
+            new HashSet<string>(StringComparer.Ordinal));
+
+        Assert.False(
+            CompatPackRules.Validate(
+                Manifest(), Array.Empty<ICompatPackContribution>(), context, out var errors, out _, out var delta));
+        Assert.NotEmpty(errors);
+        Assert.Null(delta);
+    }
+
+    [Fact]
+    public void ValidatedPackDelta_SemanticHash_IsOrderIndependent_AndFieldSensitive()
+    {
+        var stateA = new CompatSymbolState(
+            new CompatSymbolKey(CompatSymbolKind.Instruction, "SETANIMETIMER"),
+            CompatSymbolStateKind.Present, "test.delta", null, null);
+        var stateB = new CompatSymbolState(
+            new CompatSymbolKey(CompatSymbolKind.Function, "SQL_CONNECT"),
+            CompatSymbolStateKind.Present, "test.delta", "Int64", null);
+        var selections = new Dictionary<string, string>(StringComparer.Ordinal) { ["SETBGIMAGE"] = "builtin:snake" };
+        string sha = new string('d', 64);
+
+        var first = new ValidatedPackDelta(
+            "test.delta", "1.0.0", sha, new[] { "math.times-clamp.v1", "input.pointer-button.v1" },
+            new[] { stateB, stateA }, selections);
+        var second = new ValidatedPackDelta(
+            "test.delta", "1.0.0", sha, new[] { "input.pointer-button.v1", "math.times-clamp.v1" },
+            new[] { stateA, stateB }, selections);
+
+        Assert.Equal(first.DeltaSemanticHash, second.DeltaSemanticHash);
+        Assert.Equal(new[] { "input.pointer-button.v1", "math.times-clamp.v1" }, first.CapabilityIds.ToArray());
+        // 同语义、不同 PackSha256 / 表面状态 / 变体选择 → 语义哈希必须改变。
+        Assert.NotEqual(first.DeltaSemanticHash, new ValidatedPackDelta(
+            "test.delta", "1.0.0", new string('e', 64), first.CapabilityIds, first.SurfaceStates, selections)
+            .DeltaSemanticHash);
+        Assert.NotEqual(first.DeltaSemanticHash, new ValidatedPackDelta(
+            "test.delta", "1.0.0", sha, first.CapabilityIds, new[] { stateA }, selections).DeltaSemanticHash);
+        Assert.NotEqual(first.DeltaSemanticHash, new ValidatedPackDelta(
+            "test.delta", "1.0.0", sha, first.CapabilityIds, first.SurfaceStates,
+            new Dictionary<string, string>(StringComparer.Ordinal)).DeltaSemanticHash);
+    }
 }

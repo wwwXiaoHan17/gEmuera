@@ -12,6 +12,9 @@ namespace MinorShift.Emuera.Compatibility;
 /// </summary>
 internal static class SnakeLegacySurfaceNames
 {
+    /// <summary>v24pure 隐藏名的诊断归属：让未选中会话的查询提示"安装/选择 pack.gemuera.snake"。</summary>
+    internal const string OwnerPackId = "pack.gemuera.snake";
+
     internal static readonly IReadOnlyCollection<string> SnakeOnlyInstructionNames = Array.AsReadOnly(new[]
     {
         "BITMAP_CACHE_ENABLE", "CALLSTR", "CLEARIMAGELAYER", "CLEARIMAGELAYER_ALL",

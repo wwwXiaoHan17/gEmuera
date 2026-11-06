@@ -154,7 +154,9 @@ namespace MinorShift.Emuera.Compatibility
 			}
 			// v24pure 基线隐藏面（原内置 snake 模块 Declare 的职责，P-D 步 5 迁出）：
 			// 先隐藏 snake 专有名字，再由选中的包/模块在 Apply/ApplyPackSurface 阶段暴露。
-			builder.SetDeclaringModule(LegacyCompatibilityModuleCatalog.V24ModuleId);
+			// 归属记为第一方包（不是已退役的 game.snake 模块）：v24pure 查询这些名字时给出
+			// "安装/选择 pack.gemuera.snake" 的可操作提示；包会话内该模块在闭包中则不再提示。
+			builder.SetDeclaringModule(SnakeLegacySurfaceNames.OwnerPackId);
 			builder.DeclareInstructionNames(SnakeLegacySurfaceNames.SnakeOnlyInstructionNames);
 			builder.DeclareFunctionNames(SnakeLegacySurfaceNames.SnakeOnlyFunctionNames);
 			foreach (DialectModuleSnapshot selectedModule in plan.Dialect.Modules)

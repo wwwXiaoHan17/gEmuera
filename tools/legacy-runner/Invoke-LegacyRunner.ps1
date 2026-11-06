@@ -92,7 +92,7 @@ function Get-SupportedCompatibilityProfile {
 # Output: EngineProfile (live engine profile, normally v24pure) + PackId/PackPath (staging DLL).
 # Unknown profile or missing staging throws (non-zero exit): no false-green evidence is allowed.
 function Resolve-CompatibilityPackLaunch {
-    param([string]$RequestedProfile)
+    param([string]$RequestedProfile, [string]$ProjectRoot)
     $supported = @(Get-SupportedCompatibilityProfile)
     if ([string]::IsNullOrWhiteSpace($RequestedProfile)) { $RequestedProfile = 'v24pure' }
     if ($supported -contains $RequestedProfile) {
@@ -103,7 +103,12 @@ function Resolve-CompatibilityPackLaunch {
             PackPath = ''
         }
     }
-    $repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '../..')).Path
+    if ([string]::IsNullOrWhiteSpace($ProjectRoot)) {
+        $repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '../..')).Path
+    }
+    else {
+        $repoRoot = (Resolve-Path -LiteralPath $ProjectRoot).Path
+    }
     $mapPath = Join-Path $repoRoot 'assets/text/pack-profile-map.json'
     if (-not (Test-Path -LiteralPath $mapPath -PathType Leaf)) {
         throw "Profile '$RequestedProfile' is retired but pack-profile-map.json is missing: $mapPath"
@@ -314,7 +319,7 @@ try {
         throw 'An existing game root must be supplied through -GameRoot or the config file.'
     }
     # Retired profile translation: engine profile becomes v24pure, pack path is injected via env.
-    $baseResolution = Resolve-CompatibilityPackLaunch -RequestedProfile ([string]$baseConfig.profile)
+    $baseResolution = Resolve-CompatibilityPackLaunch -RequestedProfile ([string]$baseConfig.profile) -ProjectRoot $projectRootResolved
     $baseConfig.profile = $baseResolution.EngineProfile
     $baseConfig | Add-Member -NotePropertyName baseProfile -NotePropertyValue $baseResolution.BaseProfile -Force
     $baseConfig | Add-Member -NotePropertyName engineProfile -NotePropertyValue $baseResolution.EngineProfile -Force
@@ -358,9 +363,9 @@ try {
         if (-not $alternateSession.gameRoot -or -not (Test-Path -LiteralPath $alternateSession.gameRoot -PathType Container)) {
             throw 'cross-aba alternate session requires an existing gameRoot.'
         }
-        $alternateResolution = Resolve-CompatibilityPackLaunch -RequestedProfile ([string]$alternateSession.profile)
+        $alternateResolution = Resolve-CompatibilityPackLaunch -RequestedProfile ([string]$alternateSession.profile) -ProjectRoot $projectRootResolved
         if ($alternateResolution.PackId -ne $baseResolution.PackId) {
-            throw 'cross-aba sessions using different first-party packs are not supported (GEMUERA_COMPAT_PACKS is process-wide).'
+            throw ("cross-aba base/alternate resolve to different first-party packs ('" + $baseResolution.PackId + "' vs '" + $alternateResolution.PackId + "'); GEMUERA_COMPAT_PACKS is process-wide, so pass the same retired profile on both sides (e.g. -Profile snake -AlternateProfile snake) or v24pure for both.")
         }
         $alternateSourceGameRoot = [IO.Path]::GetFullPath([string]$alternateSession.gameRoot)
         $alternateProfile = $alternateResolution.EngineProfile
@@ -532,6 +537,10 @@ try {
             if ($logText -notmatch $enabledPattern) {
                 throw ("Runner did not load expected first-party pack '" + $baseResolution.PackId + "' for profile '" + $baseResolution.BaseProfile + "' (false-green guard).")
             }
+            # Negative guard: enabled + later projection failure/fallback means the pack did NOT take effect.
+            if ($logText -match 'CompatPack projection failed|fallback to no-pack baseline') {
+                throw ("Runner observed compat-pack projection failure/fallback for pack '" + $baseResolution.PackId + "' (false-green guard).")
+            }
         }
         $missingReports = @($requiredReportFilesForRun | Where-Object { -not (Test-Path -LiteralPath (Join-Path $runDirectory $_) -PathType Leaf) })
         $canonicalEntries = @()
@@ -638,6 +647,8 @@ try {
             [ordered]@{
                 gameRoot = Get-NormalizedFullPath -Path $alternateSourceGameRoot
                 profile = $alternateProfile
+                baseProfile = $alternateResolution.BaseProfile
+                engineProfile = $alternateResolution.EngineProfile
                 sharesPrimaryFixtureSource = $alternateUsesPrimarySource
             }
         }

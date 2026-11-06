@@ -400,7 +400,7 @@ per-game 启用配置（launcher 侧：游戏 → 包列表）给出**包文件�
 
 ### 13.10 v18 第一方数据包与等价门禁（2026-10-03）
 
-- `packs/gemuera.v18/`（manifest-only 数据包，packId=`pack.gemuera.v18`）内嵌的
+- `packs/pack.gemuera.v18/`（manifest-only 数据包，packId=`pack.gemuera.v18`）内嵌的
   `compatpack.manifest.json` 是**生成物**，由 `tools/compat-pack/Generate-V18PackManifest`
   从生成清单 `LegacyDialectInventories`（唯一事实源）计算 v24−v18 差集：
   hideInstructions=144、hideFunctions=106、add* 恒为空（v18 ⊆ v24 取证成立；add* 非空时

@@ -335,6 +335,13 @@ public static class CompatPackRules
         // 跳过 hide 函数 → hide 指令的镜像（内置 snake 的 BITMAP_CACHE_ENABLE 语义）。
         var instructionCollisions = new HashSet<string>(
             manifest.Surface.AddInstructionCollisions, StringComparer.Ordinal);
+        if (instructionCollisions.Count > 0
+            && (manifest.ContractAbi.Major < 1
+                || (manifest.ContractAbi.Major == 1 && manifest.ContractAbi.Minor < 1)))
+        {
+            collected.Add("surface.addInstructionCollisions 需要 contractAbi >= 1.1（当前 "
+                + manifest.ContractAbi + "）。");
+        }
         foreach (string collision in instructionCollisions.Order(StringComparer.Ordinal))
         {
             if (!context.MethodProjectedInstructionNames.Contains(collision))

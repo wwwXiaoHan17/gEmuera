@@ -16,7 +16,7 @@
       "relativePath": "compat_packs/pack.gemuera.megaten/pack.gemuera.megaten.dll",
       "relativePathAndroid": "packs/pack.gemuera.megaten/pack.gemuera.megaten.dll",
       "requiredPackVersion": "1.0.0",
-      "note": "示例占位：megaten 退役步产出（manifest-only 包 + 5 个 Wired capability；DiagnosticOnly 不可入包）。"
+      "note": "已落地：pack.gemuera.megaten（manifest-only，5 个 Wired capability；DiagnosticOnly 不可入包）。"
     },
     {
       "profileId": "erablue",
@@ -24,7 +24,7 @@
       "relativePath": "compat_packs/pack.gemuera.erablue/pack.gemuera.erablue.dll",
       "relativePathAndroid": "packs/pack.gemuera.erablue/pack.gemuera.erablue.dll",
       "requiredPackVersion": "1.0.0",
-      "note": "示例占位：erablue 退役步产出（surface.addInstructions=[SETANIMETIMER] + 1 个 Wired capability）。"
+      "note": "已落地：pack.gemuera.erablue（surface.addInstructions=[SETANIMETIMER] + 1 个 Wired capability）。"
     },
     {
       "profileId": "erafl",
@@ -32,7 +32,7 @@
       "relativePath": "compat_packs/pack.gemuera.erafl/pack.gemuera.erafl.dll",
       "relativePathAndroid": "packs/pack.gemuera.erafl/pack.gemuera.erafl.dll",
       "requiredPackVersion": "1.0.0",
-      "note": "示例占位：erafl 退役步产出（10 个 Wired capability；算法实现在引擎保留）。"
+      "note": "已落地：pack.gemuera.erafl（10 个 Wired capability；算法实现在引擎保留）。"
     },
     {
       "profileId": "snake",
@@ -40,7 +40,7 @@
       "relativePath": "compat_packs/pack.gemuera.snake/pack.gemuera.snake.dll",
       "relativePathAndroid": "packs/pack.gemuera.snake/pack.gemuera.snake.dll",
       "requiredPackVersion": "1.0.0",
-      "note": "示例占位：snake 退役步产出（19 个 Wired capability + variantSelections builtin:snake + BITMAP_CACHE_ENABLE 碰撞字段）。"
+      "note": "已落地：pack.gemuera.snake（19 个 Wired capability + variantSelections builtin:snake + BITMAP_CACHE_ENABLE 碰撞字段）。"
     }
   ]
 }

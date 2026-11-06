@@ -105,7 +105,7 @@ public class CompatPackProfileMapTests
         Assert.True(
             CompatPackProfileMap.TryParse(File.ReadAllText(mapPath), out CompatPackProfileMap? map, out var errors),
             string.Join("; ", errors));
-        foreach (string profileId in new[] { "v18", "megaten", "erablue", "erafl" })
+        foreach (string profileId in new[] { "v18", "megaten", "erablue", "erafl", "snake" })
         {
             Assert.True(map!.TryGetEntry(profileId, out CompatPackProfileMapEntry entry), "缺少映射条目：" + profileId);
             AssertPathShape(entry, entry.RelativePath, "compat_packs");

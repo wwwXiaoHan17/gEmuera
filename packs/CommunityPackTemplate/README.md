@@ -6,7 +6,7 @@
 ## 复制与改名
 
 1. 复制整个目录：`packs/CommunityPackTemplate/` → `packs/<你的 packId>/`
-   （packId 形如 `community.r18.mymod`，只允许小写字母/数字/点/下划线/连字符）。
+   （packId 形如 `community.r18.mymod`，只允许小写字母/数字/点/连字符；不允许下划线）。
 2. 重命名 csproj：`CommunityPackTemplate.csproj` → `<你的 packId>.csproj`；
    把 `<AssemblyName>` 改成 packId（构建产物 DLL 名必须等于 packId，一包一目录）。
 3. 重命名标记类文件（可选，仅用于测试定位程序集）：`CommunityPackTemplateMarker.cs` → `<PackName>Marker.cs`，
@@ -21,7 +21,7 @@
 {
   "packId": "community.example.mymod",
   "packVersion": "1.0.0",
-  "contractAbi": "1.1",
+  "contractAbi": "1.0",
   "engineApi": "1.0",
   "baseProfileId": "v24pure",
   "baseSurfaceHash": "<64 位小写十六进制；带 surface/variant 时必填>",

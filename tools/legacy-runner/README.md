@@ -107,12 +107,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/legacy-runner/Invoke-S
   -GameRoot "<A game root>" `
   -Profile v24pure `
   -AlternateGameRoot "<B game root>" `
-  -AlternateProfile snake `
+  -AlternateProfile v24pure `
   -OutputDirectory "<empty-output-directory>" `
   -RepeatCount 1 `
   -UseDisplayServer
 ```
 
 输出为 `M1-RUN-INPROCESS-CROSS-ABA-01`；它是首等待、无输入的局部隔离观察，不覆盖所有 static root、输入中切换、晚到 completion、100 次泄漏、Android、Parser/VM handler/typed-policy behavior 或 M1 gate。默认 `migration.session_isolation=false` 和普通启动链不变。
+
+> P-D 退役后：`GEMUERA_COMPAT_PACKS` 是进程级单包注入，A/B 两侧必须解析到同一个第一方包。默认两侧 v24pure 可执行；要测跨方言请两侧传同一个退役 profile（如 `-Profile snake -AlternateProfile snake`）；两侧 packId 不同会显式报错，不产生假证据。
 
 默认 harness 只构建已准备好的 `gemuera-c#.sln`，并显式使用 `--no-restore`，避免 M0 回放在受限网络中临时改写 Godot SDK 资产；首次准备 C# 资产应由 Godot 4.7 Mono editor 完成。若构建已由独立步骤验证，可对 `Test-LegacyRunner.ps1` 传入 `-SkipBuild`，此时它仍完整验证隔离回放、报告和 `semantic-trace.json`，但不替代独立 build 结论。

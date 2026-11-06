@@ -6,7 +6,9 @@ param(
     [Parameter(Mandatory = $true)][string]$GameRoot,
     [ValidateSet('v24pure', 'v18', 'megaten', 'erablue', 'erafl', 'snake')][string]$Profile = 'v24pure',
     [Parameter(Mandatory = $true)][string]$AlternateGameRoot,
-    [ValidateSet('v24pure', 'v18', 'megaten', 'erablue', 'erafl', 'snake')][string]$AlternateProfile = 'snake',
+    # 退役后 GEMUERA_COMPAT_PACKS 是进程级单包注入：base/alternate 必须解析到同一个 packId。
+    # 默认两侧 v24pure 保持可执行；要跨方言请两侧传同一个退役 profile（如 snake/snake）。
+    [ValidateSet('v24pure', 'v18', 'megaten', 'erablue', 'erafl', 'snake')][string]$AlternateProfile = 'v24pure',
     [Parameter(Mandatory = $true)][string]$OutputDirectory,
     [ValidateRange(1, 10)][int]$RepeatCount = 1,
     [ValidateRange(2, 100)][int]$SwitchCount = 2,
@@ -194,16 +196,18 @@ try {
     if ([int]$runnerSummary.inProcessSessionSwitchCount -ne $SwitchCount) {
         throw "cross_aba_runner_switch_count_not_effective:actual=$($runnerSummary.inProcessSessionSwitchCount)"
     }
-    if ($null -eq $runnerSummary.alternateSession -or $runnerSummary.alternateSession.profile -ne $AlternateProfile) {
-        throw 'cross_aba_runner_alternate_session_not_effective'
+    if ($null -eq $runnerSummary.alternateSession -or $runnerSummary.alternateSession.baseProfile -ne $AlternateProfile) {
+        throw ('cross_aba_runner_alternate_session_not_effective:requested=' + $AlternateProfile + ' reported=' + $runnerSummary.alternateSession.baseProfile)
     }
 
     $alternateSharesPrimarySource = [bool]$runnerSummary.alternateSession.sharesPrimaryFixtureSource
     $results = @()
     foreach ($run in @($runnerSummary.runs)) {
         $runDirectory = Join-Path $runOutput ('run-{0:D3}' -f [int]$run.run)
+        # 指纹/提交事件记录的是引擎 profile（退役请求已翻译为 v24pure）。
         $evidence = Get-CrossAbaRunEvidence -RunDirectory $runDirectory `
-            -ExpectedPrimaryProfile $Profile -ExpectedAlternateProfile $AlternateProfile `
+            -ExpectedPrimaryProfile ([string]$runnerSummary.profile) `
+            -ExpectedAlternateProfile ([string]$runnerSummary.alternateSession.engineProfile) `
             -AlternateSharesPrimarySource $alternateSharesPrimarySource -ExpectedSwitchCount $SwitchCount
         $results += [ordered]@{
             run = [int]$run.run

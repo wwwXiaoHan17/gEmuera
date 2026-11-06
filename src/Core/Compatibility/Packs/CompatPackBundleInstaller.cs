@@ -170,9 +170,13 @@ public static partial class CompatPackBundleInstaller
                 string targetHash = HashFile(targetPath);
                 if (string.Equals(targetHash, sourceHash, StringComparison.OrdinalIgnoreCase))
                 {
-                    // 同字节：跳过写入（但把记录补齐，便于后续内置升级覆盖）。
-                    installedHashes[payload.PackId] = sourceHash;
-                    stateChanged = true;
+                    // 同字节：跳过写入；仅在记录确实变化时才标记 stateChanged，避免每次启动都重写状态文件。
+                    if (!installedHashes.TryGetValue(payload.PackId, out string? recordedSame)
+                        || !string.Equals(recordedSame, sourceHash, StringComparison.OrdinalIgnoreCase))
+                    {
+                        installedHashes[payload.PackId] = sourceHash;
+                        stateChanged = true;
+                    }
                     skipped++;
                     continue;
                 }

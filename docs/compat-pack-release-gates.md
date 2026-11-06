@@ -328,7 +328,9 @@ reports/compatpack/
   报告与 `[LOAD] CompatPack enabled` 日志）。
 - Gate 1 的 fallback 目标正则已从六个旧 profile 名改为"无包基线 / v24pure / pack.gemuera.* /
   first-party pack"；旧日志（只写 snake/erafl 等）不再能作为新证据。
-- 当前状态（2026-11-07 P-D 退役后，桌面档）：PASS（8 项检查，桌面命令 7/7）；Core 314 passed /
+- **日常 governance 也需要先跑 staging**：`Test-Governance.ps1` 内部调用桌面 release gate，因此干净
+  checkout 必须先执行 `tools/compat-pack/Build-FirstPartyPacks.ps1`，否则 staging 完整性检查 FAIL。
+- 当前状态（2026-11-07 P-D 退役后，桌面档）：PASS（8 项检查，桌面命令 7/7）；Core 327 passed /
   1 skipped（+ installer 13 用例在该计数内）、Facade 79、ABI 4；三冒烟与 lifecycle 4/4 全绿；
   v24 表面哈希 `950dbeb9…` 钉扎 PASS；`profiles.generated.json` 仅 v24pure。
 - 仍**不可发布**：Gate 1/2/7 的真机与六游戏证据未采集（`reports/compatpack/*.json` 缺失）；

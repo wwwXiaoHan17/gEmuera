@@ -143,8 +143,8 @@ dotnet build packs/CommunityPackTemplate/CommunityPackTemplate.csproj -c Release
   `res://compat_packs` 调试根）。注意不是"每个游戏根目录下的 compat_packs"。
 - Android 端：`/storage/emulated/0/emuera/packs/`。
 
-v1 启动器**只扫描安装根顶层**的 `*.dll`（不递归子目录、不联网下载）；在启动器中勾选后，
-所选路径经环境变量 `GEMUERA_COMPAT_PACKS`（分号分隔）传给引擎加载。
+v1 启动器扫描安装根的**一层**（顶层 `*.dll` + 一级子目录 `<packId>/*.dll`，不递归更深、不联网下载）；
+在启动器中勾选后，所选路径经环境变量 `GEMUERA_COMPAT_PACKS`（分号分隔）传给引擎加载。
 
 **每包独立目录（唯一支持的部署形态）**：把每个包（主 DLL + 它引用的私有依赖）放进
 安装根下的独立子目录 `<安装根>/<packId>/<你的包>.dll`。安装根顶层**只允许放一个包**的

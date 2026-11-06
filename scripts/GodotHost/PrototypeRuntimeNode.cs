@@ -80,14 +80,10 @@ public partial class PrototypeRuntimeNode : Node
 
 	private void OnRequestToggle()
 	{
-		// 调试浮层的 profile 轮换：v24pure → snake → erafl → v24pure。
-		// P-D 退役后 megaten/snake/erafl 由兼容包供给；浮层轮换只覆盖仍内置的 profile。
-		string nextProfile = string.Equals(ProfileId, FirstWindow.CoreProfileV24Pure, StringComparison.OrdinalIgnoreCase)
-			? FirstWindow.CoreProfileSnake
-			: string.Equals(ProfileId, FirstWindow.CoreProfileSnake, StringComparison.OrdinalIgnoreCase)
-				? FirstWindow.CoreProfileEraFl
-				: FirstWindow.CoreProfileV24Pure;
-		QueueCommand(token => SwitchProfileAsync(nextProfile, token));
+		// P-D 退役后 snake/erafl/megaten/v18/erablue 均由 launcher 映射 + 兼容包供给，
+		// Core 内只剩 v24pure 这一个存活 profile；调试浮层不再轮换到已退役 profile
+		//（切过去会因 profiles.Resolve 失败显示 "Core prototype unavailable"）。
+		QueueCommand(token => SwitchProfileAsync(FirstWindow.CoreProfileV24Pure, token));
 	}
 
 	private void OnRequestDetach()

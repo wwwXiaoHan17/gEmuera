@@ -622,7 +622,7 @@ public partial class FirstWindow : Control
 		compatibilityProfileOption.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 		compatibilityProfileOption.AddThemeFontSizeOverride("font_size", 15);
 		compatibilityProfileOption.AddItem(CoreProfileV24Pure);
-		compatibilityProfileOption.AddItem(CoreProfileSnake);
+		compatibilityProfileOption.AddItem(CoreProfileSnake + "（兼容包）");
 		compatibilityProfileOption.AddItem(CoreProfileEraFl + "（兼容包）");
 		compatibilityProfileOption.AddItem(CoreProfileV18 + "（兼容包）");
 		compatibilityProfileOption.AddItem(CoreProfileEraBlue + "（兼容包）");
@@ -736,9 +736,20 @@ public partial class FirstWindow : Control
 
 	// 已退役 launcher profile 的兜底集合（映射文件缺失/损坏时仍能安全启动）：
 	// 与映射条目同源的硬编码清单，每个退役步追加；未退役 profile 绝不在此列。
+	internal static bool IsRetiredLauncherProfile(string launcherProfileId)
+	{
+		string raw = (launcherProfileId ?? "").Trim();
+		foreach (string retired in RetiredLauncherProfiles)
+		{
+			if (string.Equals(raw, retired, System.StringComparison.OrdinalIgnoreCase))
+				return true;
+		}
+		return false;
+	}
+
 	internal static readonly string[] RetiredLauncherProfiles =
 	{
-		CoreProfileV18, CoreProfileMegaten, CoreProfileEraBlue, CoreProfileEraFl,
+		CoreProfileV18, CoreProfileMegaten, CoreProfileEraBlue, CoreProfileEraFl, CoreProfileSnake,
 	};
 
 	/// <summary>launcher profile id → 引擎 profile id（映射命中 = 已退役，翻译为 v24pure）。</summary>
@@ -763,7 +774,13 @@ public partial class FirstWindow : Control
 		packPath = null;
 		warning = "";
 		CompatPackProfileMap map = GetPackProfileMap();
-		if (map == null || !map.TryGetEntry(launcherProfileId, out CompatPackProfileMapEntry entry))
+		if (map == null)
+		{
+			if (IsRetiredLauncherProfile(launcherProfileId))
+				warning = "；未找到兼容包映射（pack-profile-map.json 缺失/损坏）：本次将以 v24 基线启动。";
+			return false;
+		}
+		if (!map.TryGetEntry(launcherProfileId, out CompatPackProfileMapEntry entry))
 			return false;
 		string relativePath = OS.GetName() == "Android" ? entry.RelativePathAndroid : entry.RelativePath;
 		string absolutePath = AbsoluteizeCompatPackPath(relativePath);
@@ -974,15 +991,15 @@ public partial class FirstWindow : Control
 
 	void ScanGames()
 	{
+		// 第一方包释放必须先于 ResolveStartupGamePath（后者会调用 ApplyCompatPackEnvironment
+		// 做映射预检）；否则升级后首次冷启动会误报"未找到兼容包"。
+		FirstPartyPackBootstrap.EnsureInstalled();
 		string selectedPath = null;
 		if (TryGetSelectedGameEntry(out LauncherGameEntry selectedEntry))
 			selectedPath = selectedEntry.GameRoot;
 		if (string.IsNullOrEmpty(selectedPath))
 			selectedPath = ResolveStartupGamePath();
 
-		// 第一方包释放（执行设计 §6.1）：必须在权限解析后的包扫描之前；Android 未授权时
-		// 内部只记 Info 并跳过，resume/再次扫描会自动重试，不阻断启动。
-		FirstPartyPackBootstrap.EnsureInstalled();
 		// 兼容包候选与游戏列表同生命周期刷新（进页/切 tab/授权后都会走到这里），
 		// 且必须先于 PopulateGameList 的恢复选中回填完成。
 		ScanCompatPackCandidates();

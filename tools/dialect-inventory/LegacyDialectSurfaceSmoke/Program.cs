@@ -353,6 +353,7 @@ static class Program
                 "v24pure 查询基线指令 PRINT 不应提示。");
 
             AssertMethodProjectionInventoryMatchesRuntime();
+            AssertFirstWindowLauncherProfileTable();
             AssertSurfaceHashInputConsistency();
             AssertPackProjection();
             AssertV18PackEquivalence();
@@ -385,6 +386,48 @@ static class Program
     // 官方包生成器只依赖 Core，使用 LegacySurfaceHash.CanonicalBuiltinVariants 缺省镜像。
     // 两者必须逐项相等，否则同一引擎表面会得到两个 hash。另外用引擎变体表显式构造的
     // 输入必须与 canonical 缺省输入得到同一 hash（生成器写出的值 == 宿主校验值）。
+    /// <summary>
+    /// 静态测试：退役 launcher profile 兜底表必须完整（5 项），且高级下拉不得出现重复 snake。
+    /// FirstWindow 是 Godot UI 宿主类型，无法在 xUnit 里直接实例化；用源码文本断言钉住这两个易回归点。
+    /// </summary>
+    private static void AssertFirstWindowLauncherProfileTable()
+    {
+        string directory = AppContext.BaseDirectory;
+        string? repoRoot = null;
+        while (!string.IsNullOrEmpty(directory))
+        {
+            if (File.Exists(Path.Combine(directory, "gemuera-c#.csproj")))
+            {
+                repoRoot = directory;
+                break;
+            }
+            directory = Path.GetDirectoryName(directory) ?? "";
+        }
+        Assert(repoRoot is not null, "无法定位仓库根（gemuera-c#.csproj）。");
+        string source = File.ReadAllText(Path.Combine(repoRoot!, "scripts", "FirstWindow.cs"));
+        foreach (string profile in new[] { "CoreProfileV18", "CoreProfileMegaten", "CoreProfileEraBlue", "CoreProfileEraFl", "CoreProfileSnake" })
+        {
+            int tableIndex = source.IndexOf("RetiredLauncherProfiles", StringComparison.Ordinal);
+            int tableEnd = source.IndexOf("};", tableIndex, StringComparison.Ordinal);
+            Assert(tableIndex >= 0 && tableEnd > tableIndex
+                && source[tableIndex..tableEnd].Contains(profile, StringComparison.Ordinal),
+                "RetiredLauncherProfiles 缺退役 profile：“" + profile + "”。");
+        }
+        int snakeOptionCount = 0;
+        int search = 0;
+        while (true)
+        {
+            int index = source.IndexOf("AddItem(CoreProfileSnake", search, StringComparison.Ordinal);
+            if (index < 0) break;
+            snakeOptionCount++;
+            search = index + 1;
+        }
+        Assert(snakeOptionCount == 1,
+            "高级 profile 下拉的 snake 选项必须恰好一个（防重复项静默回落 v24pure）：" + snakeOptionCount);
+        Assert(source.Contains("CoreProfileSnake => 1", StringComparison.Ordinal),
+            "GetManualProfileOptionIndex 未把 snake 映射到固定索引。");
+    }
+
     private static void AssertSurfaceHashInputConsistency()
     {
         IReadOnlyDictionary<string, IReadOnlySet<string>> engineVariants =
@@ -766,9 +809,9 @@ static class Program
         // owner → 不提示。
         Assert(!packed.TryGetUnselectedModuleHint("CALLSHARP", out _),
             "包隐藏名的归属模块在本会话闭包内，不应提示。");
-        // snake 退役后 CALLSTR 归属由包/v24 基线隐藏面共同决定；仅要求查询不抛异常。
-        Assert(packed.TryGetUnselectedModuleHint("CALLSTR", out string? packHintOwner) || true,
-            "v24pure+包 会话查询 CALLSTR 不应抛出：提示归属=" + packHintOwner);
+        // snake 退役后 CALLSTR 的隐藏归属记到第一方包；该合成包会话未选中 snake 包 → 仍提示安装归属。
+        Assert(packed.TryGetUnselectedModuleHint("CALLSTR", out string? packHintOwner) && packHintOwner == "pack.gemuera.snake",
+            "v24pure+包 会话查询 CALLSTR 应提示归属 pack.gemuera.snake：" + packHintOwner);
         Assert(!packed.TryGetUnselectedModuleHint("SQL_CONNECT", out _),
             "包注册名已解除隐藏，不应提示。");
 

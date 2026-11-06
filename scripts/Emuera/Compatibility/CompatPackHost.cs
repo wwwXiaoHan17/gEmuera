@@ -99,9 +99,9 @@ internal static CompatPackValidationContext BuildValidationContext(string baseli
 		/// 引擎指令 handler 名全集（register 对账基准）。真实注册表（FunctionIdentifier.funcDic）
 		/// 的静态构造器不可在此触发：BuildValidationContext 运行于游戏配置装载前，funcDic 的
 		/// 比较器初始化读取 Config.ICVariable，提前触发会把比较器钉在装载前的默认值。故基准
-		/// 取 Core 侧生成清单的六 profile 并集——清单由生成器从引擎真实投影导出（单一事实源），
-		/// 并集 = 引擎在任何会话可暴露的全部指令名，且 ⊇ 内置模块可 Declare 名单
-		///（snake/erafl/erablue 的声明名均在各自增量清单内），包 add 的合法名字不会被误拒。
+		/// 取 Core 侧生成清单的冻结表面并集——v24 live 投影 + 冻结退役方言增量（生成器从
+		/// 退役前引擎真实投影固化为 `retired-dialect-surface-universe.json`，单一事实源）；
+		/// 并集 = 引擎在任何会话可暴露的全部指令名，包 add 的合法名字不会被误拒。
 		/// 在所有会话均被刻意隐藏的 port 内部名（如 OUTPUTLOG 指令形态）不在并集内——它们
 		/// 不是任何方言契约的一部分，包试图暴露时按"无 handler"拒载（fail-at-load）。
 		/// </summary>
@@ -131,7 +131,7 @@ internal static CompatPackValidationContext BuildValidationContext(string baseli
 		}
 		/// <summary>
 		/// 引擎表达式函数名 → 真实返回类型，供 manifest-only 数据包生成 descriptor；
-		/// 与 handler 名全集同源（六 profile 生成清单并集）。名字以 Trim+Upper 规范化，
+		/// 与 handler 名全集同源（v24 live + 冻结退役方言增量并集）。名字以 Trim+Upper 规范化，
 		/// 与 CompatPackRules 录制回放的函数名规范化一致；同一名字返回类型冲突即宿主配置错误。
 		/// </summary>
 		static IReadOnlyDictionary<string, string> BuildEngineFunctionReturnTypes()
