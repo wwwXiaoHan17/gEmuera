@@ -22,6 +22,12 @@ public partial class OptionWindow : Control
 	CheckButton quickFlipToggle;
 	CheckButton quickFloatingToggle;
 	CheckButton vsyncToggle;
+	CheckButton mobileLayoutLoggingToggle;
+	CheckButton mobileLayoutPanelToggle;
+	Label mobileLayoutGroupTitle;
+	Label mobileLayoutLoggingLabel;
+	Label mobileLayoutPanelLabel;
+	Label mobileLayoutHintLabel;
 	Slider maxVisibleLinesSlider;
 	Label maxVisibleLinesLabel;
 	// 游戏界面左右额外留白（仅移动端生效）：全面屏/曲面屏安全区显示异常时手动修正。
@@ -242,6 +248,36 @@ public partial class OptionWindow : Control
 		displayGroup.AddChild(vsyncHintLabel);
 		// 初始文案与可见性（ApplyLanguageTexts 在 _Ready 末尾还会再刷新一次，幂等）。
 		RefreshVSyncHint();
+
+		// ---- 移动端布局诊断（排障用，默认关闭；开关存 user://settings.cfg）----
+		var mobileLayoutGroup = CreateGroup(content, out mobileLayoutGroupTitle);
+		var mobileLayoutLoggingRow = CreateRow(mobileLayoutGroup, out mobileLayoutLoggingLabel);
+		mobileLayoutLoggingToggle = new CheckButton();
+		mobileLayoutLoggingToggle.ButtonPressed = MobileLayoutDiagnosticsSettings.LoggingEnabled;
+		mobileLayoutLoggingToggle.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		mobileLayoutLoggingToggle.CustomMinimumSize = new Vector2(120, 44);
+		mobileLayoutLoggingToggle.TooltipText = MultiLanguage.Get("OptionWindow.MobileLayoutLoggingHint",
+			"Log rotation, system small-window, and scroll reconciliation diagnostics (troubleshooting only, off by default).");
+		mobileLayoutLoggingToggle.Toggled += OnMobileLayoutLoggingToggled;
+		mobileLayoutLoggingRow.AddChild(mobileLayoutLoggingToggle);
+
+		var mobileLayoutPanelRow = CreateRow(mobileLayoutGroup, out mobileLayoutPanelLabel);
+		mobileLayoutPanelToggle = new CheckButton();
+		mobileLayoutPanelToggle.ButtonPressed = MobileLayoutDiagnosticsSettings.PanelEnabled;
+		mobileLayoutPanelToggle.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		mobileLayoutPanelToggle.CustomMinimumSize = new Vector2(120, 44);
+		mobileLayoutPanelToggle.TooltipText = MultiLanguage.Get("OptionWindow.MobileLayoutPanelHint",
+			"Shows live layout state in the top-left corner (troubleshooting only, off by default).");
+		mobileLayoutPanelToggle.Toggled += OnMobileLayoutPanelToggled;
+		mobileLayoutPanelRow.AddChild(mobileLayoutPanelToggle);
+
+		mobileLayoutHintLabel = new Label();
+		mobileLayoutHintLabel.AddThemeFontSizeOverride("font_size", 12);
+		mobileLayoutHintLabel.AddThemeColorOverride("font_color", GEmueraTheme.TextSecondary);
+		mobileLayoutHintLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+		mobileLayoutHintLabel.Text = MultiLanguage.Get("OptionWindow.MobileLayoutPanelHint",
+			"Shows live layout state in the top-left corner (troubleshooting only, off by default).");
+		mobileLayoutGroup.AddChild(mobileLayoutHintLabel);
 
 		// ---- Quick: 快捷按钮宽度 / 快捷字体 ----
 		var quickGroup = CreateGroup(content, out quickGroupTitle);
@@ -516,6 +552,14 @@ public partial class OptionWindow : Control
 		if (systemGroupTitle != null)
 			systemGroupTitle.Text = MultiLanguage.Get("OptionWindow.GroupSystem", "System");
 		// 「高级：emuera.config」调试区（折叠未构建时只刷新标题；见 OptionWindow.EmueraConfig.cs）。
+		if (mobileLayoutGroupTitle != null)
+			mobileLayoutGroupTitle.Text = MultiLanguage.Get("OptionWindow.MobileLayoutGroup", "Mobile Layout Diagnostics");
+		if (mobileLayoutLoggingLabel != null)
+			mobileLayoutLoggingLabel.Text = MultiLanguage.Get("OptionWindow.MobileLayoutLogging", "Layout Diagnostics Log");
+		if (mobileLayoutPanelLabel != null)
+			mobileLayoutPanelLabel.Text = MultiLanguage.Get("OptionWindow.MobileLayoutPanel", "Layout State Panel");
+		if (mobileLayoutHintLabel != null)
+			mobileLayoutHintLabel.Text = MultiLanguage.Get("OptionWindow.MobileLayoutPanelHint", "Shows live layout state in the top-left corner (troubleshooting only, off by default).");
 		ApplyEmueraConfigLanguageTexts();
 	}
 
@@ -641,6 +685,10 @@ public partial class OptionWindow : Control
 		VirtualMouse.ConfiguredOpacity = opacity;
 		VirtualMouse.Instance?.RefreshOpacity();
 	}
+
+	void OnMobileLayoutLoggingToggled(bool enabled) => MobileLayoutDiagnosticsSettings.LoggingEnabled = enabled;
+
+	void OnMobileLayoutPanelToggled(bool enabled) => MobileLayoutDiagnosticsSettings.PanelEnabled = enabled;
 
 	void OnPinchZoomToggled(bool enabled)
 	{

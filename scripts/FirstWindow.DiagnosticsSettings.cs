@@ -8,6 +8,9 @@ using System.IO;
 
 public partial class FirstWindow : Control
 {
+	CheckButton mobileLayoutLoggingToggle;
+	CheckButton mobileLayoutPanelToggle;
+
 	Control CreateDiagnosticsContent()
 	{
 		var scroll = new ScrollContainer();
@@ -100,6 +103,22 @@ public partial class FirstWindow : Control
 		body.AddChild(CreateLogLevelRow());
 		body.AddChild(CreateLogCategoryGrid());
 
+		mobileLayoutLoggingToggle = CreateSettingsToggle(
+			MultiLanguage.Get("FirstWindow.MobileLayoutLogging", "布局诊断日志"),
+			MobileLayoutDiagnosticsSettings.LoggingEnabled,
+			OnMobileLayoutLoggingToggled);
+		body.AddChild(mobileLayoutLoggingToggle);
+		body.AddChild(CreateHintLabel(MultiLanguage.Get("FirstWindow.MobileLayoutLoggingHint",
+			"记录横竖屏/系统小窗/滚动对账的诊断日志（排障用，默认关闭）。")));
+
+		mobileLayoutPanelToggle = CreateSettingsToggle(
+			MultiLanguage.Get("FirstWindow.MobileLayoutPanel", "布局状态面板"),
+			MobileLayoutDiagnosticsSettings.PanelEnabled,
+			OnMobileLayoutPanelToggled);
+		body.AddChild(mobileLayoutPanelToggle);
+		body.AddChild(CreateHintLabel(MultiLanguage.Get("FirstWindow.MobileLayoutPanelHint",
+			"在游戏画面左上角显示实时布局状态（排障用，默认关闭）。")));
+
 		var buttonRow = new HBoxContainer();
 		buttonRow.AddThemeConstantOverride("separation", 10);
 		buttonRow.AddChild(CreateActionButton(
@@ -191,6 +210,10 @@ public partial class FirstWindow : Control
 		}
 		return 0;
 	}
+
+	void OnMobileLayoutLoggingToggled(bool enabled) => MobileLayoutDiagnosticsSettings.LoggingEnabled = enabled;
+
+	void OnMobileLayoutPanelToggled(bool enabled) => MobileLayoutDiagnosticsSettings.PanelEnabled = enabled;
 
 	CheckButton CreateSettingsToggle(string text, bool pressed, System.Action<bool> onToggled)
 	{

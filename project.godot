@@ -18,6 +18,10 @@ prototype_runtime=true
 typed_ports=true
 pixel_store=true
 
+[autoload]
+
+AndroidWindowOrientationController="*res://assets/scenes/godot_host/android_window_orientation_host.tscn"
+
 [display]
 
 window/stretch/mode="canvas_items"

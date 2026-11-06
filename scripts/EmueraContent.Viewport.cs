@@ -1,0 +1,200 @@
+// EmueraContent.Viewport.cs —— 视口/安全区变化的状态机收敛域。
+// 背景（systematic-debugging Phase 1 取证）：Godot 4.7 ScrollContainer 的
+// largest_child_min_size 是 _get_minimum_size() 内的缓存，子节点 custom_minimum_size
+// 变化不会刷新它；旋转/小窗改变 contentScale 与 scaledContentRoot 尺寸后，vbar
+// Max/Page 可能停留在旧值，写 ScrollVertical 会被引擎钳到旧上限 => 底部不可达。
+// 因此视口变化统一走「dirty -> deferred 单入口 -> 强制刷新最小尺寸缓存 -> 用真实
+// vbar range + 纯数学对账」，不再在旋转帧内用过渡态 limit 写死滚动范围。
+using Godot;
+using System;
+using GEmuera.Core.Ui;
+using MinorShift.Emuera;
+
+public partial class EmueraContent : Control
+{
+	// 调试用：置位后桌面也走移动端 fit 布局，用于复现/验证旋转路径（APK 不设置）。
+	static readonly bool ForceMobileViewportForDiagnostics =
+		OS.GetEnvironment("GEMUERA_FORCE_MOBILE_VIEWPORT") == "1";
+
+	bool viewportLayoutDirty;
+	bool viewportLayoutApplyScheduled;
+	ulong viewportLayoutSerial;
+	int layoutSnapshotScrollY;
+	int layoutSnapshotScrollMax = -1;
+	MobileLayoutStatePanel mobileLayoutStatePanel;
+	bool mobileViewportPolicyRetryActive;
+	ulong mobileViewportPolicyRetryDeadlineMs;
+
+	// 视口/安全区/方向变化时立即调用：重置进行中的触摸/惯性状态，标记 dirty。
+	void MarkViewportLayoutDirty()
+	{
+		viewportLayoutDirty = true;
+		viewportLayoutSerial++;
+		// 先快照当时的滚动位置/范围，供 deferred 对账使用（输出增长后旧字段会 stale）。
+		if (scrollContainer != null)
+		{
+			layoutSnapshotScrollY = desiredContentScrollValid ? desiredContentScrollVertical : scrollContainer.ScrollVertical;
+			var bar = scrollContainer.GetVScrollBar();
+			layoutSnapshotScrollMax = bar != null
+				? Mathf.RoundToInt(Mathf.Max(0.0f, bar.MaxValue - bar.Page))
+				: -1;
+		}
+		MobileLayoutDiagnostics.Trace("[VIEWPORT] 视口变化 → window=" + DisplayServer.WindowGetSize()
+			+ " viewport=" + (GetViewport()?.GetVisibleRect().Size ?? Vector2.Zero)
+			+ " scrollSize=" + (scrollContainer != null ? scrollContainer.Size : Vector2.Zero)
+			+ " safe=" + ContentSafeRect
+			+ " scale=" + contentScale.ToString("0.###"));
+		// 旋转可能不派发 release/cancel：pinch、普通 drag、惯性全部清空，避免下次按下被旧状态吞掉。
+		ResetContentTouchGestureState();
+		ResetContentDragState();
+		StopContentInertia();
+	}
+
+	// 由 EmueraContent._Process 每帧调用：等待 emuera.config 解析完成后补应用移动端布局。
+	void ProcessPendingMobileViewportPolicy()
+	{
+		if (!mobileViewportPolicyRetryActive)
+			return;
+		if (Config.WindowX > 0 && Config.WindowY > 0)
+		{
+			mobileViewportPolicyRetryActive = false;
+			MobileLayoutDiagnostics.Trace("[VIEWPORT] 配置就绪 → 补应用移动端布局 config=" + Config.WindowX + "x" + Config.WindowY);
+			MarkViewportLayoutDirty();
+			ScheduleViewportLayoutApply();
+			return;
+		}
+		if (Time.GetTicksMsec() > mobileViewportPolicyRetryDeadlineMs)
+		{
+			mobileViewportPolicyRetryActive = false;
+			MobileLayoutDiagnostics.Warn("[VIEWPORT] 配置等待超时 → 未能应用移动端布局");
+		}
+	}
+
+	void ScheduleViewportLayoutApply()
+	{
+		if (viewportLayoutApplyScheduled)
+			return;
+		viewportLayoutApplyScheduled = true;
+		CallDeferred(nameof(ApplyViewportLayoutDeferred));
+	}
+
+	// 单一布局入口：安全区 -> 等比缩放 -> 强制刷新 ScrollContainer 最小尺寸缓存
+	// ->（等引擎 sort）用真实 vbar 范围对账滚动位置。
+	async void ApplyViewportLayoutDeferred()
+	{
+		viewportLayoutApplyScheduled = false;
+		if (!viewportLayoutDirty || !IsInsideTree() || scrollContainer == null)
+			return;
+		ulong serial = viewportLayoutSerial;
+		RefreshViewportMetrics();
+		ApplySafeAreaLayout();
+		ApplyOrientationAwareScale();
+		ApplyContentScaleTransform();
+		// 显式落一次尺寸/滚动范围：ApplySafeAreaLayout 只在安全区变化时 queue，
+		// 启动或仅缩放变化时可能没有待处理更新（幂等）。
+		UpdateScaleBounds();
+		RefreshScrollRangeCache();
+		for (int attempt = 0; attempt < 2; attempt++)
+			await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+		if (!GodotObject.IsInstanceValid(this) || serial != viewportLayoutSerial)
+			return;
+		RefreshScrollRangeCache();
+		await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+		if (!GodotObject.IsInstanceValid(this) || serial != viewportLayoutSerial)
+			return;
+		ReconcileContentScrollAfterLayout();
+		RefreshMobileLayoutPanel();
+		VirtualMouse.Active?.RefreshViewportBounds();
+		consoleRenderSurface?.MarkDirty();
+		viewportLayoutDirty = false;
+	}
+
+	// 只计算 fit 并写入 contentScale；尺寸/滚动范围由 deferred 入口统一落地。
+	void ApplyOrientationAwareScale()
+	{
+		if (!IsMobilePlatform && !ForceMobileViewportForDiagnostics)
+			return;
+		if (Config.WindowX <= 0 || Config.WindowY <= 0)
+			return;
+		if (contentScaleUserAdjusted
+			|| ContentSafeWidth <= 0
+			|| ContentSafeHeight <= 0
+			|| Config.DrawableWidth <= 0)
+			return;
+		float fitWidth = ContentSafeWidth / (float)Config.DrawableWidth;
+		float fitHeight = ContentSafeHeight / (float)Config.WindowY;
+		float fit = Mathf.Clamp(Mathf.Min(fitWidth, fitHeight), 0.35f, 1.0f);
+		if (Mathf.Abs(fit - contentScale) > 0.001f)
+			ApplyContentScaleValue(fit);
+	}
+
+	// Phase 1 取证结论：必须显式刷新 ScrollContainer 的 largest_child_min_size 缓存，
+	// 否则改完子节点 min size 后 vbar 范围不会更新（实测 6 帧仍为旧值）。
+	void RefreshScrollRangeCache()
+	{
+		if (scrollContainer == null)
+			return;
+		scrollContainer.UpdateMinimumSize();
+		scrollContainer.QueueSort();
+	}
+
+	void ReconcileContentScrollAfterLayout()
+	{
+		if (scrollContainer == null || scaledContentRoot == null || lineContainer == null)
+			return;
+		var vbar = scrollContainer.GetVScrollBar();
+		int viewportY = Mathf.RoundToInt(scrollContainer.Size.Y);
+		int layoutY = Mathf.RoundToInt(lineContainer.Size.Y);
+		int scaledExtentY = Mathf.RoundToInt(Mathf.Max(scaledContentRoot.Size.Y, layoutY * contentScale));
+		int nextMax = ContentScrollReconciliation.ComputeScrollMax(scaledExtentY, viewportY);
+		int engineMax = Mathf.RoundToInt(Mathf.Max(0.0f, vbar.MaxValue - vbar.Page));
+		int previousScrollY = layoutSnapshotScrollY;
+		int previousMax = layoutSnapshotScrollMax >= 0 ? layoutSnapshotScrollMax : engineMax;
+		bool wasAtBottom = pendingScroll
+			|| ContentScrollReconciliation.IsAtBottom(previousScrollY, previousMax);
+		int target = ContentScrollReconciliation.ComputeTargetScrollY(previousScrollY, previousMax, nextMax, wasAtBottom);
+		if (target > engineMax)
+			target = engineMax;
+		int targetHorizontal = NormalizeContentHorizontalScroll(scrollContainer.ScrollHorizontal);
+		scrollContainer.ScrollHorizontal = targetHorizontal;
+		scrollContainer.ScrollVertical = target;
+		RememberDesiredContentScroll(targetHorizontal, target);
+		if (MobileLayoutDiagnostics.Wanted)
+		{
+			MobileLayoutDiagnostics.PublishLayout("[VIEWPORT] 视口应用 → window=" + DisplayServer.WindowGetSize()
+				+ " self=" + Size
+				+ " root=" + (rootContent != null ? rootContent.Size : Vector2.Zero)
+				+ " scroll=" + scrollContainer.Size
+				+ " scrollMin=" + scrollContainer.GetCombinedMinimumSize()
+				+ " safe=" + ContentSafeRect
+				+ " scale=" + contentScale.ToString("0.###"));
+			MobileLayoutDiagnostics.PublishScroll("[SCROLL] 滚动对账 → layoutY=" + layoutY
+				+ " scaledExtentY=" + scaledExtentY
+				+ " viewportY=" + viewportY
+				+ " engineMax=" + engineMax
+				+ " nextMax=" + nextMax
+				+ " target=" + target
+				+ " atBottom=" + wasAtBottom
+				+ " status=" + (target == nextMax || !wasAtBottom ? "ok" : "short"));
+		}
+	}
+
+	// 排障面板：设置开启时挂一个左上角浮层（默认不创建、不渲染、不改布局）。
+	void RefreshMobileLayoutPanel()
+	{
+		bool enabled = MobileLayoutDiagnosticsSettings.PanelEnabled;
+		if (enabled && (mobileLayoutStatePanel == null || !GodotObject.IsInstanceValid(mobileLayoutStatePanel)))
+		{
+			mobileLayoutStatePanel = new MobileLayoutStatePanel { Name = "MobileLayoutStatePanel" };
+			AddChild(mobileLayoutStatePanel);
+		}
+		if (mobileLayoutStatePanel != null && GodotObject.IsInstanceValid(mobileLayoutStatePanel))
+		{
+			mobileLayoutStatePanel.Visible = enabled;
+			mobileLayoutStatePanel.SetProcess(enabled);
+		}
+	}
+
+	// 设置页切换面板开关后立即生效（无需等待下一次视口变化）。
+	public void ApplyMobileLayoutPanelSetting() => RefreshMobileLayoutPanel();
+}
