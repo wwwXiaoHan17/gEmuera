@@ -427,3 +427,47 @@ per-game 启用配置（launcher 侧：游戏 → 包列表）给出**包文件�
 - 宿主 glob 提醒：`tools/compat-pack/**` 已加入 `gemuera-c#.csproj` 的 `Compile Remove`
   兜底（工具 Program.cs 的顶层语句若被宿主收录会以全局命名空间 `Program` 遮蔽
   `MinorShift.Emuera.Program`，表现为 CS0117）。
+
+## 14. P-D 执行记录（2026-11-07）
+
+### 14.1 内置方言模块退役
+
+- `gemuera.v18`/`game.megaten`/`game.erablue`/`game.erafl`/`game.snake` 五个内置方言模块与
+  profile 已全部删除；差异改由第一方数据包 `packs/pack.gemuera.<profile>/` 表达（一包一目录、
+  manifest-only）。v24 基线表面与 `baseSurfaceHash` 不变（G8 钉扎 `950dbeb9…`）。
+- 冻结包校验表面宇宙：`tools/dialect-inventory/retired-dialect-surface-universe.json`
+  （来源 commit 30fd56e8…）是包校验/capability/variant 词汇表的 ABI 输入，退役后**只读**，
+  生成器正常模式 = live v24 + 冻结退役数据，保证 `MethodProjectedInstructionNames` 等
+  校验词汇不随退役收缩。
+- **contractAbi 1.1**：manifest `surface` 新增可选 `addInstructionCollisions`。名字必须
+  同时出现在 `hideFunctions`，且是 v24 基线 METHOD 投影名；语义 = 保留指令形态、只隐藏
+  表达式函数形态。规则层跳过"hide 函数 → hide 指令"镜像；组合解析的双形态闭包对集合内
+  名字接受 function=Hidden + instruction=Present(或沿用基线)。`engineApi`/`baseSurfaceHash`
+  输入不变，旧 `contractAbi 1.0` 包继续加载（G9）。首个消费者 = snake 的
+  `BITMAP_CACHE_ENABLE`。
+- 退役顺序：v18 → megaten → erablue → erafl → snake；每步独立 commit + 三冒烟/xUnit/
+  桌面门禁，最终目录形如 `packs/pack.gemuera.snake/`。
+
+### 14.2 分发路径（一包一目录）
+
+- `compat_packs/<packId>/<packId>.dll` 是导出 staging（gitignored，`Build-FirstPartyPacks.ps1`
+  生成）；`export_presets.cfg` include_filter 打入 PCK。
+- 启动时 `FirstPartyPackBootstrap` 经 `CompatPackBundleInstaller`（Core 纯逻辑，SHA256 +
+  原子写 + `.first-party-packs.json` last-installed 记录）释放到安装根：桌面 = exe 同级
+  `compat_packs/`；Android = `/storage/emulated/0/emuera/packs/`（未授权时 Info 跳过，
+  resume/再次扫描重试）；编辑器直接扫 `res://compat_packs`。
+- 用户更新语义：目标 SHA 与记录一致 = 接受内置升级；不一致 = 用户替换/改过，不覆盖（KeptUser）。
+  失败逐包聚合、绝不阻断启动，launcher 映射预检失败按 §3.1 回退 v24 并提示。
+- legacy-runner 对退役 profile 做"翻译 + 显式注入 `GEMUERA_COMPAT_PACKS` + 报告
+  baseProfile/packIds + 断言 `[LOAD] CompatPack enabled`"；缺包/未加载即 FAIL（G10 不假绿）。
+
+### 14.3 与 I1 硬化的关系
+
+一包一目录（2026-11-03 I1）保持不变：loader 只把 `<packId>/` 顶层被主程序集实际引用的
+DLL 当依赖闭包，未引用 DLL/平铺多包仍 fail-closed；分发链路的 staging/安装根都遵守该形态。
+
+### 14.4 未验证
+
+- Android 真机释放/权限时序、六游戏运行证据、`-RequireAndroid/-RequireSixGame` 未在本机采集：
+  标 `[未验证]`；桌面门禁通过不替代真机 e2e。
+- 通用第一方清单生成器未实现（非 v18 包为人工写出 + 等价测试 golden）：遗留 P2。

@@ -13,13 +13,13 @@ AI/开发者接手以仓库根目录 [AGENTS.md](../AGENTS.md) 为权威入口�
 ## 特性
 
 - 统一的 `Emuera1824+v24+EMv18+EEv55` 公共核心
-- v18 游戏兼容；v24 / EE / EM 扩展游戏原生支持
+- v18 / megaten / erablue / eraFL / snake 游戏兼容由第一方兼容包提供（`packs/pack.gemuera.*`）；v24 / EE / EM 扩展游戏原生支持
 - `DIMF` / `FUNCTIONF` / `LOCALF` / `ARGF` / `RESULTF` 浮点数支持
 - `VARIADIC` 可变参数函数、`#REF` / `#REFS` / `#REFF` 引用型参数
 - `SETIMAGELAYER` / `CLEARIMAGELAYER` 图像层控制、`SETANIMETIMER` 动画定时器
 - `EXISTFUNCTION` 支持 lazyload 补载触发
 - 可选 Lazyload 加速策略（`lazyloading.cfg` + 按需补载）
-- Snake 兼容 profile（同一核心上的兼容配置，非独立核心）
+- 方言差异以第一方数据包表达（引擎不再内置方言 profile；见 `packs/README.md`）
 - 存档兼容说明：v18 存档可读；v24 新存档不保证可回旧 v18 引擎
 - 未实现功能诚实声明：SafeArithmetic、Sprite 翻转、动画暂停/恢复、Zip 压缩存档等尚未实现
 - ERB 脚本执行、CSV 数据加载、SHIFT-JIS/UTF-8 编码

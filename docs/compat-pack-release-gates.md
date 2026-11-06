@@ -316,3 +316,20 @@ reports/compatpack/
 - fallback 只接受成功回退标记；fallback 失败/终止行、以及成功回退后再次出现 fail/error/exception/fatal 的日志均判失败。
 - 六游戏 result 使用大小写敏感比较；`pass` / `Pass` 均不接受。
 - fatal 是保留的阻断词：日志出现 non-fatal 之类措辞也可能被拦截；如属正常文案，应改日志或调整规则后再发布。
+
+## 10. 第一方包分发静态检查与状态更新（2026-11-07）
+
+- 桌面门禁新增一项静态检查：`compat_packs/<packId>/<packId>.dll` staging 完整（5 个第一方包、
+  一包一目录、非空、集合与 `assets/text/pack-profile-map.json` 的 `pack.gemuera.*` 完全一致）。
+  staging 不入库，**导出/发布前必须先跑 `tools/compat-pack/Build-FirstPartyPacks.ps1`**，
+  否则门禁 FAIL（防止导出空包；这是有意的 fail-closed）。
+- Gate 2 矩阵的"退役前/后"口径：退役后 profile 只作为 launcher 映射输入，实际引擎 profile
+  恒为 `v24pure` + 显式包；证据里应同时记录 `baseProfile` 与 `packIds`（legacy-runner
+  报告与 `[LOAD] CompatPack enabled` 日志）。
+- Gate 1 的 fallback 目标正则已从六个旧 profile 名改为"无包基线 / v24pure / pack.gemuera.* /
+  first-party pack"；旧日志（只写 snake/erafl 等）不再能作为新证据。
+- 当前状态（2026-11-07 P-D 退役后，桌面档）：PASS（8 项检查，桌面命令 7/7）；Core 314 passed /
+  1 skipped（+ installer 13 用例在该计数内）、Facade 79、ABI 4；三冒烟与 lifecycle 4/4 全绿；
+  v24 表面哈希 `950dbeb9…` 钉扎 PASS；`profiles.generated.json` 仅 v24pure。
+- 仍**不可发布**：Gate 1/2/7 的真机与六游戏证据未采集（`reports/compatpack/*.json` 缺失）；
+  Android/六游戏/真机一律标 `[未验证]`。

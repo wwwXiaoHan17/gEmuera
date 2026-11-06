@@ -46,7 +46,7 @@ Emuera 核心编译器以 C# 编写，为减少开发成本、方便 AI 对接�
 - GDUnit4：测试 Godot 场景与需 Godot 组件的功能。
 - xUnit：测试 Emuera 核心（ERB 语法解释器）的纯 C# 逻辑。
 
-**游戏适配铁律（2026-09-07 起强制）**：为任何 Era 游戏做适配时，行为差异**必须**以方言模块方式实现（eraFL 模式：Core 声明模块 + BuiltInDialectCatalog 注册 + LegacyCompatibilityModule 的 Declare/Apply 会话门控 + policy flag 消费），**禁止直接修改 v24 基线共享路径**（Parser/VM/字典的未门控代码）。判断标准：改动在 v24pure/snake/erafl 会话下必须逐字节等价，并以方言快照名录对比（新旧 profile 指令/函数清单零差异）作为"未选择侧不变"的硬证据。参考先例：`governance/evolution-log/2026-08-22-erafl-dialect-manifest.md` 与 `2026-09-07-eramegan-adaptation.md`（含一次违规返工的完整记录）。
+**游戏适配铁律（2026-11-07 P-D 退役后强制）**：为任何 Era 游戏做适配时，行为差异**必须**以兼容包（manifest-only 数据包 / 生成清单）方式实现，**禁止直接修改 v24 基线共享路径**（Parser/VM/字典的未门控代码）；引擎不再内置方言模块/profile，五方言差异全部在第一方包 `packs/pack.gemuera.*/` 内声明。判断标准：改动必须在 v24pure 基线 + 显式包会话下逐字节等价，并以 `FirstPartyPackEquivalenceTests` + 三冒烟（Surface/Runtime/CoreContract）作为"未选择侧不变"的硬证据；补丁/覆盖只能通过包表面（add/hide/capability/variant/`addInstructionCollisions`）表达。参考先例：`governance/evolution-log/2026-08-22-erafl-dialect-manifest.md`、`2026-09-07-eramegan-adaptation.md` 与 `2026-11-07-pd-module-retirement.md`。
 
 任务结束后，删除冗余的临时测试文件，避免造成垃圾文件。
 
@@ -62,8 +62,10 @@ Emuera 核心编译器以 C# 编写，为减少开发成本、方便 AI 对接�
   `dotnet run --project tools/dialect-inventory/LegacyDialectRuntimeSmoke`、
   `dotnet run --project tools/core-contracts/CoreContractSmoke.csproj`；
   引擎注册表/方言清单变化后先 `dotnet run --project tools/dialect-inventory/LegacyDialectInventoryGenerator -- <项目根>`
-  再生清单（`LegacyDialectInventories.Generated.cs` + `tools/legacy-runner/profiles.generated.json`），
-  最后用 legacy-runner 做 v24pure/snake/erafl 三 profile 无头执行级冒烟。
+  再生清单（`LegacyDialectInventories.Generated.cs` + `tools/legacy-runner/profiles.generated.json`，退役后后者仅 v24pure），
+  再跑 `FirstPartyPackEquivalenceTests` 与桌面 release gate（含 `compat_packs` staging 完整性检查）；
+  最后用 legacy-runner 对 v24pure 与退役 profile（翻译为 v24pure + 显式 `GEMUERA_COMPAT_PACKS`）做无头执行级冒烟——
+  缺包/未加载必须 FAIL，禁止把"profile=snake 但引擎跑 v24pure"写成通过证据。
 - **CompatPack 生命周期 P0 静态守卫**（2026-10）：改动 `Scripts/EmueraMain.cs`（StopLegacySession）、
   `Scripts/GodotHost/LegacySessionBackend.cs`、`Scripts/Emuera/Compatibility/CompatPackHost.cs`
   或 `src/Core/Compatibility/DialectRuntime.cs` 的会话生命周期/投影相关代码后，跑
@@ -118,7 +120,7 @@ project.godot -> assets/scenes/first_window.tscn -> FirstWindow._Ready()
 - `Scripts/Emuera/GameData/` — 变量、表达式、常量、函数方法、角色数据。
 - `Scripts/Emuera/Content/` — 图片、精灵、Graphics surface、ColorMatrix 绘制。
 - `Scripts/LegacyRunner/` — 旧版显示/输入回放诊断（原 `Scripts/M0/`，命名空间 `gEmuera.LegacyRunner`）。
-- `Scripts/GodotHost/` — Godot 生命周期/平台桥组件（AppBootstrap、PlatformGateway、Emuera*Component）。
+- `Scripts/GodotHost/` — Godot 生命周期/平台桥组件（PlatformGateway、Emuera*Component、FirstPartyPackBootstrap；AppBootstrap 已退役）。
 - `Scripts/uEmuera/` — `System.Drawing` / `System.Windows.Forms` 兼容层。
 - `Scripts/Diagnostics/` — 运行期诊断、日志路由、导出、输入回放、诊断面板。
 - `src/Core/` — 纯 C# 核心契约（`GEmuera.Core`，独立编译，不含 Godot 依赖）。
@@ -137,7 +139,7 @@ project.godot -> assets/scenes/first_window.tscn -> FirstWindow._Ready()
    用描述用途的名字（如 `LegacyRunner`、`governance`）。
 4. **Godot `.import` 侧车文件必须入库**：`*.import` 是导入设置（importer/uid/params），
    官方要求提交 VCS；`.godot/`（含 `imported/` 二进制缓存）才是应忽略的可再生目录。
-5. **编译产物不入库**：`.gitignore` 已排除 `.godot/`、`bin/`、`obj/`、`/export/`、
+5. **编译产物不入库**：`.gitignore` 已排除 `.godot/`、`bin/`、`obj/`、`/export/`、`/compat_packs/`、
    `*.apk/aab/exe/pck/idsig`、`reports/`、`artifacts/`。APK 导出所需文件统一放根目录 `export/`
    工作区（`android/` gradle 导出工程、`NativeLibs/` csproj 自愈还原的原生库、`releases/` APK
    产物、`keystore/` 签名密钥——均不入库；需要版本化的导出配置放 `tools/`，测试固件声明位于

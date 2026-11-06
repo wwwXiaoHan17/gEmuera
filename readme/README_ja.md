@@ -13,13 +13,13 @@ AI/開発者の引き継ぎは、リポジトリルートの [AGENTS.md](../AGEN
 ## 特徴
 
 - 統一された `Emuera1824+v24+EMv18+EEv55` コア
-- v18 ゲーム互換；v24 / EE / EM 拡張ゲームをネイティブサポート
+- v18 / megaten / erablue / eraFL / snake 互換は第一方データパック（`packs/pack.gemuera.*`）で提供；v24 / EE / EM 拡張ゲームをネイティブサポート
 - `DIMF` / `FUNCTIONF` / `LOCALF` / `ARGF` / `RESULTF` 浮動小数点サポート
 - `VARIADIC` 可変長引数関数、`#REF` / `#REFS` / `#REFF` 参照型引数
 - `SETIMAGELAYER` / `CLEARIMAGELAYER` 画像レイヤー制御、`SETANIMETIMER` アニメーションタイマー
 - `EXISTFUNCTION` lazyload オンデマンド読み込みトリガー対応
 - オプションの Lazyload 高速化戦略（`lazyloading.cfg` + オンデマンド読み込み）
-- Snake 互換プロファイル（同一コア上の互換設定、独立したコアではない）
+- 方言差は第一方データパックで表現（エンジン内蔵方言プロファイルは廃止；`packs/README.md` 参照）
 - セーブ互換性：v18 セーブは読み込み可能；v24 新規セーブは旧 v18 エンジンへの互換を保証しない
 - 未実装機能の明示：SafeArithmetic、スプライト反転、アニメーション一時停止/再開、Zip 圧縮セーブ等は未実装
 - ERB スクリプト実行、CSV データ読み込み、SHIFT-JIS/UTF-8 エンコーディング対応

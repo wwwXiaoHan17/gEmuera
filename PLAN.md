@@ -564,3 +564,9 @@
 - 第三方解释器实现（`IErbInterpreterHost` 生产接线、engine identity/version 协商）：需要独立 spec；本计划只通过 Task 8/9 记录依赖与阻塞。
 - 六游戏真实启动矩阵与 Android 真机抽测：必须由 owner 提供游戏库/设备后按 AGENTS.md 验收；本计划的所有门禁都不得替代 APK 真机结论。
 - `baseSurfaceHash` 的发布端/CI 生成流水线：Task 6 只做运行时校验与固定 hash 测试；生成器接入发布流程另开任务。
+
+
+> 注记（2026-11-07，P-D 退役后）：本计划正文中的"内置方言模块（v18/snake/erafl/erablue/megaten）尚未退役"、
+> "六 profile 并集"等历史结论已被 `docs/superpowers/specs/2026-11-07-pd-module-retirement-execution-design.md`
+> 与 `governance/evolution-log/2026-11-07-pd-module-retirement.md` 推翻；当前实现为 5 个第一方数据包 +
+> v24pure 基线，详见 `packs/README.md`。本文件仅作历史计划保留，不回改正文。

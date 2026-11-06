@@ -46,7 +46,7 @@ project.godot
 
 - `EmueraMain -> EmueraThread -> Program` 是玩家实际运行游戏的默认路径。
 - `PrototypeRuntimeNode -> CoreApplicationRuntime` 是候选 Core 的同场景 sidecar，用于验证 session、plan、bridge 和生命周期合同。
-- `AppBootstrap` 与 `PlatformGateway` 是 application-scoped Godot Autoload，只持 feature/capability 和平台生命周期信息，不应持有游戏业务状态。
+- `PlatformGateway` 是 application-scoped Godot Autoload，只持 feature/capability 和平台生命周期信息，不应持有游戏业务状态（`AppBootstrap` 已退役；第一方包释放由 `FirstPartyPackBootstrap` 在包扫描前执行）。
 - `project.godot` 中的 `prototype_runtime`、`typed_ports`、`pixel_store` 当前会被 bootstrap/prototype 读取；它们不等同于 `m3-m7-current-status.json` 中默认关闭的生产迁移 feature route。
 
 ## 已有的可运行引擎能力

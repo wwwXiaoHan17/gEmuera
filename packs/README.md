@@ -1,8 +1,10 @@
 # gEmuera 社区兼容包（CompatPack）开发指南
 
-本目录是社区兼容包的唯一入口。一个兼容包 = 一个 .NET 类库程序集（.dll）+ 内嵌的
+本目录是**社区兼容包与第一方兼容包**的共同入口。一个兼容包 = 一个 .NET 类库程序集（.dll）+ 内嵌的
 `compatpack.manifest.json` 清单，用于在不改动引擎的前提下声明对 v24 基线的差量
 （指令/函数表面名单、行为 capability、内置变体选择）与组合约束。
+
+第一方 5 个方言包（v18/megaten/erablue/erafl/snake）已于 2026-11-07 从引擎内置模块退役为数据包，见下一节；社区包从 [`CommunityPackTemplate/`](CommunityPackTemplate/) 起步。
 
 设计契约全文见 `docs/designs/compat-pack-interface.md`；双轴版本、组合解析与语义级
 `baseSurfaceHash` 的规范见
@@ -10,6 +12,23 @@
 清单 JSON Schema 见 `src/EmueraCompatPack/compatpack.manifest.schema.json`（契约程序集
 `Emuera.CompatPack`，2026-10-03 自 Emuera facade 拆分，旧包经 TypeForwardedTo 继续兼容）。
 可直接复制的模板工程：[`CommunityPackTemplate/`](CommunityPackTemplate/)。
+
+## 第一方兼容包（P-D 退役产物）
+
+引擎不再内置方言 profile；5 个方言的差异全部由下列第一方数据包表达（目录名 = packId = 主 DLL 名）：
+
+| packId | 原内置 profile | 主要差量 | 清单来源 |
+| ---- | ---- | ---- | ---- |
+| `pack.gemuera.v18` | v18 | 纯隐藏（v24 后增指令/函数不进入 v18 会话） | 生成器写出（golden 固化） |
+| `pack.gemuera.megaten` | megaten | 零表面 + 5 个 Wired capability | 手写（等价测试为 golden） |
+| `pack.gemuera.erablue` | erablue | +SETANIMETIMER、1 个 Wired capability | 手写 |
+| `pack.gemuera.erafl` | erafl | +SETANIMETIMER、10 个 Wired capability（算法库仍在引擎） | 手写 |
+| `pack.gemuera.snake` | snake | 最大差集（22 指令 + 87 函数）、19 个 Wired capability、FOR/SETBGIMAGE 变体、BITMAP_CACHE_ENABLE 碰撞态 | 由冻结表面生成 |
+
+- 一包一目录：`packs/<packId>/<packId>.csproj` + 内嵌 manifest；构建产物 DLL 名必须等于 packId。
+- 部署/分发：先跑 `tools/compat-pack/Build-FirstPartyPacks.ps1` 生成 `compat_packs/<packId>/<packId>.dll` staging（gitignored），导出时由 `export_presets.cfg` 的 include_filter 打进 PCK；启动时 `FirstPartyPackBootstrap` 释放到安装根（桌面 = exe 同级 `compat_packs/`；Android = `/storage/emulated/0/emuera/packs/`）。
+- profile 映射与回退：`assets/text/pack-profile-map.json` 把 launcher profile（v18/megaten/erablue/erafl/snake）映射到 packId + 相对路径；launcher 预检失败（staging/释放缺失）时按设计 §3.1 回退 v24 基线并给出中文提示。编辑器模式映射根按 `res://` 解析，并额外扫描 `res://compat_packs` 一级子目录。
+- 等价与回归门禁：`FirstPartyPackEquivalenceTests`（真实包 DLL 加载/组装 + capability/表面等价）、`LegacyDialectSurfaceSmoke`（packed 行为投影）、`LegacyDialectRuntimeSmoke`、`CoreContractSmoke` 与桌面 release gate。
 
 ## 目录约定
 
@@ -62,6 +81,7 @@ legacy `targetEngineApi: 1`（映射为 1.0/1.0），但官方包必须已完成
 | `surface.addInstructions` | 新增可见指令名（Trim+Upper；必须有真实引擎 handler，且不得与基线同名） |
 | `surface.hideInstructions` | 隐藏的 v24 基线指令名（基线没有的名字拒载） |
 | `surface.addFunctions` / `hideFunctions` | 表达式函数增删，规则同上；新增函数返回类型由引擎清单解析 |
+| `surface.addInstructionCollisions` | **contractAbi 1.1**：instruction/函数同名碰撞态。名字必须同时出现在 `hideFunctions`，且是 v24 基线内 METHOD 投影名；语义 = 保留指令形态、只隐藏表达式函数形态（snake 的 `BITMAP_CACHE_ENABLE`）。旧 1.0 包继续加载 |
 | `capabilities` | 行为 capability id 清单（如 `math.times-clamp.v1`），只接受引擎已收录 id，未知 id 拒载 |
 | `variantSelections` | 指令名 → `builtin:*` 内置变体；v1 不支持自带变体/策略贡献（携带即拒载） |
 | `gameIdentity` | 绑定特定游戏（与 GameBase.csv 的 コード/バージョン 比对），不匹配拒载；`versionAccept=minor` 比较 `major.minor` 前两段，单段值退化为全串相等 |
@@ -84,6 +104,26 @@ legacy `targetEngineApi: 1`（映射为 1.0/1.0），但官方包必须已完成
   变体选择通道）；variant override 的目标指令必须已在 v24 基线内。
 - 多包最终状态一致（都 Hidden / 变体同值）按同态合并，无需 override；没有任何符号/
   capability/变体贡献的包不得进入最终组合（v1 没有 bundle 概念）。
+
+## 第一方包生成、门禁与分发
+
+```powershell
+# 1) 再生方言清单（引擎注册表/冻结表面变化后；写入 LegacyDialectInventories.Generated.cs 与 profiles.generated.json）
+dotnet run --project tools/dialect-inventory/LegacyDialectInventoryGenerator -- <项目根>
+
+# 2) 第一方包等价门禁（真实 DLL 走加载/组装链；含 snake 19 capability 与碰撞态）
+dotnet test tests/xUnitTest/GEmuera.Core.Tests/GEmuera.Core.Tests.csproj -c Release --filter "FullyQualifiedName~FirstPartyPackEquivalenceTests"
+
+# 3) staging（导出前必跑；产出 compat_packs/<packId>/<packId>.dll，gitignored）
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/compat-pack/Build-FirstPartyPacks.ps1
+
+# 4) 桌面发布门禁（含 staging 完整性静态检查；Android/六游戏真机证据缺失时标 [未验证]）
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/compat-pack/Test-CompatPackReleaseGate.ps1 -ProjectRoot .
+```
+
+第一方包清单为人工/生成器写出后固化；**禁止手改已冻结的 v24 表面哈希**（G8 钉扎 `950dbeb9…`）。
+用户手装更新语义：安装根维护 `.first-party-packs.json`（packId → 上次内置释放 SHA256）；
+目标字节与记录一致时接受内置升级，不一致视为用户替换、不覆盖（执行设计 §6.2）。
 
 ## 构建方式
 
@@ -111,10 +151,9 @@ v1 启动器**只扫描安装根顶层**的 `*.dll`（不递归子目录、不�
 DLL——两个包同处一个目录时，两个包都会因"目录内含未被引用的 DLL"被拒载（fail-closed，
 不会静默挑一个哈希/依赖面）。
 
-> **启动器扫描边界（2026-11-03）**：v1 启动器**不枚举一级子目录**，因此按
-> `<安装根>/<packId>/` 摆放的包不会出现在默认勾选列表里。请用启动器的"手动路径/浏览…"
-> （Android 可手输完整路径；或直接编辑 launcher.cfg 的 `[compat_packs]` 节）指向子目录
-> 里的主 DLL。一级子目录自动发现属于后续启动器增强，不是 v1 部署契约。
+> **启动器扫描边界（2026-11-07 更新）**：启动器已枚举安装根一级子目录，`<安装根>/<packId>/<packId>.dll`
+> 会出现在候选列表里；顶层平铺多包仍被 loader fail-closed 拒载。编辑器模式额外只读扫描
+> `res://compat_packs` 的一级子目录。
 
 > 升级提示：旧的"把多个单文件包平铺在安装根"的部署会在加载期被拒载。请按
 > `<安装根>/<packId>/` 分目录摆放；包内容哈希 `PackSha256` 只覆盖本包闭包，不再随

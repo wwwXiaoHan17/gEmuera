@@ -433,3 +433,15 @@ DOTNET_ROLL_FORWARD=Major dotnet run --project tools/core-contracts/CoreContract
 - [ ] §4.1 退役顺序 v18 → megaten → erablue → erafl → snake
 - [ ] §5 删除清单与 §5.3 不删清单
 - [ ] §7 验证入口与零差异口径（快照工具现仅覆盖 v24pure/snake/erafl，v18/erablue/megaten 步暂由 G4 承担，见 §7.3）
+
+## 执行记录（2026-11-07）
+
+P-D 内置方言模块退役已执行完成（本地分支 `ai/pd-module-retirement`）：
+
+- 执行设计：`docs/superpowers/specs/2026-11-07-pd-module-retirement-execution-design.md`
+- 实施计划：`docs/superpowers/plans/2026-11-07-pd-module-retirement.md`
+- 契约增量（contractAbi 1.1 / addInstructionCollisions）：`docs/designs/compat-pack-interface.md` §14
+- 发布门禁与分发检查更新：`docs/compat-pack-release-gates.md` §10
+- 过程与验证记录：`governance/evolution-log/2026-11-07-pd-module-retirement.md`
+
+本 spec 正文为历史设计，不再回改；后续以设计/日志为准（差异见 evolution log 的"被推翻结论"）。

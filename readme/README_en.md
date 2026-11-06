@@ -13,13 +13,13 @@ For AI/developer onboarding, [AGENTS.md](../AGENTS.md) at the repository root is
 ## Features
 
 - Unified `Emuera1824+v24+EMv18+EEv55` core
-- v18 game compatibility; native v24 / EE / EM extension support
+- v18 / megaten / erablue / eraFL / snake compatibility ships as first-party packs (`packs/pack.gemuera.*`); native v24 / EE / EM extension support
 - `DIMF` / `FUNCTIONF` / `LOCALF` / `ARGF` / `RESULTF` floating-point support
 - `VARIADIC` variadic functions, `#REF` / `#REFS` / `#REFF` reference parameters
 - `SETIMAGELAYER` / `CLEARIMAGELAYER` image layer control, `SETANIMETIMER` animation timer
 - `EXISTFUNCTION` with lazyload on-demand loading trigger
 - Optional Lazyload acceleration (`lazyloading.cfg` + on-demand loading)
-- Snake compatibility profile (compatibility config on the same core, not a separate core)
+- Dialect differences are expressed as first-party data packs (no built-in dialect profiles; see `packs/README.md`)
 - Save compatibility: v18 saves are readable; v24 new saves are not guaranteed backward to old v18 engines
 - Honest unimplemented list: SafeArithmetic, sprite flip, animation pause/resume, zip-compressed saves, etc. are not yet implemented
 - ERB script execution, CSV data loading, SHIFT-JIS/UTF-8 encoding support
