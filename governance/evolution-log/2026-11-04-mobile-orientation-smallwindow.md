@@ -122,8 +122,10 @@
 ### 验证
 - [实测] GDUnit 13/13；xUnit Core 303 通过/1 跳过/304 总。
 - [实测] 桌面 resize 复现：修复前后尺寸链日志如上，`viewportY` 2357/2030 → 648。
+- [实测] 诊断 build 标记更新为 `mobile-layout-20261106b`（新旧 APK 可从 `UI.LAYOUT.BOOT` 区分）；最终重导出后 aapt2 复核 versionName/versionCode/screenOrientation 均符合预期。
+- [实测] legacy-runner v24pure：status=Passed，semanticSha256=`4859125d3f984f087eb143dd83fa54f3b754055187cb87a9e6b166d4505754a1` 不变。环境注记：Android APK 导出（dotnet publish）会把 `obj/project.assets.json` 重建为只有 net9.0 目标，随后 legacy-runner 的 `dotnet build --no-restore` 会以 NETSDK1005 失败；先 `dotnet restore gemuera-c#.sln` 即恢复（非代码回归）。
 - [未验证] 真机：等 20261106b 包安装后复测旋转落底；小窗方向仍待测（若 ignored，用户已授权阶段二）。
 - [观察] 修复后仍可见 `scroll=(2160,648)` 宽度大于视口（横向滚动模式 Disabled 时 ScrollContainer 最小宽度=内容宽）；它不影响纵向落底，但横向内容超宽时的表现另记 P2，不在本轮扩大范围。
 
 ### 交付
-- APK：`export/releases/gemuera-1.10.0-dev-20261106b-debug.apk`（75,144,260 bytes；versionName `1.10.0-dev-20261106b`、versionCode `13`、screenOrientation=13 阶段一不变；SHA256 `F4B062BA51E3B574E07ECA820C576D054898E77530BDAD4CF9102428A1044262`）。
+- APK：`export/releases/gemuera-1.10.0-dev-20261106b-debug.apk`（**75,144,308 bytes，最终重导出版**；versionName `1.10.0-dev-20261106b`、versionCode `13`、screenOrientation=13 阶段一不变；SHA256 `6DCA07812DDB0F6466CC46DE344E8862132E0DB4AFA1556383CA4108C0305E32`）。

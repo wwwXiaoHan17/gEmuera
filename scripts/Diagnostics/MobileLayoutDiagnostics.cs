@@ -12,7 +12,7 @@ using gEmuera.Diagnostics;
 public static class MobileLayoutDiagnostics
 {
 	/// <summary>构建标记：写进每条事件，便于从真机日志确认装的是哪一版修复。</summary>
-	public const string BuildTag = "mobile-layout-20261106";
+	public const string BuildTag = "mobile-layout-20261106b";
 
 	// 桌面复现/集成冒烟用：置位 GEMUERA_FORCE_MOBILE_VIEWPORT=1 时强制开启诊断（APK 不设置）。
 	static readonly bool ForceDiagnostics = OS.GetEnvironment("GEMUERA_FORCE_MOBILE_VIEWPORT") == "1";
