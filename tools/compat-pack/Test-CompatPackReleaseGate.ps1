@@ -503,7 +503,7 @@ function Test-AndroidEvidence {
             }
             # 成功标记自身包含 no-pack baseline，不需要再查目标；其它 fallback 行必须
             # 写明目标基线，否则视为未声明的静默回退。
-            $targetOk = [regex]::IsMatch($lines[$i], '(?i)\bfallback\b[^\r\n]*(no-pack baseline|no-pack composition|v24pure|snake|erafl|erablue|megaten|v18)')
+            $targetOk = [regex]::IsMatch($lines[$i], '(?i)\bfallback\b[^\r\n]*(no-pack baseline|no-pack composition|v24pure|pack\.gemuera\.|first-party pack)')
             if (-not $targetOk -and -not [string]::IsNullOrWhiteSpace($declaredFallbackTarget)) {
                 $targetOk = $lines[$i].IndexOf($declaredFallbackTarget, [StringComparison]::OrdinalIgnoreCase) -ge 0
             }
@@ -891,6 +891,65 @@ if ($script:FailureCount -gt 0) {
     Write-Output ''
     Write-Output ("=== 结果: FAIL（证据校验失败 {0} 项；桌面门禁未执行，避免假绿） ===" -f $script:FailureCount)
     exit 1
+}
+
+# ---- 第一方包 staging 完整性（执行设计 §6.1/§6.2：防止导出空包） ----
+# 导出/发布前必须已跑 tools/compat-pack/Build-FirstPartyPacks.ps1；本检查逐包核对
+# <ProjectRoot>/compat_packs/<packId>/<packId>.dll 存在、非空、一包一目录，且集合与
+# assets/text/pack-profile-map.json 的第一方 packId 完全一致。staging 不入库，
+# 缺失即 FAIL（这是有意的：桌面门禁通过不替代真机证据，也不允许静默导出无包 APK）。
+if (-not $SelfTest) {
+    $stagingRoot = Join-Path $ProjectRoot 'compat_packs'
+    $mapPath = Join-Path $ProjectRoot 'assets/text/pack-profile-map.json'
+    $stagingIssues = New-Object System.Collections.Generic.List[string]
+    $stagingPackIds = @()
+    if (-not (Test-Path -LiteralPath $mapPath -PathType Leaf)) {
+        $stagingIssues.Add('缺少 profile 映射：' + $mapPath)
+    }
+    else {
+        try {
+            $map = Get-Content -LiteralPath $mapPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            $stagingPackIds = @(@($map.profiles) |
+                ForEach-Object { [string]$_.packId } |
+                Where-Object { $_ -like 'pack.gemuera.*' } |
+                Sort-Object -Unique)
+        }
+        catch {
+            $stagingIssues.Add('profile 映射无法解析：' + $_.Exception.Message)
+        }
+    }
+    if ($stagingPackIds.Count -eq 0 -and $stagingIssues.Count -eq 0) {
+        $stagingIssues.Add('profile 映射未声明任何第一方包。')
+    }
+    if (-not (Test-Path -LiteralPath $stagingRoot -PathType Container)) {
+        $stagingIssues.Add('staging 根不存在（先跑 tools/compat-pack/Build-FirstPartyPacks.ps1）：' + $stagingRoot)
+    }
+    else {
+        $actualDirs = @(Get-ChildItem -LiteralPath $stagingRoot -Directory -ErrorAction SilentlyContinue |
+            ForEach-Object { $_.Name } | Sort-Object)
+        foreach ($packId in $stagingPackIds) {
+            if ($actualDirs -notcontains $packId) {
+                $stagingIssues.Add('staging 缺目录：' + $packId)
+                continue
+            }
+            $dir = Join-Path $stagingRoot $packId
+            $files = @(Get-ChildItem -LiteralPath $dir -File -ErrorAction SilentlyContinue)
+            $expected = $packId + '.dll'
+            if ($files.Count -ne 1 -or $files[0].Name -ne $expected) {
+                $stagingIssues.Add('staging 目录形态错误：' + $packId)
+                continue
+            }
+            if ($files[0].Length -le 0) {
+                $stagingIssues.Add('staging DLL 为空：' + $packId)
+            }
+        }
+        foreach ($dir in $actualDirs) {
+            if ($stagingPackIds -notcontains $dir) {
+                $stagingIssues.Add('staging 含映射外目录：' + $dir)
+            }
+        }
+    }
+    Write-GateCheck -Name '第一方包 staging 完整（compat_packs/<packId>/<packId>.dll）' -Passed ($stagingIssues.Count -eq 0) -Detail (($stagingIssues -join ' ; '))
 }
 
 # ---- 桌面门禁序列（顺序固定；任一失败立即停止） ----

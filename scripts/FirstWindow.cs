@@ -980,6 +980,9 @@ public partial class FirstWindow : Control
 		if (string.IsNullOrEmpty(selectedPath))
 			selectedPath = ResolveStartupGamePath();
 
+		// 第一方包释放（执行设计 §6.1）：必须在权限解析后的包扫描之前；Android 未授权时
+		// 内部只记 Info 并跳过，resume/再次扫描会自动重试，不阻断启动。
+		FirstPartyPackBootstrap.EnsureInstalled();
 		// 兼容包候选与游戏列表同生命周期刷新（进页/切 tab/授权后都会走到这里），
 		// 且必须先于 PopulateGameList 的恢复选中回填完成。
 		ScanCompatPackCandidates();

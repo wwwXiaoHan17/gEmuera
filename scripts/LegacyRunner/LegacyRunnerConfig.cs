@@ -39,6 +39,12 @@ namespace gEmuera.LegacyRunner
 		public string SchemaVersion { get; set; } = CurrentSchemaVersion;
 		public string GameRoot { get; set; } = "";
 		public string Profile { get; set; } = global::FirstWindow.CoreProfileV24Pure;
+		/// <summary>用户请求的 profile（可能已退役：v18/megaten/erablue/erafl/snake）；空=Profile。</summary>
+		public string BaseProfile { get; set; } = "";
+
+		/// <summary>本会话显式加载的第一方包 id（legacy-runner 翻译产生；空=纯基线）。</summary>
+		public List<string> PackIds { get; set; } = new List<string>();
+
 		public string SessionIsolationMode { get; set; } = SessionIsolationModeBaseline;
 		public string InProcessSessionCycle { get; set; } = InProcessSessionCycleDisabled;
 		public int InProcessSessionSwitchCount { get; set; } = 2;
@@ -153,7 +159,7 @@ namespace gEmuera.LegacyRunner
 				throw new InvalidDataException("game_root_must_be_existing_absolute_directory");
 			if (string.IsNullOrWhiteSpace(OutputDirectory) || !Path.IsPathRooted(OutputDirectory))
 				throw new InvalidDataException("output_directory_must_be_absolute");
-			ValidateSupportedProfile(Profile, "profile_must_be_v24pure_or_snake_or_erafl");
+			ValidateSupportedProfile(Profile, "profile_must_be_engine_profile_v24pure");
 			if (!string.Equals(SessionIsolationMode, SessionIsolationModeBaseline, StringComparison.OrdinalIgnoreCase)
 				&& !string.Equals(SessionIsolationMode, SessionIsolationModeCanary, StringComparison.OrdinalIgnoreCase))
 				throw new InvalidDataException("session_isolation_mode_must_be_baseline_or_canary");
@@ -216,7 +222,7 @@ namespace gEmuera.LegacyRunner
 					throw new InvalidDataException("in_process_alternate_game_root_must_be_existing_absolute_directory");
 				ValidateSupportedProfile(
 					InProcessAlternateSession.Profile,
-					"in_process_alternate_profile_must_be_v24pure_or_snake_or_erafl");
+					"in_process_alternate_profile_must_be_engine_profile_v24pure");
 
 				string alternateGame = Path.GetFullPath(InProcessAlternateSession.GameRoot)
 					.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
@@ -269,6 +275,7 @@ namespace gEmuera.LegacyRunner
 			GameRoot = game.TrimEnd(Path.DirectorySeparatorChar);
 			OutputDirectory = output.TrimEnd(Path.DirectorySeparatorChar);
 			Profile = NormalizeProfile(Profile);
+		BaseProfile = string.IsNullOrWhiteSpace(BaseProfile) ? Profile : BaseProfile.Trim();
 			SessionIsolationMode = string.Equals(
 				SessionIsolationMode,
 				SessionIsolationModeCanary,

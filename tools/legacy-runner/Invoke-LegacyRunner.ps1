@@ -87,6 +87,48 @@ function Get-SupportedCompatibilityProfile {
     return @($generated.profileIds | ForEach-Object { [string]$_ })
 }
 
+# ---- Retired profile -> first-party pack translation (execution design 6.4 / G10) ----
+# Input: requested profile (may be retired: v18/megaten/erablue/erafl/snake).
+# Output: EngineProfile (live engine profile, normally v24pure) + PackId/PackPath (staging DLL).
+# Unknown profile or missing staging throws (non-zero exit): no false-green evidence is allowed.
+function Resolve-CompatibilityPackLaunch {
+    param([string]$RequestedProfile)
+    $supported = @(Get-SupportedCompatibilityProfile)
+    if ([string]::IsNullOrWhiteSpace($RequestedProfile)) { $RequestedProfile = 'v24pure' }
+    if ($supported -contains $RequestedProfile) {
+        return [pscustomobject]@{
+            BaseProfile = $RequestedProfile
+            EngineProfile = $RequestedProfile
+            PackId = ''
+            PackPath = ''
+        }
+    }
+    $repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '../..')).Path
+    $mapPath = Join-Path $repoRoot 'assets/text/pack-profile-map.json'
+    if (-not (Test-Path -LiteralPath $mapPath -PathType Leaf)) {
+        throw "Profile '$RequestedProfile' is retired but pack-profile-map.json is missing: $mapPath"
+    }
+    $map = Get-Content -LiteralPath $mapPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $entry = @($map.profiles | Where-Object { [string]$_.profileId -eq $RequestedProfile } | Select-Object -First 1)
+    if ($entry.Count -eq 0) {
+        throw "Unknown profile '$RequestedProfile'. Supported: $($supported -join ', '); retired profiles with first-party packs: " + ((@($map.profiles) | ForEach-Object { [string]$_.profileId }) -join ', ')
+    }
+    $packId = [string]$entry[0].packId
+    $relativePath = ([string]$entry[0].relativePath).Replace('\', '/')
+    $packPath = [IO.Path]::GetFullPath((Join-Path $repoRoot $relativePath))
+    if (-not (Test-Path -LiteralPath $packPath -PathType Leaf)) {
+        throw "Profile '$RequestedProfile' maps to first-party pack '$packId' but staging is missing: $packPath. Run tools/compat-pack/Build-FirstPartyPacks.ps1 first."
+    }
+    return [pscustomobject]@{
+        BaseProfile = $RequestedProfile
+        EngineProfile = 'v24pure'
+        PackId = $packId
+        PackPath = $packPath
+    }
+}
+
+
+
 function Quote-ProcessArgument {
     param([string]$Value)
     return '"' + $Value.Replace('"', '\"') + '"'
@@ -271,9 +313,16 @@ try {
     if (-not $baseConfig.gameRoot -or -not (Test-Path -LiteralPath $baseConfig.gameRoot -PathType Container)) {
         throw 'An existing game root must be supplied through -GameRoot or the config file.'
     }
+    # Retired profile translation: engine profile becomes v24pure, pack path is injected via env.
+    $baseResolution = Resolve-CompatibilityPackLaunch -RequestedProfile ([string]$baseConfig.profile)
+    $baseConfig.profile = $baseResolution.EngineProfile
+    $baseConfig | Add-Member -NotePropertyName baseProfile -NotePropertyValue $baseResolution.BaseProfile -Force
+    $baseConfig | Add-Member -NotePropertyName engineProfile -NotePropertyValue $baseResolution.EngineProfile -Force
+    $baseConfig | Add-Member -NotePropertyName packIds -NotePropertyValue @($baseResolution.PackId | Where-Object { $_ }) -Force
+    $baseConfig | Add-Member -NotePropertyName packPaths -NotePropertyValue @($baseResolution.PackPath | Where-Object { $_ }) -Force
     $supportedProfiles = Get-SupportedCompatibilityProfile
     if ($baseConfig.profile -notin $supportedProfiles) {
-        throw "Profile must be one of: $($supportedProfiles -join ', ')."
+        throw "Engine profile must be one of: $($supportedProfiles -join ', ')."
     }
     $sessionIsolationProperty = $baseConfig.PSObject.Properties['sessionIsolationMode']
     $sessionIsolationMode = if ($null -eq $sessionIsolationProperty) { 'baseline' } else { [string]$sessionIsolationProperty.Value }
@@ -309,11 +358,13 @@ try {
         if (-not $alternateSession.gameRoot -or -not (Test-Path -LiteralPath $alternateSession.gameRoot -PathType Container)) {
             throw 'cross-aba alternate session requires an existing gameRoot.'
         }
-        if ($alternateSession.profile -notin $supportedProfiles) {
-            throw "cross-aba alternate session profile must be one of: $($supportedProfiles -join ', ')."
+        $alternateResolution = Resolve-CompatibilityPackLaunch -RequestedProfile ([string]$alternateSession.profile)
+        if ($alternateResolution.PackId -ne $baseResolution.PackId) {
+            throw 'cross-aba sessions using different first-party packs are not supported (GEMUERA_COMPAT_PACKS is process-wide).'
         }
         $alternateSourceGameRoot = [IO.Path]::GetFullPath([string]$alternateSession.gameRoot)
-        $alternateProfile = [string]$alternateSession.profile
+        $alternateProfile = $alternateResolution.EngineProfile
+        $baseConfig.inProcessAlternateSession.profile = $alternateProfile
     }
     elseif ($null -ne $alternateSessionProperty) {
         throw 'inProcessAlternateSession requires inProcessSessionCycle=cross-aba.'
@@ -325,6 +376,9 @@ try {
             godotSha256 = Get-Sha256File -Path $godotExecutable
             gameRoot = Get-NormalizedFullPath -Path $baseConfig.gameRoot
             profile = $baseConfig.profile
+            baseProfile = $baseResolution.BaseProfile
+            engineProfile = $baseResolution.EngineProfile
+            packIds = @($baseResolution.PackId | Where-Object { $_ })
             inProcessSessionCycle = $inProcessSessionCycle
             inProcessSessionSwitchCount = $inProcessSessionSwitchCount
             alternateSession = if ([string]::IsNullOrWhiteSpace($alternateSourceGameRoot)) { $null } else {
@@ -452,13 +506,33 @@ try {
             '--',
             (Quote-ProcessArgument ('--m0-runner-config=' + $runConfigPath))
         )
+        # Inject the first-party pack path (';' separated GEMUERA_COMPAT_PACKS read by host).
+        $previousCompatPackEnv = $env:GEMUERA_COMPAT_PACKS
+        if ($baseResolution.PackPath) { $env:GEMUERA_COMPAT_PACKS = [string]$baseResolution.PackPath }
+        else { Remove-Item Env:\GEMUERA_COMPAT_PACKS -ErrorAction SilentlyContinue }
         $arguments = $argumentParts -join ' '
         $startedAtUtc = [DateTime]::UtcNow
         $run = Invoke-CapturedProcess -Executable $godotExecutable -Arguments $arguments -WorkingDirectory $projectRootResolved -TimeoutMilliseconds ($TimeoutSeconds * 1000)
         $finishedAtUtc = [DateTime]::UtcNow
+        if ($null -eq $previousCompatPackEnv) { Remove-Item Env:\GEMUERA_COMPAT_PACKS -ErrorAction SilentlyContinue }
+        else { $env:GEMUERA_COMPAT_PACKS = $previousCompatPackEnv }
         [IO.File]::WriteAllText((Join-Path $runDirectory 'stdout.log'), $run.stdout, $utf8NoBom)
         [IO.File]::WriteAllText((Join-Path $runDirectory 'stderr.log'), $run.stderr, $utf8NoBom)
 
+        if ($baseResolution.PackId) {
+            # G10 false-green guard: the run must log [LOAD] CompatPack enabled for this pack.
+            $logText = ''
+            foreach ($logName in @('godot.log', 'stdout.log', 'stderr.log')) {
+                $logPath = Join-Path $runDirectory $logName
+                if (Test-Path -LiteralPath $logPath -PathType Leaf) {
+                    $logText += (Get-Content -LiteralPath $logPath -Raw -Encoding UTF8) + [Environment]::NewLine
+                }
+            }
+            $enabledPattern = '\[LOAD\] CompatPack enabled:[^\r\n]*' + [regex]::Escape([string]$baseResolution.PackId)
+            if ($logText -notmatch $enabledPattern) {
+                throw ("Runner did not load expected first-party pack '" + $baseResolution.PackId + "' for profile '" + $baseResolution.BaseProfile + "' (false-green guard).")
+            }
+        }
         $missingReports = @($requiredReportFilesForRun | Where-Object { -not (Test-Path -LiteralPath (Join-Path $runDirectory $_) -PathType Leaf) })
         $canonicalEntries = @()
         foreach ($name in $requiredSemanticFiles) {
@@ -493,6 +567,9 @@ try {
             inProcessSessionSwitchCount = $inProcessSessionSwitchCount
             alternateGameRoot = if ([string]::IsNullOrWhiteSpace($runtimeAlternateGameRoot)) { '' } else { Get-NormalizedFullPath -Path $runtimeAlternateGameRoot }
             alternateProfile = $alternateProfile
+            baseProfile = $baseResolution.BaseProfile
+            engineProfile = $baseResolution.EngineProfile
+            packIds = @($baseResolution.PackId | Where-Object { $_ })
             missingReports = $missingReports
         }
         Write-Json -Value $runReport -Path (Join-Path $runDirectory 'run.json')
@@ -551,6 +628,9 @@ try {
         gameRoot = Get-NormalizedFullPath -Path $sourceGameRoot
         isolatedGameCopy = -not $AllowGameDirectoryWrites
         profile = $baseConfig.profile
+        baseProfile = $baseResolution.BaseProfile
+        engineProfile = $baseResolution.EngineProfile
+        packIds = @($baseResolution.PackId | Where-Object { $_ })
         sessionIsolationMode = $sessionIsolationMode
         inProcessSessionCycle = $inProcessSessionCycle
         inProcessSessionSwitchCount = $inProcessSessionSwitchCount
