@@ -77,4 +77,46 @@ public class FirstPartyPackEquivalenceTests
         Assert.Throws<InvalidOperationException>(() => BuiltInDialectCatalog.CreateLegacySessionPlan("megaten"));
         handle.Unload();
     }
+    [Fact]
+    public void EraBluePack_AddsSetAnimeTimer_AndOneWiredCapability()
+    {
+        string packPath = typeof(PackGemueraEraBlue.PackGemueraEraBlueMarker).Assembly.Location;
+        using var directory = new IsolatedPackDirectory(packPath);
+        var context = Context();
+        Assert.True(CompatPackLoader.TryLoad(directory.MainAssemblyPath, context, out var handle, out var errors),
+            string.Join("; ", errors));
+        Assert.Empty(errors);
+        Assert.Equal("pack.gemuera.erablue", handle!.Manifest.PackId);
+        Assert.Equal("v24pure", handle.Manifest.BaseProfileId);
+        Assert.Equal(new[] { "SETANIMETIMER" }, handle.Manifest.Surface.AddInstructions);
+        Assert.Empty(handle.Manifest.Surface.HideInstructions);
+        Assert.Empty(handle.Manifest.Surface.AddFunctions);
+        Assert.Empty(handle.Manifest.Surface.HideFunctions);
+        // plugin.external-assembly.v1 是 DiagnosticOnly（宿主声明，无运行期消费者），不可入包。
+        Assert.Equal(new[] { "startup.continue-after-fault.v1" }, handle.Manifest.Capabilities);
+        Assert.DoesNotContain("plugin.external-assembly.v1", handle.Manifest.Capabilities);
+        Assert.Equal(
+            LegacySurfaceHash.ComputeV24SurfaceHash(LegacySurfaceHash.BuildV24SurfaceHashInput("v24pure")),
+            handle.Manifest.BaseSurfaceHash);
+
+        CompatibilityPlan baseline = V24Baseline();
+        Assert.True(CompatPackPlanAssembler.TryAssemble(
+                baseline, new[] { handle }, context, out CompatibilityPlan assembled, out var assemblyErrors),
+            string.Join("; ", assemblyErrors));
+        Assert.Empty(assemblyErrors);
+
+        var expectedInstructions = new HashSet<string>(baseline.Dialect.Instructions.Keys, StringComparer.Ordinal)
+        {
+            "SETANIMETIMER",
+        };
+        Assert.Equal(
+            expectedInstructions.Order(StringComparer.Ordinal),
+            assembled.Dialect.Instructions.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal(
+            baseline.Dialect.Functions.Keys.Order(StringComparer.Ordinal),
+            assembled.Dialect.Functions.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal(new[] { "startup.continue-after-fault.v1" }, assembled.CapabilityIds.Order(StringComparer.Ordinal));
+        Assert.Throws<InvalidOperationException>(() => BuiltInDialectCatalog.CreateLegacySessionPlan("erablue"));
+        handle.Unload();
+    }
 }

@@ -91,12 +91,6 @@ internal static class Program
             // SETANIMETIMER 函数形态：v24 可见、snake 主动排除——条件可见性的已知差）。
             AssertPlanDeclaresSurface("snake", snakeInstructions, snakeFunctions, exactInstructionCount: snakeInstructions.Count, exactFunctionCount: snakeFunctions.Count + 2);
             AssertPlanDeclaresSurface("erafl", eraflInstructions, eraflFunctions, exactInstructionCount: eraflInstructions.Count, exactFunctionCount: eraflFunctions.Count);
-            object erablue = CreateProfile(profileType, "erablue", scopedVariableInstructionsEnabled: true);
-            var erablueInstructions = GetRegistryKeys(instructionType, "GetInstructionNameDic", profileType, erablue);
-            var erablueFunctions = GetRegistryKeys(functionType, "GetMethodList", profileType, erablue);
-            AssertPlanDeclaresSurface("erablue", erablueInstructions, erablueFunctions, exactInstructionCount: erablueInstructions.Count, exactFunctionCount: erablueFunctions.Count);
-            Assert(erablueInstructions.Contains("SETANIMETIMER") && !erablueInstructions.Contains("CALLSTR"),
-                "erablue instruction surface drifted.");
 
             Console.WriteLine("Legacy dialect runtime lookup smoke passed.");
             return 0;

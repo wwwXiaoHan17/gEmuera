@@ -16,6 +16,14 @@
       "relativePathAndroid": "packs/pack.gemuera.megaten/pack.gemuera.megaten.dll",
       "requiredPackVersion": "1.0.0",
       "note": "eraMegaten 第一方数据包（5 个 Wired capability，面零增量）"
+    },
+    {
+      "profileId": "erablue",
+      "packId": "pack.gemuera.erablue",
+      "relativePath": "compat_packs/pack.gemuera.erablue/pack.gemuera.erablue.dll",
+      "relativePathAndroid": "packs/pack.gemuera.erablue/pack.gemuera.erablue.dll",
+      "requiredPackVersion": "1.0.0",
+      "note": "erablue 第一方数据包（+SETANIMETIMER、启动容错 capability）"
     }
   ]
 }

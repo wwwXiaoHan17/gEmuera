@@ -732,7 +732,6 @@ namespace MinorShift.Emuera
 				"v24pure" => EmueraCoreProfile.V24Pure,
 				"snake" => EmueraCoreProfile.Snake,
 				"erafl" => EmueraCoreProfile.EraFl,
-				"erablue" => EmueraCoreProfile.EraBlue,
 				_ => throw new InvalidOperationException(
 					$"Compatibility profile '{launcherProfile}' is not supported by the legacy bridge.")
 			};
@@ -756,7 +755,6 @@ namespace MinorShift.Emuera
 				"v24pure" => EmueraCoreProfile.V24Pure,
 				"snake" => EmueraCoreProfile.Snake,
 				"erafl" => EmueraCoreProfile.EraFl,
-				"erablue" => EmueraCoreProfile.EraBlue,
 				_ => throw new InvalidOperationException(
 					$"Compatibility plan profile '{profileId}' is not supported by the legacy bridge.")
 			};
@@ -769,7 +767,6 @@ namespace MinorShift.Emuera
 				EmueraCoreProfile.V24Pure => "v24pure",
 				EmueraCoreProfile.Snake => "snake",
 				EmueraCoreProfile.EraFl => "erafl",
-				EmueraCoreProfile.EraBlue => "erablue",
 				_ => throw new InvalidOperationException(
 					$"Legacy core profile '{profile}' has no built-in compatibility plan."),
 			};

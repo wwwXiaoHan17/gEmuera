@@ -30,27 +30,7 @@ public static class EraBlueCompatibilityModule
     public const string ContinueAfterStartupFaultCapability =
         SnakeCompatibilityCapabilities.ContinueAfterStartupFault;
 
-    public static DialectModuleDefinition CreateDefinition()
-    {
-        return new DialectModuleDefinition(
-            ModuleId,
-            ModuleVersion,
-            1,
-            dependencies: new[]
-            {
-                new ModuleDependencySnapshot(BaseModuleId, "[1.0.0,2.0.0)"),
-            });
-    }
-
-    public static CompatibilityProfileDefinition CreateProfile()
-    {
-        return new CompatibilityProfileDefinition(
-            "erablue",
-            new[] { ModuleId },
-            requiredCapabilityIds: new[]
-            {
-                ExternalPluginCapability,
-                ContinueAfterStartupFaultCapability,
-            });
-    }
+    // P-D 步 3（2026-11-07）：内置 erablue profile 已退役为第一方数据包
+    // packs/pack.gemuera.erablue（+SETANIMETIMER、1 个 Wired capability）。
+    // 常量与 DiagnosticOnly plugin capability 保留（词汇表/文档继续引用）。
 }

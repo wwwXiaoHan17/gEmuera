@@ -1,0 +1,14 @@
+{
+  "baseProfileId": "v24pure",
+  "baseSurfaceHash": "950dbeb9028a8a2fc73ac3699411a05b8e367458219b40bd862066c8902888c9",
+  "capabilities": [
+    "startup.continue-after-fault.v1"
+  ],
+  "contractAbi": "1.0",
+  "engineApi": "1.0",
+  "packId": "pack.gemuera.erablue",
+  "packVersion": "1.0.0",
+  "surface": {
+    "addInstructions": ["SETANIMETIMER"]
+  }
+}

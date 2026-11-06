@@ -22,10 +22,6 @@ public static class BuiltInDialectCatalog
         catalog.Register(new DeclaredDialectModule(
             EraFlCompatibilityModule.CreateDefinition(),
             EraFlContributions()));
-        // eraBlue（碧蓝度假村）：v24 基座 + SETANIMETIMER 可见性增量 + 外部插件 capability 声明。
-        catalog.Register(new DeclaredDialectModule(
-            EraBlueCompatibilityModule.CreateDefinition(),
-            EraBlueContributions()));
         return catalog;
     }
 
@@ -51,12 +47,6 @@ public static class BuiltInDialectCatalog
         new LegacyFunctionInventoryContribution("game.erafl.functions", "game.erafl", LegacyDialectInventories.EraFlDeltaFunctions),
     };
 
-    private static IDialectContribution[] EraBlueContributions() => new IDialectContribution[]
-    {
-        new LegacyInstructionInventoryContribution("game.erablue.instructions", "game.erablue", LegacyDialectInventories.EraBlueDeltaInstructionNames),
-        new LegacyFunctionInventoryContribution("game.erablue.functions", "game.erablue", LegacyDialectInventories.EraBlueDeltaFunctions),
-    };
-
     /// <summary>
     /// Legacy launcher profile projection. It deliberately lists roots rather
     /// than a pre-expanded closure, so <see cref="DialectModuleCatalog"/>
@@ -68,7 +58,6 @@ public static class BuiltInDialectCatalog
         catalog.Register(new CompatibilityProfileDefinition(
             "v24pure",
             new[] { "gemuera.v24" }));
-        catalog.Register(EraBlueCompatibilityModule.CreateProfile());
         catalog.Register(SnakeCompatibilityModule.CreateProfile());
         catalog.Register(EraFlCompatibilityModule.CreateProfile());
         return catalog;
