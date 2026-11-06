@@ -129,3 +129,13 @@
 
 ### 交付
 - APK：`export/releases/gemuera-1.10.0-dev-20261106b-debug.apk`（**75,144,308 bytes，最终重导出版**；versionName `1.10.0-dev-20261106b`、versionCode `13`、screenOrientation=13 阶段一不变；SHA256 `6DCA07812DDB0F6466CC46DE344E8862132E0DB4AFA1556383CA4108C0305E32`）。
+---
+
+## 收尾（2026-11-07）：用户真机确认修复 + 合并 dev + 发布 20261106
+
+- 用户 2026-11-07 确认 20261106b APK 真机验证「没问题了」（旋转后底部可达）。
+- 最终发布版按用户要求去掉 `b` 后缀：versionName `1.10.0-dev-20261106`、versionCode `14`（> 曾用于测试的 20261106b/code13，保证可覆盖升级）、screenOrientation 仍为 fullUser(13)（阶段一不变）。
+- 代码流程：`fix/mobile-orientation-smallwindow` → PR → 合并 `dev`；APK 作为 GitHub Release `v1.10.0-dev-20261106` 的资产发布。
+- 诊断标记保持 `mobile-layout-20261106b`（用于区分本轮修复代码），不在发布版另改，避免再次引起包指纹变化。
+- 小窗默认竖屏问题：用户本轮未再报，但该会话未实际进入小窗（日志 `multiWindow=False`），阶段二（manifest 默认横屏）保持已授权但未实施的待命状态；若后续复现 `status=ignored` 再启用。
+- 清理：删除本地测试用 `20261106b`/旧 `20261106(code12)` APK；删除 `E:\tmp\gemuera-mobile-orientation\userdata-backup*` 用户数据副本（已还原原文件）。
