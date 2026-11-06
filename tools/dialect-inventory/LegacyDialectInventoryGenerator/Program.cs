@@ -137,6 +137,63 @@ internal static class Program
             CollectReturnTypes(erablueFunctions, functionReturnTypes);
             CollectReturnTypes(megatenFunctions, functionReturnTypes);
 
+            // —— 一次性冻结模式（执行设计 §4.8，Task 1；生成后工件只读）——
+            // 冻结五个待退役 profile 的自有表面/并集数据，供退役后生成器与包校验继续使用。
+            if (args.Contains("--freeze-retired-surface", StringComparer.Ordinal))
+            {
+                var frozen = new
+                {
+                    schemaVersion = "1.0.0",
+                    sourceCommit = GetGitHead(repoRoot),
+                    capturedAtUtc = DateTime.UtcNow.ToString(
+                        "o", System.Globalization.CultureInfo.InvariantCulture),
+                    profiles = new Dictionary<string, object>(StringComparer.Ordinal)
+                    {
+                        ["v18"] = new
+                        {
+                            surfaceKind = "full",
+                            instructions = Sorted(v18Instructions),
+                            functions = SortedFunctions(Keys(v18Functions), functionReturnTypes),
+                        },
+                        ["snake"] = new
+                        {
+                            surfaceKind = "delta",
+                            instructions = Sorted(snakeDeltaInstructions),
+                            functions = SortedFunctions(snakeDeltaFunctions, functionReturnTypes),
+                        },
+                        ["erafl"] = new
+                        {
+                            surfaceKind = "delta",
+                            instructions = Sorted(eraflDeltaInstructions),
+                            functions = SortedFunctions(eraflDeltaFunctions, functionReturnTypes),
+                        },
+                        ["erablue"] = new
+                        {
+                            surfaceKind = "delta",
+                            instructions = Sorted(erablueDeltaInstructions),
+                            functions = SortedFunctions(erablueDeltaFunctions, functionReturnTypes),
+                        },
+                        ["megaten"] = new
+                        {
+                            surfaceKind = "delta",
+                            instructions = Sorted(megatenDeltaInstructions),
+                            functions = SortedFunctions(megatenDeltaFunctions, functionReturnTypes),
+                        },
+                    },
+                    methodProjectedInstructionNames = Sorted(methodProjectedInstructionNames),
+                };
+                string frozenJson = JsonSerializer.Serialize(
+                    frozen, new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine;
+                string frozenPath = Path.Combine(
+                    repoRoot, "tools", "dialect-inventory", "retired-dialect-surface-universe.json");
+                File.WriteAllText(frozenPath, frozenJson, new UTF8Encoding(false));
+                Console.WriteLine("frozen retired surface universe written: " + frozenPath);
+                Console.WriteLine("frozen v18 functions: " + Keys(v18Functions).Count
+                    + "; snake delta: " + snakeDeltaInstructions.Count + "/" + snakeDeltaFunctions.Count
+                    + "; method-projected: " + methodProjectedInstructionNames.Count);
+                return 0;
+            }
+
             string generatedCs = BuildGeneratedCs(
                 v24Instructions,
                 snakeDeltaInstructions,
@@ -350,6 +407,40 @@ internal static class Program
     /// 这些条目是引擎把表达式函数投影出的 METHOD 语句入口（函数可见性驱动），与真正的
     /// 指令 handler（Method == null）共享同一个注册表键空间。
     /// </summary>
+    private static string[] Sorted(HashSet<string> names)
+        => names.Order(StringComparer.Ordinal).ToArray();
+
+    private static object[] SortedFunctions(
+        HashSet<string> names, Dictionary<string, string> returnTypes)
+        => names.Order(StringComparer.Ordinal)
+            .Select(name => (object)new
+            {
+                name,
+                returnType = returnTypes.TryGetValue(name, out string? type) ? type : "Unknown",
+            })
+            .ToArray();
+
+    private static string GetGitHead(string repoRoot)
+    {
+        var startInfo = new System.Diagnostics.ProcessStartInfo("git")
+        {
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+            WorkingDirectory = repoRoot,
+        };
+        startInfo.ArgumentList.Add("-C");
+        startInfo.ArgumentList.Add(repoRoot);
+        startInfo.ArgumentList.Add("rev-parse");
+        startInfo.ArgumentList.Add("HEAD");
+        using System.Diagnostics.Process process = System.Diagnostics.Process.Start(startInfo)
+            ?? throw new InvalidOperationException("无法启动 git 读取 HEAD。");
+        string output = process.StandardOutput.ReadToEnd().Trim();
+        process.WaitForExit();
+        if (process.ExitCode != 0 || output.Length != 40)
+            throw new InvalidOperationException("无法读取 git HEAD（exit=" + process.ExitCode + "）：" + output);
+        return output;
+    }
+
     private static void CollectMethodProjectedNames(
         Type registryType,
         Type profileType,

@@ -1,0 +1,1901 @@
+{
+  "schemaVersion": "1.0.0",
+  "sourceCommit": "30fd56e8d9e4dd7a698dfd81df7b79408a08e68b",
+  "capturedAtUtc": "2026-11-06T19:11:59.4779669Z",
+  "profiles": {
+    "v18": {
+      "surfaceKind": "full",
+      "instructions": [
+        "ABS",
+        "ADDCHARA",
+        "ADDCOPYCHARA",
+        "ADDDEFCHARA",
+        "ADDSPCHARA",
+        "ADDVOIDCHARA",
+        "ALIGNMENT",
+        "ALLSAMES",
+        "ARRAYCOPY",
+        "ARRAYMSORT",
+        "ARRAYREMOVE",
+        "ARRAYSHIFT",
+        "ARRAYSORT",
+        "ASSERT",
+        "AWAIT",
+        "BAR",
+        "BARL",
+        "BARSTR",
+        "BEGIN",
+        "BREAK",
+        "CALL",
+        "CALLEVENT",
+        "CALLF",
+        "CALLFORM",
+        "CALLFORMF",
+        "CALLTRAIN",
+        "CASE",
+        "CASEELSE",
+        "CATCH",
+        "CBGCLEAR",
+        "CBGCLEARBUTTON",
+        "CBGREMOVEBMAP",
+        "CBGREMOVERANGE",
+        "CBGSETBMAPG",
+        "CBGSETBUTTONSPRITE",
+        "CBGSETG",
+        "CBGSETSPRITE",
+        "CBRT",
+        "CHARATU",
+        "CHKCHARADATA",
+        "CHKDATA",
+        "CHKFONT",
+        "CLEARBIT",
+        "CLEARLINE",
+        "CLEARTEXTBOX",
+        "CLIENTHEIGHT",
+        "CLIENTWIDTH",
+        "CMATCH",
+        "COLOR_FROMNAME",
+        "COLOR_FROMRGB",
+        "CONTINUE",
+        "CONVERT",
+        "COPYCHARA",
+        "CSVABL",
+        "CSVBASE",
+        "CSVCALLNAME",
+        "CSVCFLAG",
+        "CSVCSTR",
+        "CSVEQUIP",
+        "CSVEXP",
+        "CSVJUEL",
+        "CSVMARK",
+        "CSVMASTERNAME",
+        "CSVNAME",
+        "CSVNICKNAME",
+        "CSVRELATION",
+        "CSVTALENT",
+        "CUPCHECK",
+        "CURRENTALIGN",
+        "CURRENTREDRAW",
+        "CUSTOMDRAWLINE",
+        "CVARSET",
+        "DATA",
+        "DATAFORM",
+        "DATALIST",
+        "DEBUGCLEAR",
+        "DEBUGPRINT",
+        "DEBUGPRINTFORM",
+        "DEBUGPRINTFORML",
+        "DEBUGPRINTL",
+        "DELALLCHARA",
+        "DELCHARA",
+        "DELDATA",
+        "DO",
+        "DOTRAIN",
+        "DRAWLINE",
+        "DRAWLINEFORM",
+        "DUMPRAND",
+        "ELSE",
+        "ELSEIF",
+        "ENCODETOUNI",
+        "ENDCATCH",
+        "ENDDATA",
+        "ENDFUNC",
+        "ENDIF",
+        "ENDLIST",
+        "ENDNOSKIP",
+        "ENDSELECT",
+        "ESCAPE",
+        "EXISTCSV",
+        "EXPONENT",
+        "FINDCHARA",
+        "FINDELEMENT",
+        "FINDLASTCHARA",
+        "FINDLASTELEMENT",
+        "FIND_CHARADATA",
+        "FONTBOLD",
+        "FONTITALIC",
+        "FONTREGULAR",
+        "FONTSTYLE",
+        "FOR",
+        "FORCEKANA",
+        "FORCEWAIT",
+        "FUNC",
+        "GCLEAR",
+        "GCREATE",
+        "GCREATED",
+        "GCREATEFROMFILE",
+        "GDISPOSE",
+        "GDRAWG",
+        "GDRAWGWITHMASK",
+        "GDRAWSPRITE",
+        "GETBGCOLOR",
+        "GETBIT",
+        "GETCHARA",
+        "GETCOLOR",
+        "GETCONFIG",
+        "GETCONFIGS",
+        "GETDEFBGCOLOR",
+        "GETDEFCOLOR",
+        "GETEXPLV",
+        "GETFOCUSCOLOR",
+        "GETFONT",
+        "GETKEY",
+        "GETKEYTRIGGERED",
+        "GETLINESTR",
+        "GETMILLISECOND",
+        "GETNUM",
+        "GETNUMB",
+        "GETPALAMLV",
+        "GETSECOND",
+        "GETSPCHARA",
+        "GETSTYLE",
+        "GETTIME",
+        "GETTIMES",
+        "GFILLRECTANGLE",
+        "GGETCOLOR",
+        "GHEIGHT",
+        "GLOAD",
+        "GOTO",
+        "GOTOFORM",
+        "GROUPMATCH",
+        "GSAVE",
+        "GSETBRUSH",
+        "GSETCOLOR",
+        "GSETFONT",
+        "GSETPEN",
+        "GWIDTH",
+        "HTML_ESCAPE",
+        "HTML_GETPRINTEDSTR",
+        "HTML_POPPRINTINGSTR",
+        "HTML_PRINT",
+        "HTML_TAGSPLIT",
+        "HTML_TOPLAINTEXT",
+        "IF",
+        "INITRAND",
+        "INPUT",
+        "INPUTMOUSEKEY",
+        "INPUTS",
+        "INRANGE",
+        "INRANGEARRAY",
+        "INRANGECARRAY",
+        "INVERTBIT",
+        "ISACTIVE",
+        "ISNUMERIC",
+        "ISSKIP",
+        "JUMP",
+        "JUMPFORM",
+        "LIMIT",
+        "LINEISEMPTY",
+        "LOADCHARA",
+        "LOADDATA",
+        "LOADGAME",
+        "LOADGLOBAL",
+        "LOADTEXT",
+        "LOADVAR",
+        "LOG",
+        "LOG10",
+        "LOOP",
+        "MATCH",
+        "MAX",
+        "MAXARRAY",
+        "MAXCARRAY",
+        "MESSKIP",
+        "MIN",
+        "MINARRAY",
+        "MINCARRAY",
+        "MONEYSTR",
+        "MOUSESKIP",
+        "MOUSEX",
+        "MOUSEY",
+        "NEXT",
+        "NOSAMES",
+        "NOSKIP",
+        "ONEINPUT",
+        "ONEINPUTS",
+        "PICKUPCHARA",
+        "POWER",
+        "PRINT",
+        "PRINTBUTTON",
+        "PRINTBUTTONC",
+        "PRINTBUTTONLC",
+        "PRINTC",
+        "PRINTCD",
+        "PRINTCK",
+        "PRINTCLENGTH",
+        "PRINTCPERLINE",
+        "PRINTD",
+        "PRINTDATA",
+        "PRINTDATAD",
+        "PRINTDATADL",
+        "PRINTDATADW",
+        "PRINTDATAK",
+        "PRINTDATAKL",
+        "PRINTDATAKW",
+        "PRINTDATAL",
+        "PRINTDATAW",
+        "PRINTDL",
+        "PRINTDW",
+        "PRINTFORM",
+        "PRINTFORMC",
+        "PRINTFORMCD",
+        "PRINTFORMCK",
+        "PRINTFORMD",
+        "PRINTFORMDL",
+        "PRINTFORMDW",
+        "PRINTFORMK",
+        "PRINTFORMKL",
+        "PRINTFORMKW",
+        "PRINTFORML",
+        "PRINTFORMLC",
+        "PRINTFORMLCD",
+        "PRINTFORMLCK",
+        "PRINTFORMS",
+        "PRINTFORMSD",
+        "PRINTFORMSDL",
+        "PRINTFORMSDW",
+        "PRINTFORMSK",
+        "PRINTFORMSKL",
+        "PRINTFORMSKW",
+        "PRINTFORMSL",
+        "PRINTFORMSW",
+        "PRINTFORMW",
+        "PRINTK",
+        "PRINTKL",
+        "PRINTKW",
+        "PRINTL",
+        "PRINTLC",
+        "PRINTLCD",
+        "PRINTLCK",
+        "PRINTPLAIN",
+        "PRINTPLAINFORM",
+        "PRINTS",
+        "PRINTSD",
+        "PRINTSDL",
+        "PRINTSDW",
+        "PRINTSINGLE",
+        "PRINTSINGLED",
+        "PRINTSINGLEFORM",
+        "PRINTSINGLEFORMD",
+        "PRINTSINGLEFORMK",
+        "PRINTSINGLEFORMS",
+        "PRINTSINGLEFORMSD",
+        "PRINTSINGLEFORMSK",
+        "PRINTSINGLEK",
+        "PRINTSINGLES",
+        "PRINTSINGLESD",
+        "PRINTSINGLESK",
+        "PRINTSINGLEV",
+        "PRINTSINGLEVD",
+        "PRINTSINGLEVK",
+        "PRINTSK",
+        "PRINTSKL",
+        "PRINTSKW",
+        "PRINTSL",
+        "PRINTSW",
+        "PRINTV",
+        "PRINTVD",
+        "PRINTVDL",
+        "PRINTVDW",
+        "PRINTVK",
+        "PRINTVKL",
+        "PRINTVKW",
+        "PRINTVL",
+        "PRINTVW",
+        "PRINTW",
+        "PRINT_ABL",
+        "PRINT_EXP",
+        "PRINT_IMG",
+        "PRINT_ITEM",
+        "PRINT_MARK",
+        "PRINT_PALAM",
+        "PRINT_RECT",
+        "PRINT_SHOPITEM",
+        "PRINT_SPACE",
+        "PRINT_TALENT",
+        "PUTFORM",
+        "QUIT",
+        "RAND",
+        "RANDOMIZE",
+        "REDRAW",
+        "REF",
+        "REFBYNAME",
+        "REND",
+        "REPEAT",
+        "REPLACE",
+        "RESETBGCOLOR",
+        "RESETCOLOR",
+        "RESETDATA",
+        "RESETGLOBAL",
+        "RESET_STAIN",
+        "RESTART",
+        "RETURN",
+        "RETURNF",
+        "RETURNFORM",
+        "REUSELASTLINE",
+        "SAVECHARA",
+        "SAVEDATA",
+        "SAVEGAME",
+        "SAVEGLOBAL",
+        "SAVENOS",
+        "SAVETEXT",
+        "SAVEVAR",
+        "SELECTCASE",
+        "SETBGCOLOR",
+        "SETBGCOLORBYNAME",
+        "SETBIT",
+        "SETCOLOR",
+        "SETCOLORBYNAME",
+        "SETFONT",
+        "SIF",
+        "SIGN",
+        "SKIPDISP",
+        "SORTCHARA",
+        "SPLIT",
+        "SPRITEANIMEADDFRAME",
+        "SPRITEANIMECREATE",
+        "SPRITECREATE",
+        "SPRITECREATED",
+        "SPRITEDISPOSE",
+        "SPRITEGETCOLOR",
+        "SPRITEHEIGHT",
+        "SPRITEMOVE",
+        "SPRITEPOSX",
+        "SPRITEPOSY",
+        "SPRITESETPOS",
+        "SPRITEWIDTH",
+        "SQRT",
+        "STOPCALLTRAIN",
+        "STRCOUNT",
+        "STRDATA",
+        "STRFIND",
+        "STRFINDU",
+        "STRFORM",
+        "STRJOIN",
+        "STRLEN",
+        "STRLENFORM",
+        "STRLENFORMU",
+        "STRLENS",
+        "STRLENSU",
+        "STRLENU",
+        "SUBSTRING",
+        "SUBSTRINGU",
+        "SUMARRAY",
+        "SUMCARRAY",
+        "SWAP",
+        "SWAPCHARA",
+        "THROW",
+        "TIMES",
+        "TINPUT",
+        "TINPUTS",
+        "TOFULL",
+        "TOHALF",
+        "TOINT",
+        "TOLOWER",
+        "TONEINPUT",
+        "TONEINPUTS",
+        "TOOLTIP_SETCOLOR",
+        "TOOLTIP_SETDELAY",
+        "TOOLTIP_SETDURATION",
+        "TOSTR",
+        "TOUPPER",
+        "TRYCALL",
+        "TRYCALLFORM",
+        "TRYCALLLIST",
+        "TRYCCALL",
+        "TRYCCALLFORM",
+        "TRYCGOTO",
+        "TRYCGOTOFORM",
+        "TRYCJUMP",
+        "TRYCJUMPFORM",
+        "TRYGOTO",
+        "TRYGOTOFORM",
+        "TRYGOTOLIST",
+        "TRYJUMP",
+        "TRYJUMPFORM",
+        "TRYJUMPLIST",
+        "TWAIT",
+        "UNICODE",
+        "UNICODEBYTE",
+        "UPCHECK",
+        "VARSET",
+        "VARSIZE",
+        "WAIT",
+        "WAITANYKEY",
+        "WEND",
+        "WHILE"
+      ],
+      "functions": [
+        {
+          "name": "ABS",
+          "returnType": "Integer"
+        },
+        {
+          "name": "ALLSAMES",
+          "returnType": "Integer"
+        },
+        {
+          "name": "ARRAYMSORT",
+          "returnType": "Integer"
+        },
+        {
+          "name": "BARSTR",
+          "returnType": "String"
+        },
+        {
+          "name": "CBGCLEAR",
+          "returnType": "Integer"
+        },
+        {
+          "name": "CBGCLEARBUTTON",
+          "returnType": "Integer"
+        },
+        {
+          "name": "CBGREMOVEBMAP",
+          "returnType": "Integer"
+        },
+        {
+          "name": "CBGREMOVERANGE",
+          "returnType": "Integer"
+        },
+        {
+          "name": "CBGSETBMAPG",
+          "returnType": "Integer"
+        },
+        {
+          "name": "CBGSETBUTTONSPRITE",
+          "returnType": "Integer"
+        },
+        {
+          "name": "CBGSETG",
+          "returnType": "Integer"
+        },
+        {
+          "name": "CBGSETSPRITE",
+          "returnType": "Integer"
+        },
+        {
+          "name": "CBRT",
+          "returnType": "Integer"
+        },
+        {
+          "name": "CHARATU",
+          "returnType": "String"
+        },
+        {
+          "name": "CHKCHARADATA",
+          "returnType": "Integer"
+        },
+        {
+          "name": "CHKDATA",
+          "returnType": "Integer"
+        },
+        {
+          "name": "CHKFONT",
+          "returnType": "Integer"
+        },
+        {
+          "name": "CLIENTHEIGHT",
+          "returnType": "Integer"
+        },
+        {
+          "name": "CLIENTWIDTH",
+          "returnType": "Integer"
+        },
+        {
+          "name": "CMATCH",
+          "returnType": "Integer"
+        },
+        {
+          "name": "COLOR_FROMNAME",
+          "returnType": "Integer"
+        },
+        {
+          "name": "COLOR_FROMRGB",
+          "returnType": "Integer"
+        },
+        {
+          "name": "CONVERT",
+          "returnType": "String"
+        },
+        {
+          "name": "CSVABL",
+          "returnType": "Integer"
+        },
+        {
+          "name": "CSVBASE",
+          "returnType": "Integer"
+        },
+        {
+          "name": "CSVCALLNAME",
+          "returnType": "String"
+        },
+        {
+          "name": "CSVCFLAG",
+          "returnType": "Integer"
+        },
+        {
+          "name": "CSVCSTR",
+          "returnType": "String"
+        },
+        {
+          "name": "CSVEQUIP",
+          "returnType": "Integer"
+        },
+        {
+          "name": "CSVEXP",
+          "returnType": "Integer"
+        },
+        {
+          "name": "CSVJUEL",
+          "returnType": "Integer"
+        },
+        {
+          "name": "CSVMARK",
+          "returnType": "Integer"
+        },
+        {
+          "name": "CSVMASTERNAME",
+          "returnType": "String"
+        },
+        {
+          "name": "CSVNAME",
+          "returnType": "String"
+        },
+        {
+          "name": "CSVNICKNAME",
+          "returnType": "String"
+        },
+        {
+          "name": "CSVRELATION",
+          "returnType": "Integer"
+        },
+        {
+          "name": "CSVTALENT",
+          "returnType": "Integer"
+        },
+        {
+          "name": "CURRENTALIGN",
+          "returnType": "String"
+        },
+        {
+          "name": "CURRENTREDRAW",
+          "returnType": "Integer"
+        },
+        {
+          "name": "ENCODETOUNI",
+          "returnType": "Integer"
+        },
+        {
+          "name": "ESCAPE",
+          "returnType": "String"
+        },
+        {
+          "name": "EXISTCSV",
+          "returnType": "Integer"
+        },
+        {
+          "name": "EXPONENT",
+          "returnType": "Integer"
+        },
+        {
+          "name": "FINDCHARA",
+          "returnType": "Integer"
+        },
+        {
+          "name": "FINDELEMENT",
+          "returnType": "Integer"
+        },
+        {
+          "name": "FINDLASTCHARA",
+          "returnType": "Integer"
+        },
+        {
+          "name": "FINDLASTELEMENT",
+          "returnType": "Integer"
+        },
+        {
+          "name": "FIND_CHARADATA",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GCLEAR",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GCREATE",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GCREATED",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GCREATEFROMFILE",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GDISPOSE",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GDRAWG",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GDRAWGWITHMASK",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GDRAWSPRITE",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GETBGCOLOR",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GETBIT",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GETCHARA",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GETCOLOR",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GETCONFIG",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GETCONFIGS",
+          "returnType": "String"
+        },
+        {
+          "name": "GETDEFBGCOLOR",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GETDEFCOLOR",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GETEXPLV",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GETFOCUSCOLOR",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GETFONT",
+          "returnType": "String"
+        },
+        {
+          "name": "GETKEY",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GETKEYTRIGGERED",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GETLINESTR",
+          "returnType": "String"
+        },
+        {
+          "name": "GETMILLISECOND",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GETNUM",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GETNUMB",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GETPALAMLV",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GETSECOND",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GETSPCHARA",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GETSTYLE",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GETTIME",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GETTIMES",
+          "returnType": "String"
+        },
+        {
+          "name": "GFILLRECTANGLE",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GGETCOLOR",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GHEIGHT",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GLOAD",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GROUPMATCH",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GSAVE",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GSETBRUSH",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GSETCOLOR",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GSETFONT",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GSETPEN",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GWIDTH",
+          "returnType": "Integer"
+        },
+        {
+          "name": "HTML_ESCAPE",
+          "returnType": "String"
+        },
+        {
+          "name": "HTML_GETPRINTEDSTR",
+          "returnType": "String"
+        },
+        {
+          "name": "HTML_POPPRINTINGSTR",
+          "returnType": "String"
+        },
+        {
+          "name": "HTML_TOPLAINTEXT",
+          "returnType": "String"
+        },
+        {
+          "name": "INRANGE",
+          "returnType": "Integer"
+        },
+        {
+          "name": "INRANGEARRAY",
+          "returnType": "Integer"
+        },
+        {
+          "name": "INRANGECARRAY",
+          "returnType": "Integer"
+        },
+        {
+          "name": "ISACTIVE",
+          "returnType": "Integer"
+        },
+        {
+          "name": "ISNUMERIC",
+          "returnType": "Integer"
+        },
+        {
+          "name": "ISSKIP",
+          "returnType": "Integer"
+        },
+        {
+          "name": "LIMIT",
+          "returnType": "Integer"
+        },
+        {
+          "name": "LINEISEMPTY",
+          "returnType": "Integer"
+        },
+        {
+          "name": "LOADTEXT",
+          "returnType": "String"
+        },
+        {
+          "name": "LOG",
+          "returnType": "Integer"
+        },
+        {
+          "name": "LOG10",
+          "returnType": "Integer"
+        },
+        {
+          "name": "MATCH",
+          "returnType": "Integer"
+        },
+        {
+          "name": "MAX",
+          "returnType": "Integer"
+        },
+        {
+          "name": "MAXARRAY",
+          "returnType": "Integer"
+        },
+        {
+          "name": "MAXCARRAY",
+          "returnType": "Integer"
+        },
+        {
+          "name": "MESSKIP",
+          "returnType": "Integer"
+        },
+        {
+          "name": "MIN",
+          "returnType": "Integer"
+        },
+        {
+          "name": "MINARRAY",
+          "returnType": "Integer"
+        },
+        {
+          "name": "MINCARRAY",
+          "returnType": "Integer"
+        },
+        {
+          "name": "MONEYSTR",
+          "returnType": "String"
+        },
+        {
+          "name": "MOUSESKIP",
+          "returnType": "Integer"
+        },
+        {
+          "name": "MOUSEX",
+          "returnType": "Integer"
+        },
+        {
+          "name": "MOUSEY",
+          "returnType": "Integer"
+        },
+        {
+          "name": "NOSAMES",
+          "returnType": "Integer"
+        },
+        {
+          "name": "POWER",
+          "returnType": "Integer"
+        },
+        {
+          "name": "PRINTCLENGTH",
+          "returnType": "Integer"
+        },
+        {
+          "name": "PRINTCPERLINE",
+          "returnType": "Integer"
+        },
+        {
+          "name": "RAND",
+          "returnType": "Integer"
+        },
+        {
+          "name": "REPLACE",
+          "returnType": "String"
+        },
+        {
+          "name": "SAVENOS",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SAVETEXT",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SETANIMETIMER",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SIGN",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SPRITEANIMEADDFRAME",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SPRITEANIMECREATE",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SPRITECREATE",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SPRITECREATED",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SPRITEDISPOSE",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SPRITEGETCOLOR",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SPRITEHEIGHT",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SPRITEMOVE",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SPRITEPOSX",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SPRITEPOSY",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SPRITESETPOS",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SPRITEWIDTH",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SQRT",
+          "returnType": "Integer"
+        },
+        {
+          "name": "STRCOUNT",
+          "returnType": "Integer"
+        },
+        {
+          "name": "STRFIND",
+          "returnType": "Integer"
+        },
+        {
+          "name": "STRFINDU",
+          "returnType": "Integer"
+        },
+        {
+          "name": "STRFORM",
+          "returnType": "String"
+        },
+        {
+          "name": "STRJOIN",
+          "returnType": "String"
+        },
+        {
+          "name": "STRLENS",
+          "returnType": "Integer"
+        },
+        {
+          "name": "STRLENSU",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SUBSTRING",
+          "returnType": "String"
+        },
+        {
+          "name": "SUBSTRINGU",
+          "returnType": "String"
+        },
+        {
+          "name": "SUMARRAY",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SUMCARRAY",
+          "returnType": "Integer"
+        },
+        {
+          "name": "TOFULL",
+          "returnType": "String"
+        },
+        {
+          "name": "TOHALF",
+          "returnType": "String"
+        },
+        {
+          "name": "TOINT",
+          "returnType": "Integer"
+        },
+        {
+          "name": "TOLOWER",
+          "returnType": "String"
+        },
+        {
+          "name": "TOSTR",
+          "returnType": "String"
+        },
+        {
+          "name": "TOUPPER",
+          "returnType": "String"
+        },
+        {
+          "name": "UNICODE",
+          "returnType": "String"
+        },
+        {
+          "name": "UNICODEBYTE",
+          "returnType": "Integer"
+        },
+        {
+          "name": "VARSIZE",
+          "returnType": "Integer"
+        }
+      ]
+    },
+    "snake": {
+      "surfaceKind": "delta",
+      "instructions": [
+        "ACOS",
+        "ARGLEN",
+        "ASIN",
+        "ATAN",
+        "BGMCONTROL",
+        "BITGET",
+        "BITINDEXOFFIRST",
+        "BITSET",
+        "BITTOGGLE",
+        "CALLSTR",
+        "CEIL",
+        "CLEARIMAGELAYER",
+        "CLEARIMAGELAYER_ALL",
+        "COS",
+        "DISABLE_INPUT_MACRO",
+        "DT_CELL_GETF",
+        "ENABLE_INPUT_MACRO",
+        "EVAL",
+        "EVALF",
+        "EVALS",
+        "EXISTSIMAGELAYER",
+        "EXIST_IN_CSV",
+        "EXIST_IN_ERD",
+        "FLOOR",
+        "GETANIMETIMER",
+        "GETCSVNOBYCALLNAME",
+        "GETCSVNOBYMASTERNAME",
+        "GETCSVNOBYNAME",
+        "GETCSVNOBYNICKNAME",
+        "GETLINEY",
+        "GETMETHF",
+        "GETPLATFORM",
+        "GETSOUNDORBGMINFO",
+        "GETVARF",
+        "GET_SKIA_QUALITY",
+        "GET_TEXT_DRAWING_MODE",
+        "G_POLYGON_DRAW",
+        "G_POLYGON_FILL",
+        "G_POLYGON_POINT_ADD",
+        "G_POLYGON_POINT_CLEAR",
+        "HTML_PRINTC",
+        "HTML_PRINTLC",
+        "ISPLAYINGBGM",
+        "ISPLAYINGSOUND",
+        "JUMPSTR",
+        "MAP_FINDKEY",
+        "MAP_FROMSTRING",
+        "MAP_MERGE",
+        "MAP_REMOVEIF",
+        "MAP_TOSTRING",
+        "MAP_VALUES",
+        "MATCHALL",
+        "MATCHALLEX",
+        "ROUND",
+        "SEQUENCEINPUT",
+        "SETANIMETIMER",
+        "SETIMAGELAYER",
+        "SETIMAGELAYERL",
+        "SET_SKIA_QUALITY",
+        "SET_TEXT_DRAWING_MODE",
+        "SIN",
+        "SOUNDCONTROL",
+        "SPRITECREATEFROMFILE",
+        "SQL_CONNECT",
+        "SQL_CONNECTION_OPEN",
+        "SQL_DISCONNECT",
+        "SQL_ESCAPE",
+        "SQL_EXECUTE_NONQUERY",
+        "SQL_EXECUTE_READER",
+        "SQL_EXECUTE_SCALAR_FLOAT",
+        "SQL_EXECUTE_SCALAR_LONG",
+        "SQL_EXECUTE_SCALAR_STRING",
+        "SQL_EXPORT_DT_XML",
+        "SQL_EXPORT_MAP_XML",
+        "SQL_IMPORT_DT_XML",
+        "SQL_IMPORT_MAP_XML",
+        "SQL_IMPORT_XML_CUSTOM",
+        "SQL_P_EXECUTE_NONQUERY",
+        "SQL_P_EXECUTE_READER",
+        "SQL_P_EXECUTE_SCALAR_FLOAT",
+        "SQL_P_EXECUTE_SCALAR_LONG",
+        "SQL_P_EXECUTE_SCALAR_STRING",
+        "SQL_READER_CLOSE",
+        "SQL_READER_GET_FLOAT",
+        "SQL_READER_GET_LONG",
+        "SQL_READER_GET_STRING",
+        "SQL_READER_ISNULL",
+        "SQL_READER_READ",
+        "STRFORMCHECK",
+        "STRICT_FONT_FALLBACK",
+        "TAN",
+        "TEXT_BGC_OFF",
+        "TEXT_BGC_ON",
+        "TINPUTNF",
+        "TINPUTSNF",
+        "TOFLOAT",
+        "TONEINPUTNF",
+        "TONEINPUTSNF",
+        "TOSTRF",
+        "TRYCALLSTR",
+        "TRYCCALLSTR",
+        "TRYCJUMPSTR",
+        "TRYJUMPSTR",
+        "UNCHECKED_ADD",
+        "UNCHECKED_MUL",
+        "UNCHECKED_NEG",
+        "UNCHECKED_SUB",
+        "\u9665\u843D\u72B6\u614B",
+        "\u9677\u843D\u72B6\u6001"
+      ],
+      "functions": [
+        {
+          "name": "ACOS",
+          "returnType": "Integer"
+        },
+        {
+          "name": "ARGLEN",
+          "returnType": "Integer"
+        },
+        {
+          "name": "ASIN",
+          "returnType": "Integer"
+        },
+        {
+          "name": "ATAN",
+          "returnType": "Integer"
+        },
+        {
+          "name": "BGMCONTROL",
+          "returnType": "Integer"
+        },
+        {
+          "name": "BITGET",
+          "returnType": "Integer"
+        },
+        {
+          "name": "BITINDEXOFFIRST",
+          "returnType": "Integer"
+        },
+        {
+          "name": "BITSET",
+          "returnType": "Integer"
+        },
+        {
+          "name": "BITTOGGLE",
+          "returnType": "Integer"
+        },
+        {
+          "name": "CEIL",
+          "returnType": "Integer"
+        },
+        {
+          "name": "COS",
+          "returnType": "Integer"
+        },
+        {
+          "name": "DISABLE_INPUT_MACRO",
+          "returnType": "Integer"
+        },
+        {
+          "name": "DT_CELL_GETF",
+          "returnType": "Float"
+        },
+        {
+          "name": "ENABLE_INPUT_MACRO",
+          "returnType": "Integer"
+        },
+        {
+          "name": "EVAL",
+          "returnType": "Integer"
+        },
+        {
+          "name": "EVALF",
+          "returnType": "Float"
+        },
+        {
+          "name": "EVALS",
+          "returnType": "String"
+        },
+        {
+          "name": "EXISTSIMAGELAYER",
+          "returnType": "Integer"
+        },
+        {
+          "name": "EXIST_IN_CSV",
+          "returnType": "Integer"
+        },
+        {
+          "name": "EXIST_IN_ERD",
+          "returnType": "Integer"
+        },
+        {
+          "name": "FLOOR",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GETANIMETIMER",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GETCSVNOBYCALLNAME",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GETCSVNOBYMASTERNAME",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GETCSVNOBYNAME",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GETCSVNOBYNICKNAME",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GETLINEY",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GETMETHF",
+          "returnType": "Float"
+        },
+        {
+          "name": "GETPLATFORM",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GETSOUNDORBGMINFO",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GETVARF",
+          "returnType": "Float"
+        },
+        {
+          "name": "GET_SKIA_QUALITY",
+          "returnType": "Integer"
+        },
+        {
+          "name": "GET_TEXT_DRAWING_MODE",
+          "returnType": "Integer"
+        },
+        {
+          "name": "G_POLYGON_DRAW",
+          "returnType": "Integer"
+        },
+        {
+          "name": "G_POLYGON_FILL",
+          "returnType": "Integer"
+        },
+        {
+          "name": "G_POLYGON_POINT_ADD",
+          "returnType": "Integer"
+        },
+        {
+          "name": "G_POLYGON_POINT_CLEAR",
+          "returnType": "Integer"
+        },
+        {
+          "name": "ISPLAYINGBGM",
+          "returnType": "Integer"
+        },
+        {
+          "name": "ISPLAYINGSOUND",
+          "returnType": "Integer"
+        },
+        {
+          "name": "MAP_FINDKEY",
+          "returnType": "String"
+        },
+        {
+          "name": "MAP_FROMSTRING",
+          "returnType": "Integer"
+        },
+        {
+          "name": "MAP_MERGE",
+          "returnType": "Integer"
+        },
+        {
+          "name": "MAP_REMOVEIF",
+          "returnType": "Integer"
+        },
+        {
+          "name": "MAP_TOSTRING",
+          "returnType": "String"
+        },
+        {
+          "name": "MAP_VALUES",
+          "returnType": "String"
+        },
+        {
+          "name": "MATCHALL",
+          "returnType": "Integer"
+        },
+        {
+          "name": "MATCHALLEX",
+          "returnType": "Integer"
+        },
+        {
+          "name": "ROUND",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SEQUENCEINPUT",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SIN",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SOUNDCONTROL",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SPRITECREATEFROMFILE",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SQL_CONNECT",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SQL_CONNECTION_OPEN",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SQL_DISCONNECT",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SQL_ESCAPE",
+          "returnType": "String"
+        },
+        {
+          "name": "SQL_EXECUTE_NONQUERY",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SQL_EXECUTE_READER",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SQL_EXECUTE_SCALAR_FLOAT",
+          "returnType": "Float"
+        },
+        {
+          "name": "SQL_EXECUTE_SCALAR_LONG",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SQL_EXECUTE_SCALAR_STRING",
+          "returnType": "String"
+        },
+        {
+          "name": "SQL_EXPORT_DT_XML",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SQL_EXPORT_MAP_XML",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SQL_IMPORT_DT_XML",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SQL_IMPORT_MAP_XML",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SQL_IMPORT_XML_CUSTOM",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SQL_P_EXECUTE_NONQUERY",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SQL_P_EXECUTE_READER",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SQL_P_EXECUTE_SCALAR_FLOAT",
+          "returnType": "Float"
+        },
+        {
+          "name": "SQL_P_EXECUTE_SCALAR_LONG",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SQL_P_EXECUTE_SCALAR_STRING",
+          "returnType": "String"
+        },
+        {
+          "name": "SQL_READER_CLOSE",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SQL_READER_GET_FLOAT",
+          "returnType": "Float"
+        },
+        {
+          "name": "SQL_READER_GET_LONG",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SQL_READER_GET_STRING",
+          "returnType": "String"
+        },
+        {
+          "name": "SQL_READER_ISNULL",
+          "returnType": "Integer"
+        },
+        {
+          "name": "SQL_READER_READ",
+          "returnType": "Integer"
+        },
+        {
+          "name": "STRFORMCHECK",
+          "returnType": "Integer"
+        },
+        {
+          "name": "TAN",
+          "returnType": "Integer"
+        },
+        {
+          "name": "TOFLOAT",
+          "returnType": "Float"
+        },
+        {
+          "name": "TOSTRF",
+          "returnType": "String"
+        },
+        {
+          "name": "UNCHECKED_ADD",
+          "returnType": "Integer"
+        },
+        {
+          "name": "UNCHECKED_MUL",
+          "returnType": "Integer"
+        },
+        {
+          "name": "UNCHECKED_NEG",
+          "returnType": "Integer"
+        },
+        {
+          "name": "UNCHECKED_SUB",
+          "returnType": "Integer"
+        },
+        {
+          "name": "\u9665\u843D\u72B6\u614B",
+          "returnType": "Integer"
+        },
+        {
+          "name": "\u9677\u843D\u72B6\u6001",
+          "returnType": "Integer"
+        }
+      ]
+    },
+    "erafl": {
+      "surfaceKind": "delta",
+      "instructions": [
+        "SETANIMETIMER"
+      ],
+      "functions": []
+    },
+    "erablue": {
+      "surfaceKind": "delta",
+      "instructions": [
+        "SETANIMETIMER"
+      ],
+      "functions": []
+    },
+    "megaten": {
+      "surfaceKind": "delta",
+      "instructions": [],
+      "functions": []
+    }
+  },
+  "methodProjectedInstructionNames": [
+    "ABS",
+    "ACOS",
+    "ALLSAMES",
+    "ARGLEN",
+    "ARRAYMSORT",
+    "ARRAYMSORTEX",
+    "ASIN",
+    "ATAN",
+    "BARSTR",
+    "BGMCONTROL",
+    "BITGET",
+    "BITINDEXOFFIRST",
+    "BITMAP_CACHE_ENABLE",
+    "BITSET",
+    "BITTOGGLE",
+    "CBGCLEAR",
+    "CBGCLEARBUTTON",
+    "CBGREMOVEBMAP",
+    "CBGREMOVERANGE",
+    "CBGSETBMAPG",
+    "CBGSETBUTTONSPRITE",
+    "CBGSETG",
+    "CBGSETSPRITE",
+    "CBRT",
+    "CEIL",
+    "CHARATU",
+    "CHKCHARADATA",
+    "CHKDATA",
+    "CHKFONT",
+    "CLEARMEMORY",
+    "CLIENTHEIGHT",
+    "CLIENTWIDTH",
+    "CMATCH",
+    "COLOR_FROMNAME",
+    "COLOR_FROMRGB",
+    "CONVERT",
+    "COS",
+    "CSVABL",
+    "CSVBASE",
+    "CSVCALLNAME",
+    "CSVCFLAG",
+    "CSVCSTR",
+    "CSVEQUIP",
+    "CSVEXP",
+    "CSVJUEL",
+    "CSVMARK",
+    "CSVMASTERNAME",
+    "CSVNAME",
+    "CSVNICKNAME",
+    "CSVRELATION",
+    "CSVTALENT",
+    "CURRENTALIGN",
+    "CURRENTREDRAW",
+    "DISABLE_INPUT_MACRO",
+    "DT_CELL_GET",
+    "DT_CELL_GETF",
+    "DT_CELL_GETS",
+    "DT_CELL_ISNULL",
+    "DT_CELL_SET",
+    "DT_CLEAR",
+    "DT_COLUMN_ADD",
+    "DT_COLUMN_EXIST",
+    "DT_COLUMN_LENGTH",
+    "DT_COLUMN_NAMES",
+    "DT_COLUMN_REMOVE",
+    "DT_CREATE",
+    "DT_EXIST",
+    "DT_FROMXML",
+    "DT_NOCASE",
+    "DT_RELEASE",
+    "DT_ROW_ADD",
+    "DT_ROW_LENGTH",
+    "DT_ROW_REMOVE",
+    "DT_ROW_SET",
+    "DT_SELECT",
+    "DT_TOXML",
+    "ENABLE_INPUT_MACRO",
+    "ENUMFILES",
+    "ENUMFUNCBEGINSWITH",
+    "ENUMFUNCENDSWITH",
+    "ENUMFUNCWITH",
+    "ENUMMACROBEGINSWITH",
+    "ENUMMACROENDSWITH",
+    "ENUMMACROWITH",
+    "ENUMVARBEGINSWITH",
+    "ENUMVARENDSWITH",
+    "ENUMVARWITH",
+    "ERDNAME",
+    "ESCAPE",
+    "EVAL",
+    "EVALF",
+    "EVALS",
+    "EXISTCSV",
+    "EXISTFILE",
+    "EXISTFUNCTION",
+    "EXISTMETH",
+    "EXISTSIMAGELAYER",
+    "EXISTSOUND",
+    "EXISTVAR",
+    "EXIST_IN_CSV",
+    "EXIST_IN_ERD",
+    "EXPONENT",
+    "FINDCHARA",
+    "FINDELEMENT",
+    "FINDLASTCHARA",
+    "FINDLASTELEMENT",
+    "FIND_CHARADATA",
+    "FLOOR",
+    "FLOWINPUT",
+    "FLOWINPUTS",
+    "GCLEAR",
+    "GCREATE",
+    "GCREATED",
+    "GCREATEFROMFILE",
+    "GDASHSTYLE",
+    "GDISPOSE",
+    "GDRAWG",
+    "GDRAWGWITHMASK",
+    "GDRAWGWITHROTATE",
+    "GDRAWLINE",
+    "GDRAWSPRITE",
+    "GDRAWTEXT",
+    "GETANIMETIMER",
+    "GETBGCOLOR",
+    "GETBIT",
+    "GETCHARA",
+    "GETCOLOR",
+    "GETCONFIG",
+    "GETCONFIGS",
+    "GETCSVNOBYCALLNAME",
+    "GETCSVNOBYMASTERNAME",
+    "GETCSVNOBYNAME",
+    "GETCSVNOBYNICKNAME",
+    "GETDEFBGCOLOR",
+    "GETDEFCOLOR",
+    "GETDISPLAYLINE",
+    "GETDOINGFUNCTION",
+    "GETEXPLV",
+    "GETFOCUSCOLOR",
+    "GETFONT",
+    "GETKEY",
+    "GETKEYTRIGGERED",
+    "GETLINESTR",
+    "GETLINEY",
+    "GETMEMORYUSAGE",
+    "GETMETH",
+    "GETMETHF",
+    "GETMETHS",
+    "GETMILLISECOND",
+    "GETNUM",
+    "GETNUMB",
+    "GETPALAMLV",
+    "GETPLATFORM",
+    "GETSECOND",
+    "GETSOUNDORBGMINFO",
+    "GETSPCHARA",
+    "GETSTYLE",
+    "GETTEXTBOX",
+    "GETTIMES",
+    "GETVAR",
+    "GETVARF",
+    "GETVARS",
+    "GET_SKIA_QUALITY",
+    "GET_TEXT_DRAWING_MODE",
+    "GFILLRECTANGLE",
+    "GGETBRUSH",
+    "GGETCOLOR",
+    "GGETFONT",
+    "GGETFONTSIZE",
+    "GGETFONTSTYLE",
+    "GGETPEN",
+    "GGETPENWIDTH",
+    "GGETTEXTSIZE",
+    "GHEIGHT",
+    "GLOAD",
+    "GROUPMATCH",
+    "GSAVE",
+    "GSETBRUSH",
+    "GSETCOLOR",
+    "GSETFONT",
+    "GSETPEN",
+    "GWIDTH",
+    "G_POLYGON_DRAW",
+    "G_POLYGON_FILL",
+    "G_POLYGON_POINT_ADD",
+    "G_POLYGON_POINT_CLEAR",
+    "HOTKEY_STATE",
+    "HOTKEY_STATE_INIT",
+    "HTML_ESCAPE",
+    "HTML_GETPRINTEDSTR",
+    "HTML_POPPRINTINGSTR",
+    "HTML_STRINGLEN",
+    "HTML_STRINGLINES",
+    "HTML_SUBSTRING",
+    "HTML_TOPLAINTEXT",
+    "INRANGE",
+    "INRANGEARRAY",
+    "INRANGECARRAY",
+    "ISACTIVE",
+    "ISDEFINED",
+    "ISNUMERIC",
+    "ISPLAYINGBGM",
+    "ISPLAYINGSOUND",
+    "ISSKIP",
+    "LIMIT",
+    "LINEISEMPTY",
+    "LOADTEXT",
+    "LOG",
+    "LOG10",
+    "MAP_CLEAR",
+    "MAP_CREATE",
+    "MAP_EXIST",
+    "MAP_FINDKEY",
+    "MAP_FROMSTRING",
+    "MAP_FROMXML",
+    "MAP_GET",
+    "MAP_GETKEYS",
+    "MAP_HAS",
+    "MAP_MERGE",
+    "MAP_RELEASE",
+    "MAP_REMOVE",
+    "MAP_REMOVEIF",
+    "MAP_SET",
+    "MAP_SIZE",
+    "MAP_TOSTRING",
+    "MAP_TOXML",
+    "MAP_VALUES",
+    "MATCH",
+    "MATCHALL",
+    "MATCHALLEX",
+    "MAX",
+    "MAXARRAY",
+    "MAXCARRAY",
+    "MESSKIP",
+    "MIN",
+    "MINARRAY",
+    "MINCARRAY",
+    "MONEYSTR",
+    "MOUSEB",
+    "MOUSESKIP",
+    "MOUSEX",
+    "MOUSEY",
+    "MOVETEXTBOX",
+    "NOSAMES",
+    "PRINTCLENGTH",
+    "RAND",
+    "REGEXPMATCH",
+    "REPLACE",
+    "RESUMETEXTBOX",
+    "ROUND",
+    "SAVETEXT",
+    "SEQUENCEINPUT",
+    "SETTEXTBOX",
+    "SETVAR",
+    "SIGN",
+    "SIN",
+    "SOUNDCONTROL",
+    "SPRITEANIMEADDFRAME",
+    "SPRITEANIMECREATE",
+    "SPRITECREATE",
+    "SPRITECREATED",
+    "SPRITECREATEFROMFILE",
+    "SPRITEDISPOSE",
+    "SPRITEDISPOSEALL",
+    "SPRITEGETCOLOR",
+    "SPRITEHEIGHT",
+    "SPRITEMOVE",
+    "SPRITEPOSX",
+    "SPRITEPOSY",
+    "SPRITESETPOS",
+    "SPRITEWIDTH",
+    "SQL_CONNECT",
+    "SQL_CONNECTION_OPEN",
+    "SQL_DISCONNECT",
+    "SQL_ESCAPE",
+    "SQL_EXECUTE_NONQUERY",
+    "SQL_EXECUTE_READER",
+    "SQL_EXECUTE_SCALAR_FLOAT",
+    "SQL_EXECUTE_SCALAR_LONG",
+    "SQL_EXECUTE_SCALAR_STRING",
+    "SQL_EXPORT_DT_XML",
+    "SQL_EXPORT_MAP_XML",
+    "SQL_IMPORT_DT_XML",
+    "SQL_IMPORT_MAP_XML",
+    "SQL_IMPORT_XML_CUSTOM",
+    "SQL_P_EXECUTE_NONQUERY",
+    "SQL_P_EXECUTE_READER",
+    "SQL_P_EXECUTE_SCALAR_FLOAT",
+    "SQL_P_EXECUTE_SCALAR_LONG",
+    "SQL_P_EXECUTE_SCALAR_STRING",
+    "SQL_READER_CLOSE",
+    "SQL_READER_GET_FLOAT",
+    "SQL_READER_GET_LONG",
+    "SQL_READER_GET_STRING",
+    "SQL_READER_ISNULL",
+    "SQL_READER_READ",
+    "SQRT",
+    "STRCOUNT",
+    "STRFIND",
+    "STRFINDU",
+    "STRFORM",
+    "STRFORMCHECK",
+    "STRJOIN",
+    "STRLENS",
+    "STRLENSU",
+    "SUBSTRING",
+    "SUBSTRINGU",
+    "SUMARRAY",
+    "SUMCARRAY",
+    "TAN",
+    "TOFLOAT",
+    "TOFULL",
+    "TOHALF",
+    "TOINT",
+    "TOLOWER",
+    "TOSTR",
+    "TOSTRF",
+    "TOUPPER",
+    "UNCHECKED_ADD",
+    "UNCHECKED_MUL",
+    "UNCHECKED_NEG",
+    "UNCHECKED_SUB",
+    "UNICODE",
+    "UNICODEBYTE",
+    "VARSETEX",
+    "XML_ADDATTRIBUTE",
+    "XML_ADDATTRIBUTE_BYNAME",
+    "XML_ADDNODE",
+    "XML_ADDNODE_BYNAME",
+    "XML_DOCUMENT",
+    "XML_EXIST",
+    "XML_GET",
+    "XML_GET_BYNAME",
+    "XML_RELEASE",
+    "XML_REMOVEATTRIBUTE",
+    "XML_REMOVEATTRIBUTE_BYNAME",
+    "XML_REMOVENODE",
+    "XML_REMOVENODE_BYNAME",
+    "XML_REPLACE",
+    "XML_REPLACE_BYNAME",
+    "XML_SET",
+    "XML_SET_BYNAME",
+    "XML_TOSTR",
+    "\u9665\u843D\u72B6\u614B",
+    "\u9677\u843D\u72B6\u6001"
+  ]
+}

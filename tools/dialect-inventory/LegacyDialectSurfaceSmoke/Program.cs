@@ -57,6 +57,16 @@ static class Program
             LegacyCompatibilityProfile v24WithoutScopedVariables = LegacyCompatibilityProfile.CreateForProfile("v24pure", false);
             LegacyCompatibilityProfile snake = LegacyCompatibilityProfile.CreateForProfile("snake", true);
 
+            // G5（执行设计 §4.8）：capability 词汇表冻结为 41 项（32 Wired + 9 DiagnosticOnly）。
+            Assert(EngineCapabilityCatalog.All.Count == 41,
+                $"Engine capability vocabulary drifted: {EngineCapabilityCatalog.All.Count} != 41 (frozen pack ABI surface).");
+            // G8（执行设计 §4.8）：v24 基线语义哈希钉扎；漂移 = 冻结宇宙/生成清单/变体/capability 被改。
+            Assert(
+                LegacySurfaceHash.ComputeV24SurfaceHash(
+                    LegacySurfaceHash.BuildV24SurfaceHashInput("v24pure")) ==
+                "950dbeb9028a8a2fc73ac3699411a05b8e367458219b40bd862066c8902888c9",
+                "v24 baseSurfaceHash drifted; frozen retired surface universe or v24 surface changed.");
+
             Assert(v24.IsInstructionVisible("PRINT"), "v24 lost a baseline instruction.");
             Assert(v24.IsInstructionVisible("CALLSHARP"), "v24 lost a baseline v24 instruction.");
             // BITMAP_CACHE_ENABLE：v24 参考无该指令（仅函数，经 METHOD 投影重新引入）；
