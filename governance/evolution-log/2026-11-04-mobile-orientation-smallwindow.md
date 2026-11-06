@@ -141,3 +141,12 @@
 - 清理：删除本地测试用 `20261106b`/旧 `20261106(code12)` APK；删除 `E:\tmp\gemuera-mobile-orientation\userdata-backup*` 用户数据副本（已还原原文件）。
 - **发布结果（2026-11-07 02:0x）**：PR #36（https://github.com/wwwXiaoHan17/gEmuera/pull/36）已合并到 `dev`（merge commit `fce1bef`）；GitHub Release 已发布：`v1.10.0-dev-20261106`（https://github.com/wwwXiaoHan17/gEmuera/releases/tag/v1.10.0-dev-20261106），资产 `gemuera-1.10.0-dev-20261106-debug.apk`（75,144,324 bytes；versionName `1.10.0-dev-20261106`、versionCode `14`、screenOrientation=13；SHA256 `F0727FD37561F58429454DE8BCCD90915D69562073D3ABEB10B4EEC453E766AB`）。
 - 本地临时物清理：删除测试用 `20261106b` APK 与 `E:\tmp\gemuera-mobile-orientation\userdata-backup*` 用户数据副本；仓库工作区仅剩与任务无关的外部格式化改动（未纳入任何提交）。
+---
+
+## 交付事故补记（2026-11-07）：GitHub Release/PR 正文中文乱码（PowerShell 5.1 REST 编码）
+
+- 现象：Release `v1.10.0-dev-20261106` 正文与 PR #36 标题/正文在 GitHub 上全部显示为 `??`（用户截图 2026-11-07）。
+- 根因：用 Windows PowerShell 5.1 的 `Invoke-RestMethod -Body <JSON 字符串>` 调 GitHub REST API。PS 5.1 会把字符串按系统 ANSI（GBK）编码写入请求体，而 GitHub 按 UTF-8 解析 → 所有非 ASCII 字符变成 `?`。API 侧确实写入了乱码，不是浏览器/控制台显示问题。
+- 修复：改用 Node（读取 UTF-8 文件 → `JSON.stringify` → `curl.exe --data-binary @payload.json`，显式 `Content-Type: application/json; charset=utf-8`）重发 PATCH；以 API GET 反序列化后的字符串作为判据验证（含「修复」且无 `??`）。
+- 教训 → 动作：涉及中文的 REST 写操作，禁止用 PS 5.1 `Invoke-RestMethod -Body <string>`；要么 `[Text.Encoding]::UTF8.GetBytes($json)` 作 body + charset，要么用 curl/Node。已写入工作区记忆（跨项目通用）。
+- commit message 未受影响（git 经 Windows 命令行 UTF-16 → 内部 UTF-8），API 复核 dev 最近 5 条提交中文正常。
