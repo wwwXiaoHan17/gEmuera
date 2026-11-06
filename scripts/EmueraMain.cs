@@ -152,7 +152,7 @@ public partial class EmueraMain : Node
 		{
 			MinorShift.Emuera.Program.ConfigureCompatibilityPlan(
 				BuiltInDialectCatalog.CreateLegacySessionPlan(
-					FirstWindow.SelectedCoreProfileName));
+					FirstWindow.ResolveEngineProfileIdForBinding(FirstWindow.SelectedCoreProfileName)));
 		}
 		catch (Exception error)
 		{

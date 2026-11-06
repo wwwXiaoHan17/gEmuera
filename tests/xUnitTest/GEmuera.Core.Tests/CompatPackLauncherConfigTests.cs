@@ -102,6 +102,17 @@ public class CompatPackLauncherConfigTests
     }
 
     [Fact]
+    public void MappedDefault_UsedOnlyWhenStoredAndExternalAreEmpty()
+    {
+        // 执行设计 §4.5：注入优先级 P0 stored > P1 external > P2 mapped > P3 纯基线。
+        Assert.Equal("stored.dll", CompatPackLauncherConfig.MergeSelection("stored.dll", "external.dll", "mapped.dll"));
+        Assert.Equal("external.dll", CompatPackLauncherConfig.MergeSelection(null, "external.dll", "mapped.dll"));
+        Assert.Equal("mapped.dll", CompatPackLauncherConfig.MergeSelection(null, null, "mapped.dll"));
+        Assert.Equal("mapped.dll", CompatPackLauncherConfig.MergeSelection("", "  ;  ", "mapped.dll"));
+        Assert.Equal("", CompatPackLauncherConfig.MergeSelection(null, null, null));
+    }
+
+    [Fact]
     public void RunnerSwitch_DoesNotInheritPreviousGamePackEnvironment()
     {
         // runner/in-process switch 的非沿用语义（E2-R3）：注入 env 按目标游戏经

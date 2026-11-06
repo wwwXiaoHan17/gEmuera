@@ -394,7 +394,9 @@ namespace MinorShift.Emuera
 				// Program.TryFallbackToNoPackBaseline 相同，便于门禁与人工排查共用。
 				global::GenericUtils.Error("[LOAD] CompatPack projection failed: "
 					+ exception.GetType().Name + ": " + exception.Message);
-				plan = BuiltInDialectCatalog.CreateLegacySessionPlan(plan.ProfileId);
+				// P0（执行设计 §9 / 盘点 R2）：profile 注销后 plan.ProfileId 可能已无法再建计划，
+				// 回退目标固定为 v24pure，绝不在 catch 内二次解析原 profile（否则异常逃逸、启动崩）。
+				plan = BuiltInDialectCatalog.CreateLegacySessionPlan("v24pure");
 				profile = LegacyCompatibilityProfile.Create(plan, scopedVariableInstructionsEnabled);
 				global::GenericUtils.Error("[LOAD] CompatPack projection failed; fallback to no-pack baseline");
 			}

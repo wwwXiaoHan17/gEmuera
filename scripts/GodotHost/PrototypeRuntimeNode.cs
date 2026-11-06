@@ -200,14 +200,10 @@ public partial class PrototypeRuntimeNode : Node
 
 	private static SessionSelection CreateSelection(string profile)
 	{
-		string? saveProfile = profile switch
-		{
-			FirstWindow.CoreProfileSnake => "gemuera.snake",
-			FirstWindow.CoreProfileEraFl => GEmuera.Core.Compatibility.EraFlCompatibilityModule.SaveProfileId,
-			// megaten 此前落到默认分支 gemuera.v24，调试会话的存档 profile 指向错误（2026-09-07）。
-			FirstWindow.CoreProfileMegaten => GEmuera.Core.Compatibility.MegatenCompatibilityModule.SaveProfileId,
-			_ => "gemuera.v24",
-		};
+		// 宿主 save-profile 映射（v1 包通道不能声明 saveProfileId；引擎 plan.SaveProfileId 退役后
+		// 为 null）。统一走 Core 映射，避免退役时误删类常量导致存档 profile 漂移。
+		string? saveProfile = GEmuera.Core.Compatibility.Packs.CompatPackProfileMap
+			.LauncherProfileSaveProfileId(profile);
 		return new SessionSelection(
 			"prototype." + profile,
 			profile,

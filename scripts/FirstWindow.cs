@@ -1,5 +1,6 @@
 using Godot;
 using GEmuera.Core.Compatibility;
+using GEmuera.Core.Compatibility.Packs;
 using gEmuera.Diagnostics;
 using gEmuera.GodotHost;
 using System.Collections.Generic;
@@ -99,7 +100,7 @@ public partial class FirstWindow : Control
 
 		SelectedGamePath = path.TrimEnd('/', '\\');
 		SelectedCoreProfileName = normalizedProfileName;
-		MinorShift.Emuera.Program.SetLauncherCompatibilityProfile(normalizedProfileName);
+		MinorShift.Emuera.Program.SetLauncherCompatibilityProfile(ResolveEngineProfileIdForBinding(normalizedProfileName));
 		// runner/in-process switch 的 per-session pack 通道刷新（E2-R3）：每次会话绑定都
 		// 按目标游戏重算启用清单并写环境变量——切换到 B 不得沿用上一局 A 的
 		// GEMUERA_COMPAT_PACKS（B 无选择时清除变量，回纯 v24；外部诊断 env 的合并语义与
@@ -690,6 +691,77 @@ public partial class FirstWindow : Control
 		System.Environment.GetEnvironmentVariable(
 			MinorShift.Emuera.Compatibility.CompatPackHost.EnabledPacksEnvironmentVariable);
 
+	// —— profile → 第一方兼容包映射（生产文件 assets/text/pack-profile-map.json，执行设计 §4.5）——
+	// 条目存在 = 该 launcher profile 已由兼容包供给；绑定引擎前翻译为 v24pure，并按
+	// P0(stored) > P1(external) > P2(mapped) 注入包路径。映射缺失/解析失败 = 忽略映射，
+	// 行为回到「内置 profile / 纯基线」，绝不阻断启动。
+	static CompatPackProfileMap packProfileMap;
+	static bool packProfileMapLoaded;
+	static string compatPackMappingWarning = "";
+
+	static CompatPackProfileMap GetPackProfileMap()
+	{
+		if (packProfileMapLoaded)
+			return packProfileMap;
+		packProfileMapLoaded = true;
+		const string mapPath = "res://assets/text/pack-profile-map.json";
+		try
+		{
+			if (!Godot.FileAccess.FileExists(mapPath))
+				return packProfileMap;
+			using Godot.FileAccess file = Godot.FileAccess.Open(mapPath, Godot.FileAccess.ModeFlags.Read);
+			if (file == null)
+			{
+				GenericUtils.Warn(EmueraLogCategory.UI, () => "Launcher: profile→pack 映射无法打开（忽略映射）。");
+				return packProfileMap;
+			}
+			string json = file.GetAsText();
+			if (CompatPackProfileMap.TryParse(json, out CompatPackProfileMap parsed, out var errors))
+			{
+				packProfileMap = parsed;
+			}
+			else
+			{
+				GenericUtils.Warn(EmueraLogCategory.UI,
+					() => "Launcher: profile→pack 映射解析失败（忽略映射，按内置 profile 启动）：" + string.Join("; ", errors));
+			}
+		}
+		catch (System.Exception exception)
+		{
+			GenericUtils.Warn(EmueraLogCategory.UI,
+				() => "Launcher: profile→pack 映射读取失败（忽略映射）：" + exception.Message);
+		}
+		return packProfileMap;
+	}
+
+	/// <summary>launcher profile id → 引擎 profile id（映射命中 = 已退役，翻译为 v24pure）。</summary>
+	internal static string ResolveEngineProfileIdForBinding(string launcherProfileId)
+	{
+		CompatPackProfileMap map = GetPackProfileMap();
+		if (map == null)
+			return string.IsNullOrWhiteSpace(launcherProfileId) ? CoreProfileV24Pure : launcherProfileId.Trim();
+		return map.ResolveEngineProfileId(launcherProfileId);
+	}
+
+	static bool TryGetMappedPackPath(string launcherProfileId, out string packPath, out string warning)
+	{
+		packPath = null;
+		warning = "";
+		CompatPackProfileMap map = GetPackProfileMap();
+		if (map == null || !map.TryGetEntry(launcherProfileId, out CompatPackProfileMapEntry entry))
+			return false;
+		string relativePath = OS.GetName() == "Android" ? entry.RelativePathAndroid : entry.RelativePath;
+		string absolutePath = AbsoluteizeCompatPackPath(relativePath);
+		if (System.IO.File.Exists(absolutePath))
+		{
+			packPath = absolutePath;
+			return true;
+		}
+		warning = "；未找到 " + entry.ProfileId + " 兼容包：" + absolutePath
+			+ "。本次将以 v24 基线启动；请把 " + entry.PackId + ".dll 放到安装根的一包一目录后重试。";
+		return false;
+	}
+
 	/// <summary>
 	/// 按游戏把启用清单按合并语义（CompatPackLauncherConfig.MergeSelection）注入进程
 	/// 环境变量（launcher 与引擎同进程；Host 管线不变）：
@@ -700,15 +772,23 @@ public partial class FirstWindow : Control
 	/// </summary>
 	static void ApplyCompatPackEnvironment(string gameRoot)
 	{
-		bool hasStoredSelection = GEmuera.Core.Compatibility.Packs.CompatPackLauncherConfig.TryGetSelectionForGame(
-			gEmuera.GodotHost.LauncherSettingsStore.LoadCompatPackSelections(),
+		bool hasStoredSelection = CompatPackLauncherConfig.TryGetSelectionForGame(
+			LauncherSettingsStore.LoadCompatPackSelections(),
 			gameRoot,
 			out var paths);
-		string merged = GEmuera.Core.Compatibility.Packs.CompatPackLauncherConfig.MergeSelection(
-			hasStoredSelection
-				? GEmuera.Core.Compatibility.Packs.CompatPackLauncherConfig.SerializeSelection(paths)
-				: null,
-			externalCompatPacksOverride);
+		string storedSelection = hasStoredSelection
+			? CompatPackLauncherConfig.SerializeSelection(paths)
+			: null;
+		TryGetMappedPackPath(SelectedCoreProfileName, out string mappedPath, out string mappedWarning);
+		bool mappedUsed = string.IsNullOrEmpty(storedSelection)
+			&& string.IsNullOrEmpty(externalCompatPacksOverride)
+			&& !string.IsNullOrEmpty(mappedPath);
+		compatPackMappingWarning = mappedUsed ? "" : (string.IsNullOrEmpty(storedSelection)
+			&& string.IsNullOrEmpty(externalCompatPacksOverride) ? mappedWarning : "");
+		string merged = CompatPackLauncherConfig.MergeSelection(
+			storedSelection,
+			externalCompatPacksOverride,
+			mappedPath);
 		if (hasStoredSelection && !string.IsNullOrEmpty(externalCompatPacksOverride))
 		{
 			GenericUtils.Warn(
@@ -1415,7 +1495,7 @@ public partial class FirstWindow : Control
 		{
 			SelectedGamePath = saved;
 			SelectedCoreProfileName = LoadLastCoreProfileName();
-			MinorShift.Emuera.Program.SetLauncherCompatibilityProfile(SelectedCoreProfileName);
+			MinorShift.Emuera.Program.SetLauncherCompatibilityProfile(ResolveEngineProfileIdForBinding(SelectedCoreProfileName));
 			ApplyCompatPackEnvironment(saved);
 			return saved;
 		}
@@ -1460,6 +1540,7 @@ public partial class FirstWindow : Control
 		{
 			packWarning += "；检测到外部 GEMUERA_COMPAT_PACKS 环境变量与按游戏保存的兼容包选择并存：本次启动以按游戏选择为准，外部变量仅作诊断输入。";
 		}
+		packWarning += compatPackMappingWarning;
 		statusLabel.Text = AdvancedCompatibilityEnabled
 			? $"高级兼容模式：本次启动使用 {effectiveProfile}（目录路由为 {entry.ProfileId}，来源 {routeDescription}）{packWarning}"
 			: $"目录路由：{routeDescription} → {effectiveProfile}{packWarning}";
@@ -1474,7 +1555,7 @@ public partial class FirstWindow : Control
 
 		SelectedGamePath = path.TrimEnd('/', '\\');
 		SelectedCoreProfileName = normalizedProfileName;
-		MinorShift.Emuera.Program.SetLauncherCompatibilityProfile(normalizedProfileName);
+		MinorShift.Emuera.Program.SetLauncherCompatibilityProfile(ResolveEngineProfileIdForBinding(normalizedProfileName));
 		SaveLastGamePath(SelectedGamePath, SelectedCoreProfileName);
 		ApplyCompatPackEnvironment(SelectedGamePath);
 	}
@@ -1533,6 +1614,18 @@ public partial class FirstWindow : Control
 	static CompatibilityProfileCatalog CreateDirectoryRouteProfileCatalog()
 	{
 		CompatibilityProfileCatalog catalog = BuiltInDialectCatalog.CreateLegacyProfileCatalog();
+		// 退役 profile 的 compat/<profile>/<game> 目录路由别名（执行设计 §4.5）：引擎 catalog
+		// 删除 profile 后，目录路由仍需接受这些 launcher id；别名只做路由校验，实际计划由
+		// v24pure + 映射包供给，绝不作为引擎 profile 参与建计划。
+		string[] retiredAliases =
+		{
+			CoreProfileV18, CoreProfileEraBlue, CoreProfileMegaten, CoreProfileEraFl, CoreProfileSnake,
+		};
+		foreach (string alias in retiredAliases)
+		{
+			if (!catalog.TryResolve(alias, out _))
+				catalog.Register(new CompatibilityProfileDefinition(alias, new[] { "gemuera.v24" }));
+		}
 		catalog.Freeze();
 		return catalog;
 	}

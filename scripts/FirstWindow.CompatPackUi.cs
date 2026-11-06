@@ -125,17 +125,34 @@ public partial class FirstWindow
 			if (dir == null)
 				continue;
 			dir.IncludeHidden = true;
+			string normalizedRoot = root.TrimEnd('/', '\\');
 			foreach (string file in dir.GetFiles())
+				AddCompatPackCandidate(normalizedRoot + "/" + file);
+			// 一包一目录部署（pack.gemuera.*）：枚举安装根一级子目录里的主 DLL。
+			// 平铺多包仍由 loader fail-closed 拒载，但候选列表要让用户看见并手动修正。
+			foreach (string subdirectory in dir.GetDirectories())
 			{
-				if (string.IsNullOrEmpty(file) || !file.EndsWith(".dll", System.StringComparison.OrdinalIgnoreCase))
-					continue;
 				if (compatPackCandidatePaths.Count >= MaxCompatPackCandidates)
 					break;
-				compatPackCandidatePaths.Add(root.TrimEnd('/', '\\') + "/" + file);
+				using var subDir = DirAccess.Open(normalizedRoot + "/" + subdirectory);
+				if (subDir == null)
+					continue;
+				subDir.IncludeHidden = true;
+				foreach (string file in subDir.GetFiles())
+					AddCompatPackCandidate(normalizedRoot + "/" + subdirectory + "/" + file);
 			}
 		}
 		compatPackCandidatePaths.Sort(System.StringComparer.OrdinalIgnoreCase);
 		RebuildCompatPackListUi();
+	}
+
+	void AddCompatPackCandidate(string path)
+	{
+		if (string.IsNullOrEmpty(path) || !path.EndsWith(".dll", System.StringComparison.OrdinalIgnoreCase))
+			return;
+		if (compatPackCandidatePaths.Count >= MaxCompatPackCandidates)
+			return;
+		compatPackCandidatePaths.Add(path);
 	}
 
 	// 桌面=exe 同级 compat_packs/（与游戏扫描根的 exe 目录惯例一致）；编辑器模式
@@ -395,6 +412,14 @@ public partial class FirstWindow
 
 	static string GetCompatPackLauncherRoot()
 	{
+		// 编辑器/legacy-runner：映射 relativePath 按项目根解析（res://compat_packs/...），
+		// 否则会落到 Godot 可执行文件目录，导致映射永远 miss（执行设计 §6.3）。
+		if (OS.HasFeature("editor"))
+		{
+			string resDir = ProjectSettings.GlobalizePath("res://");
+			if (!string.IsNullOrEmpty(resDir))
+				return resDir.TrimEnd('/', '\\');
+		}
 		if (OS.GetName() == "Android")
 			return "/storage/emulated/0/emuera";
 		string exeDir = OS.GetExecutablePath().GetBaseDir();

@@ -115,12 +115,25 @@ public static class CompatPackLauncherConfig
     /// </summary>
     public static string MergeSelection(string? stored, string? external)
     {
+        return MergeSelection(stored, external, mapped: null);
+    }
+
+    /// <summary>
+    /// 三路合并（执行设计 §4.5 / P-D spec §1.2）：P0 launcher.cfg 按游戏显式选择 &gt;
+    /// P1 外部 GEMUERA_COMPAT_PACKS（诊断）&gt; P2 profile→第一方包默认映射 &gt; P3 纯基线。
+    /// 低优先级仅在更高优先级全部为空时生效；任一非空层经 parse→serialize 归一。
+    /// </summary>
+    public static string MergeSelection(string? stored, string? external, string? mapped)
+    {
         IReadOnlyList<string> storedPaths = ParseSelection(stored);
         if (storedPaths.Count > 0)
             return SerializeSelection(storedPaths);
         IReadOnlyList<string> externalPaths = ParseSelection(external);
         if (externalPaths.Count > 0)
             return SerializeSelection(externalPaths);
+        IReadOnlyList<string> mappedPaths = ParseSelection(mapped);
+        if (mappedPaths.Count > 0)
+            return SerializeSelection(mappedPaths);
         return string.Empty;
     }
 
