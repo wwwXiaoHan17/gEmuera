@@ -37,24 +37,34 @@ namespace Emuera.Compatibility.Packs
 	public sealed class CompatPackSurface
 	{
 		public static CompatPackSurface Empty { get; } = new CompatPackSurface(
-			Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>());
+			Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>(),
+			Array.Empty<string>());
 
 		internal CompatPackSurface(
 			IReadOnlyList<string> addInstructions,
 			IReadOnlyList<string> hideInstructions,
 			IReadOnlyList<string> addFunctions,
-			IReadOnlyList<string> hideFunctions)
+			IReadOnlyList<string> hideFunctions,
+			IReadOnlyList<string> addInstructionCollisions)
 		{
 			AddInstructions = addInstructions;
 			HideInstructions = hideInstructions;
 			AddFunctions = addFunctions;
 			HideFunctions = hideFunctions;
+			AddInstructionCollisions = addInstructionCollisions;
 		}
 
 		public IReadOnlyList<string> AddInstructions { get; }
 		public IReadOnlyList<string> HideInstructions { get; }
 		public IReadOnlyList<string> AddFunctions { get; }
 		public IReadOnlyList<string> HideFunctions { get; }
+
+		/// <summary>
+		/// instruction/函数同名碰撞态（contractAbi 1.1）：名字必须同时出现在 hideFunctions，
+		/// 表示"保留下该名在 v24 基线的指令形态、只隐藏其表达式函数形态"（内置 snake 的
+		/// BITMAP_CACHE_ENABLE 语义）。规则层据此跳过 hide 函数 → hide 指令的双形态镜像。
+		/// </summary>
+		public IReadOnlyList<string> AddInstructionCollisions { get; }
 	}
 
 /// <summary>
@@ -568,6 +578,7 @@ namespace Emuera.Compatibility.Packs
 			IReadOnlyList<string> hideInstructions = Array.Empty<string>();
 			IReadOnlyList<string> addFunctions = Array.Empty<string>();
 			IReadOnlyList<string> hideFunctions = Array.Empty<string>();
+			IReadOnlyList<string> addInstructionCollisions = Array.Empty<string>();
 			foreach (JsonProperty property in value.EnumerateObject())
 			{
 				switch (property.Name)
@@ -584,12 +595,15 @@ namespace Emuera.Compatibility.Packs
 					case "hideFunctions":
 						hideFunctions = RequireSurfaceNameArray(value, property.Name, errors, normalizeUpper: false);
 						break;
+					case "addInstructionCollisions":
+						addInstructionCollisions = RequireSurfaceNameArray(value, property.Name, errors, normalizeUpper: true);
+						break;
 					default:
 						errors.Add("字段 'surface' 含未知成员：'" + property.Name + "'。");
 						break;
 				}
 			}
-			return new CompatPackSurface(addInstructions, hideInstructions, addFunctions, hideFunctions);
+			return new CompatPackSurface(addInstructions, hideInstructions, addFunctions, hideFunctions, addInstructionCollisions);
 		}
 
 		private static IReadOnlyList<string> RequireSurfaceNameArray(

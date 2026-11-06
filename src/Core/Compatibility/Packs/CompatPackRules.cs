@@ -85,7 +85,8 @@ public static class CompatPackRules
         bool hasSurfaceDelta = manifest.Surface.AddInstructions.Count > 0
             || manifest.Surface.HideInstructions.Count > 0
             || manifest.Surface.AddFunctions.Count > 0
-            || manifest.Surface.HideFunctions.Count > 0;
+            || manifest.Surface.HideFunctions.Count > 0
+            || manifest.Surface.AddInstructionCollisions.Count > 0;
         bool hasVariantSelections = manifest.VariantSelections.Count > 0;
         if ((hasSurfaceDelta || hasVariantSelections) && string.IsNullOrWhiteSpace(manifest.BaseSurfaceHash))
         {
@@ -328,6 +329,27 @@ public static class CompatPackRules
         var states = new List<CompatSymbolState>();
         var effectiveHiddenInstructions = new HashSet<string>(recorder.HiddenInstructions, StringComparer.Ordinal);
         var effectiveHiddenFunctions = new HashSet<string>(recorder.HiddenFunctions, StringComparer.Ordinal);
+
+        // instruction/函数同名碰撞态（contractAbi 1.1，设计 §4.9）：名字必须同时是 v24
+        // 基线内 METHOD 投影名 + 指令名 + 函数名，并由 hideFunctions 隐藏；只保留指令形态，
+        // 跳过 hide 函数 → hide 指令的镜像（内置 snake 的 BITMAP_CACHE_ENABLE 语义）。
+        var instructionCollisions = new HashSet<string>(
+            manifest.Surface.AddInstructionCollisions, StringComparer.Ordinal);
+        foreach (string collision in instructionCollisions.Order(StringComparer.Ordinal))
+        {
+            if (!context.MethodProjectedInstructionNames.Contains(collision))
+                collected.Add("碰撞态指令 " + collision + " 不是 v24 基线的 METHOD 投影名。");
+            if (!context.BaselineInstructions.Contains(collision))
+                collected.Add("碰撞态指令 " + collision + " 不在 v24 基线指令面内。");
+            if (!context.BaselineFunctions.Contains(collision))
+                collected.Add("碰撞态指令 " + collision + " 不在 v24 基线函数面内。");
+            if (!recorder.HiddenFunctions.Contains(collision))
+                collected.Add("碰撞态指令 " + collision + " 必须同时出现在 hideFunctions。");
+            if (recorder.HiddenInstructions.Contains(collision))
+                collected.Add("碰撞态指令 " + collision + " 不得同时出现在 hideInstructions。");
+            if (recorder.RegisteredInstructions.Contains(collision))
+                collected.Add("碰撞态指令 " + collision + " 不得同时出现在 addInstructions（指令形态来自 v24 基线）。");
+        }
         foreach (string hidden in recorder.HiddenInstructions.Order(StringComparer.Ordinal))
         {
             states.Add(new CompatSymbolState(
@@ -346,7 +368,8 @@ public static class CompatPackRules
             states.Add(new CompatSymbolState(
                 new CompatSymbolKey(CompatSymbolKind.Function, hidden),
                 CompatSymbolStateKind.Hidden, manifest.PackId, null, null));
-            if (context.MethodProjectedInstructionNames.Contains(hidden))
+            if (context.MethodProjectedInstructionNames.Contains(hidden)
+                && !instructionCollisions.Contains(hidden))
             {
                 effectiveHiddenInstructions.Add(hidden);
                 states.Add(new CompatSymbolState(

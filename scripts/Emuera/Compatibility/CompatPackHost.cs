@@ -166,7 +166,9 @@ internal static CompatPackValidationContext BuildValidationContext(string baseli
 
 		/// <summary>引擎当前契约 ABI 版本（Emuera.CompatPack 公开契约面；v1 = 1.0）。
 		/// manifest 声明必须 major 相等且 minor 不高于本值，否则加载期拒载。</summary>
-		internal static readonly CompatVersion CurrentContractAbi = new(1, 0);
+		// contractAbi 1.1：manifest 表面新增 addInstructionCollisions（instruction/函数同名碰撞态）；
+		// engineApi 保持 1.0、baseSurfaceHash 输入不变（旧 1.0 包继续加载）。
+		internal static readonly CompatVersion CurrentContractAbi = new(1, 1);
 
 		/// <summary>引擎当前行为/能力契约版本（v1 = 1.0）。破坏性变更升 major，增量能力升 minor；
 		/// 不再复用 DialectModuleDefinition.ModuleApiVersion（两套版本语义不同源）。</summary>

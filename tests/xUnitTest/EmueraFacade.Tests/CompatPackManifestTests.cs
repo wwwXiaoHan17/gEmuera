@@ -594,4 +594,19 @@ public class CompatPackManifestTests
         throw new InvalidOperationException(
             "未能从测试输出目录向上找到含 AGENTS.md 的仓库根：" + AppContext.BaseDirectory);
     }
+    [Fact]
+    public void Parse_SurfaceInstructionCollisions_AreExposed()
+    {
+        const string json = "{\"packId\":\"test.collision\",\"packVersion\":\"1.0.0\","
+            + "\"contractAbi\":\"1.1\",\"engineApi\":\"1.0\","
+            + "\"baseSurfaceHash\":\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\","
+            + "\"surface\":{\"hideFunctions\":[\"BITMAP_CACHE_ENABLE\"],"
+            + "\"addInstructionCollisions\":[\" bitmap_cache_enable \"]}}";
+        Assert.True(CompatPackManifest.TryParse(json, out var manifest, out var errors), string.Join("; ", errors));
+        Assert.Empty(errors);
+        Assert.NotNull(manifest!.Surface);
+        Assert.Equal(new[] { "BITMAP_CACHE_ENABLE" }, manifest.Surface.HideFunctions);
+        Assert.Equal(new[] { "BITMAP_CACHE_ENABLE" }, manifest.Surface.AddInstructionCollisions);
+    }
+
 }

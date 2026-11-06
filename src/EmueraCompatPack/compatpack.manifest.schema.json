@@ -96,6 +96,16 @@
             "pattern": "^\\S+$"
           },
           "description": "隐藏 v24 基线函数名。"
+        },
+        "addInstructionCollisions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^\\S+$"
+          },
+          "description": "contractAbi 1.1：instruction/function 同名碰撞态。名字必须同时出现在 hideFunctions，且必须是 v24 基线内 METHOD 投影名；表示保留指令形态、只隐藏表达式函数形态（内置 snake 的 BITMAP_CACHE_ENABLE）。"
         }
       }
     },

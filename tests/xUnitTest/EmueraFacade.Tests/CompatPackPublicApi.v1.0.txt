@@ -52,6 +52,7 @@ type=Emuera.Compatibility.Packs.CompatPackOverride|public sealed record class|ba
   method=virtual System.Boolean Equals(Emuera.Compatibility.Packs.CompatPackOverride other)
 type=Emuera.Compatibility.Packs.CompatPackSurface|public sealed class|base=System.Object|interfaces=<none>
   property=System.Collections.Generic.IReadOnlyList<System.String> AddFunctions {get}
+  property=System.Collections.Generic.IReadOnlyList<System.String> AddInstructionCollisions {get}
   property=System.Collections.Generic.IReadOnlyList<System.String> AddInstructions {get}
   property=System.Collections.Generic.IReadOnlyList<System.String> HideFunctions {get}
   property=System.Collections.Generic.IReadOnlyList<System.String> HideInstructions {get}
