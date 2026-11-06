@@ -8,13 +8,14 @@
 namespace GEmuera.Core.Compatibility;
 
 /// <summary>
-/// 方言模块的自有指令/函数清单（描述符贡献数据）。v24 = v24pure 会话表面；
-/// snake/erafl 增量为对应会话表面相对 v24 表面的差集；v18 为独立基线的完整表面
-///（v24 引擎投影减 v24 后增差集）。单一事实源是引擎投影，本文件是生成镜像。
+/// 方言表面清单（描述符贡献/包校验面数据）。v24 = v24pure 会话表面（live 再生）；
+/// 五个退役 profile 的差量/完整表面来自只读冻结工件
+/// tools/dialect-inventory/retired-dialect-surface-universe.json（执行设计 §4.8）。
+/// 冻结数组定位为包 ABI 表面事实，不是方言模块；本文件是生成镜像。
 /// </summary>
 public static class LegacyDialectInventories
 {
-    /// <summary>模块 gemuera.v24 的自有指令名（Ordinal 排序）。</summary>
+    /// <summary>模块 gemuera.v24 的自有指令名（Ordinal 排序）</summary>
     public static readonly string[] V24InstructionNames =
     {
         "ABS",
@@ -580,7 +581,7 @@ public static class LegacyDialectInventories
         "XML_TOSTR",
     };
 
-    /// <summary>模块 game.snake 的自有指令名（Ordinal 排序）。</summary>
+    /// <summary>冻结包表面（pack.game.snake#instructions，来源 retired-dialect-surface-universe.json；Ordinal 排序）</summary>
     public static readonly string[] SnakeDeltaInstructionNames =
     {
         "ACOS",
@@ -694,13 +695,13 @@ public static class LegacyDialectInventories
         "陷落状态",
     };
 
-    /// <summary>模块 game.erafl 的自有指令名（Ordinal 排序）。</summary>
+    /// <summary>冻结包表面（pack.game.erafl#instructions，来源 retired-dialect-surface-universe.json；Ordinal 排序）</summary>
     public static readonly string[] EraFlDeltaInstructionNames =
     {
         "SETANIMETIMER",
     };
 
-    /// <summary>模块 gemuera.v18 的自有指令名（Ordinal 排序）。</summary>
+    /// <summary>冻结包表面（pack.gemuera.v18#instructions，来源 retired-dialect-surface-universe.json；Ordinal 排序）</summary>
     public static readonly string[] V18InstructionNames =
     {
         "ABS",
@@ -1122,7 +1123,7 @@ public static class LegacyDialectInventories
         "WHILE",
     };
 
-    /// <summary>模块 gemuera.v24 的自有表达式函数（名字 + 引擎真实返回类型，Ordinal 排序）。</summary>
+    /// <summary>模块 gemuera.v24 的自有表达式函数（名字 + 引擎真实返回类型，Ordinal 排序）</summary>
     public static readonly LegacyFunctionInventoryEntry[] V24Functions =
     {
         new LegacyFunctionInventoryEntry("ABS", "Integer"),
@@ -1393,7 +1394,7 @@ public static class LegacyDialectInventories
         new LegacyFunctionInventoryEntry("XML_TOSTR", "String"),
     };
 
-    /// <summary>模块 game.snake 的自有表达式函数（名字 + 引擎真实返回类型，Ordinal 排序）。</summary>
+    /// <summary>冻结包表面（pack.game.snake#functions，来源 retired-dialect-surface-universe.json；名字 + 引擎真实返回类型，Ordinal 排序）</summary>
     public static readonly LegacyFunctionInventoryEntry[] SnakeDeltaFunctions =
     {
         new LegacyFunctionInventoryEntry("ACOS", "Integer"),
@@ -1485,12 +1486,12 @@ public static class LegacyDialectInventories
         new LegacyFunctionInventoryEntry("陷落状态", "Integer"),
     };
 
-    /// <summary>模块 game.erafl 的自有表达式函数（名字 + 引擎真实返回类型，Ordinal 排序）。</summary>
+    /// <summary>冻结包表面（pack.game.erafl#functions，来源 retired-dialect-surface-universe.json；名字 + 引擎真实返回类型，Ordinal 排序）</summary>
     public static readonly LegacyFunctionInventoryEntry[] EraFlDeltaFunctions =
     {
     };
 
-    /// <summary>模块 gemuera.v18 的自有表达式函数（名字 + 引擎真实返回类型，Ordinal 排序）。</summary>
+    /// <summary>冻结包表面（pack.gemuera.v18#functions，来源 retired-dialect-surface-universe.json；名字 + 引擎真实返回类型，Ordinal 排序）</summary>
     public static readonly LegacyFunctionInventoryEntry[] V18Functions =
     {
         new LegacyFunctionInventoryEntry("ABS", "Integer"),
@@ -1655,23 +1656,23 @@ public static class LegacyDialectInventories
         new LegacyFunctionInventoryEntry("VARSIZE", "Integer"),
     };
 
-    /// <summary>模块 game.erablue 的自有指令名（Ordinal 排序）。</summary>
+    /// <summary>冻结包表面（pack.game.erablue#instructions，来源 retired-dialect-surface-universe.json；Ordinal 排序）</summary>
     public static readonly string[] EraBlueDeltaInstructionNames =
     {
         "SETANIMETIMER",
     };
 
-    /// <summary>模块 game.erablue 的自有表达式函数（名字 + 引擎真实返回类型，Ordinal 排序）。</summary>
+    /// <summary>冻结包表面（pack.game.erablue#functions，来源 retired-dialect-surface-universe.json；名字 + 引擎真实返回类型，Ordinal 排序）</summary>
     public static readonly LegacyFunctionInventoryEntry[] EraBlueDeltaFunctions =
     {
     };
 
-    /// <summary>模块 game.megaten 的自有指令名（Ordinal 排序）。</summary>
+    /// <summary>冻结包表面（pack.game.megaten#instructions，来源 retired-dialect-surface-universe.json；Ordinal 排序）</summary>
     public static readonly string[] MegatenDeltaInstructionNames =
     {
     };
 
-    /// <summary>模块 game.megaten 的自有表达式函数（名字 + 引擎真实返回类型，Ordinal 排序）。</summary>
+    /// <summary>冻结包表面（pack.game.megaten#functions，来源 retired-dialect-surface-universe.json；名字 + 引擎真实返回类型，Ordinal 排序）</summary>
     public static readonly LegacyFunctionInventoryEntry[] MegatenDeltaFunctions =
     {
     };

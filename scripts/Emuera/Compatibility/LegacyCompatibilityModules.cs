@@ -90,12 +90,10 @@ namespace MinorShift.Emuera.Compatibility
 	{
 		private const string V24ModuleId = "gemuera.v24";
 		private const string SnakeModuleId = "game.snake";
-		private const string EraFlModuleId = "game.erafl";
 		private static readonly ILegacyCompatibilityModule[] modules =
 		{
 			new LegacyV24CompatibilityModule(),
 			new LegacySnakeCompatibilityModule(),
-			new LegacyEraFlCompatibilityModule(),
 		};
 
 		private static readonly IReadOnlyDictionary<string, ILegacyCompatibilityModule> modulesById =
@@ -108,7 +106,6 @@ namespace MinorShift.Emuera.Compatibility
 				{
 					["v24pure"] = new HashSet<string>(StringComparer.Ordinal) { V24ModuleId },
 					["snake"] = new HashSet<string>(StringComparer.Ordinal) { V24ModuleId, SnakeModuleId },
-					["erafl"] = new HashSet<string>(StringComparer.Ordinal) { V24ModuleId, EraFlModuleId },
 				});
 
 		public static LegacyCompatibilityProfile Compose(
@@ -177,8 +174,10 @@ namespace MinorShift.Emuera.Compatibility
 			// capability 即可激活对应行为，不再要求引擎内置模块仍在场（P-D 前提）。
 			builder.SetSnakePolicy(LegacySnakeCompatibilityPolicy.FromCapabilities(
 				plan.CapabilityIds, selectedModules.Contains(SnakeModuleId)));
+			// erafl 内置模块已退役（P-D 步 4）：policy 只由 capability 派生；
+			// pack.gemuera.erafl 声明 10 个 RequiredWiredCapabilityIds ⇒ IsEnabled 为真。
 			builder.SetEraFlPolicy(LegacyEraFlCompatibilityPolicy.FromCapabilities(
-				plan.CapabilityIds, selectedModules.Contains(EraFlModuleId)));
+				plan.CapabilityIds, moduleSelected: false));
 			// megaten 内置模块已退役（P-D 步 2）：policy 只由 capability 派生，
 			// pack.gemuera.megaten 声明 3 个 RequiredCapabilities ⇒ IsEnabled 为真（语义等价）。
 			builder.SetMegatenPolicy(LegacyMegatenCompatibilityPolicy.FromCapabilities(
@@ -607,30 +606,6 @@ namespace MinorShift.Emuera.Compatibility
 			builder.SubstituteInstruction("FOR", LegacyInstructionVariant.SharedTable);
 			builder.SubstituteInstruction("SETBGIMAGE", LegacyInstructionVariant.SetBgImageSnake);
 			// 蛇系函数参数契约（重载差异名集）已在 Compose 中按 capability/模块选中统一激活。
-		}
-	}
-
-	internal sealed class LegacyEraFlCompatibilityModule : ILegacyCompatibilityModule
-	{
-		// eraFL 实测依赖的 snake 系指令（handler 由共享仓 snake 侧注册，erafl 只声明
-		// 可见性需求）。证据：erafl-master グラフィック生成.ERB:356 "SETANIMETIMER 1000 / フレームレート"。
-		// 三接口职责：v24pure = v24 参考；snake = v24 + snake 方言；erafl = v24 + eraFL 实测能力清单 + eraFL 策略。
-		private static readonly IReadOnlyCollection<string> InstructionNames =
-			Array.AsReadOnly(new[] { "SETANIMETIMER" });
-
-		public string ModuleId => EraFlCompatibilityModule.ModuleId;
-		public void Declare(LegacyCompatibilityProfileBuilder builder)
-		{
-			// Declare 对所有会话执行：erafl 声明加入隐藏集（v24pure/snake 下该指令本就隐藏，
-			// 零影响）；仅 erafl 会话的 Apply 才解除隐藏。
-			builder.DeclareInstructionNames(InstructionNames);
-		}
-		public void Apply(LegacyCompatibilityProfileBuilder builder)
-		{
-			builder.ExposeInstructionNames(InstructionNames);
-			// erafl 显式绑定共享表的 SETANIMETIMER handler：绑定归属在模块声明中可见，
-			// 未来 snake 侧 handler 分叉时 erafl 在此固定自己的变体，不再隐式跟随共享表。
-			builder.SubstituteInstruction("SETANIMETIMER", LegacyInstructionVariant.SharedTable);
 		}
 	}
 

@@ -361,20 +361,8 @@ Assert(
     && !legacySnakeProfileWithoutScopedVariables.IsInstructionVisible("VARS"),
     "Snake scoped-variable registry surface is not frozen independently from the Core module plan.");
 
-var legacyEraFlProfile = LegacyCompatibilityProfile.CreateForProfile("erafl", scopedVariableInstructionsEnabled: true);
-Assert(
-    legacyEraFlProfile.Plan.Dialect.Modules.Any(module => module.ModuleId == "game.erafl")
-    && !legacyEraFlProfile.Snake.IsEnabled
-    && legacyEraFlProfile.EraFl.IsEnabled
-    && legacyEraFlProfile.UsesExtendedDisplayHistory
-    && legacyEraFlProfile.UsesLazyResourceIndex,
-    "eraFL legacy compatibility profile did not select its module policy.");
-Assert(
-    !legacyEraFlProfile.IsInstructionVisible("CALLSTR")
-    && !legacyEraFlProfile.IsInstructionVisible("TINPUTNF")
-    && legacyEraFlProfile.IsInstructionVisible("PRINTN")
-    && !legacyEraFlProfile.IsFunctionVisible("陷落状态"),
-    "eraFL legacy compatibility profile leaked a Snake-only registry member.");
+// erafl 已退役为第一方数据包（P-D 步 4）：内置 legacy profile 不再可创建；其能力
+// （10 Wired capability + SETANIMETIMER）由 FirstPartyPackEquivalenceTests 以 pack DLL 验证。
 
 var invalidLegacyProfilePlan = new CompatibilityPlanBuilder(BuiltInDialectCatalog.CreateLegacyBaseline())
     .Build("v24pure", new[] { "game.snake" });
@@ -929,40 +917,8 @@ Assert(
     "Built-in baseline Snake module did not preserve the complete reviewed port declaration surface.");
 await baselineFacade.DisposeAsync();
 
-var eraFlFacade = LegacySessionFacade.CreateLegacyBaseline(new TestLegacyBackend());
-var eraFlSwitch = await eraFlFacade.SwitchAsync(
-    new SessionSelection("fixture-erafl", "erafl"),
-    null);
-Assert(eraFlSwitch.IsCommitted, "Built-in eraFL profile could not build a candidate.");
-Assert(eraFlFacade.CurrentPlan?.ProfileId == "erafl", "eraFL plan did not preserve its profile id.");
-Assert(
-    eraFlFacade.CurrentPlan?.Dialect.Modules.Select(module => module.ModuleId)
-        .SequenceEqual(new[] { "gemuera.v24", "game.erafl" }) == true,
-    "eraFL plan did not resolve the v24 dependency closure.");
-Assert(
-    eraFlFacade.CurrentPlan?.Dialect.Ports.Count == 5,
-    "eraFL plan did not include all independent typed policy declarations.");
-Assert(
-    eraFlFacade.CurrentPlan?.CapabilityIds.SequenceEqual(new[]
-    {
-        "arith.safe-arithmetic-guard.v1",
-        "datatable.xml-leading-bom.v1",
-        "declare.out-keyword.v1",
-        "display.dynamic-map-transaction.v1",
-        "display.extended-history.v1",
-        "input.omitted-default-argument.v1",
-        "input.pointer-blank-string.v1",
-        "input.pointer-button.v1",
-        "markup.div-v2.v1",
-        "markup.font-extended-attributes.v1",
-        "markup.image-dual-src.v1",
-        "resource.dynamic-sprite.v1",
-        "type.float-literals.v1",
-    }) == true,
-    "eraFL plan did not include the required capability set.");
-Assert(
-    eraFlFacade.CurrentPlan?.SaveProfileId == EraFlCompatibilityModule.SaveProfileId,
-    "eraFL plan did not select its independent save profile.");
+// erafl 已退役为第一方数据包（P-D 步 4）：不再有内置 erafl facade 会话；
+// capability/端口契约由 FirstPartyPackEquivalenceTests 以 pack DLL 装配链验证。
 // eraFL 的 XML/*.xml 与 *_schema.xml 带 UTF-8 BOM，LOADTEXT 读入后首字符是 \uFEFF。
 // DT_FROMXML 装载 schema/XML 前必须按方言能力剥离，否则整表静默失败，后面的
 // DT_SELECT(..., "name = ...") 会抛 EvaluateException: Cannot find column [name]。
@@ -1059,13 +1015,8 @@ Assert(
         "HO_FIND_ROOM_BY_TAG", -1, "任务開始地点", 1, eraFlQuestMap, out var recoveredQuestStart)
         && recoveredQuestStart == 2,
     "eraFL task-start recovery did not return the current map's room index.");
-Assert(
-    legacyEraFlProfile.EraFl.TaskStartRoomLookupFunction == "HO_FIND_ROOM_BY_TAG"
-        && legacyEraFlProfile.EraFl.GMapQuestType == "GMAP"
-        && legacyEraFlProfile.EraFl.TryRecoverQuestStartRoomIndex(
-            "HO_FIND_ROOM_BY_TAG", -1, "任务開始地点", 1, "MAP", eraFlQuestMap, out var bridgedQuestStart)
-        && bridgedQuestStart == 2,
-    "eraFL legacy policy did not project its task-start recovery boundary.");
+// erafl 内置 legacy profile 已退役（P-D 步 4）：GMap/task-start 算法由模块静态方法
+// 直接断言（上方/下方保留），legacy policy 投影无内置 profile 可测。
 Assert(
     !EraFlCompatibilityModule.TryRecoverQuestStartRoomIndex(
         "HO_FIND_ROOM_BY_TAG", 7, "任务開始地点", 1, eraFlQuestMap, out var retainedQuestStart)
@@ -1154,18 +1105,7 @@ Assert(
         && parsedEraFlGMapTableNodes.Count == 2,
     "eraFL GMAP schema/XML fallback discarded the complete drawing table.");
 parsedEraFlGMapTable?.Dispose();
-Assert(
-    legacyEraFlProfile.EraFl.TryParseGMapDataTableFromXml(
-        eraFlSchemaXml,
-        eraFlDataXml,
-        out var bridgedEraFlGMapTable,
-        out var bridgedEraFlGMapNodes)
-        && bridgedEraFlGMapTable.TableName == "GMAPDATA"
-        && bridgedEraFlGMapNodes.Count == 2
-        && bridgedEraFlGMapNodes[1].NodeId == 0
-        && bridgedEraFlGMapNodes[1].NodeName == "城镇入口",
-    "eraFL legacy policy did not project GMAP XML data into the bridge DTO.");
-bridgedEraFlGMapTable.Dispose();
+// erafl 内置 legacy profile 已退役（P-D 步 4）：GMAP XML 解析由下方模块静态方法断言。
 Assert(
     EraFlCompatibilityModule.TryParseGMapNodesFromXml(
         eraFlSchemaXml,
@@ -1233,7 +1173,6 @@ Assert(
         })
         && duplicateEraFlGMap[0, 0] == null,
     "eraFL GMAP DT bridge partially mutated an invalid node set.");
-await eraFlFacade.DisposeAsync();
 
 AssertThrows<ArgumentException>(
     () => planBuilder.Build("snake", new[] { "game.snake" }, new[]

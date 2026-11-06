@@ -13,6 +13,8 @@
     <ProjectReference Include="..\..\..\src\EmueraCompatPack\EmueraCompatPack.csproj" />
     <!-- v18 第一方数据包：等价门禁经真实包 DLL（内嵌生成清单）走完整加载/组装链。 -->
     <ProjectReference Include="..\..\..\packs\pack.gemuera.v18\pack.gemuera.v18.csproj" />
+    <!-- eraFL 第一方数据包：包链路行为等价门禁用真实 DLL。 -->
+    <ProjectReference Include="..\..\..\packs\pack.gemuera.erafl\pack.gemuera.erafl.csproj" />
     <!-- 运行时对照：生成清单 MethodProjectedInstructionNames 必须与引擎真实注册表投影一致
          （经反射访问 internal FunctionIdentifier.GetInstructionNameDic，不需要 IVT）。 -->
     <ProjectReference Include="..\..\..\gemuera-c#.csproj" />

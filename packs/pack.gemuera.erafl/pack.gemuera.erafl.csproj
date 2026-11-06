@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>pack.gemuera.erafl</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- erafl 第一方数据包：+SETANIMETIMER 指令面 + 10 个 Wired capability；
+         3 个 markup 表面 capability 是 DiagnosticOnly，不可入包。算法实现保留在引擎能力库。 -->
+    <EmbeddedResource Include="compatpack.manifest.json" LogicalName="compatpack.manifest.json" />
+  </ItemGroup>
+</Project>

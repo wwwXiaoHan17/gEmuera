@@ -119,4 +119,55 @@ public class FirstPartyPackEquivalenceTests
         Assert.Throws<InvalidOperationException>(() => BuiltInDialectCatalog.CreateLegacySessionPlan("erablue"));
         handle.Unload();
     }
+    [Fact]
+    public void EraFlPack_AddsSetAnimeTimer_AndTenWiredCapabilities()
+    {
+        string packPath = typeof(PackGemueraEraFl.PackGemueraEraFlMarker).Assembly.Location;
+        using var directory = new IsolatedPackDirectory(packPath);
+        var context = Context();
+        Assert.True(CompatPackLoader.TryLoad(directory.MainAssemblyPath, context, out var handle, out var errors),
+            string.Join("; ", errors));
+        Assert.Empty(errors);
+        Assert.Equal("pack.gemuera.erafl", handle!.Manifest.PackId);
+        Assert.Equal(new[] { "SETANIMETIMER" }, handle.Manifest.Surface.AddInstructions);
+        string[] expectedCapabilities =
+        {
+            "arith.safe-arithmetic-guard.v1",
+            "datatable.xml-leading-bom.v1",
+            "declare.out-keyword.v1",
+            "display.dynamic-map-transaction.v1",
+            "display.extended-history.v1",
+            "input.omitted-default-argument.v1",
+            "input.pointer-blank-string.v1",
+            "input.pointer-button.v1",
+            "markup.font-extended-attributes.v1",
+            "type.float-literals.v1",
+        };
+        Assert.Equal(
+            expectedCapabilities.Order(StringComparer.Ordinal),
+            handle.Manifest.Capabilities.Order(StringComparer.Ordinal));
+        // 3 个 markup 表面 capability 是 DiagnosticOnly，不可入包。
+        Assert.DoesNotContain("markup.div-v2.v1", handle.Manifest.Capabilities);
+        Assert.DoesNotContain("markup.image-dual-src.v1", handle.Manifest.Capabilities);
+        Assert.DoesNotContain("resource.dynamic-sprite.v1", handle.Manifest.Capabilities);
+
+        CompatibilityPlan baseline = V24Baseline();
+        Assert.True(CompatPackPlanAssembler.TryAssemble(
+                baseline, new[] { handle }, context, out CompatibilityPlan assembled, out var assemblyErrors),
+            string.Join("; ", assemblyErrors));
+        Assert.Empty(assemblyErrors);
+        var expectedInstructions = new HashSet<string>(baseline.Dialect.Instructions.Keys, StringComparer.Ordinal)
+        {
+            "SETANIMETIMER",
+        };
+        Assert.Equal(
+            expectedInstructions.Order(StringComparer.Ordinal),
+            assembled.Dialect.Instructions.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal(
+            baseline.Dialect.Functions.Keys.Order(StringComparer.Ordinal),
+            assembled.Dialect.Functions.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal(expectedCapabilities.Order(StringComparer.Ordinal), assembled.CapabilityIds.Order(StringComparer.Ordinal));
+        Assert.Throws<InvalidOperationException>(() => BuiltInDialectCatalog.CreateLegacySessionPlan("erafl"));
+        handle.Unload();
+    }
 }

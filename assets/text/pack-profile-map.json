@@ -24,6 +24,14 @@
       "relativePathAndroid": "packs/pack.gemuera.erablue/pack.gemuera.erablue.dll",
       "requiredPackVersion": "1.0.0",
       "note": "erablue 第一方数据包（+SETANIMETIMER、启动容错 capability）"
+    },
+    {
+      "profileId": "erafl",
+      "packId": "pack.gemuera.erafl",
+      "relativePath": "compat_packs/pack.gemuera.erafl/pack.gemuera.erafl.dll",
+      "relativePathAndroid": "packs/pack.gemuera.erafl/pack.gemuera.erafl.dll",
+      "requiredPackVersion": "1.0.0",
+      "note": "eraFL 第一方数据包（+SETANIMETIMER、10 个 Wired capability；算法库仍在引擎）"
     }
   ]
 }

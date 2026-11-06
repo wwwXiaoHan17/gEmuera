@@ -169,35 +169,9 @@ public static class EraFlCompatibilityModule
         return wired.AsReadOnly();
     }
 
-    public static DialectModuleDefinition CreateDefinition()
-    {
-        return new DialectModuleDefinition(
-            ModuleId,
-            ModuleVersion,
-            1,
-            dependencies: new[]
-            {
-                new ModuleDependencySnapshot(BaseModuleId, "[1.0.0,2.0.0)"),
-            },
-            portTypeIds: new[]
-            {
-                InputArgumentPortType,
-                PointerInputPortType,
-                MarkupPortType,
-                DisplayScopePortType,
-                ResourcePortType,
-            });
-    }
-
-    public static CompatibilityProfileDefinition CreateProfile()
-    {
-        return new CompatibilityProfileDefinition(
-            "erafl",
-            new[] { ModuleId },
-            defaultPorts: DefaultPorts,
-            requiredCapabilityIds: RequiredCapabilities,
-            defaultSaveProfileId: SaveProfileId);
-    }
+    // P-D 步 4（2026-11-07）：内置 erafl profile 已退役为第一方数据包
+    // packs/pack.gemuera.erafl（+SETANIMETIMER、10 Wired capability）。本类其余部分
+    //（算法库、capability/端口常量、RequiredCapabilityIds）整文件保留：policy 委托消费。
 
     /// <summary>
     /// 去除文本开头的 BOM 字符（U+FEFF）。eraFL 的 <c>XML/*.xml</c> 与

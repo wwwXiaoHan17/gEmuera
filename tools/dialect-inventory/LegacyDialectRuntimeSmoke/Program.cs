@@ -78,19 +78,13 @@ internal static class Program
             // 描述符通道漂移门禁：plan 清单（LegacyDialectInventories 生成镜像）必须覆盖
             // 引擎真实投影的每个名字。v24pure/snake/erafl 三闭包逐名核对——引擎注册表或
             // 方言桥层名单变化而未重新生成清单时，这里必须失败。
-            object erafl = CreateProfile(profileType, "erafl", scopedVariableInstructionsEnabled: true);
-            // eraFL 的 VARI/VARS 在注册表上是 snake 指令，但脚本风格是 v24 系（声明后可
-            // 立即使用），所以解析期登记契约与 v24pure 一致（eraFL0.49 QUEST_57 实证）。
-            AssertV24ScopedVariableParser(legacyAssembly, instructionType, profileType, erafl, "erafl");
-            var eraflInstructions = GetRegistryKeys(instructionType, "GetInstructionNameDic", profileType, erafl);
-            var eraflFunctions = GetRegistryKeys(functionType, "GetMethodList", profileType, erafl);
-            // v18 已退役为第一方包（P-D 步 1）：内置 profile 不再创建；
-            // 冻结表面等价门禁见 SurfaceSmoke.AssertV18PackEquivalence。
+            // v18 已退役为第一方包（P-D 步 1）；erafl 已退役为第一方包（P-D 步 4）：
+            // 内置 profile 不再创建；冻结表面/能力等价门禁见 SurfaceSmoke 与
+            // FirstPartyPackEquivalenceTests。
             AssertPlanDeclaresSurface("v24pure", v24Instructions, v24Functions, exactInstructionCount: v24Instructions.Count, exactFunctionCount: v24Functions.Count);
             // snake 闭包 = v24 ∪ snakeΔ；函数侧计划比会话多 2 个（BITMAP_CACHE_ENABLE、
             // SETANIMETIMER 函数形态：v24 可见、snake 主动排除——条件可见性的已知差）。
             AssertPlanDeclaresSurface("snake", snakeInstructions, snakeFunctions, exactInstructionCount: snakeInstructions.Count, exactFunctionCount: snakeFunctions.Count + 2);
-            AssertPlanDeclaresSurface("erafl", eraflInstructions, eraflFunctions, exactInstructionCount: eraflInstructions.Count, exactFunctionCount: eraflFunctions.Count);
 
             Console.WriteLine("Legacy dialect runtime lookup smoke passed.");
             return 0;

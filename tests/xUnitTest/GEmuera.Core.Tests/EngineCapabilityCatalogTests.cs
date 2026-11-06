@@ -162,7 +162,7 @@ public class EngineCapabilityCatalogTests
         // 内置 profile 的 plan capability 集合 = RequiredCapabilityIds 原样（DiagnosticOnly
         // 也在账本内）；这是既有 plan hash / 回归面不变的前提。
         CompatibilityProfileCatalog profiles = BuiltInDialectCatalog.CreateLegacyProfileCatalog();
-        foreach (string profileId in new[] { "v24pure", "snake", "erafl" })
+        foreach (string profileId in new[] { "v24pure", "snake" })
         {
             CompatibilityProfileDefinition profile = profiles.Resolve(profileId);
             Assert.True(EngineCapabilityCatalog.TryResolveForProfile(
@@ -177,27 +177,9 @@ public class EngineCapabilityCatalogTests
     [Fact]
     public void BuiltInProfiles_PlanCapabilityLedgerIsUnchanged()
     {
-        // 表面账本（DiagnosticOnly 也在内）不得因闭合解析过滤而收缩：
-        // erafl 13 = 5 表面 + 8 policy 行为；erablue 2；megaten 6（含共享启动容错）。
-        // 顺序与 tools/core-contracts/Program.cs 的 eraFL 断言逐项一致（plan 内按 Ordinal 排序）。
-        CompatibilityPlan erafl = BuiltInDialectCatalog.CreateLegacySessionPlan("erafl");
-        Assert.Equal(new[]
-        {
-            "arith.safe-arithmetic-guard.v1",
-            "datatable.xml-leading-bom.v1",
-            "declare.out-keyword.v1",
-            "display.dynamic-map-transaction.v1",
-            "display.extended-history.v1",
-            "input.omitted-default-argument.v1",
-            "input.pointer-blank-string.v1",
-            "input.pointer-button.v1",
-            "markup.div-v2.v1",
-            "markup.font-extended-attributes.v1",
-            "markup.image-dual-src.v1",
-            "resource.dynamic-sprite.v1",
-            "type.float-literals.v1",
-        }, erafl.CapabilityIds);
-
+        // erafl/erablue/megaten/v18 已退役为第一方包（P-D 步 1-4）；其 capability 契约
+        // （Wired 子集 + DiagnosticOnly 不可入包）由 FirstPartyPackEquivalenceTests 以
+        // 真实包 DLL 装配链验证。本测试只保留仍内置 profile 的账本断言。
         // snake 19 项（全 Wired）按 Ordinal 排序。
         Assert.Equal(new[]
         {

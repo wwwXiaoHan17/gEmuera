@@ -96,4 +96,41 @@ public class CompatPackProfileMapTests
         Assert.Equal("gemuera.erafl", CompatPackProfileMap.LauncherProfileSaveProfileId("erafl"));
         Assert.Equal("gemuera.megaten", CompatPackProfileMap.LauncherProfileSaveProfileId("megaten"));
     }
+    [Fact]
+    public void ProductionMap_EntriesMatchOnePackPerDirectoryContract()
+    {
+        string repoRoot = FindRepoRoot();
+        string mapPath = Path.Combine(repoRoot, "assets", "text", "pack-profile-map.json");
+        Assert.True(File.Exists(mapPath), "生产映射缺失：" + mapPath);
+        Assert.True(
+            CompatPackProfileMap.TryParse(File.ReadAllText(mapPath), out CompatPackProfileMap? map, out var errors),
+            string.Join("; ", errors));
+        foreach (string profileId in new[] { "v18", "megaten", "erablue", "erafl" })
+        {
+            Assert.True(map!.TryGetEntry(profileId, out CompatPackProfileMapEntry entry), "缺少映射条目：" + profileId);
+            AssertPathShape(entry, entry.RelativePath, "compat_packs");
+            AssertPathShape(entry, entry.RelativePathAndroid, "packs");
+        }
+    }
+
+    static void AssertPathShape(CompatPackProfileMapEntry entry, string path, string root)
+    {
+        string[] segments = path.Split('/');
+        Assert.Equal(3, segments.Length);
+        Assert.Equal(root, segments[0]);
+        Assert.Equal(entry.PackId, segments[1]);
+        Assert.Equal(entry.PackId + ".dll", segments[2]);
+    }
+
+    static string FindRepoRoot()
+    {
+        string? directory = AppContext.BaseDirectory;
+        while (!string.IsNullOrEmpty(directory))
+        {
+            if (File.Exists(Path.Combine(directory, "gemuera-c#.csproj")))
+                return directory;
+            directory = Path.GetDirectoryName(directory);
+        }
+        throw new InvalidOperationException("找不到仓库根（gemuera-c#.csproj）。");
+    }
 }

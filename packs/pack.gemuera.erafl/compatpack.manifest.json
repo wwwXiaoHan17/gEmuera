@@ -1,0 +1,23 @@
+{
+  "baseProfileId": "v24pure",
+  "baseSurfaceHash": "950dbeb9028a8a2fc73ac3699411a05b8e367458219b40bd862066c8902888c9",
+  "capabilities": [
+    "arith.safe-arithmetic-guard.v1",
+    "datatable.xml-leading-bom.v1",
+    "declare.out-keyword.v1",
+    "display.dynamic-map-transaction.v1",
+    "display.extended-history.v1",
+    "input.omitted-default-argument.v1",
+    "input.pointer-blank-string.v1",
+    "input.pointer-button.v1",
+    "markup.font-extended-attributes.v1",
+    "type.float-literals.v1"
+  ],
+  "contractAbi": "1.0",
+  "engineApi": "1.0",
+  "packId": "pack.gemuera.erafl",
+  "packVersion": "1.0.0",
+  "surface": {
+    "addInstructions": ["SETANIMETIMER"]
+  }
+}

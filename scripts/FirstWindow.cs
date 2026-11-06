@@ -623,10 +623,10 @@ public partial class FirstWindow : Control
 		compatibilityProfileOption.AddThemeFontSizeOverride("font_size", 15);
 		compatibilityProfileOption.AddItem(CoreProfileV24Pure);
 		compatibilityProfileOption.AddItem(CoreProfileSnake);
-		compatibilityProfileOption.AddItem(CoreProfileEraFl);
-		compatibilityProfileOption.AddItem(CoreProfileV18);
-		compatibilityProfileOption.AddItem(CoreProfileEraBlue);
-		compatibilityProfileOption.AddItem(CoreProfileMegaten);
+		compatibilityProfileOption.AddItem(CoreProfileEraFl + "（兼容包）");
+		compatibilityProfileOption.AddItem(CoreProfileV18 + "（兼容包）");
+		compatibilityProfileOption.AddItem(CoreProfileEraBlue + "（兼容包）");
+		compatibilityProfileOption.AddItem(CoreProfileMegaten + "（兼容包）");
 		compatibilityProfileOption.Select(GetManualProfileOptionIndex());
 		compatibilityProfileOption.ItemSelected += OnManualProfileSelected;
 		compatibilityProfileOption.Visible = AdvancedCompatibilityEnabled;
@@ -734,13 +734,28 @@ public partial class FirstWindow : Control
 		return packProfileMap;
 	}
 
+	// 已退役 launcher profile 的兜底集合（映射文件缺失/损坏时仍能安全启动）：
+	// 与映射条目同源的硬编码清单，每个退役步追加；未退役 profile 绝不在此列。
+	internal static readonly string[] RetiredLauncherProfiles =
+	{
+		CoreProfileV18, CoreProfileMegaten, CoreProfileEraBlue, CoreProfileEraFl,
+	};
+
 	/// <summary>launcher profile id → 引擎 profile id（映射命中 = 已退役，翻译为 v24pure）。</summary>
 	internal static string ResolveEngineProfileIdForBinding(string launcherProfileId)
 	{
+		string raw = string.IsNullOrWhiteSpace(launcherProfileId) ? CoreProfileV24Pure : launcherProfileId.Trim();
 		CompatPackProfileMap map = GetPackProfileMap();
 		if (map == null)
-			return string.IsNullOrWhiteSpace(launcherProfileId) ? CoreProfileV24Pure : launcherProfileId.Trim();
-		return map.ResolveEngineProfileId(launcherProfileId);
+		{
+			foreach (string retired in RetiredLauncherProfiles)
+			{
+				if (string.Equals(raw, retired, System.StringComparison.OrdinalIgnoreCase))
+					return CoreProfileV24Pure;
+			}
+			return raw;
+		}
+		return map.ResolveEngineProfileId(raw);
 	}
 
 	static bool TryGetMappedPackPath(string launcherProfileId, out string packPath, out string warning)
@@ -804,14 +819,12 @@ public partial class FirstWindow : Control
 
 	static string NormalizeManualCoreProfileName(string profileName)
 	{
-		if (string.Equals(profileName, CoreProfileV24Pure, System.StringComparison.OrdinalIgnoreCase))
-			return CoreProfileV24Pure;
-		if (string.Equals(profileName, CoreProfileSnake, System.StringComparison.OrdinalIgnoreCase))
-			return CoreProfileSnake;
-		if (string.Equals(profileName, CoreProfileEraFl, System.StringComparison.OrdinalIgnoreCase))
-			return CoreProfileEraFl;
-		// 旧版本曾把“自动识别”写入配置，回退后按安全的 v24 基线处理。
-		return CoreProfileV24Pure;
+		// 手动选择必须接受全部 launcher profile id（含已退役、由兼容包供给的别名），
+		// 否则重启后 v18/erablue/megaten/erafl 会被改写成 v24pure，映射注入永不发生
+		//（review P2：高级模式手动条目重启即失效）。
+		return TryNormalizeCoreProfileName(profileName, out string normalizedProfileName)
+			? normalizedProfileName
+			: CoreProfileV24Pure;
 	}
 
 	int GetManualProfileOptionIndex()

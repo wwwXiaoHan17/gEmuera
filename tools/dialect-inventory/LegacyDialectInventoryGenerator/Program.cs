@@ -355,22 +355,15 @@ internal static class Program
     /// </summary>
     private static string BuildLiveProfilesJson(Type profileType, Type instructionType, Type functionType)
     {
+        // 只跳过"profile 未注册"（已退役）：用 catalog 预检，避免把 live profile 的
+        // capability/版本失败静默当成退役（review P2 #5）。
+        CompatibilityProfileCatalog profileCatalog = BuiltInDialectCatalog.CreateLegacyProfileCatalog();
         var live = new List<(string Id, int Instructions, int Functions)>();
         foreach (string profileId in new[] { "v24pure", "snake", "erafl", "v18", "erablue", "megaten" })
         {
-            object profile;
-            try
-            {
-                profile = CreateProfile(profileType, profileId, scopedVariableInstructionsEnabled: true);
-            }
-            catch (TargetInvocationException exception) when (exception.InnerException is InvalidOperationException)
-            {
+            if (!profileCatalog.TryResolve(profileId, out _))
                 continue; // profile 已注销 = 已退役
-            }
-            catch (InvalidOperationException)
-            {
-                continue;
-            }
+            object profile = CreateProfile(profileType, profileId, scopedVariableInstructionsEnabled: true);
             live.Add((
                 profileId,
                 GetRegistryKeys(instructionType, "GetInstructionNameDic", profileType, profile).Count,
@@ -466,33 +459,38 @@ internal static class Program
             builder.AppendLine("namespace GEmuera.Core.Compatibility;");
             builder.AppendLine();
             builder.AppendLine("/// <summary>");
-            builder.AppendLine("/// 方言模块的自有指令/函数清单（描述符贡献数据）。v24 = v24pure 会话表面；");
-            builder.AppendLine("/// snake/erafl 增量为对应会话表面相对 v24 表面的差集；v18 为独立基线的完整表面");
-            builder.AppendLine("///（v24 引擎投影减 v24 后增差集）。单一事实源是引擎投影，本文件是生成镜像。");
+            builder.AppendLine("/// 方言表面清单（描述符贡献/包校验面数据）。v24 = v24pure 会话表面（live 再生）；");
+            builder.AppendLine("/// 五个退役 profile 的差量/完整表面来自只读冻结工件");
+            builder.AppendLine("/// tools/dialect-inventory/retired-dialect-surface-universe.json（执行设计 §4.8）。");
+            builder.AppendLine("/// 冻结数组定位为包 ABI 表面事实，不是方言模块；本文件是生成镜像。");
             builder.AppendLine("/// </summary>");
             builder.AppendLine("public static class LegacyDialectInventories");
             builder.AppendLine("{");
             AppendNameArray(builder, "V24InstructionNames", v24Instructions, V24ModuleId);
-            AppendNameArray(builder, "SnakeDeltaInstructionNames", snakeDeltaInstructions, SnakeModuleId);
-            AppendNameArray(builder, "EraFlDeltaInstructionNames", eraflDeltaInstructions, EraFlModuleId);
-            AppendNameArray(builder, "V18InstructionNames", v18Instructions, V18ModuleId);
+            AppendNameArray(builder, "SnakeDeltaInstructionNames", snakeDeltaInstructions, SnakeModuleId, frozen: true);
+            AppendNameArray(builder, "EraFlDeltaInstructionNames", eraflDeltaInstructions, EraFlModuleId, frozen: true);
+            AppendNameArray(builder, "V18InstructionNames", v18Instructions, V18ModuleId, frozen: true);
             AppendFunctionArray(builder, "V24Functions", v24Functions, functionReturnTypes, V24ModuleId);
-            AppendFunctionArray(builder, "SnakeDeltaFunctions", snakeDeltaFunctions, functionReturnTypes, SnakeModuleId);
-            AppendFunctionArray(builder, "EraFlDeltaFunctions", eraflDeltaFunctions, functionReturnTypes, EraFlModuleId);
-            AppendFunctionArray(builder, "V18Functions", v18Functions, functionReturnTypes, V18ModuleId);
-            AppendNameArray(builder, "EraBlueDeltaInstructionNames", erablueDeltaInstructions, EraBlueModuleId);
-            AppendFunctionArray(builder, "EraBlueDeltaFunctions", erablueDeltaFunctions, functionReturnTypes, EraBlueModuleId);
-            AppendNameArray(builder, "MegatenDeltaInstructionNames", megatenDeltaInstructions, MegatenModuleId);
-            AppendFunctionArray(builder, "MegatenDeltaFunctions", megatenDeltaFunctions, functionReturnTypes, MegatenModuleId);
+            AppendFunctionArray(builder, "SnakeDeltaFunctions", snakeDeltaFunctions, functionReturnTypes, SnakeModuleId, frozen: true);
+            AppendFunctionArray(builder, "EraFlDeltaFunctions", eraflDeltaFunctions, functionReturnTypes, EraFlModuleId, frozen: true);
+            AppendFunctionArray(builder, "V18Functions", v18Functions, functionReturnTypes, V18ModuleId, frozen: true);
+            AppendNameArray(builder, "EraBlueDeltaInstructionNames", erablueDeltaInstructions, EraBlueModuleId, frozen: true);
+            AppendFunctionArray(builder, "EraBlueDeltaFunctions", erablueDeltaFunctions, functionReturnTypes, EraBlueModuleId, frozen: true);
+            AppendNameArray(builder, "MegatenDeltaInstructionNames", megatenDeltaInstructions, MegatenModuleId, frozen: true);
+            AppendFunctionArray(builder, "MegatenDeltaFunctions", megatenDeltaFunctions, functionReturnTypes, MegatenModuleId, frozen: true);
             AppendMethodProjectedArray(builder, methodProjectedInstructionNames);
             builder.AppendLine("}");
             builder.AppendLine();
             return builder.ToString();
         }
 
-    private static void AppendNameArray(StringBuilder builder, string fieldName, HashSet<string> names, string moduleId)
+    private static void AppendNameArray(
+        StringBuilder builder, string fieldName, HashSet<string> names, string moduleId, bool frozen = false)
     {
-        builder.AppendLine($"    /// <summary>模块 {moduleId} 的自有指令名（Ordinal 排序）。</summary>");
+        string label = frozen
+            ? $"冻结包表面（pack.{moduleId}#instructions，来源 retired-dialect-surface-universe.json；Ordinal 排序）"
+            : $"模块 {moduleId} 的自有指令名（Ordinal 排序）";
+        builder.AppendLine($"    /// <summary>{label}</summary>");
         builder.AppendLine($"    public static readonly string[] {fieldName} =");
         builder.AppendLine("    {");
         var sorted = names.Order(StringComparer.Ordinal).ToArray();
@@ -526,9 +524,13 @@ internal static class Program
         string fieldName,
         HashSet<string> names,
         Dictionary<string, string> returnTypes,
-        string moduleId)
+        string moduleId,
+        bool frozen = false)
     {
-        builder.AppendLine($"    /// <summary>模块 {moduleId} 的自有表达式函数（名字 + 引擎真实返回类型，Ordinal 排序）。</summary>");
+        string label = frozen
+            ? $"冻结包表面（pack.{moduleId}#functions，来源 retired-dialect-surface-universe.json；名字 + 引擎真实返回类型，Ordinal 排序）"
+            : $"模块 {moduleId} 的自有表达式函数（名字 + 引擎真实返回类型，Ordinal 排序）";
+        builder.AppendLine($"    /// <summary>{label}</summary>");
         builder.AppendLine($"    public static readonly LegacyFunctionInventoryEntry[] {fieldName} =");
         builder.AppendLine("    {");
         var sorted = names.Order(StringComparer.Ordinal).ToArray();

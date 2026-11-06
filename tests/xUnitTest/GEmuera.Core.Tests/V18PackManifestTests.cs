@@ -45,6 +45,7 @@ public class V18PackManifestTests
         Assert.Empty(handle.Manifest.Capabilities);
         Assert.Equal(new CompatVersion(1, 0), handle.Manifest.ContractAbi);
         Assert.Equal(new CompatVersion(1, 0), handle.Manifest.EngineApi);
+        Assert.False(handle.Manifest.UsedLegacyTargetEngineApi);
         Assert.Empty(handle.Manifest.Surface.AddInstructions);
         Assert.Empty(handle.Manifest.Surface.AddFunctions);
         Assert.Equal(

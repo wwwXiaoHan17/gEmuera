@@ -95,11 +95,30 @@ static class Program
             foreach (string key in SnakeExcludedFunctions)
                 Assert(!snake.IsFunctionVisible(key), $"Snake exposed a key absent from its reference registry: {key}.");
 
-            // eraFL 接口（闭包 {v24, erafl}）必须提供其目标游戏实测依赖的能力：
+            // eraFL 已退役为第一方数据包（P-D 步 4）：用真实包 DLL 组装 v24pure + pack，
+            // 后续断言对"会话投影行为"保持同一口径（共享表 SETANIMETIMER handler 由引擎默认提供）。
             // eraFL 游戏（erafl-master グラフィック生成.ERB:356）用指令语法
-            // "SETANIMETIMER 1000 / フレームレート"，该指令在 v24 参考中不存在、
-            // 由 snake 系共享仓注册——erafl 模块需显式声明才能解除 v24 基线的隐藏。
-            LegacyCompatibilityProfile erafl = LegacyCompatibilityProfile.CreateForProfile("erafl", true);
+            // "SETANIMETIMER 1000 / フレームレート"；包清单 addInstructions 声明该指令。
+            string eraflPackPath = CopyPackToIsolatedDirectory(
+                typeof(PackGemueraEraFl.PackGemueraEraFlMarker).Assembly.Location, out string eraflPackDirectory);
+            var eraflContext = new CompatPackValidationContext(
+                currentContractAbi: new CompatVersion(1, 0),
+                currentEngineApi: new CompatVersion(1, 0),
+                capabilities: GEmuera.Core.Compatibility.EngineCapabilityCatalog.All,
+                knownBuiltinVariantNames: new HashSet<string>(StringComparer.Ordinal),
+                baselineInstructions: new HashSet<string>(
+                    GEmuera.Core.Compatibility.LegacyDialectInventories.V24InstructionNames, StringComparer.Ordinal),
+                baselineFunctions: new HashSet<string>(
+                    GEmuera.Core.Compatibility.LegacyDialectInventories.V24Functions.Select(entry => entry.Name),
+                    StringComparer.Ordinal));
+            if (!CompatPackLoader.TryLoad(eraflPackPath, eraflContext, out CompatPackHandle? eraflHandle, out var eraflLoadErrors))
+                throw new InvalidOperationException("erafl 第一方数据包加载失败：" + string.Join("; ", eraflLoadErrors));
+            if (!CompatPackPlanAssembler.TryAssemble(
+                    BuiltInDialectCatalog.CreateLegacySessionPlan("v24pure"),
+                    new[] { eraflHandle! }, eraflContext,
+                    out CompatibilityPlan eraflPlan, out var eraflAssemblyErrors))
+                throw new InvalidOperationException("erafl 第一方数据包组装失败：" + string.Join("; ", eraflAssemblyErrors));
+            LegacyCompatibilityProfile erafl = LegacyCompatibilityProfile.Create(eraflPlan, true);
             Assert(erafl.IsInstructionVisible("SETANIMETIMER"),
                 "eraFL 接口必须提供 SETANIMETIMER 指令（eraFL 游戏启动依赖，グラフィック生成.ERB:356）。");
             // 隔离护栏：erafl 不得获得其他 snake 专属能力（函数层与指令层抽查）。
@@ -139,9 +158,8 @@ static class Program
             Assert(erafl.TryGetInstructionVariant("SETBGIMAGE", out LegacyInstructionVariant bgErafl)
                 && bgErafl == LegacyInstructionVariant.SetBgImageV24,
                 "erafl 的 SETBGIMAGE 继承 v24 基线变体（与迁移前行为一致）。");
-            Assert(erafl.TryGetInstructionVariant("SETANIMETIMER", out LegacyInstructionVariant timerErafl)
-                && timerErafl == LegacyInstructionVariant.SharedTable,
-                "erafl 的 SETANIMETIMER 必须显式绑定共享表 handler。");
+            // 包通道不携带变体选择 = 使用共享表默认 handler（与内置 erafl 显式 SharedTable 同态）；
+            // 无显式选择时 TryGetInstructionVariant 返回 false，行为等价，故此处不断言变体条目。
 
             // capability 账本（quirk ledger）：snake 声明 19 项解析/调用/显示 quirk，erafl 声明
             // markup 系 + 3 项布尔 policy quirk，v24pure 不声明任何 quirk。
@@ -225,8 +243,8 @@ static class Program
                     + GEmuera.Core.Compatibility.LegacyDialectInventories.EraFlDeltaInstructionNames.Length,
                 "erafl 指令描述符数量 != v24 + erafl 增量。");
             Assert(erafl.Plan.Dialect.TryGetInstruction("SETANIMETIMER", out var eraflTimer)
-                && eraflTimer.ModuleId == "game.erafl",
-                "erafl 计划必须由 game.erafl 模块声明 SETANIMETIMER 指令。");
+                && eraflTimer.ModuleId == "pack.gemuera.erafl",
+                "erafl 计划必须由 pack.gemuera.erafl 模块声明 SETANIMETIMER 指令。");
             Assert(!v24.Plan.Dialect.TryGetInstruction("CALLSTR", out _),
                 "v24pure 计划不得声明 snake 专属指令 CALLSTR。");
 
@@ -274,6 +292,8 @@ static class Program
             // 基于独立 profile 对象的断言之后执行）。
             AssertFallbackRebindStateEquivalence();
 
+            eraflHandle!.Unload();
+            TryDeleteDirectory(eraflPackDirectory);
             Console.WriteLine("Legacy dialect surface smoke passed.");
             return 0;
         }
@@ -365,7 +385,7 @@ static class Program
         var runtimeMethodProjected = new HashSet<string>(StringComparer.Ordinal);
         foreach ((string profileId, bool scopedVariableInstructionsEnabled) in new[]
         {
-            ("v24pure", true), ("snake", true), ("erafl", true),
+            ("v24pure", true), ("snake", true),
             // scoped-variable 关闭是第三类条件符号（VARI/VARS），单独跑一次闭包校验。
             ("v24pure", false),
         })
