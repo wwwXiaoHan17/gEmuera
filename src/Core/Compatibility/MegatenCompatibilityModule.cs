@@ -98,41 +98,8 @@ public static class MegatenCompatibilityModule
 
     public static IReadOnlyList<BehaviorPortSnapshot> DefaultPorts => DefaultBehaviorPorts;
 
-    public static DialectModuleDefinition CreateDefinition()
-    {
-        return new DialectModuleDefinition(
-            ModuleId,
-            ModuleVersion,
-            1,
-            dependencies: new[]
-            {
-                new ModuleDependencySnapshot(BaseModuleId, "[1.0.0,2.0.0)"),
-            },
-            portTypeIds: new[]
-            {
-                LabelLookupPortType,
-                OutNamePortType,
-                PrivateShadowPortType,
-                StandardColorNamePortType,
-                HtmlRgbZeroAlphaPortType,
-            });
-    }
-
-    public static CompatibilityProfileDefinition CreateProfile()
-    {
-        return new CompatibilityProfileDefinition(
-            "megaten",
-            new[] { ModuleId },
-            defaultPorts: DefaultPorts,
-            requiredCapabilityIds: new[]
-            {
-                ContinueAfterStartupFaultCapability,
-                LabelLookupCaseBehavior,
-                RefOutNameBehavior,
-                PrivateSystemShadowBehavior,
-                StandardColorNameBehavior,
-                HtmlRgbZeroAlphaBehavior,
-            },
-            defaultSaveProfileId: SaveProfileId);
-    }
+    // P-D 步 2（2026-11-07）：内置 megaten profile 已退役为第一方数据包
+    // packs/pack.gemuera.megaten（5 个 Wired capability）。本类保留全部常量/端口契约：
+    // 策略类与 capability 词汇表继续消费；GetCapability 词表条目（EngineCapabilityCatalog）
+    // 也继续引用这里的常量。
 }

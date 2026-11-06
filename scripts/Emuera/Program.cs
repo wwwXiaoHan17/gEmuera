@@ -733,8 +733,6 @@ namespace MinorShift.Emuera
 				"snake" => EmueraCoreProfile.Snake,
 				"erafl" => EmueraCoreProfile.EraFl,
 				"erablue" => EmueraCoreProfile.EraBlue,
-				// megaten：launcher 显式选择时映射到新枚举值。
-				"megaten" => EmueraCoreProfile.Megaten,
 				_ => throw new InvalidOperationException(
 					$"Compatibility profile '{launcherProfile}' is not supported by the legacy bridge.")
 			};
@@ -759,7 +757,6 @@ namespace MinorShift.Emuera
 				"snake" => EmueraCoreProfile.Snake,
 				"erafl" => EmueraCoreProfile.EraFl,
 				"erablue" => EmueraCoreProfile.EraBlue,
-				"megaten" => EmueraCoreProfile.Megaten,
 				_ => throw new InvalidOperationException(
 					$"Compatibility plan profile '{profileId}' is not supported by the legacy bridge.")
 			};
@@ -773,7 +770,6 @@ namespace MinorShift.Emuera
 				EmueraCoreProfile.Snake => "snake",
 				EmueraCoreProfile.EraFl => "erafl",
 				EmueraCoreProfile.EraBlue => "erablue",
-				EmueraCoreProfile.Megaten => "megaten",
 				_ => throw new InvalidOperationException(
 					$"Legacy core profile '{profile}' has no built-in compatibility plan."),
 			};

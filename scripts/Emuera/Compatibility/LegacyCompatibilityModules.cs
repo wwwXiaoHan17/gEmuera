@@ -91,17 +91,12 @@ namespace MinorShift.Emuera.Compatibility
 		private const string V24ModuleId = "gemuera.v24";
 		private const string SnakeModuleId = "game.snake";
 		private const string EraFlModuleId = "game.erafl";
-		// megaten 模块 id（常量在 Core 侧 MegatenCompatibilityModule 中定义）。
-		private const string MegatenModuleId = "game.megaten";
-
 		private static readonly ILegacyCompatibilityModule[] modules =
 		{
 			new LegacyV24CompatibilityModule(),
 			new LegacySnakeCompatibilityModule(),
 			new LegacyEraFlCompatibilityModule(),
 			new LegacyEraBlueCompatibilityModule(),
-			// megaten：策略 + 启动容错 capability 模块（Apply 注入策略，见类定义）。
-			new LegacyMegatenCompatibilityModule(),
 		};
 
 		private static readonly IReadOnlyDictionary<string, ILegacyCompatibilityModule> modulesById =
@@ -116,8 +111,6 @@ namespace MinorShift.Emuera.Compatibility
 					["snake"] = new HashSet<string>(StringComparer.Ordinal) { V24ModuleId, SnakeModuleId },
 					["erafl"] = new HashSet<string>(StringComparer.Ordinal) { V24ModuleId, EraFlModuleId },
 					["erablue"] = new HashSet<string>(StringComparer.Ordinal) { V24ModuleId, EraBlueCompatibilityModule.ModuleId },
-					// megaten 闭包 = v24 基线 + game.megaten（与 erafl 同构）。
-					["megaten"] = new HashSet<string>(StringComparer.Ordinal) { V24ModuleId, MegatenModuleId },
 				});
 
 		public static LegacyCompatibilityProfile Compose(
@@ -188,8 +181,10 @@ namespace MinorShift.Emuera.Compatibility
 				plan.CapabilityIds, selectedModules.Contains(SnakeModuleId)));
 			builder.SetEraFlPolicy(LegacyEraFlCompatibilityPolicy.FromCapabilities(
 				plan.CapabilityIds, selectedModules.Contains(EraFlModuleId)));
+			// megaten 内置模块已退役（P-D 步 2）：policy 只由 capability 派生，
+			// pack.gemuera.megaten 声明 3 个 RequiredCapabilities ⇒ IsEnabled 为真（语义等价）。
 			builder.SetMegatenPolicy(LegacyMegatenCompatibilityPolicy.FromCapabilities(
-				plan.CapabilityIds, selectedModules.Contains(MegatenModuleId)));
+				plan.CapabilityIds, moduleSelected: false));
 
 			// 蛇系函数参数契约与 module.Apply 解耦：完整 snake capability 集在场时，
 			// 社区包在 v24pure 基线上也能激活同名函数的重载差异契约。
@@ -460,7 +455,7 @@ namespace MinorShift.Emuera.Compatibility
 			}
 		}
 
-		// megaten：Apply 阶段由 LegacyMegatenCompatibilityModule 注入启用策略。
+		// megaten：策略由 plan.CapabilityIds 派生（P-D 步 2 起由 pack.gemuera.megaten 提供）。
 		public void SetMegatenPolicy(IMegatenCompatibilityPolicy policy)
 		{
 			megaten = policy ?? throw new ArgumentNullException(nameof(policy));
@@ -614,21 +609,6 @@ namespace MinorShift.Emuera.Compatibility
 			builder.SubstituteInstruction("FOR", LegacyInstructionVariant.SharedTable);
 			builder.SubstituteInstruction("SETBGIMAGE", LegacyInstructionVariant.SetBgImageSnake);
 			// 蛇系函数参数契约（重载差异名集）已在 Compose 中按 capability/模块选中统一激活。
-		}
-	}
-
-	// megaten：纯策略模块。注册表表面与 v24 完全一致（不隐藏/暴露任何名字），
-	// 仅在会话选中 game.megaten 时注入启用策略；三个门控行为全部由引擎侧
-	// 读取 Program.Compatibility.Megaten 的 flag 决定。
-	internal sealed class LegacyMegatenCompatibilityModule : ILegacyCompatibilityModule
-	{
-		public string ModuleId => MegatenCompatibilityModule.ModuleId;
-		// Declare 无需隐藏任何名字：megaten 不改变指令/函数可见性，零声明即与 v24 一致。
-		public void Declare(LegacyCompatibilityProfileBuilder builder) { }
-		public void Apply(LegacyCompatibilityProfileBuilder builder)
-		{
-			// 策略安装已集中到 LegacyCompatibilityModuleCatalog.Compose：由 plan.CapabilityIds
-			// 决定（模块选中或包声明同一组 capability 均可激活），不再依赖本模块 Apply 是否执行。
 		}
 	}
 

@@ -8,6 +8,14 @@
       "relativePathAndroid": "packs/pack.gemuera.v18/pack.gemuera.v18.dll",
       "requiredPackVersion": "1.0.0",
       "note": "emuera1824+v18 血统第一方数据包（纯 hide）"
+    },
+    {
+      "profileId": "megaten",
+      "packId": "pack.gemuera.megaten",
+      "relativePath": "compat_packs/pack.gemuera.megaten/pack.gemuera.megaten.dll",
+      "relativePathAndroid": "packs/pack.gemuera.megaten/pack.gemuera.megaten.dll",
+      "requiredPackVersion": "1.0.0",
+      "note": "eraMegaten 第一方数据包（5 个 Wired capability，面零增量）"
     }
   ]
 }

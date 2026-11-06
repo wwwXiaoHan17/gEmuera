@@ -4,7 +4,6 @@
   "profileIds": [
     "erablue",
     "erafl",
-    "megaten",
     "snake",
     "v24pure"
   ],
@@ -38,14 +37,6 @@
         "game.erablue"
       ],
       "instructionCount": 562,
-      "functionCount": 266
-    },
-    "megaten": {
-      "modules": [
-        "gemuera.v24",
-        "game.megaten"
-      ],
-      "instructionCount": 561,
       "functionCount": 266
     }
   }

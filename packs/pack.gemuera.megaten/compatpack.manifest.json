@@ -1,0 +1,15 @@
+{
+  "baseProfileId": "v24pure",
+  "capabilities": [
+    "startup.continue-after-fault.v1",
+    "parser.label-lookup-case.v1",
+    "parser.ref-out-name.v1",
+    "parser.private-system-shadow.v1",
+    "ui.html-rgb-zero-alpha.v1"
+  ],
+  "contractAbi": "1.0",
+  "engineApi": "1.0",
+  "packId": "pack.gemuera.megaten",
+  "packVersion": "1.0.0",
+  "surface": {}
+}

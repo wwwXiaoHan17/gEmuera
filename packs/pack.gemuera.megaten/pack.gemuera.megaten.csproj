@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>pack.gemuera.megaten</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- megaten 第一方数据包：程序集只内嵌审定清单，不含 ICompatPack 入口类。
+         清单声明 5 个 Wired capability（DiagnosticOnly 的 ui.standard-color-name.v1 不可入包）。 -->
+    <EmbeddedResource Include="compatpack.manifest.json" LogicalName="compatpack.manifest.json" />
+  </ItemGroup>
+</Project>
