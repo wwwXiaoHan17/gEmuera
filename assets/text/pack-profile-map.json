@@ -32,6 +32,14 @@
       "relativePathAndroid": "packs/pack.gemuera.erafl/pack.gemuera.erafl.dll",
       "requiredPackVersion": "1.0.0",
       "note": "eraFL 第一方数据包（+SETANIMETIMER、10 个 Wired capability；算法库仍在引擎）"
+    },
+    {
+      "profileId": "snake",
+      "packId": "pack.gemuera.snake",
+      "relativePath": "compat_packs/pack.gemuera.snake/pack.gemuera.snake.dll",
+      "relativePathAndroid": "packs/pack.gemuera.snake/pack.gemuera.snake.dll",
+      "requiredPackVersion": "1.0.0",
+      "note": "snake 第一方数据包（最大差集、19 个 Wired capability、builtin:snake 变体、BITMAP_CACHE_ENABLE 碰撞态）"
     }
   ]
 }

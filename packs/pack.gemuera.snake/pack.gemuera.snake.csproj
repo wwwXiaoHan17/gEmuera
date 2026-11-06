@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>pack.gemuera.snake</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- snake 第一方数据包：最大差集 + 19 Wired capability + builtin:snake 变体；
+         BITMAP_CACHE_ENABLE 走 addInstructionCollisions（保留指令形态、隐藏函数形态）。
+         清单由冻结表面（retired-dialect-surface-universe.json）计算生成。 -->
+    <EmbeddedResource Include="compatpack.manifest.json" LogicalName="compatpack.manifest.json" />
+  </ItemGroup>
+</Project>

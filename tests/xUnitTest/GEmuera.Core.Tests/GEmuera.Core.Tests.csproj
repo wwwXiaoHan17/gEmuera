@@ -29,6 +29,8 @@
     <ProjectReference Include="..\..\..\packs\pack.gemuera.erablue\pack.gemuera.erablue.csproj" />
     <!-- erafl 第一方数据包（+SETANIMETIMER、10 Wired capability，等价门禁）。 -->
     <ProjectReference Include="..\..\..\packs\pack.gemuera.erafl\pack.gemuera.erafl.csproj" />
+    <!-- snake 第一方数据包（最大差集、19 Wired、碰撞字段，等价门禁）。 -->
+    <ProjectReference Include="..\..\..\packs\pack.gemuera.snake\pack.gemuera.snake.csproj" />
     <!-- 契约夹具：只引用 Emuera 契约程序集的最小 ICompatPack 样本（ALC 正向用例复用）。 -->
     <ProjectReference Include="..\CompatPackContractOnlyFixture\CompatPackContractOnlyFixture.csproj" />
     <!-- 多入口夹具（M9）：同一程序集两个 ICompatPack 实现类，钉住"恰好一个入口"拒载。 -->

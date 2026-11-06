@@ -33,24 +33,7 @@ public static class SnakeCompatibilityModule
         "IResourceLazyIndexPolicy",
     };
 
-    public static DialectModuleDefinition CreateDefinition()
-    {
-        return new DialectModuleDefinition(
-            ModuleId,
-            ModuleVersion,
-            1,
-            dependencies: new[]
-            {
-                new ModuleDependencySnapshot(BaseModuleId, "[1.0.0,2.0.0)"),
-            },
-            portTypeIds: PortTypeIds);
-    }
-
-    public static CompatibilityProfileDefinition CreateProfile()
-    {
-        return new CompatibilityProfileDefinition(
-            "snake",
-            new[] { ModuleId },
-            requiredCapabilityIds: SnakeCompatibilityCapabilities.RequiredCapabilityIds);
-    }
+    // P-D 步 5（2026-11-07）：内置 snake profile 已退役为第一方数据包
+    // packs/pack.gemuera.snake（最大差集 + 19 Wired capability + builtin:snake 变体）。
+    // 本类保留常量/PortTypeIds：policy 与测试词汇表继续消费。
 }

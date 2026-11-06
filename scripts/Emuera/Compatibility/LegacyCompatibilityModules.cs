@@ -88,12 +88,10 @@ namespace MinorShift.Emuera.Compatibility
 	/// </summary>
 	internal static class LegacyCompatibilityModuleCatalog
 	{
-		private const string V24ModuleId = "gemuera.v24";
-		private const string SnakeModuleId = "game.snake";
+		internal const string V24ModuleId = "gemuera.v24";
 		private static readonly ILegacyCompatibilityModule[] modules =
 		{
 			new LegacyV24CompatibilityModule(),
-			new LegacySnakeCompatibilityModule(),
 		};
 
 		private static readonly IReadOnlyDictionary<string, ILegacyCompatibilityModule> modulesById =
@@ -105,7 +103,6 @@ namespace MinorShift.Emuera.Compatibility
 				new Dictionary<string, ISet<string>>(StringComparer.Ordinal)
 				{
 					["v24pure"] = new HashSet<string>(StringComparer.Ordinal) { V24ModuleId },
-					["snake"] = new HashSet<string>(StringComparer.Ordinal) { V24ModuleId, SnakeModuleId },
 				});
 
 		public static LegacyCompatibilityProfile Compose(
@@ -155,6 +152,11 @@ namespace MinorShift.Emuera.Compatibility
 				builder.SetDeclaringModule(module.ModuleId);
 				module.Declare(builder);
 			}
+			// v24pure 基线隐藏面（原内置 snake 模块 Declare 的职责，P-D 步 5 迁出）：
+			// 先隐藏 snake 专有名字，再由选中的包/模块在 Apply/ApplyPackSurface 阶段暴露。
+			builder.SetDeclaringModule(LegacyCompatibilityModuleCatalog.V24ModuleId);
+			builder.DeclareInstructionNames(SnakeLegacySurfaceNames.SnakeOnlyInstructionNames);
+			builder.DeclareFunctionNames(SnakeLegacySurfaceNames.SnakeOnlyFunctionNames);
 			foreach (DialectModuleSnapshot selectedModule in plan.Dialect.Modules)
 			{
 				if (packModuleIdsInClosure.Contains(selectedModule.ModuleId))
@@ -172,8 +174,10 @@ namespace MinorShift.Emuera.Compatibility
 			// 策略激活与"哪个内置模块被选中"解耦：policy 对象从 plan.CapabilityIds 派生。
 			// 内置 profile 仍得到与旧实现相同的布尔组合；社区包在 v24pure 基线上声明同一组
 			// capability 即可激活对应行为，不再要求引擎内置模块仍在场（P-D 前提）。
+			// snake 内置模块已退役（P-D 步 5）：policy 只由 capability 派生；
+			// pack.gemuera.snake 声明 19 个 Wired capability ⇒ IsEnabled 为真。
 			builder.SetSnakePolicy(LegacySnakeCompatibilityPolicy.FromCapabilities(
-				plan.CapabilityIds, selectedModules.Contains(SnakeModuleId)));
+				plan.CapabilityIds, moduleSelected: false));
 			// erafl 内置模块已退役（P-D 步 4）：policy 只由 capability 派生；
 			// pack.gemuera.erafl 声明 10 个 RequiredWiredCapabilityIds ⇒ IsEnabled 为真。
 			builder.SetEraFlPolicy(LegacyEraFlCompatibilityPolicy.FromCapabilities(
@@ -187,10 +191,13 @@ namespace MinorShift.Emuera.Compatibility
 			// 社区包在 v24pure 基线上也能激活同名函数的重载差异契约。
 			bool snakeCapabilitiesComplete = GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities
 				.RequiredCapabilityIds.All(plan.CapabilityIds.Contains);
-			if (selectedModules.Contains(SnakeModuleId) || snakeCapabilitiesComplete)
+			if (snakeCapabilitiesComplete)
 			{
-				builder.SetDeclaringModule(SnakeModuleId);
-				builder.ActivateDialectFunctionContracts(LegacySnakeCompatibilityModule.DivergentFunctionContractNames);
+				// P-D 步 5：内置 snake 模块已退役；完整 snake capability 集由第一方包声明。
+				// 归属模块取计划里的包模块 id（单包会话 = pack.gemuera.snake）。
+				builder.SetDeclaringModule(
+					plan.Dialect.PackModuleIds.Count > 0 ? plan.Dialect.PackModuleIds[0] : "");
+				builder.ActivateDialectFunctionContracts(SnakeLegacySurfaceNames.DivergentFunctionContractNames);
 			}
 
 			if (packModuleIdsInClosure.Count > 0)
@@ -516,96 +523,6 @@ namespace MinorShift.Emuera.Compatibility
 			// 子方言模块在自己的 Apply 里按需覆盖。
 			builder.SubstituteInstruction("FOR", LegacyInstructionVariant.ForCountV24);
 			builder.SubstituteInstruction("SETBGIMAGE", LegacyInstructionVariant.SetBgImageV24);
-		}
-	}
-
-	internal sealed class LegacySnakeCompatibilityModule : ILegacyCompatibilityModule
-	{
-		// 蛇系参数契约名集：这些同名函数在 snake 与 v24 参考注册表中重载形态不同
-		//（DialectFunctionContracts 逐名提供 CheckArgumentType 差异）。激活后该会话
-		// 使用蛇系契约；v24pure/erafl 会话保持 v24 形态。
-		internal static readonly IReadOnlyCollection<string> DivergentFunctionContractNames =
-			Array.AsReadOnly(new[]
-			{
-				"ABS", "ARGLEN", "CBGSETSPRITE", "CBRT", "EXISTVAR", "EXPONENT",
-				"GETVAR", "GETVARS", "LIMIT", "LOG", "LOG10", "POWER", "SIGN",
-				"SPRITECREATE", "SPRITECREATEFROMFILE", "SQRT", "TOINT",
-				"UNCHECKED_ADD", "UNCHECKED_MUL", "UNCHECKED_NEG", "UNCHECKED_SUB",
-			});
-
-		// Public-key delta between the checked-in v24 and Snake reference
-		// registries. Handler class prefixes are not dialect ownership evidence.
-		private static readonly IReadOnlyCollection<string> InstructionNames =
-			Array.AsReadOnly(new[]
-			{
-						"BITMAP_CACHE_ENABLE", "CALLSTR", "CLEARIMAGELAYER", "CLEARIMAGELAYER_ALL",
-				"HTML_PRINTC", "HTML_PRINTLC", "JUMPSTR", "SET_SKIA_QUALITY", "SET_TEXT_DRAWING_MODE",
-				"SETANIMETIMER", "SETIMAGELAYER", "SETIMAGELAYERL", "STRICT_FONT_FALLBACK",
-				"TEXT_BGC_OFF", "TEXT_BGC_ON", "TINPUTNF", "TINPUTSNF", "TONEINPUTNF",
-				"TONEINPUTSNF", "TRYCALLSTR", "TRYCCALLSTR", "TRYCJUMPSTR", "TRYJUMPSTR",
-			});
-
-		// The v24 baseline does not expose these Snake/port expression functions.
-		// Keep this list at the visibility boundary so ExpressionParser cannot
-		// resolve an unselected dialect capability through the static handler map.
-		private static readonly IReadOnlyCollection<string> FunctionNames =
-			Array.AsReadOnly(new[]
-			{
-				"ACOS", "ARGLEN", "ASIN", "ATAN", "BGMCONTROL", "BITGET", "BITINDEXOFFIRST",
-				"BITSET", "BITTOGGLE", "CBGSETCIMG", "CEIL", "COS", "DISABLE_INPUT_MACRO",
-				"DT_CELL_GETF", "DT_CELL_SETF", "ENABLE_INPUT_MACRO", "EVAL", "EVALF", "EVALS",
-				"EXISTSIMAGELAYER", "EXIST_IN_CSV", "EXIST_IN_ERD", "FLOOR", "GCLEARLOWALPHA", "GDRAWPOLYGON", "GDRAWPOLYGONADDPOINT",
-				"GDRAWPOLYGONCLEARPOINT", "GDRAWSTRING", "GET_SKIA_QUALITY", "GET_TEXT_DRAWING_MODE",
-				"GETANIMETIMER", "GETARGCOUNT", "GETCSVNOBYCALLNAME", "GETCSVNOBYMASTERNAME",
-				"GETCSVNOBYNAME", "GETCSVNOBYNICKNAME", "GETLINEY", "GETMETHF", "GETPLATFORM",
-				"GETSOUNDORBGMINFO", "GETVARF", "GFILLPOLYGON", "G_POLYGON_DRAW",
-				"G_POLYGON_FILL", "G_POLYGON_POINT_ADD", "G_POLYGON_POINT_CLEAR", "GROTATE", "ISPLAYINGBGM",
-				"ISPLAYINGSOUND", "MAP_FINDKEY", "MAP_FROMSTRING", "MAP_MERGE", "MAP_REMOVEIF",
-				"MAP_TOSTRING", "MAP_VALUES", "MATCHALL", "MATCHALLEX", "MOUSEBUTTON", "ROUND",
-				"SEQUENCEINPUT", "SIN", "SOUNDCONTROL", "SPRITECREATEFROMFILE", "SQL_CONNECT",
-				"SQL_CONNECTION_OPEN", "SQL_DISCONNECT", "SQL_ESCAPE", "SQL_EXECUTE_NONQUERY",
-				"SQL_EXECUTE_READER", "SQL_EXECUTE_SCALAR_FLOAT", "SQL_EXECUTE_SCALAR_LONG",
-				"SQL_EXECUTE_SCALAR_STRING", "SQL_EXPORT_DT_XML", "SQL_EXPORT_MAP_XML", "SQL_IMPORT_DT_XML",
-				"SQL_IMPORT_MAP_XML", "SQL_IMPORT_XML_CUSTOM", "SQL_P_EXECUTE_NONQUERY", "SQL_P_EXECUTE_READER",
-				"SQL_P_EXECUTE_SCALAR_FLOAT", "SQL_P_EXECUTE_SCALAR_LONG", "SQL_P_EXECUTE_SCALAR_STRING",
-				"SQL_READER_CLOSE", "SQL_READER_GET_FLOAT", "SQL_READER_GET_LONG", "SQL_READER_GET_STRING",
-				"SQL_READER_ISNULL", "SQL_READER_READ", "STRFORMCHECK", "TAN", "TOFLOAT", "TOSTRF",
-				"UNCHECKED_ADD", "UNCHECKED_MUL", "UNCHECKED_NEG", "UNCHECKED_SUB", "陥落状態", "陷落状态",
-			});
-
-		// The checked-in Snake expression registry is not a strict v24 union.
-		// These functions are either v24-only or Godot-port-only aliases and
-		// therefore must remain unavailable in a Snake session.
-		// NOTE: 陥落状態/陷落状态 must NOT be hidden here — eraTW 系口上包在多个角色
-		// ERB 中直接调用它，而定义只存在于个别口上包（如さとり包）里；SnakeFallenStateMethod
-		// 提供共通 TALENT/CFLAG 兜底（用户 @陥落状態 定义优先执行），隐藏后这些口上会在
-		// 运行时抛"陥落状態は解釈できない識別子です"（eraThe World 平板日志 20260805 实证）。
-		private static readonly IReadOnlyCollection<string> SnakeExcludedFunctionNames =
-			Array.AsReadOnly(new[]
-			{
-					"BITMAP_CACHE_ENABLE", "CBGSETCIMG", "DT_CELL_SETF", "GCLEARLOWALPHA",
-				"GDRAWPOLYGON", "GDRAWPOLYGONADDPOINT", "GDRAWPOLYGONCLEARPOINT", "GDRAWSTRING", "GROTATE",
-				"GETARGCOUNT", "GFILLPOLYGON", "MOUSEBUTTON", "SETANIMETIMER",
-			});
-
-		public string ModuleId => "game.snake";
-
-		public void Declare(LegacyCompatibilityProfileBuilder builder)
-		{
-			builder.DeclareInstructionNames(InstructionNames);
-			builder.DeclareFunctionNames(FunctionNames);
-		}
-
-		public void Apply(LegacyCompatibilityProfileBuilder builder)
-		{
-			builder.ExposeInstructionNames(InstructionNames);
-			builder.ExposeFunctionNames(FunctionNames);
-			builder.HideFunctionNames(SnakeExcludedFunctionNames);
-			// snake 覆盖 v24 基线：SETBGIMAGE 用 snake 变体；FOR 回退共享表原条目
-			//（snake 的 FOR 文法即共享表注册的 REPEAT 内核，EXTENDED 标志保持不变）。
-			builder.SubstituteInstruction("FOR", LegacyInstructionVariant.SharedTable);
-			builder.SubstituteInstruction("SETBGIMAGE", LegacyInstructionVariant.SetBgImageSnake);
-			// 蛇系函数参数契约（重载差异名集）已在 Compose 中按 capability/模块选中统一激活。
 		}
 	}
 

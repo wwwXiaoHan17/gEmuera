@@ -773,7 +773,10 @@ public class CompatPackRulesTests
         new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
         new HashSet<string>(StringComparer.Ordinal) { "CALLSHARP", "SETBGIMAGE", "PRINT" },
         new HashSet<string>(StringComparer.Ordinal) { "EXISTVAR" },
-        baselineProfileId: baselineProfileId);
+        baselineProfileId: baselineProfileId,
+        // 基线 profile 只作为规则输入（内置 snake 退役后不再可解析）；哈希缺省值显式给定，
+        // 避免 BuildV24SurfaceHashInput 依赖 BuiltInDialectCatalog 的 profile 注册表。
+        baselineSurfaceHash: LegacySurfaceHash.ComputeV24SurfaceHash());
 
     static CompatPackManifest AxesManifest(string contractAbi, string engineApi)
     {

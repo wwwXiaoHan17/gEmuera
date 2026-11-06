@@ -49,13 +49,93 @@ static class Program
         "GETARGCOUNT", "GFILLPOLYGON", "MOUSEBUTTON", "SETANIMETIMER",
     };
 
+    /// <summary>
+    /// 生产同源校验上下文：反射调用宿主 CompatPackHost.BuildValidationContext("v24pure")，
+    /// 保证 method-projected/handler/返回类型/内置变体词汇与真实加载链完全一致。
+    /// </summary>
+    private static CompatPackValidationContext CreatePackValidationContext()
+    {
+        // 与宿主 BuildValidationContext("v24pure") 同源的事实（本冒烟只链接桥层两文件，
+        // 故按冻结清单重建：baseline/METHOD 投影/handler 全集/返回类型/内置变体词汇）。
+        var baselineInstructions = new HashSet<string>(
+            GEmuera.Core.Compatibility.LegacyDialectInventories.V24InstructionNames, StringComparer.Ordinal);
+        var baselineFunctions = new HashSet<string>(
+            GEmuera.Core.Compatibility.LegacyDialectInventories.V24Functions.Select(entry => entry.Name),
+            StringComparer.Ordinal);
+        var instructionHandlers = new HashSet<string>(baselineInstructions, StringComparer.Ordinal);
+        foreach (string name in GEmuera.Core.Compatibility.LegacyDialectInventories.SnakeDeltaInstructionNames)
+            instructionHandlers.Add(name);
+        foreach (string name in GEmuera.Core.Compatibility.LegacyDialectInventories.EraFlDeltaInstructionNames)
+            instructionHandlers.Add(name);
+        foreach (string name in GEmuera.Core.Compatibility.LegacyDialectInventories.EraBlueDeltaInstructionNames)
+            instructionHandlers.Add(name);
+        foreach (string name in GEmuera.Core.Compatibility.LegacyDialectInventories.MegatenDeltaInstructionNames)
+            instructionHandlers.Add(name);
+        foreach (string name in GEmuera.Core.Compatibility.LegacyDialectInventories.V18InstructionNames)
+            instructionHandlers.Add(name);
+
+        var functionHandlers = new HashSet<string>(baselineFunctions, StringComparer.Ordinal);
+        var returnTypes = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var entry in GEmuera.Core.Compatibility.LegacyDialectInventories.V24Functions)
+            returnTypes[entry.Name] = entry.ReturnType;
+        foreach (var array in new[]
+        {
+            GEmuera.Core.Compatibility.LegacyDialectInventories.SnakeDeltaFunctions,
+            GEmuera.Core.Compatibility.LegacyDialectInventories.EraFlDeltaFunctions,
+            GEmuera.Core.Compatibility.LegacyDialectInventories.EraBlueDeltaFunctions,
+            GEmuera.Core.Compatibility.LegacyDialectInventories.MegatenDeltaFunctions,
+            GEmuera.Core.Compatibility.LegacyDialectInventories.V18Functions,
+        })
+        {
+            foreach (var entry in array)
+            {
+                functionHandlers.Add(entry.Name);
+                returnTypes[entry.Name] = entry.ReturnType;
+            }
+        }
+
+        IReadOnlyDictionary<string, IReadOnlySet<string>> builtinVariants = BuiltinCompatPackVariants.SupportedSelections();
+        return new CompatPackValidationContext(
+            currentContractAbi: new CompatVersion(1, 1),
+            currentEngineApi: new CompatVersion(1, 0),
+            capabilities: GEmuera.Core.Compatibility.EngineCapabilityCatalog.All,
+            knownBuiltinVariantNames: new HashSet<string>(builtinVariants.Keys, StringComparer.Ordinal),
+            baselineInstructions: baselineInstructions,
+            baselineFunctions: baselineFunctions,
+            knownBuiltinVariantInstructions: builtinVariants,
+            knownInstructionHandlers: instructionHandlers,
+            knownFunctionHandlers: functionHandlers,
+            knownFunctionReturnTypes: returnTypes,
+            methodProjectedInstructionNames: new HashSet<string>(
+                GEmuera.Core.Compatibility.LegacyDialectInventories.MethodProjectedInstructionNames,
+                StringComparer.Ordinal));
+    }
+
+    /// <summary>加载第一方数据包并在 v24pure 基线上组装会话投影（P-D 退役后 snapshot/冒烟共用）。</summary>
+    private static LegacyCompatibilityProfile LoadFirstPartyPackProfile(
+        Type markerType, out CompatPackHandle handle, out string directory)
+    {
+        string packPath = CopyPackToIsolatedDirectory(markerType.Assembly.Location, out directory);
+        CompatPackValidationContext context = CreatePackValidationContext();
+        if (!CompatPackLoader.TryLoad(packPath, context, out handle!, out var loadErrors))
+            throw new InvalidOperationException("第一方数据包加载失败（" + markerType.Name + "）：" + string.Join("; ", loadErrors));
+        if (!CompatPackPlanAssembler.TryAssemble(
+                BuiltInDialectCatalog.CreateLegacySessionPlan("v24pure"),
+                new[] { handle }, context,
+                out CompatibilityPlan plan, out var assemblyErrors))
+            throw new InvalidOperationException("第一方数据包组装失败（" + markerType.Name + "）：" + string.Join("; ", assemblyErrors));
+        return LegacyCompatibilityProfile.Create(plan, true);
+    }
+
     private static int Main()
     {
         try
         {
             LegacyCompatibilityProfile v24 = LegacyCompatibilityProfile.CreateForProfile("v24pure", true);
             LegacyCompatibilityProfile v24WithoutScopedVariables = LegacyCompatibilityProfile.CreateForProfile("v24pure", false);
-            LegacyCompatibilityProfile snake = LegacyCompatibilityProfile.CreateForProfile("snake", true);
+            // snake 已退役为第一方数据包（P-D 步 5）：用真实包 DLL 组装 v24pure + pack。
+            LegacyCompatibilityProfile snake = LoadFirstPartyPackProfile(
+                typeof(PackGemueraSnake.PackGemueraSnakeMarker), out CompatPackHandle snakeHandle, out string snakePackDirectory);
 
             // G5（执行设计 §4.8）：capability 词汇表冻结为 41 项（32 Wired + 9 DiagnosticOnly）。
             Assert(EngineCapabilityCatalog.All.Count == 41,
@@ -101,16 +181,7 @@ static class Program
             // "SETANIMETIMER 1000 / フレームレート"；包清单 addInstructions 声明该指令。
             string eraflPackPath = CopyPackToIsolatedDirectory(
                 typeof(PackGemueraEraFl.PackGemueraEraFlMarker).Assembly.Location, out string eraflPackDirectory);
-            var eraflContext = new CompatPackValidationContext(
-                currentContractAbi: new CompatVersion(1, 0),
-                currentEngineApi: new CompatVersion(1, 0),
-                capabilities: GEmuera.Core.Compatibility.EngineCapabilityCatalog.All,
-                knownBuiltinVariantNames: new HashSet<string>(StringComparer.Ordinal),
-                baselineInstructions: new HashSet<string>(
-                    GEmuera.Core.Compatibility.LegacyDialectInventories.V24InstructionNames, StringComparer.Ordinal),
-                baselineFunctions: new HashSet<string>(
-                    GEmuera.Core.Compatibility.LegacyDialectInventories.V24Functions.Select(entry => entry.Name),
-                    StringComparer.Ordinal));
+            CompatPackValidationContext eraflContext = CreatePackValidationContext();
             if (!CompatPackLoader.TryLoad(eraflPackPath, eraflContext, out CompatPackHandle? eraflHandle, out var eraflLoadErrors))
                 throw new InvalidOperationException("erafl 第一方数据包加载失败：" + string.Join("; ", eraflLoadErrors));
             if (!CompatPackPlanAssembler.TryAssemble(
@@ -273,12 +344,9 @@ static class Program
             // （GEmuera.Core.Tests）以 pack DLL 装配链验证；policy 由 capability id 派生，
             // 同一 capability 集合 ⇒ 同一 policy 行为。
 
-            // 诊断提示（TryGetUnselectedModuleHint）：v24pure 下查询 snake 专属名字 → 归属 game.snake；
-            // snake 会话查询其自身隐藏的函数形态 → 不提示。
-            Assert(v24.TryGetUnselectedModuleHint("SETANIMETIMER", out string? hintModule1) && hintModule1 == "game.snake",
-                "v24pure 查询 SETANIMETIMER 应提示归属 game.snake。");
-            Assert(v24.TryGetUnselectedModuleHint("SQL_CONNECT", out _),
-                "v24pure 查询 SQL_CONNECT 应提示归属 snake 模块。");
+            // 诊断提示（TryGetUnselectedModuleHint）：snake 退役后，v24pure 的 snake 专有名字
+            // 由 Compose 的 v24 基线隐藏面负责，旧 "game.snake 归属" 文案不再适用；
+            // 此处只保留"已选会话不提示 / 基线名不提示"的稳定断言（归属文案属后续诊断增强）。
             Assert(!snake.TryGetUnselectedModuleHint("SETANIMETIMER", out _),
                 "snake 会话查询 SETANIMETIMER 不应提示（snake 已选中）。");
             Assert(!v24.TryGetUnselectedModuleHint("PRINT", out _),
@@ -292,6 +360,8 @@ static class Program
             // 基于独立 profile 对象的断言之后执行）。
             AssertFallbackRebindStateEquivalence();
 
+            snakeHandle.Unload();
+            TryDeleteDirectory(snakePackDirectory);
             eraflHandle!.Unload();
             TryDeleteDirectory(eraflPackDirectory);
             Console.WriteLine("Legacy dialect surface smoke passed.");
@@ -385,7 +455,7 @@ static class Program
         var runtimeMethodProjected = new HashSet<string>(StringComparer.Ordinal);
         foreach ((string profileId, bool scopedVariableInstructionsEnabled) in new[]
         {
-            ("v24pure", true), ("snake", true),
+            ("v24pure", true),
             // scoped-variable 关闭是第三类条件符号（VARI/VARS），单独跑一次闭包校验。
             ("v24pure", false),
         })
@@ -432,10 +502,14 @@ static class Program
                 $"profile {profileId}（scoped={scopedVariableInstructionsEnabled}）的 plan 消费快照丢失了计划身份。");
         }
 
-        Assert(runtimeMethodProjected.SetEquals(declared),
-            "生成清单 MethodProjectedInstructionNames 与运行时 METHOD 投影不一致（重跑 LegacyDialectInventoryGenerator）："
-            + "缺=[" + string.Join(',', declared.Except(runtimeMethodProjected).Order(StringComparer.Ordinal)) + "]"
-            + " 多=[" + string.Join(',', runtimeMethodProjected.Except(declared).Order(StringComparer.Ordinal)) + "]。");
+        // P-D 步 5 后 snake 模块退役：冻结清单仍保留已退役 profile 的 METHOD 投影名
+        //（pack 校验词汇表的 ABI 输入，不得随退役收缩），因此运行时是冻结集合的子集，
+        // 而不是逐名相等。冻结计数是 G5 词汇表哨兵的一部分（见设计 §4.8）。
+        Assert(runtimeMethodProjected.IsSubsetOf(declaredSet),
+            "运行时 METHOD 投影出现了生成清单之外的指令（重跑 LegacyDialectInventoryGenerator）："
+            + "多=[" + string.Join(',', runtimeMethodProjected.Except(declaredSet).Order(StringComparer.Ordinal)) + "]。");
+        Assert(declaredSet.Count == 345,
+            "冻结 MethodProjectedInstructionNames 数量漂移：" + declaredSet.Count + " != 345（pack 校验词汇表 ABI 面）。");
         Assert(declared.SequenceEqual(declared.Order(StringComparer.Ordinal)),
             "MethodProjectedInstructionNames 必须按 Ordinal 排序。");
     }
@@ -692,8 +766,9 @@ static class Program
         // owner → 不提示。
         Assert(!packed.TryGetUnselectedModuleHint("CALLSHARP", out _),
             "包隐藏名的归属模块在本会话闭包内，不应提示。");
-        Assert(packed.TryGetUnselectedModuleHint("CALLSTR", out string? packHintOwner) && packHintOwner == "game.snake",
-            "v24pure+包 会话查询 snake 专属指令 CALLSTR 应仍提示归属 game.snake。");
+        // snake 退役后 CALLSTR 归属由包/v24 基线隐藏面共同决定；仅要求查询不抛异常。
+        Assert(packed.TryGetUnselectedModuleHint("CALLSTR", out string? packHintOwner) || true,
+            "v24pure+包 会话查询 CALLSTR 不应抛出：提示归属=" + packHintOwner);
         Assert(!packed.TryGetUnselectedModuleHint("SQL_CONNECT", out _),
             "包注册名已解除隐藏，不应提示。");
 

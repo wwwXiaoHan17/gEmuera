@@ -726,7 +726,6 @@ namespace MinorShift.Emuera
 			return launcherProfile switch
 			{
 				"v24pure" => EmueraCoreProfile.V24Pure,
-				"snake" => EmueraCoreProfile.Snake,
 				_ => throw new InvalidOperationException(
 					$"Compatibility profile '{launcherProfile}' is not supported by the legacy bridge.")
 			};
@@ -748,7 +747,6 @@ namespace MinorShift.Emuera
 			return profileId switch
 			{
 				"v24pure" => EmueraCoreProfile.V24Pure,
-				"snake" => EmueraCoreProfile.Snake,
 				_ => throw new InvalidOperationException(
 					$"Compatibility plan profile '{profileId}' is not supported by the legacy bridge.")
 			};
@@ -759,7 +757,6 @@ namespace MinorShift.Emuera
 			return profile switch
 			{
 				EmueraCoreProfile.V24Pure => "v24pure",
-				EmueraCoreProfile.Snake => "snake",
 				_ => throw new InvalidOperationException(
 					$"Legacy core profile '{profile}' has no built-in compatibility plan."),
 			};

@@ -15,13 +15,19 @@ namespace GEmuera.Core.Tests;
 public class FirstPartyPackEquivalenceTests
 {
     static CompatPackValidationContext Context() => new(
-        currentContractAbi: new CompatVersion(1, 0),
+        currentContractAbi: new CompatVersion(1, 1),
         currentEngineApi: new CompatVersion(1, 0),
         capabilities: EngineCapabilityCatalog.All,
-        knownBuiltinVariantNames: new HashSet<string>(StringComparer.Ordinal),
+        knownBuiltinVariantNames: new HashSet<string>(StringComparer.Ordinal) { "builtin:snake" },
         baselineInstructions: new HashSet<string>(LegacyDialectInventories.V24InstructionNames, StringComparer.Ordinal),
         baselineFunctions: new HashSet<string>(
-            LegacyDialectInventories.V24Functions.Select(entry => entry.Name), StringComparer.Ordinal));
+            LegacyDialectInventories.V24Functions.Select(entry => entry.Name), StringComparer.Ordinal),
+        knownBuiltinVariantInstructions: new Dictionary<string, IReadOnlySet<string>>(StringComparer.Ordinal)
+        {
+            ["builtin:snake"] = new HashSet<string>(StringComparer.Ordinal) { "FOR", "SETBGIMAGE" },
+        },
+        methodProjectedInstructionNames: new HashSet<string>(
+            LegacyDialectInventories.MethodProjectedInstructionNames, StringComparer.Ordinal));
 
     static CompatibilityPlan V24Baseline() => BuiltInDialectCatalog.CreateLegacySessionPlan("v24pure");
 
@@ -170,4 +176,62 @@ public class FirstPartyPackEquivalenceTests
         Assert.Throws<InvalidOperationException>(() => BuiltInDialectCatalog.CreateLegacySessionPlan("erafl"));
         handle.Unload();
     }
+
+    [Fact]
+    public void SnakePack_CarriesMaximalDelta_AndNineteenWiredCapabilities()
+    {
+        string packPath = typeof(PackGemueraSnake.PackGemueraSnakeMarker).Assembly.Location;
+        using var directory = new IsolatedPackDirectory(packPath);
+        var context = Context();
+        Assert.True(CompatPackLoader.TryLoad(directory.MainAssemblyPath, context, out var handle, out var errors),
+            string.Join("; ", errors));
+        Assert.Empty(errors);
+        Assert.Equal("pack.gemuera.snake", handle!.Manifest.PackId);
+        Assert.Equal("v24pure", handle.Manifest.BaseProfileId);
+        Assert.Equal(new CompatVersion(1, 1), handle.Manifest.ContractAbi);
+        Assert.Equal(22, handle.Manifest.Surface.AddInstructions.Count);
+        Assert.Equal(LegacyDialectInventories.SnakeDeltaFunctions.Length, handle.Manifest.Surface.AddFunctions.Count);
+        Assert.Equal(new[] { "BITMAP_CACHE_ENABLE", "SETANIMETIMER" }, handle.Manifest.Surface.HideFunctions);
+        Assert.Equal(new[] { "BITMAP_CACHE_ENABLE" }, handle.Manifest.Surface.AddInstructionCollisions);
+        Assert.Equal(new[] { "FOR", "SETBGIMAGE" }, handle.Manifest.VariantSelections.Keys.Order(StringComparer.Ordinal));
+
+        string[] expectedCapabilities = SnakeCompatibilityCapabilities.RequiredWiredCapabilityIds
+            .Order(StringComparer.Ordinal).ToArray();
+        Assert.Equal(19, expectedCapabilities.Length);
+        Assert.Equal(expectedCapabilities, handle.Manifest.Capabilities.Order(StringComparer.Ordinal));
+
+        CompatibilityPlan baseline = V24Baseline();
+        Assert.True(CompatPackPlanAssembler.TryAssemble(
+                baseline, new[] { handle }, context, out CompatibilityPlan assembled, out var assemblyErrors),
+            string.Join("; ", assemblyErrors));
+        Assert.Empty(assemblyErrors);
+
+        var expectedInstructions = new HashSet<string>(baseline.Dialect.Instructions.Keys, StringComparer.Ordinal);
+        foreach (string name in LegacyDialectInventories.SnakeDeltaInstructionNames)
+            expectedInstructions.Add(name);
+        Assert.Equal(
+            expectedInstructions.Order(StringComparer.Ordinal),
+            assembled.Dialect.Instructions.Keys.Order(StringComparer.Ordinal));
+        Assert.True(assembled.Dialect.Instructions.ContainsKey("CALLSTR"));
+        Assert.True(assembled.Dialect.Instructions.ContainsKey("BITMAP_CACHE_ENABLE"));
+
+        var expectedFunctions = new HashSet<string>(baseline.Dialect.Functions.Keys, StringComparer.Ordinal);
+        foreach (var entry in LegacyDialectInventories.SnakeDeltaFunctions)
+            expectedFunctions.Add(entry.Name);
+        expectedFunctions.Remove("BITMAP_CACHE_ENABLE");
+        expectedFunctions.Remove("SETANIMETIMER");
+        Assert.Equal(
+            expectedFunctions.Order(StringComparer.Ordinal),
+            assembled.Dialect.Functions.Keys.Order(StringComparer.Ordinal));
+        Assert.False(assembled.Dialect.Functions.ContainsKey("BITMAP_CACHE_ENABLE"));
+        Assert.False(assembled.Dialect.Functions.ContainsKey("SETANIMETIMER"));
+        Assert.True(assembled.Dialect.Functions.ContainsKey("陥落状態"));
+        Assert.True(assembled.Dialect.Functions.ContainsKey("陷落状态"));
+        Assert.True(assembled.Dialect.Functions.ContainsKey("SQL_CONNECT"));
+
+        Assert.Equal(expectedCapabilities, assembled.CapabilityIds.Order(StringComparer.Ordinal));
+        Assert.Throws<InvalidOperationException>(() => BuiltInDialectCatalog.CreateLegacySessionPlan("snake"));
+        handle.Unload();
+    }
+
 }

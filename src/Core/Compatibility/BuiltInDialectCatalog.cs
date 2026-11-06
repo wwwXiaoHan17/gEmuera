@@ -16,9 +16,6 @@ public static class BuiltInDialectCatalog
         catalog.Register(new DeclaredDialectModule(
             new DialectModuleDefinition("gemuera.v24", "1.0.0", 1),
             V24Contributions()));
-        catalog.Register(new DeclaredDialectModule(
-            SnakeCompatibilityModule.CreateDefinition(),
-            SnakeContributions()));
         return catalog;
     }
 
@@ -32,12 +29,6 @@ public static class BuiltInDialectCatalog
         new LegacyFunctionInventoryContribution("gemuera.v24.functions", "gemuera.v24", LegacyDialectInventories.V24Functions),
     };
 
-    private static IDialectContribution[] SnakeContributions() => new IDialectContribution[]
-    {
-        new LegacyInstructionInventoryContribution("game.snake.instructions", "game.snake", LegacyDialectInventories.SnakeDeltaInstructionNames),
-        new LegacyFunctionInventoryContribution("game.snake.functions", "game.snake", LegacyDialectInventories.SnakeDeltaFunctions),
-    };
-
     /// <summary>
     /// Legacy launcher profile projection. It deliberately lists roots rather
     /// than a pre-expanded closure, so <see cref="DialectModuleCatalog"/>
@@ -49,7 +40,6 @@ public static class BuiltInDialectCatalog
         catalog.Register(new CompatibilityProfileDefinition(
             "v24pure",
             new[] { "gemuera.v24" }));
-        catalog.Register(SnakeCompatibilityModule.CreateProfile());
         return catalog;
     }
 

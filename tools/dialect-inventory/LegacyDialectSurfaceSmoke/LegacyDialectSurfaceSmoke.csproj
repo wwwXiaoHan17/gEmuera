@@ -15,10 +15,13 @@
     <ProjectReference Include="..\..\..\packs\pack.gemuera.v18\pack.gemuera.v18.csproj" />
     <!-- eraFL 第一方数据包：包链路行为等价门禁用真实 DLL。 -->
     <ProjectReference Include="..\..\..\packs\pack.gemuera.erafl\pack.gemuera.erafl.csproj" />
+    <!-- snake 第一方数据包：包链路行为等价门禁用真实 DLL。 -->
+    <ProjectReference Include="..\..\..\packs\pack.gemuera.snake\pack.gemuera.snake.csproj" />
     <!-- 运行时对照：生成清单 MethodProjectedInstructionNames 必须与引擎真实注册表投影一致
          （经反射访问 internal FunctionIdentifier.GetInstructionNameDic，不需要 IVT）。 -->
     <ProjectReference Include="..\..\..\gemuera-c#.csproj" />
     <Compile Include="..\..\..\Scripts\Emuera\Compatibility\LegacyCompatibilityProfile.cs" Link="LegacyCompatibilityProfile.cs" />
     <Compile Include="..\..\..\Scripts\Emuera\Compatibility\LegacyCompatibilityModules.cs" Link="LegacyCompatibilityModules.cs" />
+    <Compile Include="..\..\..\Scripts\Emuera\Compatibility\SnakeLegacySurfaceNames.cs" Link="SnakeLegacySurfaceNames.cs" />
   </ItemGroup>
 </Project>

@@ -280,6 +280,7 @@ moduleCatalog.Register(new TestDialectModule(
 var planBuilder = new CompatibilityPlanBuilder(moduleCatalog);
 
 var profileCatalog = new CompatibilityProfileCatalog();
+profileCatalog.Register(new CompatibilityProfileDefinition("v24pure", new[] { "gemuera.v24" }));
 var mutableProfileModules = new[] { "game.snake" };
 profileCatalog.Register(new CompatibilityProfileDefinition("snake", mutableProfileModules));
 mutableProfileModules[0] = "gemuera.v24";
@@ -315,9 +316,6 @@ var builtInProfiles = BuiltInDialectCatalog.CreateLegacyProfileCatalog();
 Assert(
     builtInProfiles.Resolve("v24pure").RootModuleIds.SequenceEqual(new[] { "gemuera.v24" }),
     "Built-in v24 profile does not declare its root module.");
-Assert(
-    builtInProfiles.Resolve("snake").RootModuleIds.SequenceEqual(new[] { "game.snake" }),
-    "Built-in Snake profile does not declare its root module.");
 
 var legacyV24Profile = LegacyCompatibilityProfile.CreateForProfile("v24pure", scopedVariableInstructionsEnabled: true);
 Assert(
@@ -337,35 +335,20 @@ Assert(
     && !legacyV24Profile.IsFunctionVisible("陷落状态"),
     "v24 legacy compatibility profile leaked a Snake-only registry member.");
 
-var legacySnakeProfile = LegacyCompatibilityProfile.CreateForProfile("snake", scopedVariableInstructionsEnabled: true);
-Assert(
-    legacySnakeProfile.Plan.Dialect.Modules.Any(module => module.ModuleId == "game.snake")
-    && legacySnakeProfile.Snake.IsEnabled
-	&& legacySnakeProfile.Snake.AllowsScopedVariablePreRegistration
-    && !legacySnakeProfile.EraFl.IsEnabled,
-    "Snake legacy compatibility profile did not select only its game module.");
-Assert(
-    legacySnakeProfile.IsInstructionVisible("PRINTN")
-    && legacySnakeProfile.IsInstructionVisible("VARI")
-    && legacySnakeProfile.IsFunctionVisible("陷落状态"),
-    "Snake legacy compatibility profile did not expose its scoped registry surface.");
+// snake 已退役为第一方数据包（P-D 步 5）：不再有内置 snake profile；
+// 其 19 capability / 变体 / 碰撞态由 FirstPartyPackEquivalenceTests 与 SurfaceSmoke 验证。
 
-var legacySnakeProfileWithoutScopedVariables = LegacyCompatibilityProfile.CreateForProfile(
-    "snake",
-    scopedVariableInstructionsEnabled: false);
-Assert(
-    legacySnakeProfile.Plan.CanonicalHash == legacySnakeProfileWithoutScopedVariables.Plan.CanonicalHash
-    && legacySnakeProfile.RegistrySurfaceHash != legacySnakeProfileWithoutScopedVariables.RegistrySurfaceHash
-	&& legacySnakeProfileWithoutScopedVariables.Snake.AllowsScopedVariablePreRegistration
-    && !legacySnakeProfileWithoutScopedVariables.IsInstructionVisible("VARI")
-    && !legacySnakeProfileWithoutScopedVariables.IsInstructionVisible("VARS"),
-    "Snake scoped-variable registry surface is not frozen independently from the Core module plan.");
 
 // erafl 已退役为第一方数据包（P-D 步 4）：内置 legacy profile 不再可创建；其能力
 // （10 Wired capability + SETANIMETIMER）由 FirstPartyPackEquivalenceTests 以 pack DLL 验证。
 
-var invalidLegacyProfilePlan = new CompatibilityPlanBuilder(BuiltInDialectCatalog.CreateLegacyBaseline())
-    .Build("v24pure", new[] { "game.snake" });
+// snake 内置模块已退役（P-D 步 5）：用同 id 的合成模块复现"内置 profile 闭包被污染"拒载。
+var catalogWithSnakeLikeModule = BuiltInDialectCatalog.CreateLegacyBaseline();
+catalogWithSnakeLikeModule.Register(new TestDialectModule(
+    new DialectModuleDefinition("game.snake", "1.0.0", 1),
+    Array.Empty<IDialectContribution>()));
+var invalidLegacyProfilePlan = new CompatibilityPlanBuilder(catalogWithSnakeLikeModule)
+    .Build("v24pure", new[] { "gemuera.v24", "game.snake" });
 AssertThrows<InvalidOperationException>(
     () => LegacyCompatibilityProfile.Create(invalidLegacyProfilePlan, scopedVariableInstructionsEnabled: true),
     "Legacy compatibility profile accepted a v24 profile composed with the Snake module.");
@@ -821,7 +804,9 @@ AssertThrows<InvalidOperationException>(
     "Legacy launch registry accepted duplicate normalized game ids.");
 
 var legacyBackend = new TestLegacyBackend();
-var facade = new LegacySessionFacade(planBuilder, legacyBackend);
+// 内置 snake profile 已退役：此用例验证的是 facade 的"注入 profile catalog"通路，
+// 因此使用上面注册的合成 snake profile，而不是内置 catalog。
+var facade = new LegacySessionFacade(planBuilder, profileCatalog, legacyBackend);
 var facadeV24 = await facade.SwitchAsync(new SessionSelection("fixture-v24", "v24pure"), new[] { "gemuera.v24" });
 Assert(facadeV24.IsCommitted, "Legacy facade did not start the v24 backend.");
 Assert(facade.CurrentPlan?.ProfileId == "v24pure", "Legacy facade did not expose the committed compatibility plan.");
@@ -833,9 +818,8 @@ var facadeSnake = await facade.SwitchAsync(
     "legacy.save.v1");
 Assert(facadeSnake.IsCommitted, "Legacy facade did not switch to the Snake backend.");
 Assert(facade.CurrentPlan?.Dialect.Ports.Single().PortTypeId == "IExtraArgumentPolicy", "Legacy facade discarded requested ports.");
-Assert(facade.CurrentPlan?.CapabilityIds.Contains("runtime.audio.v1") == true
-    && facade.CurrentPlan?.CapabilityIds.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.ExtraCallArguments) == true,
-    "Legacy facade discarded requested or profile-declared capabilities.");
+Assert(facade.CurrentPlan?.CapabilityIds.Contains("runtime.audio.v1") == true,
+    "Legacy facade discarded requested capabilities.");
 Assert(facade.CurrentPlan?.SaveProfileId == "legacy.save.v1", "Legacy facade discarded the save profile id.");
 Assert(facade.IsBackendRunning && facade.BackendGeneration == facade.Current?.Generation, "Legacy backend generation diverged from the committed plan.");
 Assert(legacyBackend.Events.SequenceEqual(new[]
@@ -847,7 +831,7 @@ Assert(legacyBackend.Events.SequenceEqual(new[]
 await facade.DisposeAsync();
 
 var recoveryBackend = new TestLegacyBackend();
-var recoveryFacade = new LegacySessionFacade(planBuilder, recoveryBackend);
+var recoveryFacade = new LegacySessionFacade(planBuilder, profileCatalog, recoveryBackend);
 var recoveryA = await recoveryFacade.SwitchAsync(new SessionSelection("recovery-a", "v24pure"), new[] { "gemuera.v24" });
 Assert(recoveryA.IsCommitted, "Recovery fixture could not start its baseline backend.");
 recoveryBackend.FailNextStart = true;
@@ -862,7 +846,7 @@ Assert(recoveryFacade.Current?.Selection.GameId == "recovery-a", "A-to-B-to-A di
 await recoveryFacade.DisposeAsync();
 
 var staleBackend = new TestLegacyBackend();
-var staleFacade = new LegacySessionFacade(planBuilder, staleBackend);
+var staleFacade = new LegacySessionFacade(planBuilder, profileCatalog, staleBackend);
 var staleA = await staleFacade.SwitchAsync(new SessionSelection("stale-a", "v24pure"), new[] { "gemuera.v24" });
 Assert(staleA.IsCommitted, "Stale activation fixture could not start its baseline backend.");
 var staleStartGate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -881,7 +865,7 @@ Assert(staleC.IsCommitted && staleFacade.Current?.Selection.GameId == "stale-c",
 await staleFacade.DisposeAsync();
 
 var cancellationBackend = new TestLegacyBackend();
-var cancellationFacade = new LegacySessionFacade(planBuilder, cancellationBackend);
+var cancellationFacade = new LegacySessionFacade(planBuilder, profileCatalog, cancellationBackend);
 var cancellationA = await cancellationFacade.SwitchAsync(new SessionSelection("cancel-a", "v24pure"), new[] { "gemuera.v24" });
 Assert(cancellationA.IsCommitted, "Cancellation fixture could not start its baseline backend.");
 var cancellationStartGate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -904,18 +888,8 @@ using (var cancellation = new CancellationTokenSource())
 Assert(cancellationBackend.IsRunning && cancellationFacade.Current?.Selection.GameId == "cancel-a", "Cancellation replaced the active legacy session.");
 await cancellationFacade.DisposeAsync();
 
-var baselineFacade = LegacySessionFacade.CreateLegacyBaseline(new TestLegacyBackend());
-var baselineSwitch = await baselineFacade.SwitchAsync(
-    new SessionSelection("fixture-baseline", "snake"),
-    null,
-    new[] { port });
-Assert(baselineSwitch.IsCommitted, "Built-in legacy baseline facade could not build a Snake plan.");
-Assert(baselineFacade.CurrentPlan?.Dialect.Modules.Count == 2, "Built-in baseline facade did not resolve module dependencies.");
-Assert(baselineFacade.CurrentPlan?.Dialect.Ports.Single().PortTypeId == "IExtraArgumentPolicy", "Built-in baseline did not declare the reviewed Snake port surface.");
-Assert(
-    baselineFacade.CurrentPlan?.Dialect.Modules.Single(module => module.ModuleId == "game.snake").PortTypeIds.Count == 10,
-    "Built-in baseline Snake module did not preserve the complete reviewed port declaration surface.");
-await baselineFacade.DisposeAsync();
+// snake 已退役为第一方数据包（P-D 步 5）：内置 baseline facade 不再包含 game.snake；
+// 其模块依赖/端口/19 capability 契约由 SurfaceSmoke 的 pack DLL 装配链验证。
 
 // erafl 已退役为第一方数据包（P-D 步 4）：不再有内置 erafl facade 会话；
 // capability/端口契约由 FirstPartyPackEquivalenceTests 以 pack DLL 装配链验证。

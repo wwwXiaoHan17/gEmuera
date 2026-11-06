@@ -24,5 +24,7 @@
              Link="Emuera\Compatibility\LegacyCompatibilityProfile.cs" />
     <Compile Include="..\..\Scripts\Emuera\Compatibility\LegacyCompatibilityModules.cs"
              Link="Emuera\Compatibility\LegacyCompatibilityModules.cs" />
+    <Compile Include="..\..\Scripts\Emuera\Compatibility\SnakeLegacySurfaceNames.cs"
+             Link="Emuera\Compatibility\SnakeLegacySurfaceNames.cs" />
   </ItemGroup>
 </Project>

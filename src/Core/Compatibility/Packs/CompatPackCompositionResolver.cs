@@ -191,7 +191,15 @@ public static class CompatPackCompositionResolver
         ValidateHideVariantCrossKind(finalStates, claimsBySymbol, context, collected);
 
         // 10. 双形态闭包（METHOD 投影名两侧同态；override 破坏镜像即拒载，见方法注释）。
-        ValidateDualFormClosure(finalStates, context, collected);
+        // contractAbi 1.1：addInstructionCollisions 声明"保留基线指令形态、只隐藏函数形态"的
+        // 同名碰撞态，闭包对集合内名字接受 function=Hidden + instruction=基线 Present。
+        var instructionCollisions = new HashSet<string>(StringComparer.Ordinal);
+        foreach (CompatPackHandle handle in packs)
+        {
+            foreach (string collision in handle.Manifest.Surface.AddInstructionCollisions)
+                instructionCollisions.Add(collision);
+        }
+        ValidateDualFormClosure(finalStates, context, instructionCollisions, collected);
 
         if (collected.Count > 0)
         {
@@ -263,7 +271,14 @@ public static class CompatPackCompositionResolver
                 // 改既有语义必须走变体通道：Present 不得覆盖 v24 基线 handler。
                 if (state.Kind == CompatSymbolStateKind.Present)
                 {
-                    if (key.Kind == CompatSymbolKind.Instruction && context.BaselineInstructions.Contains(key.Name))
+                    // contractAbi 1.1：addInstructionCollisions 允许包为"保留基线指令形态"声明
+                    // Present（同名碰撞态）；其余 Present 仍不得覆盖 v24 基线 handler。
+                    bool collisionInstruction = key.Kind == CompatSymbolKind.Instruction
+                        && handle.Manifest.Surface.AddInstructionCollisions.Any(collision =>
+                            string.Equals(collision, key.Name, StringComparison.Ordinal));
+                    if (key.Kind == CompatSymbolKind.Instruction
+                        && context.BaselineInstructions.Contains(key.Name)
+                        && !collisionInstruction)
                     {
                         errors.Add("包 " + packId + " 注册指令与 v24 基线同名：" + key.Name
                             + "（改既有语义必须走变体选择通道）。");
@@ -792,6 +807,7 @@ public static class CompatPackCompositionResolver
     static void ValidateDualFormClosure(
         IReadOnlyDictionary<CompatSymbolKey, CompatSymbolState> finalStates,
         CompatPackValidationContext context,
+        IReadOnlySet<string> instructionCollisions,
         List<string> errors)
     {
         foreach (string name in context.MethodProjectedInstructionNames.Order(StringComparer.Ordinal))
@@ -804,6 +820,20 @@ public static class CompatPackCompositionResolver
                 continue;
 
             string symbolName = instructionKey.ToContractString();
+            if (instructionCollisions.Contains(name))
+            {
+                // 碰撞态（contractAbi 1.1）：函数侧必须 Hidden；指令侧允许缺省（沿用 v24 基线
+                // Present）或显式 Present；任何其他组合都破坏 fail-closed 语义。
+                if (!hasFunction || function!.Kind != CompatSymbolStateKind.Hidden)
+                    errors.Add("碰撞态 METHOD 投影名 " + symbolName
+                        + " 的 function 最终状态必须是 Hidden（addInstructionCollisions 契约）。");
+                if (hasInstruction && instruction!.Kind != CompatSymbolStateKind.Present)
+                    errors.Add("碰撞态 METHOD 投影名 " + symbolName
+                        + " 的 instruction 最终状态只能是 Present 或沿用基线（实际 " + instruction.Kind + "）。");
+                if (!context.BaselineInstructions.Contains(name))
+                    errors.Add("碰撞态 METHOD 投影名 " + symbolName + " 不在 v24 基线指令面内。");
+                continue;
+            }
             if (hasInstruction != hasFunction)
             {
                 errors.Add("双形态闭包不一致：METHOD 投影名 " + symbolName

@@ -2,7 +2,6 @@
   "schemaVersion": "1.0.0",
   "generatedBy": "tools/dialect-inventory/LegacyDialectInventoryGenerator",
   "profileIds": [
-    "snake",
     "v24pure"
   ],
   "profiles": {
@@ -12,14 +11,6 @@
       ],
       "instructionCount": 561,
       "functionCount": 266
-    },
-    "snake": {
-      "modules": [
-        "gemuera.v24",
-        "game.snake"
-      ],
-      "instructionCount": 670,
-      "functionCount": 351
     }
   }
 }

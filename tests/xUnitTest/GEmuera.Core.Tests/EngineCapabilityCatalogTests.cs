@@ -162,7 +162,7 @@ public class EngineCapabilityCatalogTests
         // 内置 profile 的 plan capability 集合 = RequiredCapabilityIds 原样（DiagnosticOnly
         // 也在账本内）；这是既有 plan hash / 回归面不变的前提。
         CompatibilityProfileCatalog profiles = BuiltInDialectCatalog.CreateLegacyProfileCatalog();
-        foreach (string profileId in new[] { "v24pure", "snake" })
+        foreach (string profileId in new[] { "v24pure" })
         {
             CompatibilityProfileDefinition profile = profiles.Resolve(profileId);
             Assert.True(EngineCapabilityCatalog.TryResolveForProfile(
@@ -180,30 +180,8 @@ public class EngineCapabilityCatalogTests
         // erafl/erablue/megaten/v18 已退役为第一方包（P-D 步 1-4）；其 capability 契约
         // （Wired 子集 + DiagnosticOnly 不可入包）由 FirstPartyPackEquivalenceTests 以
         // 真实包 DLL 装配链验证。本测试只保留仍内置 profile 的账本断言。
-        // snake 19 项（全 Wired）按 Ordinal 排序。
-        Assert.Equal(new[]
-        {
-            "call.extra-arguments.v1",
-            "csv.preset-erd-merge.v1",
-            "csv.relation-without-mastername.v1",
-            "declare.out-keyword.v1",
-            "display.fast-refresh.v1",
-            "flow.before-error-event.v1",
-            "flow.throw-event.v1",
-            "graphics.mask-alpha-channel.v1",
-            "lex.escape-e-two-char.v1",
-            "math.rand-clamp.v1",
-            "math.times-clamp.v1",
-            "parse.parser-diagnostics.v1",
-            "parse.private-arguments.v1",
-            "parse.scoped-variable-pre-registration.v1",
-            "parse.user-defined-variable-resolution.v1",
-            "parse.variadic-strip.v1",
-            "random.reseed-on-randomize.v1",
-            "startup.continue-after-fault.v1",
-            "type.float-system.v1",
-        }, BuiltInDialectCatalog.CreateLegacySessionPlan("snake").CapabilityIds);
-
+        // snake 19 项 capability 契约由 FirstPartyPackEquivalenceTests 以 pack DLL 装配链验证
+        //（P-D 步 5 后内置 snake profile 不再存在）。
         Assert.Empty(BuiltInDialectCatalog.CreateLegacySessionPlan("v24pure").CapabilityIds);
     }
 

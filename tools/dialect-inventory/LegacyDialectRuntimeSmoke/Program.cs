@@ -15,45 +15,36 @@ internal static class Program
             Type profileType = RequiredType(legacyAssembly, "MinorShift.Emuera.Compatibility.LegacyCompatibilityProfile");
             object v24 = CreateProfile(profileType, "v24pure", scopedVariableInstructionsEnabled: true);
             object v24WithoutScopedVariables = CreateProfile(profileType, "v24pure", scopedVariableInstructionsEnabled: false);
-            object snake = CreateProfile(profileType, "snake", scopedVariableInstructionsEnabled: true);
 
             Type instructionType = RequiredType(legacyAssembly, "MinorShift.Emuera.GameProc.Function.FunctionIdentifier");
             Type functionType = RequiredType(legacyAssembly, "MinorShift.Emuera.GameData.Function.FunctionMethodCreator");
             var v24Instructions = GetRegistryKeys(instructionType, "GetInstructionNameDic", profileType, v24);
             var v24InstructionsWithoutScopedVariables = GetRegistryKeys(instructionType, "GetInstructionNameDic", profileType, v24WithoutScopedVariables);
-            var snakeInstructions = GetRegistryKeys(instructionType, "GetInstructionNameDic", profileType, snake);
             var v24Functions = GetRegistryKeys(functionType, "GetMethodList", profileType, v24);
-            var snakeFunctions = GetRegistryKeys(functionType, "GetMethodList", profileType, snake);
 
-            Console.WriteLine($"v24MergedInstructions={v24Instructions.Count}; snakeMergedInstructions={snakeInstructions.Count}; v24Functions={v24Functions.Count}; snakeFunctions={snakeFunctions.Count}");
+            Console.WriteLine($"v24MergedInstructions={v24Instructions.Count}; v24Functions={v24Functions.Count}");
 
             // 注册表面快照：367 个总注册中，v24pure 隐藏 101 个 snake 扩展 → 266 可见；
             // snake 会话再隐藏 16 个（SnakeExcludedFunctionNames）→ 351 可见
             //（2026-10-18 对齐 Skiav13.0：新增 EXIST_IN_CSV / EXIST_IN_ERD 两个 snake 专属函数）。
             // 计数随 Creator.cs 注册表变化需同步更新（reflection 快照，非语义断言）。
             Assert(v24Functions.Count == 266, $"Unexpected v24 expression function count: {v24Functions.Count}.");
-            Assert(snakeFunctions.Count == 351, $"Unexpected Snake expression function count: {snakeFunctions.Count}.");
 
             Assert(v24Instructions.Contains("CALLSHARP"), "v24 lost a baseline instruction.");
             Assert(!v24Instructions.Contains("CALLSTR"), "Snake instruction CALLSTR leaked into v24.");
-            Assert(snakeInstructions.Contains("CALLSTR"), "Snake instruction CALLSTR is unavailable.");
-            Assert(!v24Instructions.Contains("OUTPUTLOG") && !snakeInstructions.Contains("OUTPUTLOG"), "Port-only OUTPUTLOG instruction leaked into a dialect surface.");
+            Assert(!v24Instructions.Contains("OUTPUTLOG"), "Port-only OUTPUTLOG instruction leaked into v24.");
             Assert(v24Instructions.Contains("VARI") && v24Instructions.Contains("VARS"), "Enabled scoped variables are unavailable in v24.");
             Assert(!v24InstructionsWithoutScopedVariables.Contains("VARI") && !v24InstructionsWithoutScopedVariables.Contains("VARS"), "Disabled scoped variables leaked into v24.");
             AssertInstructionArgumentBuilder(instructionType, profileType, v24, "SETBGIMAGE", "FORM_STR_ANY_ArgumentBuilder");
-            AssertInstructionArgumentBuilder(instructionType, profileType, snake, "SETBGIMAGE", "SP_SETBGIMAGE_ArgumentBuilder");
 
-			Assert(!v24Functions.Contains("ACOS") && snakeFunctions.Contains("ACOS"), "Snake-only expression ACOS has incorrect visibility.");
-			Assert(!v24Functions.Contains("GROTATE") && !snakeFunctions.Contains("GROTATE"), "Port-only expression GROTATE leaked into an upstream dialect.");
-			Assert(!snakeFunctions.Contains("GETARGCOUNT"), "Snake exposed GETARGCOUNT although Snake upstream does not register it.");
-			Assert(v24Functions.Contains("BITMAP_CACHE_ENABLE") && !snakeFunctions.Contains("BITMAP_CACHE_ENABLE"), "v24-only BITMAP_CACHE_ENABLE has incorrect visibility.");
+			Assert(!v24Functions.Contains("ACOS"), "Snake-only expression ACOS leaked into v24.");
+			Assert(!v24Functions.Contains("GROTATE"), "Port-only expression GROTATE leaked into v24.");
+			Assert(v24Functions.Contains("BITMAP_CACHE_ENABLE"), "v24 lost BITMAP_CACHE_ENABLE expression function.");
 			AssertMethodInstructionProjection(profileType, instructionType, v24, "BITMAP_CACHE_ENABLE", expected: true);
-			AssertMixedCaseInstructionLookup(legacyAssembly, instructionType, profileType, snake);
 
-            Assert(!v24Instructions.Contains("ACOS") && snakeInstructions.Contains("ACOS"), "Expression function ACOS leaked through the METHOD instruction path.");
-            Assert(!v24Instructions.Contains("GROTATE") && !snakeInstructions.Contains("GROTATE"), "Port-only expression GROTATE leaked through the METHOD instruction path.");
-            Assert(!v24Instructions.Contains("GETARGCOUNT") && !snakeInstructions.Contains("GETARGCOUNT"), "Current-only GETARGCOUNT leaked through the METHOD instruction path.");
-            Assert(v24Instructions.Contains("BITMAP_CACHE_ENABLE") && snakeInstructions.Contains("BITMAP_CACHE_ENABLE"), "BITMAP_CACHE_ENABLE has the wrong v24/Snake instruction visibility.");
+            Assert(!v24Instructions.Contains("ACOS"), "Expression function ACOS leaked through the METHOD instruction path.");
+            Assert(!v24Instructions.Contains("GROTATE"), "Port-only expression GROTATE leaked through the METHOD instruction path.");
+            Assert(v24Instructions.Contains("BITMAP_CACHE_ENABLE"), "BITMAP_CACHE_ENABLE instruction missing from v24 METHOD projection.");
 
             AssertParserInstruction(legacyAssembly, instructionType, profileType, v24, "CALLSHARP", expected: true);
             AssertParserInstruction(legacyAssembly, instructionType, profileType, v24, "BITMAP_CACHE_ENABLE", expected: true);
@@ -63,14 +54,6 @@ internal static class Program
             AssertParserInstruction(legacyAssembly, instructionType, profileType, v24, "ACOS", expected: false);
             AssertParserInstruction(legacyAssembly, instructionType, profileType, v24, "SQL_CONNECT", expected: false);
 
-            AssertParserInstruction(legacyAssembly, instructionType, profileType, snake, "CALLSTR", expected: true);
-            AssertParserInstruction(legacyAssembly, instructionType, profileType, snake, "BITMAP_CACHE_ENABLE", expected: true);
-            AssertParserInstruction(legacyAssembly, instructionType, profileType, snake, "TINPUTNF", expected: true);
-            AssertParserInstruction(legacyAssembly, instructionType, profileType, snake, "SETIMAGELAYER", expected: true);
-            AssertParserInstruction(legacyAssembly, instructionType, profileType, snake, "ACOS", expected: true);
-            AssertParserInstruction(legacyAssembly, instructionType, profileType, snake, "SQL_CONNECT", expected: true);
-            AssertParserInstruction(legacyAssembly, instructionType, profileType, snake, "GETARGCOUNT", expected: false);
-            AssertParserInstruction(legacyAssembly, instructionType, profileType, snake, "GROTATE", expected: false);
 
             AssertV24ScopedVariableParser(legacyAssembly, instructionType, profileType, v24, "v24pure");
             AssertPluginFloatParameter(legacyAssembly);
@@ -84,7 +67,6 @@ internal static class Program
             AssertPlanDeclaresSurface("v24pure", v24Instructions, v24Functions, exactInstructionCount: v24Instructions.Count, exactFunctionCount: v24Functions.Count);
             // snake 闭包 = v24 ∪ snakeΔ；函数侧计划比会话多 2 个（BITMAP_CACHE_ENABLE、
             // SETANIMETIMER 函数形态：v24 可见、snake 主动排除——条件可见性的已知差）。
-            AssertPlanDeclaresSurface("snake", snakeInstructions, snakeFunctions, exactInstructionCount: snakeInstructions.Count, exactFunctionCount: snakeFunctions.Count + 2);
 
             Console.WriteLine("Legacy dialect runtime lookup smoke passed.");
             return 0;

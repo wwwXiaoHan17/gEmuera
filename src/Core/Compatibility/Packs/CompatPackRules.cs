@@ -377,6 +377,15 @@ public static class CompatPackRules
                     CompatSymbolStateKind.Hidden, manifest.PackId, null, null));
             }
         }
+        // 碰撞态：函数侧 Hidden（上面的有效隐藏集合）+ 指令侧 Present（归属包），
+        // 让 plan 保留指令形态、ApplyPackSurface 能在模块 Declare 之后重新露出该指令。
+        foreach (string collision in instructionCollisions.Order(StringComparer.Ordinal))
+        {
+            states.Add(new CompatSymbolState(
+                new CompatSymbolKey(CompatSymbolKind.Instruction, collision),
+                CompatSymbolStateKind.Present, manifest.PackId, null, null));
+        }
+
         foreach (string registered in recorder.RegisteredInstructions.Order(StringComparer.Ordinal))
         {
             if (context.MethodProjectedInstructionNames.Contains(registered))
