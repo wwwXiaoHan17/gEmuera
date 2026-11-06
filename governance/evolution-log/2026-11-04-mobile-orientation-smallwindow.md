@@ -139,3 +139,5 @@
 - 诊断标记保持 `mobile-layout-20261106b`（用于区分本轮修复代码），不在发布版另改，避免再次引起包指纹变化。
 - 小窗默认竖屏问题：用户本轮未再报，但该会话未实际进入小窗（日志 `multiWindow=False`），阶段二（manifest 默认横屏）保持已授权但未实施的待命状态；若后续复现 `status=ignored` 再启用。
 - 清理：删除本地测试用 `20261106b`/旧 `20261106(code12)` APK；删除 `E:\tmp\gemuera-mobile-orientation\userdata-backup*` 用户数据副本（已还原原文件）。
+- **发布结果（2026-11-07 02:0x）**：PR #36（https://github.com/wwwXiaoHan17/gEmuera/pull/36）已合并到 `dev`（merge commit `fce1bef`）；GitHub Release 已发布：`v1.10.0-dev-20261106`（https://github.com/wwwXiaoHan17/gEmuera/releases/tag/v1.10.0-dev-20261106），资产 `gemuera-1.10.0-dev-20261106-debug.apk`（75,144,324 bytes；versionName `1.10.0-dev-20261106`、versionCode `14`、screenOrientation=13；SHA256 `F0727FD37561F58429454DE8BCCD90915D69562073D3ABEB10B4EEC453E766AB`）。
+- 本地临时物清理：删除测试用 `20261106b` APK 与 `E:\tmp\gemuera-mobile-orientation\userdata-backup*` 用户数据副本；仓库工作区仅剩与任务无关的外部格式化改动（未纳入任何提交）。
