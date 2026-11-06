@@ -1,6 +1,7 @@
 using Emuera.Compatibility.Packs;
 using GEmuera.Core.Compatibility;
 using GEmuera.Core.Compatibility.Packs;
+using GEmuera.Core.Runtime;
 using Xunit;
 
 namespace GEmuera.Core.Tests;
@@ -24,6 +25,37 @@ public class CompatPackAssemblyTests
         => CompatPackCompositionTestData.Context(capabilities, baselineProfileId: baselineProfileId);
 
     static CompatibilityPlan Baseline() => BuiltInDialectCatalog.CreateLegacySessionPlan("v24pure");
+
+    /// <summary>
+    /// 合成会话基线（退役后用于不再有内置 plan 的 profile 身份/隐藏语义测试）：只含显式名字，
+    /// module 为 v24（合法 id），profileId 由调用方给出，用于构造"基线缺席某隐藏目标"等边界。
+    /// </summary>
+    static CompatibilityPlan SyntheticBaseline(
+        string profileId,
+        IEnumerable<string> instructionNames,
+        IEnumerable<string>? functionNames = null)
+    {
+        var instructions = instructionNames
+            .Distinct(StringComparer.Ordinal)
+            .ToDictionary(
+                name => name,
+                name => new InstructionDescriptor(name, "legacy", "gemuera.v24", VmCompletionMode.CoreImmediate),
+                StringComparer.Ordinal);
+        var functions = (functionNames ?? Array.Empty<string>())
+            .Distinct(StringComparer.Ordinal)
+            .ToDictionary(
+                name => name,
+                name => new FunctionDescriptor(name, "legacy", "gemuera.v24", "Integer"),
+                StringComparer.Ordinal);
+        var dialect = new DialectPlan(
+            new[] { new DialectModuleSnapshot("gemuera.v24", "1.0.0", 1) },
+            Array.Empty<BehaviorPortSnapshot>(),
+            instructions,
+            functions,
+            "synthetic." + profileId);
+        return new CompatibilityPlan(
+            profileId, dialect, Array.Empty<string>(), null, "synthetic.plan." + profileId);
+    }
 
     [Fact]
     public void EndToEnd_EnabledPack_ChangesSurfacePlanAndHash()
@@ -348,35 +380,36 @@ public class CompatPackAssemblyTests
     [Fact]
     public void Assemble_HideNameAbsentFromSessionBaseline_IsBenignNoOp()
     {
-        // v18 会话基线不含 v24 后增指令 SETBGIMAGE（v24 清单内合法隐藏目标）；
-        // 组装不得以"规则漂移"整体拒载——归类良性 no-op（隐藏差量仍进哈希，包意图可复现）。
-        CompatibilityPlan v18 = BuiltInDialectCatalog.CreateLegacySessionPlan("v18");
-        Assert.False(v18.Dialect.TryGetInstruction("SETBGIMAGE", out _), "前置：SETBGIMAGE 不在 v18 基线。");
+        // 合成会话基线不含 v24 后增指令 SETBGIMAGE（v24 清单内合法隐藏目标）；退役后已无内置
+        // v18 计划，故用 SyntheticBaseline 构造同等基线身份。组装不得以"规则漂移"整体拒载——
+        // 归类良性 no-op（隐藏差量仍进哈希，包意图可复现）。
+        CompatibilityPlan baseline = SyntheticBaseline("v24pure", new[] { "PRINT", "CALL" });
+        Assert.False(baseline.Dialect.TryGetInstruction("SETBGIMAGE", out _), "前置：SETBGIMAGE 不在合成基线。");
 
         var handle = ManualHandle("test.hide-noop", CompatPackCompositionTestData.ShaOf('c'),
             surfaceStates: new[] { HiddenInstruction("SETBGIMAGE") });
-        // context 必须与基线同源（profile 身份一致）：v18 基线配 v18 标签，v24 规则事实
-        // 仍由测试夹具提供（隐藏目标合法性由 v24 清单对账）。
+        // context 必须与基线同源（profile 身份一致）：合成基线沿用 v24pure 身份（退役后唯一
+        // 保证注册的 profile），规则事实仍由测试夹具提供（隐藏目标合法性由 v24 清单对账）。
         Assert.True(CompatPackPlanAssembler.TryAssemble(
-                v18, new[] { handle }, Context(baselineProfileId: "v18"), out var assembled, out var errors),
+                baseline, new[] { handle }, Context(), out var assembled, out var errors),
             string.Join("; ", errors));
         Assert.False(assembled!.Dialect.TryGetInstruction("SETBGIMAGE", out _));
-        // 表面与 v18 基线一致，但哈希计入隐藏差量（区别于未声明该隐藏的同字节包）。
-        Assert.Equal(v18.Dialect.Instructions.Count, assembled.Dialect.Instructions.Count);
-        Assert.NotEqual(v18.CanonicalHash, assembled.CanonicalHash);
+        // 表面与基线一致，但哈希计入隐藏差量（区别于未声明该隐藏的同字节包）。
+        Assert.Equal(baseline.Dialect.Instructions.Count, assembled.Dialect.Instructions.Count);
+        Assert.NotEqual(baseline.CanonicalHash, assembled.CanonicalHash);
     }
 
     [Fact]
     public void Assemble_ContextBaselineProfileMismatch_Rejects()
     {
-        // context 必须由同一会话基线构造：v18 基线 + 默认 v24pure 上下文会让 resolver 用
-        // 错误的基线事实裁决（profile 身份漂移属接线错误），组装期 fail-closed。
-        CompatibilityPlan v18 = BuiltInDialectCatalog.CreateLegacySessionPlan("v18");
+        // context 必须由同一会话基线构造：合成 v18 基线 + 默认 v24pure 上下文会让 resolver
+        // 用错误的基线事实裁决（profile 身份漂移属接线错误），组装期 fail-closed。
+        CompatibilityPlan baseline = SyntheticBaseline("v18", new[] { "PRINT", "CALL" });
         var handle = ManualHandle("test.profile", CompatPackCompositionTestData.ShaOf('p'),
             capabilityIds: new[] { "math.times-clamp.v1" });
 
         Assert.False(CompatPackPlanAssembler.TryAssemble(
-            v18, new[] { handle }, Context(), out var assembled, out var errors));
+            baseline, new[] { handle }, Context(), out var assembled, out var errors));
 
         Assert.Null(assembled);
         Assert.Contains(errors!, error => error.Contains("profile")

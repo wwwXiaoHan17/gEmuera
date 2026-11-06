@@ -6,7 +6,6 @@
     "erafl",
     "megaten",
     "snake",
-    "v18",
     "v24pure"
   ],
   "profiles": {
@@ -32,13 +31,6 @@
       ],
       "instructionCount": 562,
       "functionCount": 266
-    },
-    "v18": {
-      "modules": [
-        "gemuera.v18"
-      ],
-      "instructionCount": 417,
-      "functionCount": 160
     },
     "erablue": {
       "modules": [

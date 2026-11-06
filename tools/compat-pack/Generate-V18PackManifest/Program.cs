@@ -3,7 +3,7 @@ using GEmuera.Core.Compatibility;
 using GEmuera.Core.Compatibility.Packs;
 
 // ============================================================================
-// v18 第一方数据包清单生成器（packs/gemuera.v18/compatpack.manifest.json）。
+// v18 第一方数据包清单生成器（packs/pack.gemuera.v18/compatpack.manifest.json）。
 //
 // 唯一事实源：src/Core/Compatibility/LegacyDialectInventories.Generated.cs（引擎投影
 // 的生成镜像）。本工具从 v24/v18 两份生成清单计算差量并落盘为规范化 JSON：
@@ -93,7 +93,7 @@ string baseSurfaceHash = LegacySurfaceHash.ComputeV24SurfaceHash(
 // —— 规范化 JSON（键 Ordinal 排序；数组已排序；LF；UTF-8 无 BOM；末尾单换行） ——
 string json = BuildManifestJson(baseSurfaceHash, hideInstructions, hideFunctions);
 
-string outputDirectory = Path.Combine(repoRoot, "packs", "gemuera.v18");
+string outputDirectory = Path.Combine(repoRoot, "packs", "pack.gemuera.v18");
 Directory.CreateDirectory(outputDirectory);
 string outputPath = Path.Combine(outputDirectory, "compatpack.manifest.json");
 

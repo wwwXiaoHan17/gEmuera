@@ -6,10 +6,11 @@ using Xunit;
 namespace GEmuera.Core.Tests;
 
 /// <summary>
-/// v18 第一方数据包（packs/gemuera.v18）的清单等价门禁：包清单由生成器从
-/// <see cref="LegacyDialectInventories"/>（唯一事实源）的 v24−v18 差集计算，
-/// 组装后的 "v24pure + v18 包" 会话表面必须与内置 v18 profile 逐名相等。
-/// 不硬编码 LegacyV18CompatibilityModule 的手抄差量名单（仅作交叉诊断）。
+/// v18 第一方数据包（packs/pack.gemuera.v18）的清单等价门禁（P-D 步 1 退役后口径）：
+/// 内置 v18 profile 已删除，golden 改为冻结表面（LegacyDialectInventories.V18*，源自
+/// tools/dialect-inventory/retired-dialect-surface-universe.json）。包清单由生成器产出，
+/// v24pure + 包 的会话表面必须与冻结 v18 表面逐名相等；投影为 LegacyCompatibilityProfile
+/// 后可见性与冻结表面一致。清单漂移（生成清单再生成后未重跑生成器/手改 JSON）在此先红。
 /// </summary>
 [Collection("CompatPack")]
 public class V18PackManifestTests
@@ -24,7 +25,7 @@ public class V18PackManifestTests
             LegacyDialectInventories.V24Functions.Select(entry => entry.Name), StringComparer.Ordinal));
 
     [Fact]
-    public void GeneratedManifest_ReproducesBuiltinV18Surface()
+    public void GeneratedManifest_ReproducesFrozenV18Surface()
     {
         string packPath = typeof(GemueraV18Pack.GemueraV18PackMarker).Assembly.Location;
         using var directory = new IsolatedPackDirectory(packPath);
@@ -33,21 +34,17 @@ public class V18PackManifestTests
         Assert.True(CompatPackLoader.TryLoad(directory.MainAssemblyPath, context, out var handle, out var errors),
             string.Join("; ", errors));
         Assert.Empty(errors);
-        // 身份与差量方向自检：包只隐藏（v18 ⊆ v24 由生成清单取证），不声明 capability。
+        // 身份与差量方向自检：包只隐藏（冻结证据 v18 ⊆ v24），不声明 capability。
         Assert.Equal("pack.gemuera.v18", handle!.Manifest.PackId);
         Assert.Equal("v24pure", handle.Manifest.BaseProfileId);
-        // T7：官方包必须声明语义级基线表面哈希（生成器写入，禁止手写）；
-        // 值必须与宿主/生成器共用的 Core 输入构造逐字相等，且是 64 位小写十六进制。
         Assert.False(string.IsNullOrWhiteSpace(handle.Manifest.BaseSurfaceHash));
         Assert.Matches("^[0-9a-f]{64}$", handle.Manifest.BaseSurfaceHash);
         Assert.Equal(
             LegacySurfaceHash.ComputeV24SurfaceHash(LegacySurfaceHash.BuildV24SurfaceHashInput("v24pure")),
             handle.Manifest.BaseSurfaceHash);
         Assert.Empty(handle.Manifest.Capabilities);
-        // 官方包已完成双轴迁移：不再依赖 legacy targetEngineApi 的 1.0/1.0 映射。
         Assert.Equal(new CompatVersion(1, 0), handle.Manifest.ContractAbi);
         Assert.Equal(new CompatVersion(1, 0), handle.Manifest.EngineApi);
-        Assert.False(handle.Manifest.UsedLegacyTargetEngineApi);
         Assert.Empty(handle.Manifest.Surface.AddInstructions);
         Assert.Empty(handle.Manifest.Surface.AddFunctions);
         Assert.Equal(
@@ -69,14 +66,19 @@ public class V18PackManifestTests
             string.Join("; ", assemblyErrors));
         Assert.Empty(assemblyErrors);
 
-        // 核心断言：v24pure + v18 包的会话表面 == 内置 v18 profile（指令/函数键集合逐名相等）。
-        CompatibilityPlan builtinV18 = BuiltInDialectCatalog.CreateLegacySessionPlan("v18");
-        Assert.Equal(
-            builtinV18.Dialect.Instructions.Keys.Order(StringComparer.Ordinal).ToArray(),
-            assembled.Dialect.Instructions.Keys.Order(StringComparer.Ordinal).ToArray());
-        Assert.Equal(
-            builtinV18.Dialect.Functions.Keys.Order(StringComparer.Ordinal).ToArray(),
-            assembled.Dialect.Functions.Keys.Order(StringComparer.Ordinal).ToArray());
+        // 核心断言：v24pure + v18 包的会话表面 == 冻结 v18 表面（指令/函数键集合逐名相等）。
+        string[] expectedInstructions = LegacyDialectInventories.V18InstructionNames
+            .Order(StringComparer.Ordinal).ToArray();
+        string[] expectedFunctions = LegacyDialectInventories.V18Functions
+            .Select(entry => entry.Name).Order(StringComparer.Ordinal).ToArray();
+        Assert.Equal(expectedInstructions, assembled.Dialect.Instructions.Keys.Order(StringComparer.Ordinal).ToArray());
+        Assert.Equal(expectedFunctions, assembled.Dialect.Functions.Keys.Order(StringComparer.Ordinal).ToArray());
+
+        // 会话投影可见性由 SurfaceSmoke.AssertV18PackEquivalence 验证（本测试工程不引用
+        // legacy 宿主程序集；plan 键集合断言已覆盖表面对账核心）。
+
+        // P-D 步 1 硬证据：内置 v18 profile 已注销，禁止再被引擎解析。
+        Assert.Throws<InvalidOperationException>(() => BuiltInDialectCatalog.CreateLegacySessionPlan("v18"));
         handle.Unload();
     }
 }

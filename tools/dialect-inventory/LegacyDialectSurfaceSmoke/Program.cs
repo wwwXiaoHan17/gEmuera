@@ -241,22 +241,8 @@ static class Program
             Assert(!erafl.UsesDialectFunctionContract("ABS"),
                 "erafl 会话继承 v24 参数契约（不激活蛇系名集）。");
 
-            // v18 基线方言（emuera_v18_exported 双源取证）：独立闭包 {gemuera.v18}，
-            // 表面 = v24 投影减 39 指令 + 110 函数的 v24 后增差集；无 quirk capability。
-            LegacyCompatibilityProfile v18 = LegacyCompatibilityProfile.CreateForProfile("v18", true);
-            Assert(v18.IsInstructionVisible("PRINT") && v18.IsFunctionVisible("ABS"),
-                "v18 丢失基线指令/函数。");
-            Assert(!v18.IsInstructionVisible("SETBGIMAGE") && !v18.IsInstructionVisible("PRINTN")
-                && !v18.IsInstructionVisible("VARI") && !v18.IsInstructionVisible("VARS")
-                && !v18.IsInstructionVisible("CALLSTR") && !v18.IsInstructionVisible("SKIPLOG"),
-                "v18 泄漏了 v24 后增或 snake 专属指令。");
-            Assert(!v18.IsFunctionVisible("GETVAR") && !v18.IsFunctionVisible("DT_CREATE")
-                && !v18.IsFunctionVisible("XML_DOCUMENT") && !v18.IsFunctionVisible("SQL_CONNECT"),
-                "v18 泄漏了 v24 后增或 snake 专属函数。");
-            Assert(v18.Plan.Dialect.Instructions.Count == GEmuera.Core.Compatibility.LegacyDialectInventories.V18InstructionNames.Length
-                && v18.Plan.Dialect.Functions.Count == GEmuera.Core.Compatibility.LegacyDialectInventories.V18Functions.Length,
-                "v18 描述符数量与生成清单不一致。");
-            Assert(v18.Plan.CapabilityIds.Count == 0, "v18 基线不应声明 quirk capability。");
+            // v18 已退役为第一方包（P-D 步 1）：内置 profile 不再存在；等价门禁改由
+            // AssertV18PackEquivalence 以冻结表面（retired-dialect-surface-universe.json）承担。
 
             // eraBlue（碧蓝度假村）：v24 基座 + SETANIMETIMER 增量 + 外部插件 capability。
             // 血统：游戏自带 Emuera.NET 1824+v24+EMv18+EEv55 启动器；插件经 CALLSHARP 调用。
@@ -416,7 +402,7 @@ static class Program
         foreach ((string profileId, bool scopedVariableInstructionsEnabled) in new[]
         {
             ("v24pure", true), ("snake", true), ("erafl", true),
-            ("v18", true), ("erablue", true), ("megaten", true),
+            ("erablue", true), ("megaten", true),
             // scoped-variable 关闭是第三类条件符号（VARI/VARS），单独跑一次闭包校验。
             ("v24pure", false),
         })
@@ -731,7 +717,7 @@ static class Program
         AssertMultiPackSurfaceReplay();
     }
 
-    // —— v18 第一方数据包等价门禁：packs/gemuera.v18 的内嵌清单由生成器从
+    // —— v18 第一方数据包等价门禁：packs/pack.gemuera.v18 的内嵌清单由生成器从
     //    LegacyDialectInventories（唯一事实源）计算 v24−v18 差集（禁止手改），经真实
     //    包 DLL → CompatPackLoader → CompatPackPlanAssembler 组装进 v24pure 基线后：
     //    (1) 指令/函数键集合与内置 v18 计划逐名相等；(2) 投影为 LegacyCompatibilityProfile
@@ -771,9 +757,9 @@ static class Program
                     BuiltinCompatPackVariants.SupportedSelections()));
             Assert(handle!.Manifest.BaseSurfaceHash is not null
                     && System.Text.RegularExpressions.Regex.IsMatch(handle.Manifest.BaseSurfaceHash, "^[0-9a-f]{64}$"),
-                "packs/gemuera.v18 的 baseSurfaceHash 缺失或不是 64 位小写十六进制。");
+                "packs/pack.gemuera.v18 的 baseSurfaceHash 缺失或不是 64 位小写十六进制。");
             Assert(handle.Manifest.BaseSurfaceHash == expectedSurfaceHash,
-                "packs/gemuera.v18 的 baseSurfaceHash 与宿主现算值不一致（重跑 Generate-V18PackManifest）："
+                "packs/pack.gemuera.v18 的 baseSurfaceHash 与宿主现算值不一致（重跑 Generate-V18PackManifest）："
                 + handle.Manifest.BaseSurfaceHash + " vs " + expectedSurfaceHash + "。");
 
             CompatibilityPlan baseline = BuiltInDialectCatalog.CreateLegacySessionPlan("v24pure");
@@ -782,33 +768,39 @@ static class Program
                     out CompatibilityPlan assembled, out var assemblyErrors))
                 throw new InvalidOperationException("v18 第一方数据包组装失败：" + string.Join("; ", assemblyErrors));
 
-            CompatibilityPlan builtinV18Plan = BuiltInDialectCatalog.CreateLegacySessionPlan("v18");
-            Assert(builtinV18Plan.Dialect.Instructions.Keys.Order(StringComparer.Ordinal)
-                    .SequenceEqual(assembled.Dialect.Instructions.Keys.Order(StringComparer.Ordinal)),
-                "v24pure + v18 包的指令键集合 != 内置 v18 计划（清单漂移？重跑 Generate-V18PackManifest）。");
-            Assert(builtinV18Plan.Dialect.Functions.Keys.Order(StringComparer.Ordinal)
-                    .SequenceEqual(assembled.Dialect.Functions.Keys.Order(StringComparer.Ordinal)),
-                "v24pure + v18 包的函数键集合 != 内置 v18 计划（清单漂移？重跑 Generate-V18PackManifest）。");
+            // golden（P-D 步 1 退役后）：内置 v18 计划已不存在，冻结表面
+            // （retired-dialect-surface-universe.json → LegacyDialectInventories.V18*）就是
+            // v24pure + 包 必须逐名复现的目标；投影可见性也必须与冻结表面一致。
+            var expectedInstructions = new HashSet<string>(
+                GEmuera.Core.Compatibility.LegacyDialectInventories.V18InstructionNames, StringComparer.Ordinal);
+            var expectedFunctions = new HashSet<string>(
+                GEmuera.Core.Compatibility.LegacyDialectInventories.V18Functions.Select(entry => entry.Name),
+                StringComparer.Ordinal);
+            Assert(assembled.Dialect.Instructions.Keys.Order(StringComparer.Ordinal)
+                    .SequenceEqual(expectedInstructions.Order(StringComparer.Ordinal)),
+                "v24pure + v18 包的指令键集合 != 冻结 v18 表面（清单漂移？重跑 Generate-V18PackManifest）。");
+            Assert(assembled.Dialect.Functions.Keys.Order(StringComparer.Ordinal)
+                    .SequenceEqual(expectedFunctions.Order(StringComparer.Ordinal)),
+                "v24pure + v18 包的函数键集合 != 冻结 v18 表面（清单漂移？重跑 Generate-V18PackManifest）。");
 
-            LegacyCompatibilityProfile builtinV18 = LegacyCompatibilityProfile.Create(builtinV18Plan, true);
             LegacyCompatibilityProfile packed = LegacyCompatibilityProfile.Create(assembled, true);
-            AssertRuntimePlanClosure(assembled, "packs/gemuera.v18（真实包 DLL）");
+            AssertRuntimePlanClosure(assembled, "packs/pack.gemuera.v18（真实包 DLL）");
 
-            // 投影后可见性逐名相等：universe 取两侧计划键的并集（含保留名/隐藏差量）。
-            IEnumerable<string> instructionUniverse = builtinV18.Plan.Dialect.Instructions.Keys
-                .Concat(packed.Plan.Dialect.Instructions.Keys)
+            // 投影后可见性逐名等于冻结表面（v18 名可见；v24 后增/snake 专属不可见）。
+            IEnumerable<string> instructionUniverse = expectedInstructions
+                .Concat(assembled.Dialect.Instructions.Keys)
                 .Distinct(StringComparer.Ordinal)
                 .Order(StringComparer.Ordinal);
             foreach (string name in instructionUniverse)
-                Assert(builtinV18.IsInstructionVisible(name) == packed.IsInstructionVisible(name),
-                    $"v18 包投影与内置 v18 可见性不一致（指令 {name}：builtin={builtinV18.IsInstructionVisible(name)} packed={packed.IsInstructionVisible(name)}）。");
-            IEnumerable<string> functionUniverse = builtinV18.Plan.Dialect.Functions.Keys
-                .Concat(packed.Plan.Dialect.Functions.Keys)
+                Assert(packed.IsInstructionVisible(name) == expectedInstructions.Contains(name),
+                    $"v18 包投影可见性与冻结表面不一致（指令 {name}：expected={expectedInstructions.Contains(name)} actual={packed.IsInstructionVisible(name)}）。");
+            IEnumerable<string> functionUniverse = expectedFunctions
+                .Concat(assembled.Dialect.Functions.Keys)
                 .Distinct(StringComparer.Ordinal)
                 .Order(StringComparer.Ordinal);
             foreach (string name in functionUniverse)
-                Assert(builtinV18.IsFunctionVisible(name) == packed.IsFunctionVisible(name),
-                    $"v18 包投影与内置 v18 可见性不一致（函数 {name}：builtin={builtinV18.IsFunctionVisible(name)} packed={packed.IsFunctionVisible(name)}）。");
+                Assert(packed.IsFunctionVisible(name) == expectedFunctions.Contains(name),
+                    $"v18 包投影可见性与冻结表面不一致（函数 {name}：expected={expectedFunctions.Contains(name)} actual={packed.IsFunctionVisible(name)}）。");
 
             // 抽样哨兵（失败信息可读性）：基线保留，v24 后增与 snake 专属不泄漏。
             Assert(packed.IsInstructionVisible("PRINT") && packed.IsFunctionVisible("ABS"),

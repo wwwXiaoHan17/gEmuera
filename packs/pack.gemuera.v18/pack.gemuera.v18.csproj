@@ -4,6 +4,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
+    <AssemblyName>pack.gemuera.v18</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
     <!-- v18 第一方数据包：程序集只内嵌"生成器产出的 manifest"，不含 ICompatPack 入口类

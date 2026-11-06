@@ -22,7 +22,9 @@
     <!-- 社区包模板（packs/，manifest-only 数据包脚手架）。 -->
     <ProjectReference Include="..\..\..\packs\CommunityPackTemplate\CommunityPackTemplate.csproj" />
     <!-- v18 第一方数据包（packs/，生成清单差量的端到端等价门禁）。 -->
-    <ProjectReference Include="..\..\..\packs\gemuera.v18\gemuera.v18.csproj" />
+    <ProjectReference Include="..\..\..\packs\pack.gemuera.v18\pack.gemuera.v18.csproj" />
+    <!-- megaten 第一方数据包（5 Wired capability，等价门禁）。 -->
+    <ProjectReference Include="..\..\..\packs\pack.gemuera.megaten\pack.gemuera.megaten.csproj" />
     <!-- 契约夹具：只引用 Emuera 契约程序集的最小 ICompatPack 样本（ALC 正向用例复用）。 -->
     <ProjectReference Include="..\CompatPackContractOnlyFixture\CompatPackContractOnlyFixture.csproj" />
     <!-- 多入口夹具（M9）：同一程序集两个 ICompatPack 实现类，钉住"恰好一个入口"拒载。 -->

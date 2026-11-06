@@ -162,7 +162,7 @@ public class EngineCapabilityCatalogTests
         // 内置 profile 的 plan capability 集合 = RequiredCapabilityIds 原样（DiagnosticOnly
         // 也在账本内）；这是既有 plan hash / 回归面不变的前提。
         CompatibilityProfileCatalog profiles = BuiltInDialectCatalog.CreateLegacyProfileCatalog();
-        foreach (string profileId in new[] { "v24pure", "v18", "snake", "erafl", "erablue", "megaten" })
+        foreach (string profileId in new[] { "v24pure", "snake", "erafl", "erablue", "megaten" })
         {
             CompatibilityProfileDefinition profile = profiles.Resolve(profileId);
             Assert.True(EngineCapabilityCatalog.TryResolveForProfile(

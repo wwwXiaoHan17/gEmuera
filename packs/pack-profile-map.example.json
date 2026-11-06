@@ -1,46 +1,46 @@
 {
   "schemaVersion": "1.0.0",
-  "description": "P-D profile→第一方兼容包映射示例（docs/plans/2026-10-03-pd-module-retirement-spec.md §2）。本文件是 schema 文档示例，不参与运行；生产文件为 assets/text/pack-profile-map.json，且条目与对应内置模块退役同一提交落地。",
+  "description": "P-D profile→第一方兼容包映射示例（docs/superpowers/specs/2026-11-07-pd-module-retirement-execution-design.md §4.5）。本文件是 schema 文档示例，不参与运行；生产文件为 assets/text/pack-profile-map.json，且条目与对应内置模块退役同一提交落地。路径一律「安装根/<packId>/<packId>.dll」（一包一目录，2026-11-03 I1 硬化）。",
   "profiles": [
     {
       "profileId": "v18",
       "packId": "pack.gemuera.v18",
-      "relativePath": "compat_packs/pack.gemuera.v18.dll",
-      "relativePathAndroid": "packs/pack.gemuera.v18.dll",
+      "relativePath": "compat_packs/pack.gemuera.v18/pack.gemuera.v18.dll",
+      "relativePathAndroid": "packs/pack.gemuera.v18/pack.gemuera.v18.dll",
       "requiredPackVersion": "1.0.0",
-      "note": "唯一已存在的第一方包：packs/gemuera.v18/（manifest-only 数据包，等价门禁见设计 §13.10）。"
+      "note": "emuera1824+v18 血统第一方数据包（纯 hide）：packs/pack.gemuera.v18/。"
     },
     {
       "profileId": "megaten",
       "packId": "pack.gemuera.megaten",
-      "relativePath": "compat_packs/pack.gemuera.megaten.dll",
-      "relativePathAndroid": "packs/pack.gemuera.megaten.dll",
+      "relativePath": "compat_packs/pack.gemuera.megaten/pack.gemuera.megaten.dll",
+      "relativePathAndroid": "packs/pack.gemuera.megaten/pack.gemuera.megaten.dll",
       "requiredPackVersion": "1.0.0",
-      "note": "示例占位：包待 megaten 退役步产出（manifest-only 壳 + 3 个 behavior capability id）。"
+      "note": "示例占位：megaten 退役步产出（manifest-only 包 + 5 个 Wired capability；DiagnosticOnly 不可入包）。"
     },
     {
       "profileId": "erablue",
       "packId": "pack.gemuera.erablue",
-      "relativePath": "compat_packs/pack.gemuera.erablue.dll",
-      "relativePathAndroid": "packs/pack.gemuera.erablue.dll",
+      "relativePath": "compat_packs/pack.gemuera.erablue/pack.gemuera.erablue.dll",
+      "relativePathAndroid": "packs/pack.gemuera.erablue/pack.gemuera.erablue.dll",
       "requiredPackVersion": "1.0.0",
-      "note": "示例占位：包待 erablue 退役步产出（surface.addInstructions=[SETANIMETIMER]）。"
+      "note": "示例占位：erablue 退役步产出（surface.addInstructions=[SETANIMETIMER] + 1 个 Wired capability）。"
     },
     {
       "profileId": "erafl",
       "packId": "pack.gemuera.erafl",
-      "relativePath": "compat_packs/pack.gemuera.erafl.dll",
-      "relativePathAndroid": "packs/pack.gemuera.erafl.dll",
+      "relativePath": "compat_packs/pack.gemuera.erafl/pack.gemuera.erafl.dll",
+      "relativePathAndroid": "packs/pack.gemuera.erafl/pack.gemuera.erafl.dll",
       "requiredPackVersion": "1.0.0",
-      "note": "示例占位：包待 erafl 退役步产出（完整 erafl capability 集；算法实现保留在引擎）。"
+      "note": "示例占位：erafl 退役步产出（10 个 Wired capability；算法实现在引擎保留）。"
     },
     {
       "profileId": "snake",
       "packId": "pack.gemuera.snake",
-      "relativePath": "compat_packs/pack.gemuera.snake.dll",
-      "relativePathAndroid": "packs/pack.gemuera.snake.dll",
+      "relativePath": "compat_packs/pack.gemuera.snake/pack.gemuera.snake.dll",
+      "relativePathAndroid": "packs/pack.gemuera.snake/pack.gemuera.snake.dll",
       "requiredPackVersion": "1.0.0",
-      "note": "示例占位：包待 snake 退役步产出（变体经 variantSelections builtin:snake；hide 名单逐字等于 SnakeExcludedFunctionNames，不得含 陥落状態/陷落状态）。"
+      "note": "示例占位：snake 退役步产出（19 个 Wired capability + variantSelections builtin:snake + BITMAP_CACHE_ENABLE 碰撞字段）。"
     }
   ]
 }

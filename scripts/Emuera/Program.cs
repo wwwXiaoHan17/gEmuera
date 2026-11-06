@@ -732,7 +732,6 @@ namespace MinorShift.Emuera
 				"v24pure" => EmueraCoreProfile.V24Pure,
 				"snake" => EmueraCoreProfile.Snake,
 				"erafl" => EmueraCoreProfile.EraFl,
-				"v18" => EmueraCoreProfile.V18,
 				"erablue" => EmueraCoreProfile.EraBlue,
 				// megaten：launcher 显式选择时映射到新枚举值。
 				"megaten" => EmueraCoreProfile.Megaten,
@@ -759,7 +758,6 @@ namespace MinorShift.Emuera
 				"v24pure" => EmueraCoreProfile.V24Pure,
 				"snake" => EmueraCoreProfile.Snake,
 				"erafl" => EmueraCoreProfile.EraFl,
-				"v18" => EmueraCoreProfile.V18,
 				"erablue" => EmueraCoreProfile.EraBlue,
 				"megaten" => EmueraCoreProfile.Megaten,
 				_ => throw new InvalidOperationException(
@@ -774,7 +772,6 @@ namespace MinorShift.Emuera
 				EmueraCoreProfile.V24Pure => "v24pure",
 				EmueraCoreProfile.Snake => "snake",
 				EmueraCoreProfile.EraFl => "erafl",
-				EmueraCoreProfile.V18 => "v18",
 				EmueraCoreProfile.EraBlue => "erablue",
 				EmueraCoreProfile.Megaten => "megaten",
 				_ => throw new InvalidOperationException(

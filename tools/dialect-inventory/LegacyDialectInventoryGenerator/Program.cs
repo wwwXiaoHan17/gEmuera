@@ -2,6 +2,7 @@ using System.Collections;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
+using GEmuera.Core.Compatibility;
 
 // LegacyDialectInventoryGenerator —— 方言描述符清单的唯一生成器。
 // 从引擎真实投影（FunctionIdentifier.GetInstructionNameDic / FunctionMethodCreator.GetMethodList，
@@ -36,6 +37,18 @@ internal static class Program
             Type profileType = RequiredType(legacyAssembly, "MinorShift.Emuera.Compatibility.LegacyCompatibilityProfile");
             Type instructionType = RequiredType(legacyAssembly, "MinorShift.Emuera.GameProc.Function.FunctionIdentifier");
             Type functionType = RequiredType(legacyAssembly, "MinorShift.Emuera.GameData.Function.FunctionMethodCreator");
+
+            // 退役后模式（Task 1 冻结工件存在时）：live 只建 v24pure，退役 profile 表面取冻结工件；
+            // profile 清单只列当前仍可解析的内置 profile。冻结模式（--freeze-retired-surface）
+            // 保持走下方六 profile 旧路径，只用于一次性捕获。
+            bool freezeRequested = args.Contains("--freeze-retired-surface", StringComparer.Ordinal);
+            string frozenUniversePath = Path.Combine(
+                repoRoot, "tools", "dialect-inventory", "retired-dialect-surface-universe.json");
+            if (!freezeRequested && File.Exists(frozenUniversePath))
+            {
+                return RunPostRetirementMode(
+                    repoRoot, frozenUniversePath, profileType, instructionType, functionType);
+            }
 
             object v24 = CreateProfile(profileType, "v24pure", scopedVariableInstructionsEnabled: true);
             object snake = CreateProfile(profileType, "snake", scopedVariableInstructionsEnabled: true);
@@ -235,6 +248,159 @@ internal static class Program
             Console.Error.WriteLine(exception.ToString());
             return 1;
         }
+    }
+
+    /// <summary>
+    /// 退役后正常生成模式：v24pure 从引擎 live 读；五个退役 profile 的表面/METHOD 投影/返回类型
+    /// 从冻结工件读取；profiles.generated.json 只列当前仍可解析的内置 profile（随退役步收缩）。
+    /// 输出与退役前逐字节一致（冻结工件由退役前 live 结果一次性捕获），保证 v24 哈希与包校验面不变。
+    /// </summary>
+    private static int RunPostRetirementMode(
+        string repoRoot,
+        string frozenUniversePath,
+        Type profileType,
+        Type instructionType,
+        Type functionType)
+    {
+        using JsonDocument frozenDocument = JsonDocument.Parse(
+            File.ReadAllText(frozenUniversePath, Encoding.UTF8));
+        JsonElement frozenRoot = frozenDocument.RootElement;
+
+        object v24 = CreateProfile(profileType, "v24pure", scopedVariableInstructionsEnabled: true);
+        var v24Instructions = GetRegistryKeys(instructionType, "GetInstructionNameDic", profileType, v24);
+        var v24Functions = GetRegistry(functionType, "GetMethodList", profileType, v24);
+        var v24FunctionNames = Keys(v24Functions);
+
+        var frozenInstructions = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+        var frozenFunctions = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+        var frozenReturnTypes = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (JsonProperty profileProperty in frozenRoot.GetProperty("profiles").EnumerateObject())
+        {
+            var instructions = new HashSet<string>(StringComparer.Ordinal);
+            foreach (JsonElement name in profileProperty.Value.GetProperty("instructions").EnumerateArray())
+                instructions.Add(name.GetString() ?? string.Empty);
+            var functions = new HashSet<string>(StringComparer.Ordinal);
+            foreach (JsonElement function in profileProperty.Value.GetProperty("functions").EnumerateArray())
+            {
+                string name = function.GetProperty("name").GetString() ?? string.Empty;
+                string returnType = function.GetProperty("returnType").GetString() ?? "Unknown";
+                functions.Add(name);
+                frozenReturnTypes[name] = returnType;
+            }
+            frozenInstructions[profileProperty.Name] = instructions;
+            frozenFunctions[profileProperty.Name] = functions;
+        }
+
+        var methodProjectedInstructionNames = new HashSet<string>(StringComparer.Ordinal);
+        foreach (JsonElement name in frozenRoot.GetProperty("methodProjectedInstructionNames").EnumerateArray())
+            methodProjectedInstructionNames.Add(name.GetString() ?? string.Empty);
+
+        var functionReturnTypes = new Dictionary<string, string>(StringComparer.Ordinal);
+        CollectReturnTypes(v24Functions, functionReturnTypes);
+        foreach (KeyValuePair<string, string> pair in frozenReturnTypes)
+        {
+            if (functionReturnTypes.TryGetValue(pair.Key, out string? existing)
+                && !string.Equals(existing, pair.Value, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "Frozen return type conflict for function '" + pair.Key + "': " + existing + " vs " + pair.Value);
+            }
+            functionReturnTypes[pair.Key] = pair.Value;
+        }
+
+        string generatedCs = BuildGeneratedCs(
+            v24Instructions,
+            frozenInstructions["snake"],
+            frozenInstructions["erafl"],
+            frozenInstructions["v18"],
+            v24FunctionNames,
+            frozenFunctions["snake"],
+            frozenFunctions["erafl"],
+            frozenFunctions["v18"],
+            frozenInstructions["erablue"],
+            frozenFunctions["erablue"],
+            frozenInstructions["megaten"],
+            frozenFunctions["megaten"],
+            functionReturnTypes,
+            methodProjectedInstructionNames);
+        string corePath = Path.Combine(repoRoot, "src", "Core", "Compatibility", "LegacyDialectInventories.Generated.cs");
+        File.WriteAllText(corePath, generatedCs, new UTF8Encoding(false));
+
+        string profilesJson = BuildLiveProfilesJson(profileType, instructionType, functionType);
+        string runnerPath = Path.Combine(repoRoot, "tools", "legacy-runner", "profiles.generated.json");
+        File.WriteAllText(runnerPath, profilesJson, new UTF8Encoding(false));
+
+        Console.WriteLine("v24: " + v24Instructions.Count + " instructions / " + v24FunctionNames.Count + " functions");
+        Console.WriteLine("frozen retired surface universe: " + frozenUniversePath);
+        Console.WriteLine("written: " + corePath);
+        Console.WriteLine("written: " + runnerPath);
+        return 0;
+    }
+
+    static readonly IReadOnlyDictionary<string, string[]> ModulesByProfile =
+        new Dictionary<string, string[]>(StringComparer.Ordinal)
+        {
+            ["v24pure"] = new[] { "gemuera.v24" },
+            ["snake"] = new[] { "gemuera.v24", "game.snake" },
+            ["erafl"] = new[] { "gemuera.v24", "game.erafl" },
+            ["v18"] = new[] { "gemuera.v18" },
+            ["erablue"] = new[] { "gemuera.v24", "game.erablue" },
+            ["megaten"] = new[] { "gemuera.v24", "game.megaten" },
+        };
+
+    /// <summary>
+    /// profiles.generated.json 由当前仍可解析的内置 profile 生成（退役 profile 的条目随步消失；
+    /// v24pure 必须永不消失）。计数口径 = 退役前 live 注册表键数（不是 plan.Dialect.Functions，
+    /// 后者含 plan ⊇ 会话的 2 个隐藏函数面，会改变工具清单字节）。
+    /// </summary>
+    private static string BuildLiveProfilesJson(Type profileType, Type instructionType, Type functionType)
+    {
+        var live = new List<(string Id, int Instructions, int Functions)>();
+        foreach (string profileId in new[] { "v24pure", "snake", "erafl", "v18", "erablue", "megaten" })
+        {
+            object profile;
+            try
+            {
+                profile = CreateProfile(profileType, profileId, scopedVariableInstructionsEnabled: true);
+            }
+            catch (TargetInvocationException exception) when (exception.InnerException is InvalidOperationException)
+            {
+                continue; // profile 已注销 = 已退役
+            }
+            catch (InvalidOperationException)
+            {
+                continue;
+            }
+            live.Add((
+                profileId,
+                GetRegistryKeys(instructionType, "GetInstructionNameDic", profileType, profile).Count,
+                Keys(GetRegistry(functionType, "GetMethodList", profileType, profile)).Count));
+        }
+        if (live.All(entry => entry.Id != "v24pure"))
+            throw new InvalidOperationException("v24pure 必须始终可解析（引擎基线不可退役）。");
+
+        var profiles = new Dictionary<string, object>(StringComparer.Ordinal);
+        foreach (string orderId in new[] { "v24pure", "snake", "erafl", "v18", "erablue", "megaten" })
+        {
+            var entry = live.Find(candidate => candidate.Id == orderId);
+            if (entry.Id is null)
+                continue;
+            profiles[entry.Id] = new
+            {
+                modules = ModulesByProfile[entry.Id],
+                instructionCount = entry.Instructions,
+                functionCount = entry.Functions,
+            };
+        }
+
+        var root = new
+        {
+            schemaVersion = "1.0.0",
+            generatedBy = "tools/dialect-inventory/LegacyDialectInventoryGenerator",
+            profileIds = live.Select(entry => entry.Id).Order(StringComparer.Ordinal).ToArray(),
+            profiles,
+        };
+        return JsonSerializer.Serialize(root, new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine;
     }
 
     private static HashSet<string> Keys(object registry)

@@ -22,11 +22,6 @@ public static class BuiltInDialectCatalog
         catalog.Register(new DeclaredDialectModule(
             EraFlCompatibilityModule.CreateDefinition(),
             EraFlContributions()));
-        // v18 基线方言（emuera1824+v18 血统）：独立基座（不依赖 gemuera.v24），会话表面 =
-        // v24 引擎投影减去"v24 注册而 v18 参考未注册"的差集（桥层 LegacyV18CompatibilityModule）。
-        catalog.Register(new DeclaredDialectModule(
-            new DialectModuleDefinition("gemuera.v18", "1.0.0", 1),
-            V18Contributions()));
         // eraBlue（碧蓝度假村）：v24 基座 + SETANIMETIMER 可见性增量 + 外部插件 capability 声明。
         catalog.Register(new DeclaredDialectModule(
             EraBlueCompatibilityModule.CreateDefinition(),
@@ -60,12 +55,6 @@ public static class BuiltInDialectCatalog
         new LegacyFunctionInventoryContribution("game.erafl.functions", "game.erafl", LegacyDialectInventories.EraFlDeltaFunctions),
     };
 
-    private static IDialectContribution[] V18Contributions() => new IDialectContribution[]
-    {
-        new LegacyInstructionInventoryContribution("gemuera.v18.instructions", "gemuera.v18", LegacyDialectInventories.V18InstructionNames),
-        new LegacyFunctionInventoryContribution("gemuera.v18.functions", "gemuera.v18", LegacyDialectInventories.V18Functions),
-    };
-
     private static IDialectContribution[] EraBlueContributions() => new IDialectContribution[]
     {
         new LegacyInstructionInventoryContribution("game.erablue.instructions", "game.erablue", LegacyDialectInventories.EraBlueDeltaInstructionNames),
@@ -89,9 +78,6 @@ public static class BuiltInDialectCatalog
         catalog.Register(new CompatibilityProfileDefinition(
             "v24pure",
             new[] { "gemuera.v24" }));
-        catalog.Register(new CompatibilityProfileDefinition(
-            "v18",
-            new[] { "gemuera.v18" }));
         catalog.Register(EraBlueCompatibilityModule.CreateProfile());
         catalog.Register(MegatenCompatibilityModule.CreateProfile());
         catalog.Register(SnakeCompatibilityModule.CreateProfile());
