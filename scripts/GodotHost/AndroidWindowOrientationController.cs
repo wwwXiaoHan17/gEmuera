@@ -69,7 +69,10 @@ public partial class AndroidWindowOrientationController : Node
 		WindowLayoutKind current = isMultiWindow ? WindowLayoutKind.MultiWindow : WindowLayoutKind.Fullscreen;
 		OrientationRequest request = WindowOrientationPolicy.Decide(previous, current);
 		previous = current;
-		MobileLayoutDiagnostics.Trace("[ORIENTATION] state -> multiWindow=" + isMultiWindow);
+		MobileLayoutDiagnostics.Trace("[ORIENTATION] 状态 → multiWindow=" + isMultiWindow
+			+ " window=" + DisplayServer.WindowGetSize()
+			+ " screen=" + DisplayServer.ScreenGetSize()
+			+ " requestedRaw=" + (int)DisplayServer.ScreenGetOrientation());
 		if (request == OrientationRequest.None)
 			return;
 		RequestOrientation(request, isMultiWindow ? "enter_multi_window" : "exit_multi_window");

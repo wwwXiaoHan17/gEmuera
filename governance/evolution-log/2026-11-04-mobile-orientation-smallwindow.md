@@ -70,3 +70,34 @@
 - P1：真机确认 ScrollContainer.UpdateMinimumSize() 修复在真实旋转路径生效（诊断日志 [SCROLL] status=ok）。
 - P2：EmueraContent.cs 视口域纯移动拆分（本轮未做，主文件仍 7403 行）。
 - P2：isInMultiWindowMode 粗判据对分屏的影响（分屏也会请求横屏）——如需细分 freeform 另立任务。
+---
+
+## 补遗（2026-11-06）：首版真机复测「日志无信息」的两处根因与修复（build 20261106）
+
+### 现象
+用户装 20261104 APK 后反馈「还是有问题」，附导出日志 `gemuera_20261106-210504.log`。日志头为
+`RuntimeLevel=WARN Categories=General,Config`、`Records=51`，**没有任何 `[VIEWPORT]/[SCROLL]/[ORIENTATION]`**。
+
+### 根因 A：布局诊断事件被日志等级/分类过滤（诊断链路缺陷）
+- `MobileLayoutDiagnostics` 走 `GenericUtils.Info(EmueraLogCategory.UI, ...)`；真机 `RuntimeLevel=WARN` 且分类只启用 General/Config（active debug model 决定），INFO+UI 事件被双重丢弃。用户即使打开「布局诊断日志」开关也拿不到任何证据。
+- 修复：改用 `DiagnosticLogExporter.WriteInfrastructureRecord`（基础设施通道，不受 RuntimeLevel/CategorySwitches 过滤，仍受 `logging.enabled`、`level=none` 全关契约与限流约束），事件 id 改为 `UI.LAYOUT.BOOT/VIEWPORT/SCROLL/ORIENTATION/TRACE/WARN`；每条附加 `build=mobile-layout-20261106` 构建标记；debug 构建默认开启诊断（release 仍由设置页开关控制）。
+- [实测] 本地真实主场景窗口化运行（WARN 等级、file sink）：`UI.LAYOUT.BOOT`、`配置就绪`、`视口应用`、`[SCROLL] 滚动对账 status=ok` 均写入 ring buffer/日志。
+
+### 根因 B：移动端 fit 布局在启动时从未被应用（启动时序缺陷）
+- [实测] `EmueraMain` 在 `StartLegacySessionAsync()` 返回后立即调用 `ApplyMobileViewportPolicy()`，但此时 `emuera.config` 仍在后台线程解析（本地日志：BOOT 记录比 `ConfigData.loadConfig` 早 42ms）；旧逻辑 `Config.WindowX<=0` 直接 return → 移动端 fit/安全区布局在启动时从未生效，直到某次视口变化才可能碰巧触发。这解释了「改了但看起来没变化」类反馈。
+- 修复：`ApplyMobileViewportPolicy` 配置未就绪时进入 15s 轮询重试（`ProcessPendingMobileViewportPolicy` 每帧检查），配置就绪后自动补做 `MarkViewportLayoutDirty + ScheduleViewportLayoutApply`；超时打印 `[VIEWPORT] 配置等待超时` 告警。
+- [实测] FORCE=1 桌面真实场景：`[VIEWPORT] 配置就绪 → 补应用移动端布局 config=1920x1080`、`[VIEWPORT] 视口应用 → scale=0.6`、`[SCROLL] 滚动对账 → engineMax=0 nextMax=0 target=0 atBottom=True status=ok`（布局链路首次以实测证据跑通，部分关闭原 P1 证据缺口）。
+
+### 新增诊断埋点（为下一轮定位剩余问题）
+- 视口变化即时记录：window/viewport/scrollSize/safe/scale；
+- 拖动结束记录：`[SCROLL] 拖动结束 → scrollY/vbarMax/mathMaxY/atBottom`（直接判断引擎 range 与自算上限是否一致、是否真的到达底部）；
+- 方向状态记录：multiWindow/window/screen/requestedRaw；请求结果按窗口宽高比输出 changed|already|ignored。
+
+### 本轮交付
+- APK：`export/releases/gemuera-1.10.0-dev-20261106-debug.apk`（75,057,906 bytes；versionName `1.10.0-dev-20261106`、versionCode `12`、screenOrientation=13 阶段一不变；SHA256 `FCC4B6EFF165892107182B28FF4D169C836456ED61444A95758645D2F20451A7`）。
+- [实测] 构建 0 error；Core xUnit 303 通过/1 跳过/304 总。
+
+### 用户反馈与下一步
+- 用户确认当前**剩余问题只有**「横屏/竖屏切换后滑不到底」；小窗默认竖屏本轮未再报（待下一轮日志确认）。
+- 用户已授权：若新日志显示小窗请求 `status=ignored`，可直接进入阶段二（manifest 默认横屏 + 全屏恢复 Sensor；冷启动竖持会一次可见跳变）。
+- 下一轮真机需要：装 20261106 包 → 复现旋转/小窗 → 保存日志；判据：含 `UI.LAYOUT.BOOT build=mobile-layout-20261106`、旋转后 `[SCROLL] 滚动对账` 的 engineMax/nextMax/status、拖动结束的 vbarMax/mathMaxY/atBottom。

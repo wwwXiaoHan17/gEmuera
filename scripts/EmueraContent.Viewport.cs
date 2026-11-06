@@ -22,6 +22,8 @@ public partial class EmueraContent : Control
 	int layoutSnapshotScrollY;
 	int layoutSnapshotScrollMax = -1;
 	MobileLayoutStatePanel mobileLayoutStatePanel;
+	bool mobileViewportPolicyRetryActive;
+	ulong mobileViewportPolicyRetryDeadlineMs;
 
 	// 视口/安全区/方向变化时立即调用：重置进行中的触摸/惯性状态，标记 dirty。
 	void MarkViewportLayoutDirty()
@@ -37,10 +39,35 @@ public partial class EmueraContent : Control
 				? Mathf.RoundToInt(Mathf.Max(0.0f, bar.MaxValue - bar.Page))
 				: -1;
 		}
+		MobileLayoutDiagnostics.Trace("[VIEWPORT] 视口变化 → window=" + DisplayServer.WindowGetSize()
+			+ " viewport=" + (GetViewport()?.GetVisibleRect().Size ?? Vector2.Zero)
+			+ " scrollSize=" + (scrollContainer != null ? scrollContainer.Size : Vector2.Zero)
+			+ " safe=" + ContentSafeRect
+			+ " scale=" + contentScale.ToString("0.###"));
 		// 旋转可能不派发 release/cancel：pinch、普通 drag、惯性全部清空，避免下次按下被旧状态吞掉。
 		ResetContentTouchGestureState();
 		ResetContentDragState();
 		StopContentInertia();
+	}
+
+	// 由 EmueraContent._Process 每帧调用：等待 emuera.config 解析完成后补应用移动端布局。
+	void ProcessPendingMobileViewportPolicy()
+	{
+		if (!mobileViewportPolicyRetryActive)
+			return;
+		if (Config.WindowX > 0 && Config.WindowY > 0)
+		{
+			mobileViewportPolicyRetryActive = false;
+			MobileLayoutDiagnostics.Trace("[VIEWPORT] 配置就绪 → 补应用移动端布局 config=" + Config.WindowX + "x" + Config.WindowY);
+			MarkViewportLayoutDirty();
+			ScheduleViewportLayoutApply();
+			return;
+		}
+		if (Time.GetTicksMsec() > mobileViewportPolicyRetryDeadlineMs)
+		{
+			mobileViewportPolicyRetryActive = false;
+			MobileLayoutDiagnostics.Warn("[VIEWPORT] 配置等待超时 → 未能应用移动端布局");
+		}
 	}
 
 	void ScheduleViewportLayoutApply()

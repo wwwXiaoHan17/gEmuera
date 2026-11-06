@@ -684,10 +684,20 @@ public partial class EmueraContent : Control
 	// 调试：环境变量 GEMUERA_FORCE_MOBILE_VIEWPORT=1 时桌面也走移动端 fit 路径。
 	public void ApplyMobileViewportPolicy()
 	{
+		MobileLayoutDiagnostics.PublishBootOnce();
 		if (!IsMobilePlatform && !ForceMobileViewportForDiagnostics)
 			return;
 		if (Config.WindowX <= 0 || Config.WindowY <= 0)
+		{
+			// 启动时序：EmueraMain 在 StartLegacySessionAsync 返回后立即调用本方法，
+			// 但 emuera.config 仍在后台线程解析。直接 return 会让移动端 fit 布局
+			// 在启动时永远不生效（2026-11-06 本地实测：boot 早于 ConfigData.loadConfig 42ms）。
+			// 改为轮询等待配置就绪后自动补一次。
+			mobileViewportPolicyRetryActive = true;
+			mobileViewportPolicyRetryDeadlineMs = Time.GetTicksMsec() + 15000; // emuera.config 解析上限（10s 级）
 			return;
+		}
+		mobileViewportPolicyRetryActive = false;
 		MarkViewportLayoutDirty();
 		ScheduleViewportLayoutApply();
 	}
@@ -6612,6 +6622,7 @@ public partial class EmueraContent : Control
 	public override void _Process(double delta)
 	{
 		TrimUnboundedCaches();
+		ProcessPendingMobileViewportPolicy();
 		AnimatedWebpSpriteFrames.ProcessPendingFrameUploads(OS.HasFeature("mobile"));
 		ProcessPendingContentPinchZoom();
 		ProcessContentInertia((float)delta);
@@ -6961,6 +6972,16 @@ public partial class EmueraContent : Control
 			restoreQuickInputGate = advanceTap;
 		}
 
+		if (contentDragMoved && scrollContainer != null)
+		{
+			var dragVbar = scrollContainer.GetVScrollBar();
+			int dragMax = Mathf.RoundToInt(Mathf.Max(0.0f, dragVbar.MaxValue - dragVbar.Page));
+			int dragMathMax = GetMaxContentVerticalScroll();
+			MobileLayoutDiagnostics.Trace("[SCROLL] 拖动结束 → scrollY=" + scrollContainer.ScrollVertical
+				+ " vbarMax=" + dragMax
+				+ " mathMaxY=" + dragMathMax
+				+ " atBottom=" + (scrollContainer.ScrollVertical >= Mathf.Min(dragMax, dragMathMax) - 2));
+		}
 		if (GenericUtils.IsScrollTraceActive)
 			TraceScroll("pointer_release", () => $"moved={contentDragMoved} button={contentDragStartedOnButton} pressedInput={GenericUtils.ClipTrace(pressedButtonInput, 64)} advance={advanceTap} handled={handled}");
 		if (GenericUtils.IsTouchTraceEnabled("pointer"))
