@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string]$ProjectRoot = (Get-Location).Path
 )
@@ -41,8 +41,11 @@ $legacyModulesText = Get-Content -LiteralPath $legacyModulesPath -Raw -Encoding 
 Assert-CoreArchitecture ($legacyProfileText -notmatch 'SnakeOnly(?:Instruction|Function)Names') 'Profile projection owns a dialect key list instead of a module.'
 Assert-CoreArchitecture ($legacyModulesText -match 'selectedModules\.SetEquals\(expectedModules\)') 'Legacy profile module closure is not exact.'
 Assert-CoreArchitecture ($legacyModulesText -match 'LegacyV24CompatibilityModule') 'v24 bridge module is not declared.'
-Assert-CoreArchitecture ($legacyModulesText -match 'LegacySnakeCompatibilityModule') 'Snake bridge module is not declared.'
-Assert-CoreArchitecture ($legacyModulesText -match 'LegacyEraFlCompatibilityModule') 'eraFL bridge module is not declared.'
+# P-D 退役后 snake/erafl 内置桥接模块已删除；其静态表面名集迁到独立文件（兼容包加载链使用）。
+$snakeLegacySurfacePath = Join-Path $ProjectRoot 'Scripts\Emuera\Compatibility\SnakeLegacySurfaceNames.cs'
+Assert-CoreArchitecture (Test-Path -LiteralPath $snakeLegacySurfacePath -PathType Leaf) 'Snake legacy surface names file is missing.'
+$snakeLegacySurfaceText = Get-Content -LiteralPath $snakeLegacySurfacePath -Raw -Encoding utf8
+Assert-CoreArchitecture ($snakeLegacySurfaceText -match 'SnakeOnlyInstructionNames' -and $snakeLegacySurfaceText -match 'SnakeExcludedFunctionNames') 'Snake legacy surface names are not declared.'
 
 $instructionRegistryPath = Join-Path $ProjectRoot 'Scripts\Emuera\GameProc\Function\FunctionIdentifier.cs'
 $functionRegistryPath = Join-Path $ProjectRoot 'Scripts\Emuera\GameData\Function\Creator.cs'

@@ -493,10 +493,11 @@ function Get-LegacyProfileSurfaceNames {
     param(
         [string]$ProjectRoot,
         [string]$FieldName,
-        [string]$ClassName = 'LegacySnakeCompatibilityModule'
+        [string]$ClassName,
+        [string]$RelativePath = 'Scripts/Emuera/Compatibility/LegacyCompatibilityModules.cs'
     )
 
-    $relativePath = 'Scripts/Emuera/Compatibility/LegacyCompatibilityModules.cs'
+    $relativePath = $RelativePath
     $path = Join-Path $ProjectRoot ($relativePath.Replace('/', '\'))
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
         throw "Legacy compatibility surface source is missing: $relativePath"
@@ -504,10 +505,10 @@ function Get-LegacyProfileSurfaceNames {
 
     $lines = [IO.File]::ReadAllLines([IO.Path]::GetFullPath($path), [Text.Encoding]::UTF8)
     $classBlock = Get-CSharpBlock -Lines $lines `
-        -DeclarationRegex ('^\s*internal\s+sealed\s+class\s+' + [regex]::Escape($ClassName) + '\b') `
+        -DeclarationRegex ('^\s*internal\s+(?:sealed|static)\s+class\s+' + [regex]::Escape($ClassName) + '\b') `
         -Label $ClassName
     $fieldBlock = Get-CSharpBlock -Lines $classBlock.lines `
-        -DeclarationRegex ('^\s*private\s+static\s+readonly\s+IReadOnlyCollection<string>\s+' + [regex]::Escape($FieldName) + '\s*=') `
+        -DeclarationRegex ('^\s*(?:private|internal)\s+static\s+readonly\s+IReadOnlyCollection<string>\s+' + [regex]::Escape($FieldName) + '\s*=') `
         -Label "$ClassName.$FieldName"
     $text = $fieldBlock.lines -join "`n"
     # 注意：不能用 $matches 承接正则结果——它是 PowerShell 只读自动变量，
@@ -628,12 +629,12 @@ function New-DialectRegistrySnapshotReport {
     }
     $projectRoot = [string]$Inventory.projectRoot
     $portOnlyInstructionNames = @(Get-LegacyProfileSurfaceNames -ProjectRoot $projectRoot -ClassName 'LegacyV24CompatibilityModule' -FieldName 'PortOnlyInstructionNames')
-    $snakeInstructionNames = @(Get-LegacyProfileSurfaceNames -ProjectRoot $projectRoot -FieldName 'InstructionNames')
-    $v24ExcludedFunctionNames = @(Get-LegacyProfileSurfaceNames -ProjectRoot $projectRoot -FieldName 'FunctionNames')
-    $snakeExcludedFunctionNames = @(Get-LegacyProfileSurfaceNames -ProjectRoot $projectRoot -FieldName 'SnakeExcludedFunctionNames')
-    # eraFL 自持能力清单：erafl 会话在 v24 排除集基础上，仅解除自己声明的指令（SETANIMETIMER）。
-    $eraflRaw = Get-LegacyProfileSurfaceNames -ProjectRoot $projectRoot -ClassName 'LegacyEraFlCompatibilityModule' -FieldName 'InstructionNames'
-    $eraflInstructionNames = @($eraflRaw)
+    $snakeSurfacePath = 'Scripts/Emuera/Compatibility/SnakeLegacySurfaceNames.cs'
+    $snakeInstructionNames = @(Get-LegacyProfileSurfaceNames -ProjectRoot $projectRoot -ClassName 'SnakeLegacySurfaceNames' -FieldName 'SnakeOnlyInstructionNames' -RelativePath $snakeSurfacePath)
+    $v24ExcludedFunctionNames = @(Get-LegacyProfileSurfaceNames -ProjectRoot $projectRoot -ClassName 'SnakeLegacySurfaceNames' -FieldName 'SnakeOnlyFunctionNames' -RelativePath $snakeSurfacePath)
+    $snakeExcludedFunctionNames = @(Get-LegacyProfileSurfaceNames -ProjectRoot $projectRoot -ClassName 'SnakeLegacySurfaceNames' -FieldName 'SnakeExcludedFunctionNames' -RelativePath $snakeSurfacePath)
+    # eraFL 已退役为第一方包：会话在 v24 排除集基础上仅解除自己声明的指令（SETANIMETIMER）。
+    $eraflInstructionNames = @('SETANIMETIMER')
     $v24ExcludedInstructionNames = @($portOnlyInstructionNames + $snakeInstructionNames)
     $v24 = New-LegacyRuntimeSurfaceSnapshot -Inventory $Inventory -ProfileId 'v24pure' `
         -ExcludedInstructionNames $v24ExcludedInstructionNames -ExcludedFunctionNames $v24ExcludedFunctionNames

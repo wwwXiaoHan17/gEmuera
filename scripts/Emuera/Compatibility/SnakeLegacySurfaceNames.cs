@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace MinorShift.Emuera.Compatibility;
 
 /// <summary>
-/// snake 方言的静态表面名集（P-D 步 5 从已退役的 LegacySnakeCompatibilityModule 迁出）。
+/// snake 方言的静态表面名集（P-D 步 5 从已退役的 snake 内置模块迁出）。
 /// SnakeOnlyInstructionNames/SnakeOnlyFunctionNames 是 v24pure 基线必须隐藏的 snake/port 专有面
 ///（Compose 在模块 Declare 后统一声明，包/模块再在 Apply 阶段暴露自己声明的名字）；
 /// DivergentFunctionContractNames 驱动蛇系函数参数契约；SnakeExcludedFunctionNames 是
