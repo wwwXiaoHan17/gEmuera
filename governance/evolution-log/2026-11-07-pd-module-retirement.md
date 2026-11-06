@@ -97,3 +97,24 @@ Facade 79、ABI 4；三冒烟全绿；governance PASS。**本分支不可发布*
 
 本记录只统计本任务在 `ai/pd-module-retirement` 分支上的改动与亲自执行的命令输出；基线 worktree
 之外其它会话的未提交改动不计入。本日志随 Task 11 文档提交入库，最终复核证据在 Task 12 追加。
+
+
+## 8. Task 12 最终验证（2026-11-07 补遗）
+
+- [实测] HEAD（`7be665b` + 本段前的工具清理）重跑桌面 release gate：**PASS（8 项检查；桌面命令 7/7）**。
+- [实测] 重跑 `Test-Governance.ps1`：**PASS（7 项检查；lifecycle 4/4）**。
+- [实测] 重跑生成器两次（`LegacyDialectInventoryGenerator -- .`）：exit 0 ×2，
+  `LegacyDialectInventories.Generated.cs` 与 `profiles.generated.json` **零 diff**；
+  `profiles.generated.json` 仅 `v24pure`；v24 = 561 指令 / 266 函数。
+- [实测] 静态工具清理：`DialectInventory.psm1` 的 legacy 表面读取改为读
+  `SnakeLegacySurfaceNames.cs`（SnakeOnlyInstructionNames=23 / SnakeOnlyFunctionNames=98 /
+  SnakeExcludedFunctionNames=13），模块 parser 0 error（BOM 已恢复）；
+  `Test-CoreArchitecture.ps1` 删旧 snake/erafl 类断言、改断言新表面文件（BOM 已恢复）。
+- [实测] 全仓 grep：无 `CreateForProfile("<退役 id>")` / `CreateLegacySessionPlan("<退役 id>")` /
+  旧 snake/erafl 桥接类名 / 旧扁平映射 `compat_packs/<name>.dll` 残留。
+- [静态] staging 脚本重跑幂等（Build-FirstPartyPacks.ps1 PASS；5 包一包一目录、集合与生产映射一致）。
+- [未验证] Android/六游戏真机证据、legacy-runner 执行级（无 Godot 4.7/无设备）；`Test-CoreArchitecture.ps1`
+  在基线已存在的 `Core` 依赖断言（Core csproj 对 EmueraCompatPack 的既有 ProjectReference）上预存在红，
+  不在本任务门禁集内，记 P2。
+- 复审：独立 result-review 子代理已派发；得分/P0-P2 处置见下节（若本段末尾尚无分数，说明复审未回，
+  不得把本分支当已复审通过）。
