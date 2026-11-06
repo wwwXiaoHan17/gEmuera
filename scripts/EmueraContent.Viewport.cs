@@ -162,7 +162,11 @@ public partial class EmueraContent : Control
 		if (MobileLayoutDiagnostics.Wanted)
 		{
 			MobileLayoutDiagnostics.PublishLayout("[VIEWPORT] 视口应用 → window=" + DisplayServer.WindowGetSize()
-				+ " viewport=" + scrollContainer.Size + " safe=" + ContentSafeRect
+				+ " self=" + Size
+				+ " root=" + (rootContent != null ? rootContent.Size : Vector2.Zero)
+				+ " scroll=" + scrollContainer.Size
+				+ " scrollMin=" + scrollContainer.GetCombinedMinimumSize()
+				+ " safe=" + ContentSafeRect
 				+ " scale=" + contentScale.ToString("0.###"));
 			MobileLayoutDiagnostics.PublishScroll("[SCROLL] 滚动对账 → layoutY=" + layoutY
 				+ " scaledExtentY=" + scaledExtentY
