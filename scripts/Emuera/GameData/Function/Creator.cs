@@ -243,6 +243,13 @@ namespace MinorShift.Emuera.GameData.Function
                 ["SOUNDCONTROL"] = new SoundControlMethod(),
                 ["ISPLAYINGBGM"] = new IsPlayingBgmMethod(),
                 ["BGMCONTROL"] = new BgmControlMethod(),
+                // R-AUD-8 EWP audio v1（6 内建；snake 兼容包表面，v24pure 隐藏面由 SnakeLegacySurfaceNames 负责）。
+                ["AUDIO_PLAY"] = new AudioPlayMethod(),
+                ["AUDIO_CTL"] = new AudioCtlMethod(),
+                ["AUDIO_BUS"] = new AudioBusMethod(),
+                ["AUDIO_DUCK"] = new AudioDuckMethod(),
+                ["AUDIO_QUERY"] = new AudioQueryMethod(),
+                ["AUDIO_BUS_QUERY"] = new AudioBusQueryMethod(),
                 ["GET_TEXT_DRAWING_MODE"] = new GetTextDrawingModeMethod(),
                 ["GET_SKIA_QUALITY"] = new GetSkiaQualityMethod(),
                 ["陥落状態"] = new SnakeFallenStateMethod(),

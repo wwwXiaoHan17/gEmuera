@@ -101,6 +101,33 @@ internal static partial class GenericUtils
         EnqueueUI(() => EmueraContent.instance?.PlaySoundFile(path, repeat, channel));
     }
 
+
+    // R-AUD-8：audio v1 适配器需要把账本句柄固定映射到某条物理通道，
+    // 以便 NotifySoundPlaybackPosition 能把进度回送给对应句柄。
+    // 该重载保持既有 PlaySoundFile(path, repeat) 的状态机/日志/UI 队列语义不变。
+    public static void PlaySoundFile(string path, int repeat, int channel)
+    {
+        if (channel < 0 || channel >= SnakeSoundChannelCount)
+            return;
+        lock (snakeAudioLock)
+        {
+            FlushCompletedAudioStatesLocked();
+            var state = snakeSounds[channel];
+            state.Path = path;
+            state.Playing = true;
+            state.PendingStart = true;
+            state.Paused = false;
+            state.Speed = 100;
+            state.Repeat = repeat < 0 ? -1 : Math.Max(repeat, 1);
+            state.StartedAtMs = 0;
+            state.TotalMs = 0;
+            state.LastKnownCurrentMs = 0;
+        }
+        if (gEmuera.LegacyRunner.LegacyTrace.IsEnabled)
+            gEmuera.LegacyRunner.LegacyTrace.TryRecordEffect("audio_enqueued", "sound", path, "play", channel, repeat);
+        EnqueueUI(() => EmueraContent.instance?.PlaySoundFile(path, repeat, channel));
+    }
+
     public static void StopSounds()
     {
         lock (snakeAudioLock)
@@ -341,6 +368,8 @@ internal static partial class GenericUtils
             state.Repeat = 1;
             state.LastKnownCurrentMs = 0;
         }
+        // R-AUD-8：锁外把异步加载/解码失败送回 v1 账本。
+        AudioV1OnSoundFailed(channel);
     }
 
     public static void NotifySoundPlaybackRepeated(int channel)
@@ -377,6 +406,8 @@ internal static partial class GenericUtils
             if (playing)
                 state.StartedAtMs = GetTickMs() - ScaleFromPlaybackMs(state.LastKnownCurrentMs, state.Speed);
         }
+        // R-AUD-8：锁外把物理通道进度送回 v1 账本（避免锁序反转）。
+        AudioV1OnSoundPosition(channel, currentSec, totalSec);
     }
 
     public static void NotifySoundPlaybackFinished(int channel)
@@ -392,6 +423,8 @@ internal static partial class GenericUtils
             state.Repeat = 1;
             state.LastKnownCurrentMs = 0;
         }
+        // R-AUD-8：锁外通知 v1 账本该物理通道已结束。
+        AudioV1OnSoundFinished(channel);
     }
 
     public static void NotifyBgmPlaybackStarted(string path, long totalMs)
@@ -407,6 +440,8 @@ internal static partial class GenericUtils
             snakeBgm.TotalMs = Math.Max(0, totalMs);
             snakeBgm.LastKnownCurrentMs = 0;
         }
+        // R-AUD-8：BGM 后台加载完成后补一次速率/音量（v1 句柄存在时）。
+        AudioV1OnBgmStarted();
     }
 
     public static void NotifyBgmPlaybackFailed(string path)
@@ -421,6 +456,8 @@ internal static partial class GenericUtils
             snakeBgm.Repeat = 1;
             snakeBgm.LastKnownCurrentMs = 0;
         }
+        // R-AUD-8：锁外把 BGM 异步失败送回 v1 账本。
+        AudioV1OnBgmFailed();
     }
 
     public static void NotifyBgmPlaybackPosition(double currentSec, double totalSec, bool playing)
@@ -437,6 +474,8 @@ internal static partial class GenericUtils
             if (playing)
                 snakeBgm.StartedAtMs = GetTickMs() - ScaleFromPlaybackMs(snakeBgm.LastKnownCurrentMs, snakeBgm.Speed);
         }
+        // R-AUD-8：锁外把 BGM 进度送回 v1 账本。
+        AudioV1OnBgmPosition(currentSec, totalSec);
     }
 
     static long GetCurrentAudioMs(SnakeAudioState state)

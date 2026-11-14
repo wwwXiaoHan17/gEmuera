@@ -15,6 +15,7 @@ using MinorShift.Emuera.GameView;
 using MinorShift.Emuera.Content;
 using uEmuera.Drawing;
 using uEmuera.VisualBasic;
+using GEmuera.Core.Audio;
 
 namespace MinorShift.Emuera.GameData.Function
 {
@@ -3359,6 +3360,183 @@ namespace MinorShift.Emuera.GameData.Function
 				return global::GenericUtils.ControlBgm(action);
 			}
 		}
+
+
+		#region R-AUD-8 EWP audio v1（6 内建；形状校验与默认值由 Core AudioV1CallParser 承担）
+		// 任务要求与本文件 SoundControlMethod 同构：argumentTypeArray = null + 手写 CheckArgumentType，
+		// 不引入 argumentTypeArrayEx 多签名语法。Core 的解析器只负责形状/默认值，账本由 AudioV1Session 驱动。
+
+		static AudioV1Argument[] ToAudioArguments(IOperandTerm[] arguments, ExpressionMediator exm)
+		{
+			var result = new AudioV1Argument[arguments.Length];
+			for (int i = 0; i < arguments.Length; i++)
+			{
+				var term = arguments[i];
+				if (term == null)
+				{
+					result[i] = AudioV1Argument.Missing;
+					continue;
+				}
+				switch (term.GetEraType())
+				{
+					case EraType.String:
+						result[i] = AudioV1Argument.FromString(exm == null ? null : term.GetStrValue(exm));
+						break;
+					case EraType.Float:
+						result[i] = AudioV1Argument.FromFloat(exm == null ? 0.0 : term.GetFloatValue(exm));
+						break;
+					case EraType.Integer:
+						result[i] = AudioV1Argument.FromInt(exm == null ? 0 : term.GetIntValue(exm));
+						break;
+					default:
+						result[i] = AudioV1Argument.Missing;
+						break;
+				}
+			}
+			return result;
+		}
+
+		static string FormatAudioArgumentError(string name, AudioV1ArgumentError error, int index)
+		{
+			if (error == AudioV1ArgumentError.Count)
+				return name + "関数の引数の数が正しくありません";
+			if (error == AudioV1ArgumentError.Required)
+				return name + "関数の" + (index + 1) + "番目の引数は省略できません";
+			return name + "関数の" + (index + 1) + "番目の引数の型が正しくありません";
+		}
+
+		private sealed class AudioPlayMethod : FunctionMethod
+		{
+			public AudioPlayMethod()
+			{
+				ReturnType = EraType.Integer;
+				argumentTypeArray = null;
+				CanRestructure = false;
+			}
+			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+			{
+				if (!AudioV1CallParser.TryParsePlay(ToAudioArguments(arguments, null),
+					out _, out AudioV1ArgumentError error, out int index))
+					return FormatAudioArgumentError(name, error, index);
+				return null;
+			}
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				var request = AudioV1CallParser.ParsePlay(ToAudioArguments(arguments, exm));
+				return global::GenericUtils.AudioV1.Play(request);
+			}
+		}
+
+		private sealed class AudioCtlMethod : FunctionMethod
+		{
+			public AudioCtlMethod()
+			{
+				ReturnType = EraType.Integer;
+				argumentTypeArray = null;
+				CanRestructure = false;
+			}
+			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+			{
+				if (!AudioV1CallParser.TryParseControl(ToAudioArguments(arguments, null),
+					out _, out AudioV1ArgumentError error, out int index))
+					return FormatAudioArgumentError(name, error, index);
+				return null;
+			}
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				var request = AudioV1CallParser.ParseControl(ToAudioArguments(arguments, exm));
+				return global::GenericUtils.AudioV1.Control(request);
+			}
+		}
+
+		private sealed class AudioBusMethod : FunctionMethod
+		{
+			public AudioBusMethod()
+			{
+				ReturnType = EraType.Integer;
+				argumentTypeArray = null;
+				CanRestructure = false;
+			}
+			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+			{
+				if (!AudioV1CallParser.TryParseBus(ToAudioArguments(arguments, null),
+					out _, out AudioV1ArgumentError error, out int index))
+					return FormatAudioArgumentError(name, error, index);
+				return null;
+			}
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				var request = AudioV1CallParser.ParseBus(ToAudioArguments(arguments, exm));
+				return global::GenericUtils.AudioV1.Bus(request);
+			}
+		}
+
+		private sealed class AudioDuckMethod : FunctionMethod
+		{
+			public AudioDuckMethod()
+			{
+				ReturnType = EraType.Integer;
+				argumentTypeArray = null;
+				CanRestructure = false;
+			}
+			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+			{
+				if (!AudioV1CallParser.TryParseDuck(ToAudioArguments(arguments, null),
+					out _, out AudioV1ArgumentError error, out int index))
+					return FormatAudioArgumentError(name, error, index);
+				return null;
+			}
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				var request = AudioV1CallParser.ParseDuck(ToAudioArguments(arguments, exm));
+				return global::GenericUtils.AudioV1.Duck(request);
+			}
+		}
+
+		private sealed class AudioQueryMethod : FunctionMethod
+		{
+			public AudioQueryMethod()
+			{
+				ReturnType = EraType.Integer;
+				argumentTypeArray = null;
+				CanRestructure = false;
+			}
+			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+			{
+				if (!AudioV1CallParser.TryParseQuery(ToAudioArguments(arguments, null),
+					out _, out AudioV1ArgumentError error, out int index))
+					return FormatAudioArgumentError(name, error, index);
+				return null;
+			}
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				var request = AudioV1CallParser.ParseQuery(ToAudioArguments(arguments, exm));
+				return global::GenericUtils.AudioV1.Query(request.Handle, request.Field);
+			}
+		}
+
+		private sealed class AudioBusQueryMethod : FunctionMethod
+		{
+			public AudioBusQueryMethod()
+			{
+				ReturnType = EraType.Integer;
+				argumentTypeArray = null;
+				CanRestructure = false;
+			}
+			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
+			{
+				if (!AudioV1CallParser.TryParseBusQuery(ToAudioArguments(arguments, null),
+					out _, out AudioV1ArgumentError error, out int index))
+					return FormatAudioArgumentError(name, error, index);
+				return null;
+			}
+			public override Int64 GetIntValue(ExpressionMediator exm, IOperandTerm[] arguments)
+			{
+				var request = AudioV1CallParser.ParseBusQuery(ToAudioArguments(arguments, exm));
+				return global::GenericUtils.AudioV1.BusQuery(request.Bus, request.Field);
+			}
+		}
+		#endregion
 
 		private sealed class GetTextDrawingModeMethod : FunctionMethod
 		{

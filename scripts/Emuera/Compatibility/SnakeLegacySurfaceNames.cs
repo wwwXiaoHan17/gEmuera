@@ -26,7 +26,7 @@ internal static class SnakeLegacySurfaceNames
 
     internal static readonly IReadOnlyCollection<string> SnakeOnlyFunctionNames = Array.AsReadOnly(new[]
     {
-        "ACOS", "ARGLEN", "ASIN", "ATAN", "BGMCONTROL", "BITGET", "BITINDEXOFFIRST",
+        "ACOS", "ARGLEN", "ASIN", "ATAN", "AUDIO_BUS", "AUDIO_BUS_QUERY", "AUDIO_CTL", "AUDIO_DUCK", "AUDIO_PLAY", "AUDIO_QUERY", "BGMCONTROL", "BITGET", "BITINDEXOFFIRST",
         "BITSET", "BITTOGGLE", "CBGSETCIMG", "CEIL", "COS", "DISABLE_INPUT_MACRO",
         "DT_CELL_GETF", "DT_CELL_SETF", "ENABLE_INPUT_MACRO", "EVAL", "EVALF", "EVALS",
         "EXISTSIMAGELAYER", "EXIST_IN_CSV", "EXIST_IN_ERD", "FLOOR", "GCLEARLOWALPHA", "GDRAWPOLYGON", "GDRAWPOLYGONADDPOINT",

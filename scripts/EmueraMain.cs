@@ -421,12 +421,17 @@ public partial class EmueraMain : Node
 			{
 				GenericUtils.Error($"LEGACY_SESSION_STOP_FAILED {error}");
 			}
+			// R-AUD-8：VM 线程停止后再清 EWP audio v1 账本，避免停止过程又被脚本写入。
+			ResetAudioV1Session();
 			return;
 		}
 
 		var backend = legacySessionBackend;
 		if (backend is null)
+		{
+			ResetAudioV1Session();
 			return;
+		}
 
 		// 重要：不能在这里用 !backend.IsRunning 提前返回。Back/Restart/ERB restart 路径
 		// 会先调用 EmueraThread.End()，此时线程已停、IsRunning=false，但会话清理
@@ -440,6 +445,20 @@ public partial class EmueraMain : Node
 		catch (Exception error)
 		{
 			GenericUtils.Error($"LEGACY_BASELINE_STOP_FAILED {error}");
+		}
+		// R-AUD-8：与 ClearCompatibilityPlan 同点（线程停后）清空 v1 账本并整体停声。
+		ResetAudioV1Session();
+	}
+
+	void ResetAudioV1Session()
+	{
+		try
+		{
+			GenericUtils.ResetAudioV1();
+		}
+		catch (Exception error)
+		{
+			GenericUtils.Error($"AUDIO_V1_RESET_FAILED {error}");
 		}
 	}
 
