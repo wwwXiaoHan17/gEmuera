@@ -163,6 +163,14 @@ namespace MinorShift.Emuera.Content
 		{
 		}
 
+		// SPRITECREATE 8/10 参形态：裁剪 + 偏移 + 目标尺寸（参考 Skiav17.2 CroppedImage.cs:199-203）。
+		// DestBasePosition/DestBaseSize 的重映射由 ASpriteSingle.ApplyDestBaseCanvas 负责，
+		// 与 CSV sprite 的 SpriteF(rect,pos,destSize) 共用同一套渲染语义。
+		public SpriteG(string name, GraphicsImage gra, Rectangle rect, Point pos, Size destSize)
+			: base(name, gra, rect, destSize)
+		{
+			this.DestBasePosition = pos;
+		}
 	}
 
 	/// <summary>

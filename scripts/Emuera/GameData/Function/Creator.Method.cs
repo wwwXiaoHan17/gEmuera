@@ -907,33 +907,11 @@ namespace MinorShift.Emuera.GameData.Function
                 if (arguments[0].GetEraType() == EraType.Float)
                     return (long)arguments[0].GetFloatValue(exm);
                 string str = arguments[0].GetStrValue(exm);
-                if (str == null || str == "")
-                    return (0);
-                //全角文字が入ってるなら無条件で0を返す
-                if (str.Length < LangManager.GetStrlenLang(str))
-                    return (0);
-                StringStream st = new StringStream(str);
-                if (!char.IsDigit(st.Current) && st.Current != '+' && st.Current != '-')
-                    return (0);
-                else if ((st.Current == '+' || st.Current == '-') && !char.IsDigit(st.Next))
-                    return (0);
-                Int64 ret = LexicalAnalyzer.ReadInt64(st, true);
-                if (!st.EOS)
-                {
-                    if (st.Current == '.')
-                    {
-                        st.ShiftNext();
-                        while (!st.EOS)
-                        {
-                            if (!char.IsDigit(st.Current))
-                                return (0);
-                            st.ShiftNext();
-                        }
-                    }
-                    else
-                        return (0);
-                }
-                return ret;
+                // 参考实现（Skiav17.2 Creator.Method.cs:6142-6150）把 ReadInt64 包在 try/catch 里：
+                // 溢出/非法串返回 0。此处把同一份判定抽到 ToIntTextParser（可 xUnit 直测），
+                // 宿主只注入 LangManager 的显示宽度判定与 LexicalAnalyzer 的实际数字读取。
+                int displayLength = str == null ? 0 : LangManager.GetStrlenLang(str);
+                return ToIntTextParser.Parse(str, displayLength, st => LexicalAnalyzer.ReadInt64(st, true));
             }
         }
 
@@ -2310,9 +2288,12 @@ namespace MinorShift.Emuera.GameData.Function
 				argumentTypeArray = new EraType[] { EraType.String };
 				CanRestructure = false;
 			}
+			// METHOD 指令语法面（FunctionIdentifier 的 funcDic 复用本方法，且不经过 DFC 投影）
+			// 保持 v24 基线的 2/6 参形态：放宽到 8/10 会让 v24 未选择侧也接受 snake 专属签名。
+			// snake 的 8/10 参放行由 DialectFunctionContracts.CheckSpriteCreateSnake 负责，
+			// 本方法的 GetIntValue 已能执行 8/10 参（修复"放行后被静默忽略"）。
 			public override string CheckArgumentType(string name, IOperandTerm[] arguments)
 			{
-
 				if (arguments.Length < 2)
 					return string.Format(Properties.Resources.SyntaxErrMesMethodDefaultArgumentNum1, name, 2);
 				if (arguments.Length > 6)
@@ -2354,16 +2335,27 @@ namespace MinorShift.Emuera.GameData.Function
 					return 0;
 				}
 
-				Rectangle rect = new Rectangle(0, 0, g.Width, g.Height);
-				if(arguments.Length == 6)
+				int argumentCount = arguments.Length;
+				// 6 参起第 3~6 参是裁剪矩形（ReadRectangle 负责 int 域/非 0 校验）；
+				// 2 参形态直接以整图为源矩形。
+				Rectangle sourceRect = argumentCount == 2
+					? new Rectangle(0, 0, g.Width, g.Height)
+					: ReadRectangle(Name, exm, arguments, 2);
+				if (!SpriteCreateArgumentLayout.TryResolve(argumentCount, sourceRect.X, sourceRect.Y,
+						sourceRect.Width, sourceRect.Height, index => arguments[index].GetIntValue(exm),
+						out SpriteCreateLayout layout))
+					throw new CodeEE(string.Format(Properties.Resources.SyntaxErrMesMethodDefaultArgumentNum0, Name));
+				Rectangle rect = new Rectangle(layout.SourceX, layout.SourceY, layout.SourceWidth, layout.SourceHeight);
+				if(layout.HasSourceRectangle && !rect.IntersectsWith(new Rectangle(0, 0, g.Width, g.Height)))
 				{//四角形は正でも負でもよいが親画像の外を指してはいけない
 				 //参考（v24/snake 同款，EM_私家版_SPRITECREATE範囲制限緩和）：仅在与父图完全不相交时
 				 //抛错；部分越界保留原 rect 创建（负宽高亦透传，SrcRectangle 契约允许负值）。
-					rect = ReadRectangle(Name, exm, arguments, 2);
-					if (!rect.IntersectsWith(new Rectangle(0, 0, g.Width, g.Height)))
-						throw new CodeEE(string.Format(Properties.Resources.RuntimeErrMesMethodCIMGCreateOutOfRange0, Name));
+					throw new CodeEE(string.Format(Properties.Resources.RuntimeErrMesMethodCIMGCreateOutOfRange0, Name));
 				}
-				AppContents.CreateSpriteG(imgname, g, rect);
+				// 8/10 参的偏移与目标尺寸在此透传（修复前被静默忽略）。
+				AppContents.CreateSpriteG(imgname, g, rect,
+					new Point(layout.PositionX, layout.PositionY),
+					new Size(layout.DestWidth, layout.DestHeight));
 				return 1;
 			}
 		}
@@ -4728,7 +4720,12 @@ namespace MinorShift.Emuera.GameData.Function
 		{
 			string imgName = arguments[0].GetStrValue(exm) ?? "";
 			string filepath = arguments[1].GetStrValue(exm) ?? "";
-			return AppContents.CreateSpriteFromFileDynamic(imgName, filepath) ? 1 : 0;
+			// 参考 SpriteCreateFromFileMethod：第 3 参 isRelative（0 = ContentDir，非 0 = 相对路径）。
+			// 省略（null 实参）保持我方 2 参平台适配路径，不在此收窄。
+			bool? isRelative = null;
+			if (arguments.Length > 2 && arguments[2] != null)
+				isRelative = arguments[2].GetIntValue(exm) != 0;
+			return AppContents.CreateSpriteFromFileDynamic(imgName, filepath, isRelative) ? 1 : 0;
 		}
 	}
 

@@ -168,9 +168,19 @@ namespace MinorShift.Emuera.Content
 
 		static public bool CreateSpriteFromFileDynamic(string imgName, string filepath)
 		{
+			return CreateSpriteFromFileDynamic(imgName, filepath, null);
+		}
+
+		/// <summary>
+		/// SPRITECREATEFROMFILE(imgName, filename[, isRelative])。
+		/// isRelative 为 null = 未提供（保持我方 2 参平台适配：游戏根优先、再 resources）；
+		/// true = 相对路径（游戏根）；false = ContentDir（参考 SpriteCreateFromFileMethod）。
+		/// </summary>
+		static public bool CreateSpriteFromFileDynamic(string imgName, string filepath, bool? isRelative)
+		{
 			if (string.IsNullOrEmpty(imgName) || string.IsNullOrEmpty(filepath))
 				return false;
-			string resolvedFilepath = ResolveDynamicSpriteFilePath(filepath);
+			string resolvedFilepath = ResolveDynamicSpriteFilePath(filepath, isRelative);
 			if (!uEmuera.Utils.FileExists(resolvedFilepath))
 				return false;
 			imgName = imgName.ToUpper();
@@ -188,26 +198,29 @@ namespace MinorShift.Emuera.Content
 			return true;
 		}
 
-		static string ResolveDynamicSpriteFilePath(string filepath)
+		static string ResolveDynamicSpriteFilePath(string filepath, bool? isRelative)
 		{
-			// 企业级说明：SPRITECREATEFROMFILE 的相对路径按 emuera 约定以游戏目录为基准。
+			// SPRITECREATEFROMFILE 的相对路径按 emuera 约定默认以游戏目录为基准（2 参兼容路径）：
 			// eraFL 等脚本会传 portrait/prt_FIX/*.webp，而真实资源在 resources 下；因此先查游戏根目录，
 			// 再查 resources 目录，同时避免把显式 resources/ 前缀拼成 resources/resources。
-			string resolved = uEmuera.Utils.NormalizePath(filepath.Trim());
-			if (Path.IsPathRooted(resolved) || resolved.Contains("://"))
-				return uEmuera.Utils.ResolveExistingFilePath(resolved);
+			// 显式提供第 3 参时按参考实现收窄候选：true=相对（游戏根），false=ContentDir。
+			string normalized = uEmuera.Utils.NormalizePath(filepath.Trim());
+			string[] candidates = DynamicSpritePathResolver.BuildCandidates(
+				normalized,
+				DynamicSpritePathResolver.ResolveMode(isRelative),
+				Program.ExeDir,
+				Program.ContentDir);
+			if (candidates.Length == 0)
+				return uEmuera.Utils.ResolveExistingFilePath(normalized);
 
-			string gameCandidate = Path.Combine(Program.ExeDir ?? "", resolved);
-			string gameResolved = uEmuera.Utils.ResolveExistingFilePath(gameCandidate);
-			if (uEmuera.Utils.FileExists(gameResolved))
-				return gameResolved;
-
-			const string resourcesPrefix = "resources/";
-			string contentRelative = resolved.StartsWith(resourcesPrefix, StringComparison.OrdinalIgnoreCase)
-				? resolved.Substring(resourcesPrefix.Length)
-				: resolved;
-			resolved = Path.Combine(Program.ContentDir ?? "", contentRelative);
-			return uEmuera.Utils.ResolveExistingFilePath(resolved);
+			string resolved = normalized;
+			foreach (string candidate in candidates)
+			{
+				resolved = uEmuera.Utils.ResolveExistingFilePath(candidate);
+				if (uEmuera.Utils.FileExists(resolved))
+					return resolved;
+			}
+			return resolved;
 		}
 
 		static public void CreateSpriteG(string imgName, GraphicsImage parent,Rectangle rect)
@@ -216,6 +229,20 @@ namespace MinorShift.Emuera.Content
 				throw new ArgumentOutOfRangeException();
 			imgName = imgName.ToUpper();
 			SpriteG newCImg = new SpriteG(imgName, parent, rect);
+			imageDictionary[imgName] = newCImg;
+		}
+
+		/// <summary>
+		/// SPRITECREATE 的 8/10 参形态：裁剪 + 偏移 + 目标尺寸
+		/// （对照参考 AppContents.CreateSpriteG(imgName, parent, rect, pos, destSize)）。
+		/// 渲染侧 ASpriteSingle 已消费 DestBasePosition/DestBaseSize，故无需 Godot 侧新增方法。
+		/// </summary>
+		static public void CreateSpriteG(string imgName, GraphicsImage parent, Rectangle rect, Point pos, Size destSize)
+		{
+			if (string.IsNullOrEmpty(imgName))
+				throw new ArgumentOutOfRangeException();
+			imgName = imgName.ToUpper();
+			SpriteG newCImg = new SpriteG(imgName, parent, rect, pos, destSize);
 			imageDictionary[imgName] = newCImg;
 		}
 

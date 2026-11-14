@@ -29,7 +29,12 @@ namespace MinorShift.Emuera.GameData.Function
 				case "ABS":
 					return snake ? Wrap(method, null, CheckAnyCount(name, 1, 1)) : Wrap(method, Int1, CheckFixedInt);
 				case "ARGLEN":
-					return snake ? Wrap(method, null, AllowAny) : method;
+					// 参考 ArgLengthMethod：argumentTypeArrayEx = [{ ArgTypes = { } }] → 恰好 0 参
+					//（Creator.Method.cs:10816-10825）。snake 分支曾用 AllowAny 完全关闭校验，
+					// 与参考不符；v24 走底层 EraType[0] 的默认校验。
+					return snake
+						? Wrap(method, null, (name, arguments) => DialectArgumentShape.CheckNoArguments(name, arguments.Length))
+						: method;
 				case "CBGSETBUTTONSPRITE":
 					return Wrap(method, null, CheckButtonSprite);
 				case "CBGSETSPRITE":
@@ -135,8 +140,6 @@ namespace MinorShift.Emuera.GameData.Function
 		{
 			return new DialectFunctionMethod(method, declared, checker);
 		}
-
-		private static string AllowAny(string name, IOperandTerm[] arguments) => null;
 
 		private static Func<string, IOperandTerm[], string> CheckAnyCount(string name, int min, int max)
 		{
