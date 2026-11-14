@@ -24,7 +24,7 @@ internal static class Program
 
             Console.WriteLine($"v24MergedInstructions={v24Instructions.Count}; v24Functions={v24Functions.Count}");
 
-            // 注册表面快照：367 个总注册中，v24pure 隐藏 101 个 snake 扩展 → 266 可见；
+            // 注册表面快照（freeze v2 后）：总注册含 snake 扩展与 AUDIO 六函数，v24pure 会话隐藏后 → 266 可见；
             // snake 会话再隐藏 16 个（SnakeExcludedFunctionNames）→ 351 可见
             //（2026-10-18 对齐 Skiav13.0：新增 EXIST_IN_CSV / EXIST_IN_ERD 两个 snake 专属函数）。
             // 计数随 Creator.cs 注册表变化需同步更新（reflection 快照，非语义断言）。

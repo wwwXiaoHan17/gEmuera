@@ -115,6 +115,9 @@ namespace MinorShift.Emuera.GameData.Function
 				case "SIGN":
 					return snake ? Wrap(method, null, CheckAnyCount(name, 1, 1)) : Wrap(method, Int1, CheckFixedInt);
 				case "SPRITECREATE":
+				// 已知限制（2026-11-14 复审 P1-1）：snake 8/10 参只覆盖表达式形态（METHOD 投影经本 DFC 放行）；
+				// 语句形态（FunctionIdentifier 镜像表复用底层方法且不经本投影）仍按 v24 基线 2/6 拒绝——
+				// fail-loud（编译错）而非静默错误；完整修复需让镜像表经 DFC 投影（遗留登记）。
 					return Wrap(method, null, snake ? CheckSpriteCreateSnake : CheckSpriteCreateV24);
 				case "SPRITECREATEFROMFILE":
 					return snake ? Wrap(method, null, CheckSpriteCreateFromFile) : method;

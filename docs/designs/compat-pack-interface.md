@@ -237,7 +237,7 @@ per-game 启用配置（launcher 侧：游戏 → 包列表）给出**包文件�
    capability=<id>|<status>|<consumerContractId>|<introducedInEngineApi>
    ~~~
 
-   指令/函数按名字键、METHOD 投影名按 Ordinal 排序、capability 按 id、variant 先按指令名再按变体名做 Ordinal 排序（不是整行排序）；不含绝对路径/时间戳/进程值。对文本取 SHA256 得小写十六进制 64 字符。**哈希规范 v1 修订（2026-11-03 修复轮）**：新增 `methodProjection=<name>` 段覆盖 spec §5.4 的"指令到 METHOD 投影的条件"；该修订属于 v1 内的语义补全，不是新版本轴，所有既有 `baseSurfaceHash` 必须按本规范重算。METHOD 投影名的唯一事实源是生成清单 `LegacyDialectInventories.MethodProjectedInstructionNames`（宿主 validation context、上下文缺省与生成器三处同源）。当前基线值 `950dbeb9028a8a2fc73ac3699411a05b8e367458219b40bd862066c8902888c9` 由 `LegacySurfaceHashTests.LegacySurfaceHash_V24_IsStable` 与官方包测试钉住；生成清单 / capability / 变体漂移时先红，必须重跑 `LegacyDialectInventoryGenerator` 与 `Generate-V18PackManifest` 后再发布/更新包声明。
+   指令/函数按名字键、METHOD 投影名按 Ordinal 排序、capability 按 id、variant 先按指令名再按变体名做 Ordinal 排序（不是整行排序）；不含绝对路径/时间戳/进程值。对文本取 SHA256 得小写十六进制 64 字符。**哈希规范 v1 修订（2026-11-03 修复轮）**：新增 `methodProjection=<name>` 段覆盖 spec §5.4 的"指令到 METHOD 投影的条件"；该修订属于 v1 内的语义补全，不是新版本轴，所有既有 `baseSurfaceHash` 必须按本规范重算。METHOD 投影名的唯一事实源是生成清单 `LegacyDialectInventories.MethodProjectedInstructionNames`（宿主 validation context、上下文缺省与生成器三处同源）。当前基线值 `b5dde4e4fc3ff3780df05fc0cda0d9bc0ec6fc60975f5918a6e50f1717832fdb`（freeze v2，2026-11-14） 由 `LegacySurfaceHashTests.LegacySurfaceHash_V24_IsStable` 与官方包测试钉住；生成清单 / capability / 变体漂移时先红，必须重跑 `LegacyDialectInventoryGenerator` 与 `Generate-V18PackManifest` 后再发布/更新包声明。
 
 
 ### 12.10 2026-11-03 final fix wave（整支 final review 后的唯一修复轮）
