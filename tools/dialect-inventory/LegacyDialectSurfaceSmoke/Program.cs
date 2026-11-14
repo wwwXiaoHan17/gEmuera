@@ -144,7 +144,7 @@ static class Program
             Assert(
                 LegacySurfaceHash.ComputeV24SurfaceHash(
                     LegacySurfaceHash.BuildV24SurfaceHashInput("v24pure")) ==
-                "950dbeb9028a8a2fc73ac3699411a05b8e367458219b40bd862066c8902888c9",
+                "b5dde4e4fc3ff3780df05fc0cda0d9bc0ec6fc60975f5918a6e50f1717832fdb",
                 "v24 baseSurfaceHash drifted; frozen retired surface universe or v24 surface changed.");
 
             Assert(v24.IsInstructionVisible("PRINT"), "v24 lost a baseline instruction.");
@@ -551,8 +551,8 @@ static class Program
         Assert(runtimeMethodProjected.IsSubsetOf(declaredSet),
             "运行时 METHOD 投影出现了生成清单之外的指令（重跑 LegacyDialectInventoryGenerator）："
             + "多=[" + string.Join(',', runtimeMethodProjected.Except(declaredSet).Order(StringComparer.Ordinal)) + "]。");
-        Assert(declaredSet.Count == 345,
-            "冻结 MethodProjectedInstructionNames 数量漂移：" + declaredSet.Count + " != 345（pack 校验词汇表 ABI 面）。");
+        Assert(declaredSet.Count == 351,
+            "冻结 MethodProjectedInstructionNames 数量漂移：" + declaredSet.Count + " != 351（pack 校验词汇表 ABI 面；freeze v2 +6 AUDIO）。");
         Assert(declared.SequenceEqual(declared.Order(StringComparer.Ordinal)),
             "MethodProjectedInstructionNames 必须按 Ordinal 排序。");
     }

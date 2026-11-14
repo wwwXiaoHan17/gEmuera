@@ -14,7 +14,9 @@ namespace GEmuera.Core.Tests;
 public class LegacySurfaceHashTests
 {
     // 由当前 LegacyDialectInventories + EngineCapabilityCatalog + canonical 变体映射计算后钉住。
-    const string PinnedV24SemanticSurfaceHash = "950dbeb9028a8a2fc73ac3699411a05b8e367458219b40bd862066c8902888c9";
+    // freeze v2（2026-11-14，Skiav17.2 对齐）：MethodProjectedInstructionNames 345→351（+6 AUDIO_*），
+    // v24 会话表面本身不变（561/266）；按冻结宇宙 v2 重算并重钉。
+    const string PinnedV24SemanticSurfaceHash = "b5dde4e4fc3ff3780df05fc0cda0d9bc0ec6fc60975f5918a6e50f1717832fdb";
 
     static SurfaceHashInput BuildInput(
         CompatVersion? engineApi = null,

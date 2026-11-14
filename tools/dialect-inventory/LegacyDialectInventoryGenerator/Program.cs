@@ -331,6 +331,7 @@ internal static class Program
         File.WriteAllText(runnerPath, profilesJson, new UTF8Encoding(false));
 
         Console.WriteLine("v24: " + v24Instructions.Count + " instructions / " + v24FunctionNames.Count + " functions");
+        Console.WriteLine("v24 baseSurfaceHash: " + GEmuera.Core.Compatibility.Packs.LegacySurfaceHash.ComputeV24SurfaceHash());
         Console.WriteLine("frozen retired surface universe: " + frozenUniversePath);
         Console.WriteLine("written: " + corePath);
         Console.WriteLine("written: " + runnerPath);

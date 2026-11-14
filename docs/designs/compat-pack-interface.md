@@ -434,7 +434,7 @@ per-game 启用配置（launcher 侧：游戏 → 包列表）给出**包文件�
 
 - `gemuera.v18`/`game.megaten`/`game.erablue`/`game.erafl`/`game.snake` 五个内置方言模块与
   profile 已全部删除；差异改由第一方数据包 `packs/pack.gemuera.<profile>/` 表达（一包一目录、
-  manifest-only）。v24 基线表面与 `baseSurfaceHash` 不变（G8 钉扎 `950dbeb9…`）。
+  manifest-only）。v24 基线会话表面不变；`baseSurfaceHash` 于 freeze v2（2026-11-14，Skiav17.2 对齐 +6 AUDIO，MP 345→351）按规范重算重钉为 `b5dde4e4…`（原 `950dbeb9…`，历史值见 evolution log）。
 - 冻结包校验表面宇宙：`tools/dialect-inventory/retired-dialect-surface-universe.json`
   （来源 commit 30fd56e8…）是包校验/capability/variant 词汇表的 ABI 输入，退役后**只读**，
   生成器正常模式 = live v24 + 冻结退役数据，保证 `MethodProjectedInstructionNames` 等

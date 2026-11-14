@@ -3,7 +3,7 @@
 - **packId**：`pack.gemuera.snake`（目录/程序集/DLL 同名）
 - **来源内置模块**：`game.snake`（2026-11-07 退役，commit `c865596`）
 - **适用 profile / 游戏**：snake（Skiav13.0 系/eraTW 等）；由 launcher profile→pack 映射选择
-- **表面差量**：最大差集——22 个非 METHOD 指令 + 87 个函数（87 个 METHOD 投影名由函数侧镜像）；
+- **表面差量**：最大差集——22 个非 METHOD 指令 + 93 个函数（METHOD 投影名由函数侧镜像；2026-11-14 对齐 Skiav17.2 增 6 个 AUDIO_*，packVersion 1.1.0）；
   `hideFunctions=["BITMAP_CACHE_ENABLE","SETANIMETIMER"]`；
   `addInstructionCollisions=["BITMAP_CACHE_ENABLE"]`（contractAbi 1.1，保留指令/隐藏函数）；
   19 个 Wired capability；`variantSelections={FOR,SETBGIMAGE}=builtin:snake`

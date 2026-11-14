@@ -1,6 +1,6 @@
 {
   "baseProfileId": "v24pure",
-  "baseSurfaceHash": "950dbeb9028a8a2fc73ac3699411a05b8e367458219b40bd862066c8902888c9",
+  "baseSurfaceHash": "b5dde4e4fc3ff3780df05fc0cda0d9bc0ec6fc60975f5918a6e50f1717832fdb",
   "capabilities": [
     "arith.safe-arithmetic-guard.v1",
     "datatable.xml-leading-bom.v1",

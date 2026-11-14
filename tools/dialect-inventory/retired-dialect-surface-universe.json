@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
-  "sourceCommit": "30fd56e8d9e4dd7a698dfd81df7b79408a08e68b",
-  "capturedAtUtc": "2026-11-06T19:11:59.4779669Z",
+  "sourceCommit": "e832d3fa709dd10c72f76b096e169cb02ac08c3f",
+  "capturedAtUtc": "2026-11-14T17:20:00.0000000Z",
   "profiles": {
     "v18": {
       "surfaceKind": "full",
@@ -1074,6 +1074,12 @@
         "ARGLEN",
         "ASIN",
         "ATAN",
+        "AUDIO_BUS",
+        "AUDIO_BUS_QUERY",
+        "AUDIO_CTL",
+        "AUDIO_DUCK",
+        "AUDIO_PLAY",
+        "AUDIO_QUERY",
         "BGMCONTROL",
         "BITGET",
         "BITINDEXOFFIRST",
@@ -1195,6 +1201,30 @@
         },
         {
           "name": "ATAN",
+          "returnType": "Integer"
+        },
+        {
+          "name": "AUDIO_BUS",
+          "returnType": "Integer"
+        },
+        {
+          "name": "AUDIO_BUS_QUERY",
+          "returnType": "Integer"
+        },
+        {
+          "name": "AUDIO_CTL",
+          "returnType": "Integer"
+        },
+        {
+          "name": "AUDIO_DUCK",
+          "returnType": "Integer"
+        },
+        {
+          "name": "AUDIO_PLAY",
+          "returnType": "Integer"
+        },
+        {
+          "name": "AUDIO_QUERY",
           "returnType": "Integer"
         },
         {
@@ -1560,6 +1590,12 @@
     "ARRAYMSORTEX",
     "ASIN",
     "ATAN",
+    "AUDIO_BUS",
+    "AUDIO_BUS_QUERY",
+    "AUDIO_CTL",
+    "AUDIO_DUCK",
+    "AUDIO_PLAY",
+    "AUDIO_QUERY",
     "BARSTR",
     "BGMCONTROL",
     "BITGET",
