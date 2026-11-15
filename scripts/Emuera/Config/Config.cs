@@ -6,6 +6,8 @@ using System;
 //using System.Windows.Forms;
 using MinorShift._Library;
 
+using GEmuera.Core.Ui;
+
 using uEmuera.Forms;
 using uEmuera.Drawing;
 
@@ -571,6 +573,31 @@ namespace MinorShift.Emuera
 			WindowX = width;
 			WindowY = height;
 			DrawableWidth = width - DrawingParam_ShapePositionShift;
+		}
+		/// <summary>
+		/// 运行时改写核心字号（不写回游戏的 emuera.config）。UI 字号 API 的核心入口：
+		/// 镜像 SetConfig 的钳制规则（字号下限 8；行高随字号等比缩放且不低于字号），
+		/// 重算派生排版参数（DrawingParam_ShapePositionShift/DrawableWidth）并清字体缓存
+		/// （GetFont 缓存按字体名键控、字号烘焙在首次创建，不清则新文本仍用旧字号）；
+		/// 同步 ConfigData 条目以保持 ERB GETCONFIG("フォントサイズ"/"LINE HEIGHT") 一致。
+		/// 仅影响之后生成的行；调用方须在解释器空闲时调用（ClearFont 与解释器线程
+		/// 并发读 fontDic 存在竞态，见 EmueraContent.ProcessPendingFontSize）。
+		/// </summary>
+		public static void SetRuntimeFontSize(int newFontSize)
+		{
+			int clamped = FontSizeScaling.ClampFontSize(newFontSize);
+			if (clamped == FontSize)
+				return;
+			int oldFontSize = FontSize;
+			FontSize = clamped;
+			LineHeight = FontSizeScaling.ComputeScaledLineHeight(oldFontSize, LineHeight, clamped);
+			DrawingParam_ShapePositionShift = 0;
+			if (TextDrawingMode != TextDrawingMode.WINAPI)
+				DrawingParam_ShapePositionShift = Math.Max(2, FontSize / 6);
+			DrawableWidth = WindowX - DrawingParam_ShapePositionShift;
+			ClearFont();
+			ConfigData.Instance?.GetItem(ConfigCode.FontSize)?.SetValue<int>(FontSize);
+			ConfigData.Instance?.GetItem(ConfigCode.LineHeight)?.SetValue<int>(LineHeight);
 		}
 		public static int WindowY { get; private set; }
 		public static int WindowPosX { get; private set; }

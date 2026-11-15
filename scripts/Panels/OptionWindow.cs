@@ -131,11 +131,12 @@ public partial class OptionWindow : Control
 		fontSizeSlider.Value = MinorShift.Emuera.Config.FontSize > 0 ? MinorShift.Emuera.Config.FontSize : 18;
 		fontSizeSlider.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 		fontSizeSlider.CustomMinimumSize = new Vector2(120, 44);
-		// 自绘画布下字体大小由内容缩放实现：不再锁死在 emuera.config 的
-		// FontSize，也不改写游戏的 emuera.config（配置严格只读）。
+		// 字号滑杆直接驱动核心字号 Config.FontSize（运行时字号 API，
+		// 仅影响之后输出的行，会话内生效不改 emuera.config）；
+		// 整体视图缩放与字号严格分离，请用 Scalepad（SetContentScale）。
 		fontSizeSlider.Editable = true;
 		fontSizeSlider.TooltipText = MultiLanguage.Get("OptionWindow.FontSizeHint",
-			"Adjust rendered font size without changing the game's emuera.config.");
+			"Adjust the console font size (applies to newly printed lines). Use the scale pad to zoom the whole view.");
 		fontSizeSlider.ValueChanged += OnFontSizeChanged;
 		fontRow.AddChild(fontSizeSlider);
 		fontSizeLabel = CreateValueLabel();
@@ -565,25 +566,24 @@ public partial class OptionWindow : Control
 
 	public void ShowPopup()
 	{
-		SyncFontSizeFromContentScale();
+		SyncFontSizeFromConfig();
 		popup.PopupCentered();
 		CallDeferred(nameof(ClampPopupToSafeArea));
 		EmitSignal(SignalName.PopupOpened);
 	}
 
-	// 字体滑杆展示的是“渲染后字号”：核心字号 × 当前内容缩放。
-	// 这样自动 fit 后打开选项也能看到实际大小。
-	void SyncFontSizeFromContentScale()
+	// 字号滑杆直接反映/驱动核心字号 Config.FontSize（运行时字号 API），
+	// 与内容缩放（Scalepad / SetContentScale）严格分离。
+	void SyncFontSizeFromConfig()
 	{
 		if (fontSizeSlider == null || fontSizeLabel == null)
 			return;
 		int coreSize = MinorShift.Emuera.Config.FontSize > 0 ? MinorShift.Emuera.Config.FontSize : 18;
-		float scale = EmueraContent.instance?.ContentScale ?? 1.0f;
-		int rendered = Mathf.Clamp(Mathf.RoundToInt(coreSize * scale), 8, 48);
+		int size = Mathf.Clamp(coreSize, 8, 48);
 		fontSizeSlider.SetBlockSignals(true);
-		fontSizeSlider.Value = rendered;
+		fontSizeSlider.Value = size;
 		fontSizeSlider.SetBlockSignals(false);
-		fontSizeLabel.Text = rendered.ToString();
+		fontSizeLabel.Text = size.ToString();
 	}
 
 	void ClampPopupToSafeArea()
@@ -616,11 +616,11 @@ public partial class OptionWindow : Control
 
 	void OnFontSizeChanged(double value)
 	{
-		int coreSize = MinorShift.Emuera.Config.FontSize > 0 ? MinorShift.Emuera.Config.FontSize : 18;
 		int requested = Mathf.Clamp((int)System.Math.Round(value), 8, 48);
 		fontSizeLabel.Text = requested.ToString();
-		float scale = Mathf.Clamp(requested / (float)coreSize, 0.5f, 3.0f);
-		EmueraContent.instance?.SetContentScale(scale);
+		// 运行时字号 API：会话内生效（不写回 emuera.config），在解释器空闲帧应用；
+		// 内容缩放互不影响，请用 Scalepad。
+		EmueraContent.instance?.RequestFontSize(requested);
 	}
 
 	void OnQuickButtonWidthChanged(double value)

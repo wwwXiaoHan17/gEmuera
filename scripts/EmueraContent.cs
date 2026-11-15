@@ -6629,6 +6629,7 @@ public partial class EmueraContent : Control
 	{
 		TrimUnboundedCaches();
 		ProcessPendingMobileViewportPolicy();
+		ProcessPendingFontSize();
 		AnimatedWebpSpriteFrames.ProcessPendingFrameUploads(OS.HasFeature("mobile"));
 		ProcessPendingContentPinchZoom();
 		ProcessContentInertia((float)delta);
