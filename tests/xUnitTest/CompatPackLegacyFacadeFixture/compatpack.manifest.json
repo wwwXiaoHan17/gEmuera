@@ -4,6 +4,6 @@
   "contractAbi": "1.0",
   "engineApi": "1.0",
   "baseProfileId": "v24pure",
-  "baseSurfaceHash": "b5dde4e4fc3ff3780df05fc0cda0d9bc0ec6fc60975f5918a6e50f1717832fdb",
+  "baseSurfaceHash": "99a8763bf53f850bbd9a2c52315a375bd4075f396b467d8d4ad097a27bd05b37",
   "capabilities": ["input.pointer-button.v1"]
 }

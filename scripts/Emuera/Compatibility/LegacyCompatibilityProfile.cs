@@ -20,6 +20,9 @@ namespace MinorShift.Emuera.Compatibility
 		bool AllowsScopedVariablePreRegistration { get; }
 		bool ContinuesAfterStartupFault { get; }
 		bool UsesFastDisplayRefresh { get; }
+
+		/// <summary>HTML div 的 align 属性接受并忽略（Skiav17.2；HtmlManager div 属性解析门控）。</summary>
+		bool IgnoresDivAlignAttribute { get; }
 		bool UsesLazyResourceIndex { get; }
 		bool UsesTimesClamp { get; }
 		bool UsesRandClamp { get; }

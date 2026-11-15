@@ -539,6 +539,7 @@ namespace MinorShift.Emuera.Compatibility
 		public bool AllowsScopedVariablePreRegistration => false;
 		public bool ContinuesAfterStartupFault => false;
 		public bool UsesFastDisplayRefresh => false;
+		public bool IgnoresDivAlignAttribute => false;
 		public bool UsesLazyResourceIndex => false;
 		public bool UsesTimesClamp => false;
 		public bool UsesRandClamp => false;
@@ -587,6 +588,7 @@ namespace MinorShift.Emuera.Compatibility
 		public bool AllowsScopedVariablePreRegistration => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.ScopedVariablePreRegistration);
 		public bool ContinuesAfterStartupFault => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.ContinueAfterStartupFault);
 		public bool UsesFastDisplayRefresh => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.FastDisplayRefresh);
+		public bool IgnoresDivAlignAttribute => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.DivAlignAttrIgnore);
 		public bool UsesLazyResourceIndex => true;
 		public bool UsesTimesClamp => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.TimesClamp);
 		public bool UsesRandClamp => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.RandClamp);

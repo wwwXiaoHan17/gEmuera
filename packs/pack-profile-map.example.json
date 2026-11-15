@@ -40,7 +40,7 @@
       "relativePath": "compat_packs/pack.gemuera.snake/pack.gemuera.snake.dll",
       "relativePathAndroid": "packs/pack.gemuera.snake/pack.gemuera.snake.dll",
       "requiredPackVersion": "1.0.0",
-      "note": "已落地：pack.gemuera.snake（19 个 Wired capability + variantSelections builtin:snake + BITMAP_CACHE_ENABLE 碰撞字段）。"
+      "note": "已落地：pack.gemuera.snake（20 个 Wired capability 含 html.div-align-attr-ignore + variantSelections builtin:snake + BITMAP_CACHE_ENABLE 碰撞字段）。"
     }
   ]
 }

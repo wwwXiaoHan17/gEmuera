@@ -332,6 +332,6 @@ reports/compatpack/
   checkout 必须先执行 `tools/compat-pack/Build-FirstPartyPacks.ps1`，否则 staging 完整性检查 FAIL。
 - 当前状态（2026-11-07 P-D 退役后，桌面档）：PASS（8 项检查，桌面命令 7/7）；Core 327 passed /
   1 skipped（+ installer 13 用例在该计数内）、Facade 79、ABI 4；三冒烟与 lifecycle 4/4 全绿；
-  v24 表面哈希 `b5dde4e4…` 钉扎 PASS；`profiles.generated.json` 仅 v24pure。
+  v24 表面哈希 `99a8763b…` 钉扎 PASS；`profiles.generated.json` 仅 v24pure。
 - 仍**不可发布**：Gate 1/2/7 的真机与六游戏证据未采集（`reports/compatpack/*.json` 缺失）；
   Android/六游戏/真机一律标 `[未验证]`。

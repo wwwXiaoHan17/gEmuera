@@ -197,7 +197,7 @@ public class FirstPartyPackEquivalenceTests
 
         string[] expectedCapabilities = SnakeCompatibilityCapabilities.RequiredWiredCapabilityIds
             .Order(StringComparer.Ordinal).ToArray();
-        Assert.Equal(19, expectedCapabilities.Length);
+        Assert.Equal(20, expectedCapabilities.Length);
         Assert.Equal(expectedCapabilities, handle.Manifest.Capabilities.Order(StringComparer.Ordinal));
 
         CompatibilityPlan baseline = V24Baseline();

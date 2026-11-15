@@ -32,6 +32,12 @@ public static class SnakeCompatibilityCapabilities
     /// <summary>低于 60fps 时使用 snake 快速显示刷新策略（EmueraConsole）。</summary>
     public const string FastDisplayRefresh = "display.fast-refresh.v1";
 
+    /// <summary>
+    /// HTML div 的 align 属性接受并忽略（Skiav17.2 起；此前未知属性丢弃整行 HTML）。
+    /// 几何仍由 xpos/width/height 决定（HtmlManager div 属性解析门控）。
+    /// </summary>
+    public const string DivAlignAttrIgnore = "html.div-align-attr-ignore.v1";
+
     /// <summary>TIMES 结果钳制到 [0,1000] 并打印越界警告（v24 参考为 unchecked 直转）。</summary>
     public const string TimesClamp = "math.times-clamp.v1";
 
@@ -106,6 +112,7 @@ public static class SnakeCompatibilityCapabilities
                 [OutKeyword] = "AllowsOutKeyword",
                 [VariadicStrip] = "UsesVariadicStrip",
                 [FloatTypeSystem] = "UsesFloatTypeSystem",
+                [DivAlignAttrIgnore] = "IgnoresDivAlignAttribute",
             });
 
     public static readonly IReadOnlyList<string> RequiredCapabilityIds =
@@ -130,6 +137,7 @@ public static class SnakeCompatibilityCapabilities
             VariadicStrip,
             FloatTypeSystem,
             PresetErdMerge,
+            DivAlignAttrIgnore,
         });
 
     /// <summary>

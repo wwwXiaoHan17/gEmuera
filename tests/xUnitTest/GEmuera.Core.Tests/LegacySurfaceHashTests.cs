@@ -16,7 +16,7 @@ public class LegacySurfaceHashTests
     // 由当前 LegacyDialectInventories + EngineCapabilityCatalog + canonical 变体映射计算后钉住。
     // freeze v2（2026-11-14，Skiav17.2 对齐）：MethodProjectedInstructionNames 345→351（+6 AUDIO_*），
     // v24 会话表面本身不变（561/266）；按冻结宇宙 v2 重算并重钉。
-    const string PinnedV24SemanticSurfaceHash = "b5dde4e4fc3ff3780df05fc0cda0d9bc0ec6fc60975f5918a6e50f1717832fdb";
+    const string PinnedV24SemanticSurfaceHash = "99a8763bf53f850bbd9a2c52315a375bd4075f396b467d8d4ad097a27bd05b37";
 
     static SurfaceHashInput BuildInput(
         CompatVersion? engineApi = null,

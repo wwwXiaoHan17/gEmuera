@@ -1210,6 +1210,15 @@ namespace MinorShift.Emuera.GameView
 								// 实测全部 fixture/游戏零使用——按"禁止语义偏移"口径全线拒绝。
 								throw new CodeEE("<" + tag + ">タグの属性名" + word.Code + "は解釈できません");
 							}
+							else if (word.Code.Equals("align", StringComparison.OrdinalIgnoreCase)
+								&& Program.Compatibility.Snake.IgnoresDivAlignAttribute
+								&& (attrValue.Equals("left", StringComparison.OrdinalIgnoreCase)
+									|| attrValue.Equals("center", StringComparison.OrdinalIgnoreCase)
+									|| attrValue.Equals("right", StringComparison.OrdinalIgnoreCase)))
+							{
+								// html.div-align-attr-ignore.v1（Skiav17.2）：div 的 align 接受并忽略；
+								// 几何仍由 xpos/width/height 决定。未激活会话保持未知属性整行拒绝（v24 基线）。
+							}
 							else if (!tryParseStyledBoxAttribute(ref divTag.StyledBox, word.Code, attrValue))
 								throw new CodeEE("<" + tag + ">タグの属性名" + word.Code + "は解釈できません");
 						}
