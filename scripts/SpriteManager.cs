@@ -800,7 +800,22 @@ const int AsyncTextureWorkerQuiescenceTimeoutMs = 2000;
 			else if (extname == "jpg" || extname == "jpeg")
 				err = img.LoadJpgFromBuffer(content);
 			else if (extname == "webp")
+			{
 				err = img.LoadWebpFromBuffer(content);
+				if (err != Error.Ok && AnimatedWebpSpriteFrames.IsAnimatedWebp(filename))
+				{
+					// Godot 静态 WebP 解码器不支持动画 WebP（VP8X+ANIM，err=43）。
+					// 动画立绘（如 TW EagloV 包的目常目动态）在此会退化为 1x1 透明占位，
+					// 叠加层整层不可见。回退 Skia 首帧解码：动画播放仍由 EmueraImage 的
+					// 逐帧路径负责，脚本合成/绘制至少拿到真实首帧，不再静默空白。
+					if (AnimatedWebpSpriteFrames.TryDecodeFirstFrameImage(filename, out var animatedFirstFrame))
+					{
+						LogSpriteWarning(() => $"[SpriteManager] animated webp decoded via Skia first-frame fallback: {filename}");
+						img.Dispose();
+						return animatedFirstFrame;
+					}
+				}
+			}
 			else if (extname == "bmp")
 				err = img.LoadBmpFromBuffer(content);
 			else if (extname == "tga")
