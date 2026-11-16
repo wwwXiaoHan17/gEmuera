@@ -21,8 +21,40 @@ public partial class AndroidWindowOrientationController : Node
 	const string SettingsPath = "user://settings.cfg";
 	const string SettingsSection = "Display";
 	const string FollowDeviceOrientationKey = "FollowDeviceOrientation";
+	// 一次性迁移标记：旧版本手动旋转会无条件把 FollowDeviceOrientation 写成 false
+	//（持久化），该值不代表用户真实偏好。为此新增「仅本次/永久」选择并写入本标记；
+	// 标记缺失 = 旧配置 = 把该键重置回「跟随」，之后用户选择正常持久化。
+	const string FollowMigrationKey = "RotationFollowSemanticsV2";
 
 	static int followDeviceOrientationCache = -1;
+
+	/// <summary>
+	/// 旧配置一次性迁移：把旧版本遗留的 FollowDeviceOrientation=false 重置为 true。
+	/// 幂等：迁移后写入标记，后续不再执行。
+	/// </summary>
+	static void MigrateLegacyRotationSettingsIfNeeded()
+	{
+		try
+		{
+			var cfg = new ConfigFile();
+			if (cfg.Load(SettingsPath) != Error.Ok)
+				return; // 无配置文件：无需迁移
+			if (cfg.GetValue(SettingsSection, FollowMigrationKey, false).AsBool())
+				return; // 已迁移
+			cfg.SetValue(SettingsSection, FollowDeviceOrientationKey, true);
+			cfg.SetValue(SettingsSection, FollowMigrationKey, true);
+			cfg.Save(SettingsPath);
+			followDeviceOrientationCache = 1;
+			MobileLayoutDiagnostics.PublishOrientation(
+				"[ORIENTATION] 迁移旧配置：FollowDeviceOrientation 重置为跟随（旧版本无条件写盘导致）");
+		}
+		catch (Exception ex)
+		{
+			// 迁移失败不阻断：把异常降级为告警，行为退回读取原始配置。
+			MobileLayoutDiagnostics.Warn("[ORIENTATION] 方向配置迁移失败 -> "
+				+ ex.GetType().Name + ": " + ex.Message);
+		}
+	}
 
 	/// <summary>
 	/// 读取 settings.cfg 里用户持久化的偏好（不改动内存缓存）。
@@ -34,6 +66,7 @@ public partial class AndroidWindowOrientationController : Node
 	{
 		get
 		{
+			MigrateLegacyRotationSettingsIfNeeded();
 			var cfg = new ConfigFile();
 			if (cfg.Load(SettingsPath) != Error.Ok)
 				return true; // 文件缺失/损坏：按默认（跟随）处理
@@ -48,6 +81,7 @@ public partial class AndroidWindowOrientationController : Node
 		{
 			if (followDeviceOrientationCache < 0)
 			{
+				MigrateLegacyRotationSettingsIfNeeded();
 				var cfg = new ConfigFile();
 				cfg.Load(SettingsPath);
 				followDeviceOrientationCache =

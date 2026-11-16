@@ -129,3 +129,18 @@ fullSensor 语义 = 4 方向跟随传感器**且忽略用户方向锁定**，旋
 >
 > 验证 [实测]：`dotnet build` 0 error。[未验证] 真机两选项写盘行为（需用户安装后确认）。
 > 让弹窗出现的条件：设置窗打开「跟随手机朝向」（或清掉 settings.cfg 的该键）。
+
+> 补遗 3（2026-11-16，用户反馈「旧版本关闭的跟随，更新后仍然关闭」）
+>
+> 现象正常但不应让用户承担：旧版 `RotateScreen` 无条件写盘，用户点过一次旋转就把
+> `FollowDeviceOrientation=false` 永久落盘；该值不代表真实偏好，而新版本迁移不会纠正它。
+>
+> 修复：一次性配置迁移 `MigrateLegacyRotationSettingsIfNeeded()`。
+> - 判据：`settings.cfg` 缺少新键 `RotationFollowSemanticsV2` = 旧配置
+> - 动作：把 `FollowDeviceOrientation` 重置为 true，写入标记，后续不再执行（幂等）
+> - 触发点：`FollowDeviceOrientation` 与 `PersistedFollowDeviceOrientation` 两个读取入口
+>   首次访问时（打开设置窗 / 点旋转 / 启动时应用方向模式）
+> - 失败降级：异常只记告警，退回读取原始配置，不阻断启动
+>
+> 验证 [实测]：`dotnet build` 0 error。[未验证] 真机上迁移后的实际表现（需安装后确认
+> settings.cfg 出现 `RotationFollowSemanticsV2=true` 且 `FollowDeviceOrientation=true`）。
