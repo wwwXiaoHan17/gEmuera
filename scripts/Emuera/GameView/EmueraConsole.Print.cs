@@ -553,6 +553,17 @@ namespace MinorShift.Emuera.GameView
 		// PRINTC/PRINTBUTTONC 在 Godot 侧按像素宽度分栏，避免全半角混排时列宽漂移。
 		// 这里单独跟踪缓冲中由 PRINTC 累积的宽度，因为 force_button 路径的按钮宽度要到 Flush 前才会补齐。
 		private int printCCurrentLinePx = 0;
+		/// <summary>
+		/// 运行时字号变化后使 PRINTC 像素分栏阈值失效（printCWidth/printCWidthL 按
+		/// Config.Font 的尺寸懒计算且无过期机制，字号变了阈值仍是旧值）。下一帧
+		/// PrintC/PRINTBUTTONC 会以新字号重算。由 EmueraContent.ProcessPendingFontSize
+		/// 在解释器空闲点调用。
+		/// </summary>
+		public void InvalidatePrintCWidthCache()
+		{
+			printCWidth = -1;
+			printCWidthL = -1;
+		}
 		public void PrintC(string str, bool alignmentRight)
 		{
 			if (string.IsNullOrEmpty(str))

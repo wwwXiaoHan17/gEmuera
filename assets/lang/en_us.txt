@@ -82,6 +82,7 @@ FirstWindow.ManualGameRoute=manual
 FirstWindow.GameTab=Games
 FirstWindow.CompatSettingsToggle=Compatibility settings
 OptionWindow.FontSize=Font Size
+OptionWindow.FontSizeHint=Adjust the console font size (applies to newly printed lines). Use the scale pad to zoom the whole view.
 OptionWindow.QuickButtonWidth=Quick Width
 OptionWindow.QuickFontSize=Quick Font
 OptionWindow.ButtonDragSensitivity=Scroll Sensitivity
