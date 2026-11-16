@@ -112,3 +112,20 @@ fullSensor 语义 = 4 方向跟随传感器**且忽略用户方向锁定**，旋
 > 顺带修复：本轮预览时发现桌面 `user://settings.cfg` 被早前手工恢复时写坏
 > （`Language=zh_cn` 缺引号 → ConfigFile 解析失败 → 语言回退英文），已修正为 `Language="zh_cn"`。
 > 教训：手工改 Godot cfg 的字符串值必须带双引号。
+
+> 补遗 2（2026-11-16，用户反馈「构建后不弹窗」+ 由此发现的升级 bug）
+>
+> 现象：用户构建后点旋转没有弹出选择框。
+> 解释：跟随已关闭时不弹窗是**有意设计**（已是固定模式，"永久/本次"无区别，直接转）。
+> 用户设备上此前点过旧版旋转，`settings.cfg` 里 `FollowDeviceOrientation` 已是 false。
+>
+> **但由此发现一个真实 bug**：`RotateChoiceDialog.Show` 原用 `FollowDeviceOrientation`
+> （含「仅本次」的会话覆盖）判断是否弹窗。用户点「仅本次」后内存态为 false 而配置仍为 true，
+> 再点旋转会走"已关闭跟随"分支并 `RotateScreen(persist: true)`——**把"仅本次"悄悄升级成永久**。
+>
+> 修复：新增 `AndroidWindowOrientationController.PersistedFollowDeviceOrientation`
+> （只读 settings.cfg，不碰内存缓存），弹窗判断改用它。语义变为：
+> 「用户偏好=跟随 → 弹窗询问；用户偏好=固定 → 直接转」。
+>
+> 验证 [实测]：`dotnet build` 0 error。[未验证] 真机两选项写盘行为（需用户安装后确认）。
+> 让弹窗出现的条件：设置窗打开「跟随手机朝向」（或清掉 settings.cfg 的该键）。
