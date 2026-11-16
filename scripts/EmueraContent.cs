@@ -352,6 +352,18 @@ public partial class EmueraContent : Control
 	// two-finger input is common on phones while tapping dense command buttons.
 	float contentScale = 1.0f;
 	bool contentScaleUserAdjusted;
+	// UI 缩放补偿（第二层画布缩放解耦）：实际渲染 Scale = contentScale × uiScaleCompensation，
+	// 其中 uiScaleCompensation = 1 / root.ContentScaleFactor。两因子相乘后物理大小与 UI 缩放
+	// 无关：contentScale 只表达用户意志（Scalepad/双指捏合/字体滑条/移动端 fit），
+	// root.ContentScaleFactor 只影响系统 UI（启动器/悬浮面板）。不持久化——每次从
+	// 窗口属性现算，会话内即时跟随；不写 contentScaleUserAdjusted，auto-fit 用户路径不变。
+	float uiScaleCompensation = 1.0f;
+
+	/// <summary>实际渲染缩放（画布单位）：布局/滚动/命中/坐标换算一律用它，禁用裸 contentScale。</summary>
+	float EffectiveContentScale => contentScale * uiScaleCompensation;
+
+	/// <summary>UI 缩放补偿因子（Scalepad Fit 等外部换算用）。实例不存在时视为无补偿。</summary>
+	public static float UiScaleCompensation => instance?.uiScaleCompensation ?? 1.0f;
 	Dictionary<int, Vector2> contentTouchPositions = new Dictionary<int, Vector2>();
 	bool contentTouchGestureActive = false;
 	bool contentPinchActive = false;
@@ -881,6 +893,9 @@ public partial class EmueraContent : Control
 	public override void _Ready()
 	{
 		instance = this;
+		// UI 缩放补偿按启动时窗口因子初始化（父节点 EmueraMain._Ready 已先应用持久化 UiScale：
+		// Godot 子节点 _Ready 晚于父节点，EmueraContent 又是运行时 AddChild，时序必然成立）。
+		SyncUiScaleCompensation();
 		RefreshViewportMetrics();
 		GetViewport().SizeChanged += OnViewportSizeChanged;
 
@@ -3863,9 +3878,10 @@ public partial class EmueraContent : Control
 	}
 
 	// Protect divisions and scroll math from zero scale.
+	// 返回实际渲染缩放（含 UI 缩放补偿）——所有布局/滚动/命中数学的唯一口径。
 	float GetSafeContentScale()
 	{
-		return Mathf.Max(contentScale, 0.001f);
+		return Mathf.Max(EffectiveContentScale, 0.001f);
 	}
 
 	// Unscaled console layout must never be narrower than emuera's drawable area.
@@ -5682,7 +5698,7 @@ public partial class EmueraContent : Control
 			return contentPosition;
 		var rect = scrollContainer.GetGlobalRect();
 		var scrollOffset = new Vector2(NormalizeContentHorizontalScroll(scrollContainer.ScrollHorizontal), scrollContainer.ScrollVertical);
-		var scaled = contentPosition * (contentScale > 0.001f ? contentScale : 1.0f);
+		var scaled = contentPosition * GetSafeContentScale();
 		return scaled - scrollOffset + rect.Position;
 	}
 
@@ -5695,8 +5711,7 @@ public partial class EmueraContent : Control
 		var rect = scrollContainer.GetGlobalRect();
 		var contentPosition = globalPosition - rect.Position;
 		contentPosition += new Vector2(NormalizeContentHorizontalScroll(scrollContainer.ScrollHorizontal), scrollContainer.ScrollVertical);
-		if (contentScale > 0.001f)
-			contentPosition /= contentScale;
+		contentPosition /= GetSafeContentScale();
 		return contentPosition;
 	}
 
@@ -6564,7 +6579,9 @@ public partial class EmueraContent : Control
 	// size is handled separately by UpdateScaleBounds.
 	void ApplyContentScaleTransform()
 	{
-		var scaleVector = new Vector2(contentScale, contentScale);
+		// 实际渲染用有效缩放（含 UI 补偿）：UI 缩放只改系统 UI，不动游戏内容物理大小。
+		float effectiveScale = GetSafeContentScale();
+		var scaleVector = new Vector2(effectiveScale, effectiveScale);
 		if (consoleRenderSurface != null)
 			consoleRenderSurface.Scale = scaleVector;
 		if (lineContainer != null)
@@ -7394,7 +7411,7 @@ public partial class EmueraContent : Control
 		var localFocus = center - rect.Position;
 		localFocus.X = Mathf.Clamp(localFocus.X, 0.0f, rect.Size.X);
 		localFocus.Y = Mathf.Clamp(localFocus.Y, 0.0f, rect.Size.Y);
-		float scale = Mathf.Max(contentScale, 0.001f);
+		float scale = GetSafeContentScale();
 		contentPinchFocusContent = (GetCurrentContentScrollVector() + localFocus) / scale;
 		contentPinchActive = true;
 		// 用户主动双指缩放后，旋转屏幕不再用 fit scale 覆盖用户选择。
@@ -7497,7 +7514,7 @@ public partial class EmueraContent : Control
 		contentPinchStartSpread = Mathf.Max(spread, ContentPinchMinSpread);
 		contentPinchStartScale = contentScale;
 		contentPinchFilteredSpread = contentPinchStartSpread;
-		float scale = Mathf.Max(contentScale, 0.001f);
+		float scale = GetSafeContentScale();
 		contentPinchFocusContent = (GetCurrentContentScrollVector() + scaleFocusLocalPoint) / scale;
 	}
 
@@ -7536,7 +7553,7 @@ public partial class EmueraContent : Control
 		localFocus.X = Mathf.Clamp(localFocus.X, 0.0f, rect.Size.X);
 		localFocus.Y = Mathf.Clamp(localFocus.Y, 0.0f, rect.Size.Y);
 
-		float previousScale = Mathf.Max(contentScale, 0.001f);
+		float previousScale = GetSafeContentScale();
 		var previousScroll = desiredContentScrollValid
 			? new Vector2(desiredContentScrollHorizontal, desiredContentScrollVertical)
 			: new Vector2(NormalizeContentHorizontalScroll(scrollContainer.ScrollHorizontal), scrollContainer.ScrollVertical);
@@ -7563,7 +7580,7 @@ public partial class EmueraContent : Control
 		if (scrollContainer == null)
 			return;
 
-		var nextScroll = contentFocus * contentScale - localFocus;
+		var nextScroll = contentFocus * GetSafeContentScale() - localFocus;
 		int targetHorizontal = NormalizeContentHorizontalScroll(Mathf.Clamp(Mathf.RoundToInt(nextScroll.X), 0, GetMaxContentHorizontalScroll()));
 		int targetVertical = Mathf.Clamp(Mathf.RoundToInt(nextScroll.Y), 0, GetMaxContentVerticalScroll());
 		scrollContainer.ScrollHorizontal = targetHorizontal;
@@ -7629,8 +7646,7 @@ public partial class EmueraContent : Control
 		var rect = scrollContainer.GetGlobalRect();
 		var contentPosition = globalPosition - rect.Position;
 		contentPosition += new Vector2(NormalizeContentHorizontalScroll(scrollContainer.ScrollHorizontal), scrollContainer.ScrollVertical);
-		if (contentScale > 0.001f)
-			contentPosition /= contentScale;
+		contentPosition /= GetSafeContentScale();
 		return contentPosition;
 	}
 
@@ -7666,8 +7682,7 @@ public partial class EmueraContent : Control
 			return globalPosition;
 		var rect = scrollContainer.GetGlobalRect();
 		var contentPosition = globalPosition - rect.Position;
-		if (contentScale > 0.001f)
-			contentPosition /= contentScale;
+		contentPosition /= GetSafeContentScale();
 		return contentPosition;
 	}
 
