@@ -8,6 +8,11 @@ public partial class OptionWindow : Control
 	// 不影响游戏画面内容（其缩放独立走 Scalepad/双指捏合）。
 	Slider uiScaleSlider;
 	Label uiScaleValue;
+	// 方向控制（仅 Android 构建时创建）：跟随手机朝向 / 手动旋转。
+	CheckButton followOrientationToggle;
+	Button rotateScreenButton;
+	Label followOrientationLabel;
+	Label rotateScreenLabel;
 	Slider fontSizeSlider;
 	Label fontSizeLabel;
 	Slider quickButtonWidthSlider;
@@ -145,6 +150,31 @@ public partial class OptionWindow : Control
 		uiScaleValue = CreateValueLabel();
 		uiScaleValue.Text = FormatUiScalePercent(UiScaleHelper.current);
 		uiScaleRow.AddChild(uiScaleValue);
+
+		// 方向控制（仅 Android）：跟随手机朝向（Sensor 忽略系统方向锁定）+ 手动旋转。
+		if (OS.GetName() == "Android")
+		{
+			var followRow = CreateRow(displayGroup, out followOrientationLabel);
+			followOrientationToggle = new CheckButton();
+			followOrientationToggle.ButtonPressed = AndroidWindowOrientationController.FollowDeviceOrientation;
+			followOrientationToggle.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+			followOrientationToggle.CustomMinimumSize = new Vector2(0, 44);
+			followOrientationToggle.TooltipText = MultiLanguage.Get("OptionWindow.FollowOrientationHint",
+				"开启后即使系统开启了方向锁定，转动手机也会旋转整个界面。");
+			followOrientationToggle.Toggled += OnFollowOrientationToggled;
+			followRow.AddChild(followOrientationToggle);
+
+			var rotateRow = CreateRow(displayGroup, out rotateScreenLabel);
+			rotateScreenButton = new Button();
+			rotateScreenButton.Text = MultiLanguage.Get("OptionWindow.RotateScreen", "旋转屏幕");
+			rotateScreenButton.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+			rotateScreenButton.CustomMinimumSize = new Vector2(0, 44);
+			rotateScreenButton.TooltipText = MultiLanguage.Get("OptionWindow.RotateScreenHint",
+				"手动把整个界面旋转 90°（会关闭「跟随手机朝向」，改为固定方向）。");
+			GEmueraTheme.ApplyButton(rotateScreenButton, GEmueraTheme.Surface, GEmueraTheme.Border);
+			rotateScreenButton.Pressed += OnRotateScreenPressed;
+			rotateRow.AddChild(rotateScreenButton);
+		}
 
 		var fontRow = CreateRow(displayGroup, out fontLabel);
 		fontSizeSlider = new HSlider();
@@ -526,6 +556,25 @@ public partial class OptionWindow : Control
 				uiScaleSlider.TooltipText = MultiLanguage.Get("OptionWindow.UiScaleHint",
 					"调整界面整体大小，不影响游戏画面。");
 		}
+		if (followOrientationLabel != null)
+		{
+			followOrientationLabel.Text = MultiLanguage.Get("OptionWindow.FollowOrientation", "跟随手机朝向");
+			if (followOrientationToggle != null)
+				followOrientationToggle.TooltipText = MultiLanguage.Get(
+					"OptionWindow.FollowOrientationHint",
+					"开启后即使系统开启了方向锁定，转动手机也会旋转整个界面。");
+		}
+		if (rotateScreenLabel != null)
+		{
+			rotateScreenLabel.Text = MultiLanguage.Get("OptionWindow.RotateScreen", "旋转屏幕");
+			if (rotateScreenButton != null)
+			{
+				rotateScreenButton.Text = MultiLanguage.Get("OptionWindow.RotateScreen", "旋转屏幕");
+				rotateScreenButton.TooltipText = MultiLanguage.Get(
+					"OptionWindow.RotateScreenHint",
+					"手动把整个界面旋转 90°（会关闭「跟随手机朝向」，改为固定方向）。");
+			}
+		}
 		if (fontLabel != null)
 			fontLabel.Text = MultiLanguage.Get("OptionWindow.FontSize", "Font Size");
 		if (quickWidthLabel != null)
@@ -670,6 +719,23 @@ public partial class OptionWindow : Control
 		UiScaleHelper.SetScale((float)uiScaleSlider.Value, persist: true);
 		EmueraContent.instance?.NotifyUiScaleChanged();
 		CallDeferred(nameof(ClampPopupToSafeArea));
+	}
+
+	void OnFollowOrientationToggled(bool enabled)
+	{
+		AndroidWindowOrientationController.FollowDeviceOrientation = enabled;
+	}
+
+	void OnRotateScreenPressed()
+	{
+		// RotateScreen 隐含切到固定方向；同步开关显示，避免 UI 与真实模式不一致。
+		AndroidWindowOrientationController.RotateScreen();
+		if (followOrientationToggle != null)
+		{
+			followOrientationToggle.SetBlockSignals(true);
+			followOrientationToggle.ButtonPressed = false;
+			followOrientationToggle.SetBlockSignals(false);
+		}
 	}
 
 	void OnFontSizeChanged(double value)

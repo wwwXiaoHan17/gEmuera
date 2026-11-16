@@ -14,6 +14,206 @@ public partial class AndroidWindowOrientationController : Node
 	const int MaxFailureWarnings = 3;
 	const int MaxWindowModeFailureWarnings = 3;
 
+	// —— 方向跟随（设置持久化）——
+	// sensor：请求 ScreenOrientation.Sensor —— Android 上该值按平台契约忽略用户的
+	//         「自动旋转」锁定，手机物理转动即跟随（本功能的核心诉求）。
+	// fixed ：请求当前窗口宽高比对应的固定方向，锁定在用户手动选择的方向。
+	const string SettingsPath = "user://settings.cfg";
+	const string SettingsSection = "Display";
+	const string FollowDeviceOrientationKey = "FollowDeviceOrientation";
+
+	static int followDeviceOrientationCache = -1;
+
+	/// <summary>跟随手机朝向（true）或固定当前方向（false）。写入 settings.cfg。</summary>
+	public static bool FollowDeviceOrientation
+	{
+		get
+		{
+			if (followDeviceOrientationCache < 0)
+			{
+				var cfg = new ConfigFile();
+				cfg.Load(SettingsPath);
+				followDeviceOrientationCache =
+					cfg.GetValue(SettingsSection, FollowDeviceOrientationKey, true).AsBool() ? 1 : 0;
+			}
+			return followDeviceOrientationCache != 0;
+		}
+		set
+		{
+			followDeviceOrientationCache = value ? 1 : 0;
+			var cfg = new ConfigFile();
+			Error loadError = cfg.Load(SettingsPath);
+			if (loadError == Error.Ok || loadError == Error.FileNotFound)
+			{
+				cfg.SetValue(SettingsSection, FollowDeviceOrientationKey, value);
+				cfg.Save(SettingsPath);
+			}
+			ApplyOrientationMode(value ? "follow_sensor" : "fixed");
+		}
+	}
+
+	/// <summary>手动旋转 90°（竖↔横）。隐含关闭「跟随手机」。</summary>
+	public static void RotateScreen()
+	{
+		if (OS.GetName() != "Android")
+			return;
+		Vector2I size = DisplayServer.WindowGetSize();
+		DisplayServer.ScreenOrientation target = size.X > size.Y
+			? DisplayServer.ScreenOrientation.Portrait
+			: DisplayServer.ScreenOrientation.Landscape;
+		SetFollowCache(false);
+		try
+		{
+			DisplayServer.ScreenSetOrientation(target);
+			MobileLayoutDiagnostics.PublishOrientation("[ORIENTATION] 手动旋转 → target=" + target
+				+ " windowBefore=" + size);
+		}
+		catch (Exception ex)
+		{
+			MobileLayoutDiagnostics.Warn("[ORIENTATION] 手动旋转失败 -> " + ex.GetType().Name + ": " + ex.Message);
+		}
+	}
+
+	static void SetFollowCache(bool value)
+	{
+		followDeviceOrientationCache = value ? 1 : 0;
+		var cfg = new ConfigFile();
+		Error loadError = cfg.Load(SettingsPath);
+		if (loadError == Error.Ok || loadError == Error.FileNotFound)
+		{
+			cfg.SetValue(SettingsSection, FollowDeviceOrientationKey, value);
+			cfg.Save(SettingsPath);
+		}
+	}
+
+	/// <summary>应用当前模式：优先 fullSensor（跟随手机），失败才退回轮询。</summary>
+	static void ApplyOrientationMode(string reason)
+	{
+		if (OS.GetName() != "Android")
+			return;
+		if (FollowDeviceOrientation)
+		{
+			nextGravitySampleTime = 0;
+			// 立刻按当前姿态校正一次（清冷却），否则切换开关后要等冷却期结束。
+			orientationCooldownUntilMs = 0;
+			// 首选 SCREEN_ORIENTATION_FULL_SENSOR：4 方向跟随传感器且忽略用户方向锁定，
+			// 旋转完全交给系统。Godot 的 ScreenOrientation 枚举没有该值（导出清单是
+			// fullUser = 尊重用户锁定，这才是锁定下不跟随的根因），故直接调 Java。
+			fullSensorApplied = TryApplyFullSensor();
+			MobileLayoutDiagnostics.PublishOrientation("[ORIENTATION] 应用方向模式 → reason=" + reason
+				+ " mode=" + (fullSensorApplied ? "full_sensor" : "gravity_poll")
+				+ " window=" + DisplayServer.WindowGetSize());
+			return;
+		}
+		fullSensorApplied = false;
+		Vector2I size = DisplayServer.WindowGetSize();
+		ApplyScreenOrientation(
+			size.X > size.Y ? DisplayServer.ScreenOrientation.Landscape : DisplayServer.ScreenOrientation.Portrait,
+			reason + ":fixed");
+	}
+
+	// ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR —— 4 方向跟随传感器，忽略用户锁定。
+	const int AndroidFullSensorOrientation = 10;
+
+	/// <summary>
+	/// 通过 AndroidRuntime 直接调用 Activity.setRequestedOrientation(FULL_SENSOR)。
+	/// 返回 true = 调用被接受（此时旋转由系统负责，轮询可停）。
+	/// </summary>
+	static bool TryApplyFullSensor()
+	{
+		try
+		{
+			GodotObject runtime = Engine.GetSingleton("AndroidRuntime");
+			if (runtime == null)
+				return false;
+			GodotObject activity = runtime.Call("getActivity").AsGodotObject();
+			if (activity == null)
+				return false;
+			activity.Call("setRequestedOrientation", AndroidFullSensorOrientation);
+			// Java 抛异常时 Call 返回 Nil 且异常存于 JavaClassWrapper，必须按失败计。
+			if (JavaClassWrapper.GetException() != null)
+				return false;
+			return true;
+		}
+		catch (Exception ex)
+		{
+			MobileLayoutDiagnostics.Warn("[ORIENTATION] FULL_SENSOR 设置失败 -> "
+				+ ex.GetType().Name + ": " + ex.Message);
+			return false;
+		}
+	}
+
+	static void ApplyScreenOrientation(DisplayServer.ScreenOrientation target, string reason)
+	{
+		try
+		{
+			DisplayServer.ScreenSetOrientation(target);
+			// 旋转后冷却：过渡帧内窗口尺寸与传感器读数都会抖动，期间一律不响应，
+			// 否则会形成「横→竖→横」的反向切换循环。
+			orientationCooldownUntilMs = Time.GetTicksMsec() + OrientationCooldownMilliseconds;
+			MobileLayoutDiagnostics.PublishOrientation("[ORIENTATION] 应用方向 → reason=" + reason
+				+ " target=" + target
+				+ " window=" + DisplayServer.WindowGetSize());
+		}
+		catch (Exception ex)
+		{
+			MobileLayoutDiagnostics.Warn("[ORIENTATION] 方向应用失败 -> " + reason + " " + ex.GetType().Name + ": " + ex.Message);
+		}
+	}
+
+	// —— 传感器轮询（跟随手机）——
+	// 无状态判定：当前朝向直接读窗口实际宽高比，而不是维护 lastApplied 之类静态状态。
+	// 原因（实测）：窗口 resized / 前后台切换会触发 _Notification 与 Evaluate，静态状态
+	// 被重置或与真实窗口不一致时会出现「横→竖→横」反复切换。宽高比是唯一可信事实。
+	// 三段防护：
+	//   1) 迟滞死区：主分量差值不足 OrientationAxisHysteresis 时不动；
+	//   2) 旋转后冷却：过渡帧内窗口尺寸与传感器读数都抖动，冷却期内不响应；
+	//   3) 与当前窗口朝向相同则不发请求（天然幂等）。
+	const double GravitySampleIntervalSeconds = 0.15;
+	const float OrientationAxisHysteresis = 4.0f;
+	const double OrientationCooldownMilliseconds = 2000.0;
+
+	static double nextGravitySampleTime;
+	static double orientationCooldownUntilMs;
+	// fullSensor 生效时旋转交给系统，轮询完全停用（避免与系统互相纠正）。
+	static bool fullSensorApplied;
+
+	public override void _Process(double delta)
+	{
+		if (OS.GetName() != "Android" || !FollowDeviceOrientation || fullSensorApplied)
+			return;
+		// 冷却期内不响应：旋转过渡帧会同时改变窗口尺寸与传感器姿态读数。
+		if (Time.GetTicksMsec() < orientationCooldownUntilMs)
+			return;
+		nextGravitySampleTime -= delta;
+		if (nextGravitySampleTime > 0.0)
+			return;
+		nextGravitySampleTime = GravitySampleIntervalSeconds;
+
+		// GetGravity 是「设备重力方向」语义；部分构建只启用加速度计，回退取之
+		//（静止时两者等价，仅符号相反——本判定只用绝对值，符号无关）。
+		Vector3 gravity = Input.GetGravity();
+		if (gravity.LengthSquared() < 1.0f)
+			gravity = Input.GetAccelerometer();
+		float ax = Mathf.Abs(gravity.X);
+		float ay = Mathf.Abs(gravity.Y);
+		if (Mathf.Max(ax, ay) < 3.0f)
+			return;                       // 平放桌面：朝向不确定
+		if (Mathf.Abs(ax - ay) < OrientationAxisHysteresis)
+			return;                       // 死区：接近 45°，保持现状
+		bool wantLandscape = ax > ay;
+
+		// 当前朝向 = 窗口宽高比（真实事实，不受任何缓存状态影响）。
+		Vector2I size = DisplayServer.WindowGetSize();
+		bool isLandscape = size.X > size.Y;
+		if (wantLandscape == isLandscape)
+			return;                       // 已是目标朝向，不发请求
+
+		ApplyScreenOrientation(
+			wantLandscape ? DisplayServer.ScreenOrientation.Landscape : DisplayServer.ScreenOrientation.Portrait,
+			"gravity");
+	}
+
 	WindowLayoutKind previous = WindowLayoutKind.Unknown;
 	Timer debounceTimer;
 	int failureWarnings;
@@ -41,6 +241,9 @@ public partial class AndroidWindowOrientationController : Node
 			GetViewport().SizeChanged += OnWindowSizeChanged;
 		}
 		CallDeferred(nameof(Evaluate));
+		// 启动即应用方向模式：manifest 的 handheld/orientation 只写清单，运行时显式
+		// 请求才能保证「跟随手机」在系统方向锁定下依然生效（Sensor 忽略用户锁定）。
+		ApplyOrientationMode("startup");
 	}
 
 	public override void _ExitTree()
@@ -126,7 +329,11 @@ public partial class AndroidWindowOrientationController : Node
 		// 回到前台后系统可能已恢复系统栏（系统策略/切应用覆盖），重新评估一次；
 		// Evaluate 幂等（方向按边沿、窗口模式按读回去重），重复触发无害。
 		if (what == NotificationApplicationResumed || what == NotificationApplicationFocusIn)
+		{
+			// 切前后台可能被系统改写方向请求，重新应用用户选择（跟随/固定）。
+			ApplyOrientationMode("resume");
 			CallDeferred(nameof(Evaluate));
+		}
 	}
 
 	void RequestOrientation(OrientationRequest request, string reason)
