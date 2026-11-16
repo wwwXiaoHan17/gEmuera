@@ -36,6 +36,9 @@ public partial class EmueraContent : Control
 	BoxContainer menuBar;
 	// 系统菜单栏里的「旋转」入口（非 Android 置灰）。
 	TextureButton rotateMenuButton;
+	// 菜单面板容器与展开/收起按钮：竖屏时二者纵向同列（toggle 在最上）。
+	PanelContainer menuPanelContainer;
+	TextureButton menuToggleButton;
 	SafeAreaApplicator menuSafeArea;
 	Inputpad inputpad;
 	QuickButtons quickButtons;
@@ -452,7 +455,7 @@ public partial class EmueraContent : Control
 	// click-to-advance.
 	Control rootContent;
 	CanvasLayer menuLayer;
-	HBoxContainer menuRoot;
+	BoxContainer menuRoot;
 	// 用 BoxContainer 而非 HBoxContainer：竖屏时需要运行时切换 Vertical（横排 11 个
 	// 图标在窄屏会横向溢出）。HBoxContainer 的 vertical 不可改（引擎会报错）。
 	BoxContainer menuExpandedBar;
@@ -940,7 +943,7 @@ public partial class EmueraContent : Control
 
 		BuildTooltipLayer();
 
-		menuRoot = new HBoxContainer();
+		menuRoot = new BoxContainer();
 		menuRoot.AnchorLeft = 1;
 		menuRoot.AnchorRight = 1;
 		menuRoot.AnchorTop = 0;
@@ -955,6 +958,7 @@ public partial class EmueraContent : Control
 		// Panel holding the 9 action icons (hidden until toggled).
 		// Placed BEFORE the toggle in the HBox so it sits on the toggle's left.
 		var menuPanel = new PanelContainer();
+		menuPanelContainer = menuPanel;
 		menuPanel.MouseFilter = MouseFilterEnum.Stop;
 		var menuPanelStyle = GEmueraTheme.SurfaceStyle(
 			GEmueraTheme.SurfaceRaised,
@@ -991,6 +995,7 @@ public partial class EmueraContent : Control
 
 		// Toggle at the right edge (last child = rightmost in HBox).
 		var menuToggleBtn = new TextureButton();
+		menuToggleButton = menuToggleBtn;
 		menuToggleBtn.CustomMinimumSize = new Vector2(SystemButtonTouchSize, SystemButtonTouchSize);
 		menuToggleBtn.StretchMode = TextureButton.StretchModeEnum.KeepAspectCentered;
 		// 顶部对齐（不拉伸）：竖屏时面板很高（12 个图标竖排），HBox 会把 toggle 拉伸到
@@ -1705,6 +1710,9 @@ public partial class EmueraContent : Control
 	{
 		var btn = new TextureButton();
 		btn.CustomMinimumSize = new Vector2(SystemButtonTouchSize, SystemButtonTouchSize);
+		// 不随容器拉伸：竖排时父容器很高，Fill 会把图标拉长。
+		btn.SizeFlagsHorizontal = SizeFlags.ShrinkCenter;
+		btn.SizeFlagsVertical = SizeFlags.ShrinkCenter;
 		btn.StretchMode = TextureButton.StretchModeEnum.KeepAspectCentered;
 		btn.MouseFilter = MouseFilterEnum.Stop;
 		StyleSystemIconButton(btn);
@@ -6548,12 +6556,40 @@ public partial class EmueraContent : Control
 	// 面板变高会自然下移，位置无需另调。
 	void UpdateMenuBarOrientation()
 	{
-		if (menuExpandedBar == null)
+		if (menuExpandedBar == null || menuRoot == null || menuPanelContainer == null)
 			return;
 		bool portrait = Size.X > 0 && Size.X < Size.Y;
-		if (menuExpandedBar.Vertical == portrait)
+		if (portrait)
+		{
+			// 竖屏：toggle 与图标纵向同列，toggle 固定在最上；面板整体收缩、靠右上。
+			// 关键是同时把根容器与面板的尺寸标志设为「收缩」，否则竖排时面板会被
+			// 拉伸到容器宽度/高度之外（实测曾出现 1362px 高溢出）。
+			menuRoot.Vertical = true;
+			menuRoot.GrowHorizontal = GrowDirection.Begin;
+			menuRoot.GrowVertical = GrowDirection.End;
+			menuExpandedBar.Vertical = true;
+			menuPanelContainer.SizeFlagsHorizontal = SizeFlags.ShrinkEnd;
+			menuPanelContainer.SizeFlagsVertical = SizeFlags.ShrinkBegin;
+			EnsureMenuToggleFirst(true);
 			return;
-		menuExpandedBar.Vertical = portrait;
+		}
+		menuRoot.Vertical = false;
+		menuRoot.GrowHorizontal = GrowDirection.Begin;
+		menuRoot.GrowVertical = GrowDirection.Begin;
+		menuExpandedBar.Vertical = false;
+		menuPanelContainer.SizeFlagsHorizontal = SizeFlags.ShrinkBegin;
+		menuPanelContainer.SizeFlagsVertical = SizeFlags.ShrinkBegin;
+		EnsureMenuToggleFirst(false);
+	}
+
+	// 竖屏把 toggle 放到子节点首位（最上）；横屏放到末位（最右）。
+	void EnsureMenuToggleFirst(bool portrait)
+	{
+		if (menuToggleButton == null || !GodotObject.IsInstanceValid(menuToggleButton))
+			return;
+		int target = portrait ? 0 : menuRoot.GetChildCount() - 1;
+		if (menuToggleButton.GetIndex() != target)
+			menuRoot.MoveChild(menuToggleButton, target);
 	}
 
 	// 系统菜单里的「旋转」：与启动器/设置窗同一个入口，弹「仅本次/永久」选择框。

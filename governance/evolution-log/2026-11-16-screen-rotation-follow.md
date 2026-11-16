@@ -315,3 +315,20 @@ fullSensor 语义 = 4 方向跟随传感器**且忽略用户方向锁定**，旋
 >
 > 验证 [实测]：PC 竖屏（560x1200）截图——12 个图标单列、toggle 固定在栏顶右侧；
 > 构建 0 error。
+
+> 补遗 15（2026-11-16，用户要求 toggle 与图标纵排同一列）
+>
+> 上一版把 toggle 固定在栏体顶部右侧（同一水平线），用户指出「竖着这样很奇怪」——
+> 正确形态是 toggle 与 12 个图标纵向排成一列、toggle 在最上。
+>
+> 实现（`scripts/EmueraContent.cs`）：
+> - `menuRoot` 字段与实例全部改为 `BoxContainer`（此前字段已是 BoxContainer 但
+>   `new HBoxContainer()` 未同步，导致 `Vertical` 设置被引擎拒绝、竖排不生效——
+>   这是本轮两次踩到的同一个坑）。
+> - 竖屏：`menuRoot.Vertical = true` + `GrowVertical = End`，`menuPanelContainer`
+>   设 `ShrinkEnd/ShrinkBegin` 防止被拉伸到容器外（此前实测出现 1362px 溢出）。
+> - `AddIconButton` 的图标设 `ShrinkCenter`，竖排时保持 48px 不被拉长。
+> - 新增 `EnsureMenuToggleFirst`：竖屏把 toggle 移到子节点首位（最上），横屏移到末位（最右）。
+>
+> 验证 [实测]：PC 竖屏 560x1200 截图——toggle 在最上、12 个图标顺次向下（含旋转图标），
+> `ROOT vertical=true`、`PANEL size=(72,822)` 不再溢出；构建 0 error。
