@@ -4,6 +4,10 @@ using System.Collections.Generic;
 public partial class OptionWindow : Control
 {
 	PopupPanel popup;
+	// 系统级 UI 缩放（root.ContentScaleFactor）：启动器与游戏内面板整体放大缩小，
+	// 不影响游戏画面内容（其缩放独立走 Scalepad/双指捏合）。
+	Slider uiScaleSlider;
+	Label uiScaleValue;
 	Slider fontSizeSlider;
 	Label fontSizeLabel;
 	Slider quickButtonWidthSlider;
@@ -41,6 +45,7 @@ public partial class OptionWindow : Control
 
 	// MultiLanguage-driven description labels (values are slider-derived numbers
 	// and stay untouched); refreshed together when the language changes.
+	Label uiScaleLabel;
 	Label fontLabel;
 	Label quickWidthLabel;
 	Label quickFontLabel;
@@ -121,8 +126,25 @@ public partial class OptionWindow : Control
 		content.AddThemeConstantOverride("separation", 16); // 组间距
 		scroll.AddChild(content);
 
-		// ---- Display: 字体大小 / 最大行数 / 分辨率 / 帧率 ----
+		// ---- Display: 界面缩放 / 字体大小 / 最大行数 / 分辨率 / 帧率 ----
 		var displayGroup = CreateGroup(content, out displayGroupTitle);
+
+		var uiScaleRow = CreateRow(displayGroup, out uiScaleLabel);
+		uiScaleSlider = new HSlider();
+		uiScaleSlider.MinValue = UiScaleHelper.MinScale;
+		uiScaleSlider.MaxValue = UiScaleHelper.MaxScale;
+		uiScaleSlider.Step = 0.05;
+		uiScaleSlider.Value = UiScaleHelper.current;
+		uiScaleSlider.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		uiScaleSlider.CustomMinimumSize = new Vector2(120, 44);
+		uiScaleSlider.TooltipText = MultiLanguage.Get("OptionWindow.UiScaleHint",
+			"调整界面整体大小，不影响游戏画面。");
+		uiScaleSlider.ValueChanged += OnUiScaleChanged;
+		uiScaleSlider.DragEnded += OnUiScaleDragEnded;
+		uiScaleRow.AddChild(uiScaleSlider);
+		uiScaleValue = CreateValueLabel();
+		uiScaleValue.Text = FormatUiScalePercent(UiScaleHelper.current);
+		uiScaleRow.AddChild(uiScaleValue);
 
 		var fontRow = CreateRow(displayGroup, out fontLabel);
 		fontSizeSlider = new HSlider();
@@ -497,6 +519,13 @@ public partial class OptionWindow : Control
 	// Idempotent.
 	void ApplyLanguageTexts()
 	{
+		if (uiScaleLabel != null)
+		{
+			uiScaleLabel.Text = MultiLanguage.Get("OptionWindow.UiScale", "UI Scale");
+			if (uiScaleSlider != null)
+				uiScaleSlider.TooltipText = MultiLanguage.Get("OptionWindow.UiScaleHint",
+					"调整界面整体大小，不影响游戏画面。");
+		}
 		if (fontLabel != null)
 			fontLabel.Text = MultiLanguage.Get("OptionWindow.FontSize", "Font Size");
 		if (quickWidthLabel != null)
@@ -612,6 +641,31 @@ public partial class OptionWindow : Control
 		popup.Position = new Vector2I(
 			Mathf.Clamp(popup.Position.X, left, right),
 			Mathf.Clamp(popup.Position.Y, top, bottom));
+	}
+
+	static string FormatUiScalePercent(float scale)
+	{
+		return Mathf.RoundToInt(scale * 100) + "%";
+	}
+
+	// 拖动中实时预览：只改运行态不写盘（ConfigFile.Save 每帧写文件代价高）。
+	// 缩放变化会让弹窗在画布单位下超出可视区，deferred 钳位保持可见。
+	void OnUiScaleChanged(double value)
+	{
+		float scale = (float)value;
+		UiScaleHelper.SetScale(scale, persist: false);
+		if (uiScaleValue != null)
+			uiScaleValue.Text = FormatUiScalePercent(scale);
+		EmueraContent.instance?.NotifyUiScaleChanged();
+		CallDeferred(nameof(ClampPopupToSafeArea));
+	}
+
+	// 拖动结束才持久化；弹窗开着时整体缩放已变，重新钳位到安全区。
+	void OnUiScaleDragEnded(bool valueChanged)
+	{
+		UiScaleHelper.SetScale((float)uiScaleSlider.Value, persist: true);
+		EmueraContent.instance?.NotifyUiScaleChanged();
+		CallDeferred(nameof(ClampPopupToSafeArea));
 	}
 
 	void OnFontSizeChanged(double value)

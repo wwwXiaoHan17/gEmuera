@@ -197,4 +197,14 @@ public partial class EmueraContent : Control
 
 	// 设置页切换面板开关后立即生效（无需等待下一次视口变化）。
 	public void ApplyMobileLayoutPanelSetting() => RefreshMobileLayoutPanel();
+
+	// 系统级 UI 缩放（root.ContentScaleFactor，UiScaleHelper）变化后调用：改
+	// content_scale_factor 不保证触发 Viewport.SizeChanged，必须显式走既有
+	// deferred 管线重算安全区/游戏区 fit 与滚动对账。游戏画面内容的物理大小
+	// 由 fit 补偿保持不变，只有画布单位坐标变化。
+	public void NotifyUiScaleChanged()
+	{
+		MarkViewportLayoutDirty();
+		ScheduleViewportLayoutApply();
+	}
 }

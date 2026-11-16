@@ -142,6 +142,7 @@ public partial class FirstWindow : Control
 		FrameRateHelper.Apply();
 		VSyncHelper.Apply();
 		ResolutionHelper.Apply();
+		UiScaleHelper.Apply();
 
 		// 企业级说明：Android APK 首屏可能停留在启动器和权限流程，尚未进入 EmueraMain。
 		// 这里提前初始化诊断系统，确保冷启动、权限失败和游戏路径选择都能写入 breadcrumb。
@@ -252,7 +253,65 @@ public partial class FirstWindow : Control
 		title.AddThemeColorOverride("font_color", GEmueraTheme.TextPrimary);
 		header.AddChild(title);
 
+		header.AddChild(CreateUiScaleOption());
+
 		return header;
+	}
+
+	// 系统级 UI 缩放（启动器 + 游戏内面板）选择器：root.ContentScaleFactor，
+	// 不影响游戏画面内容（其缩放由 Scalepad/双指捏合独立控制）。
+	Control CreateUiScaleOption()
+	{
+		var option = new OptionButton();
+		option.TooltipText = MultiLanguage.Get("FirstWindow.UiScaleHint",
+			"调整界面整体大小，不影响游戏画面。");
+		option.CustomMinimumSize = new Vector2(128, 36);
+		foreach (int percent in UiScaleHelper.PresetPercents)
+			option.AddItem(percent + "%");
+		SelectUiScaleOption(option);
+		option.ItemSelected += index =>
+		{
+			if (index < 0 || index >= UiScaleHelper.PresetPercents.Length)
+				return;
+			UiScaleHelper.SetScale(UiScaleHelper.PresetPercents[index] / 100f, persist: true);
+			option.Text = MultiLanguage.Get("FirstWindow.UiScale", "界面") + " " + UiScaleHelper.PresetPercents[index] + "%";
+			// content_scale_factor 变化不保证触发 viewport SizeChanged，主动贴合一次。
+			CallDeferred(nameof(RefitLauncherToViewport));
+		};
+		// 语言切换时刷新前缀文案，保留当前档位。
+		MultiLanguage.LanguageChanged += () =>
+		{
+			if (!GodotObject.IsInstanceValid(option))
+				return;
+			int percent = Mathf.RoundToInt(UiScaleHelper.current * 100);
+			option.Text = MultiLanguage.Get("FirstWindow.UiScale", "界面") + " " + percent + "%";
+		};
+		return option;
+	}
+
+	void SelectUiScaleOption(OptionButton option)
+	{
+		int percent = Mathf.RoundToInt(UiScaleHelper.current * 100);
+		int index = System.Array.IndexOf(UiScaleHelper.PresetPercents, percent);
+		if (index < 0)
+		{
+			// 配置值不在预设档位（历史手改 cfg）：归一到最近档位并回写，保证 UI 与生效值一致。
+			int best = 0;
+			int bestDiff = int.MaxValue;
+			for (int i = 0; i < UiScaleHelper.PresetPercents.Length; i++)
+			{
+				int diff = Mathf.Abs(UiScaleHelper.PresetPercents[i] - percent);
+				if (diff < bestDiff)
+				{
+					bestDiff = diff;
+					best = i;
+				}
+			}
+			index = best;
+			UiScaleHelper.SetScale(UiScaleHelper.PresetPercents[best] / 100f, persist: true);
+		}
+		option.Select(index);
+		option.Text = MultiLanguage.Get("FirstWindow.UiScale", "界面") + " " + UiScaleHelper.PresetPercents[index] + "%";
 	}
 
 	Control CreateLauncherTabs()
