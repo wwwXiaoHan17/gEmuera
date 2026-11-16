@@ -59,6 +59,9 @@ public partial class QuickButtons : CanvasLayer
 	const string QuickFloatingKey = "QuickFloating";
 	const string QuickFloatingXKey = "QuickFloatingX";
 	const string QuickFloatingYKey = "QuickFloatingY";
+	// 浮动面板位置语义版本；见 EnsureSettingsLoaded 的迁移说明。
+	const string QuickFloatingPositionVersionKey = "QuickFloatingPositionVersion";
+	const int QuickFloatingPositionVersion = 2;
 	const int FloatingDragBarHeight = 26;
 	const int DefaultQuickButtonFontSize = 12;
 	const int DefaultQuickButtonWidth = 90;
@@ -1137,6 +1140,11 @@ public partial class QuickButtons : CanvasLayer
 		float bottomMargin = 20 + GetSafeBottomInset(safeRect);
 		float leftMargin = 20;
 		float topMargin = 20;
+		// 竖屏时系统菜单栏在右侧竖排（12 个图标向下延伸），面板贴右会直接盖住它，
+		// 因此额外让开一个按钮位 + 间距；横屏时菜单栏在顶部横排，只需让开顶部高度。
+		bool portraitMenuBar = safeRect.Size.Y > safeRect.Size.X;
+		if (portraitMenuBar)
+			rightMargin += 48f + 16f;
 
 		// 水平锚点：默认贴右（面板在右下角），翻转/悬浮 → 贴左。
 		// 宽度调节条始终在面板内侧（贴右 → 拉条在左；贴左 → 拉条在右），
@@ -1164,28 +1172,19 @@ public partial class QuickButtons : CanvasLayer
 			resizeHandle.OffsetRight = -rightMargin - width;
 		}
 
-		if (AnchoredTop)
-		{
-			panel.AnchorTop = 0;
-			panel.AnchorBottom = 0;
-			panel.OffsetTop = topMargin;
-			panel.OffsetBottom = topMargin + height;
-			resizeHandle.AnchorTop = 0;
-			resizeHandle.AnchorBottom = 0;
-			resizeHandle.OffsetTop = topMargin;
-			resizeHandle.OffsetBottom = topMargin + height;
-		}
-		else
-		{
-			panel.AnchorTop = 1;
-			panel.AnchorBottom = 1;
-			panel.OffsetTop = -bottomMargin - height;
-			panel.OffsetBottom = -bottomMargin;
-			resizeHandle.AnchorTop = 1;
-			resizeHandle.AnchorBottom = 1;
-			resizeHandle.OffsetTop = -bottomMargin - height;
-			resizeHandle.OffsetBottom = -bottomMargin;
-		}
+		// 垂直锚点：一律贴顶。
+		// 为什么：面板由右上角系统菜单里的「快捷」按钮唤出，出现在顶部菜单栏下方才符合
+		// 视线预期；原实现默认贴底，竖屏下会跑到屏幕另一端（用户明确反馈「不符合逻辑」）。
+		// 非浮动模式需要让开顶部横排菜单栏（一个按钮位 + 间距）；悬浮承载时沿用 20px 边距。
+		float panelTopMargin = AnchoredTop ? topMargin : (48f + 16f);
+		panel.AnchorTop = 0;
+		panel.AnchorBottom = 0;
+		panel.OffsetTop = panelTopMargin;
+		panel.OffsetBottom = panelTopMargin + height;
+		resizeHandle.AnchorTop = 0;
+		resizeHandle.AnchorBottom = 0;
+		resizeHandle.OffsetTop = panelTopMargin;
+		resizeHandle.OffsetBottom = panelTopMargin + height;
 	}
 
 	// 移动端悬浮层布局：面板位置完全由 floatingPanelPosition 决定（安全区内钳制），
@@ -1197,12 +1196,19 @@ public partial class QuickButtons : CanvasLayer
 		Vector2 pos = floatingPanelPosition;
 		if (pos.X < 0 || pos.Y < 0)
 		{
-			// 默认贴右上角、系统菜单栏正下方：用户是从右上角菜单里的「快捷」按钮
-			// 唤出本面板的，面板出现在该按钮下方才符合视线预期。
-			//（原实现默认在右下角，竖屏下要跨屏寻找，体验割裂。）
+			// 默认贴着唤出它的系统菜单栏：
+			//   横屏 → 菜单栏在顶部横排（高约一个按钮位），面板贴右边缘、落在其下方；
+			//   竖屏 → 菜单栏在右侧竖排（宽约一个按钮位，12 个图标竖向延伸），
+			//          面板必须再往左让开它，否则会盖住菜单图标。
+			//（原实现默认在右下角，竖屏下与右上角的唤出按钮相距整屏。）
+			const float MenuExtent = 48f + 16f; // SystemButtonTouchSize + 间距
+			const float EdgeMargin = 20f;
+			const float TopOffset = 48f + 16f;
+			bool portrait = safeRect.Size.Y > safeRect.Size.X;
+			float rightReserve = portrait ? MenuExtent : EdgeMargin;
 			pos = new Vector2(
-				safeRect.Position.X + safeRect.Size.X - width - 20,
-				safeRect.Position.Y + 48 + 16);
+				safeRect.Position.X + safeRect.Size.X - width - rightReserve,
+				safeRect.Position.Y + TopOffset);
 		}
 		float maxX = Mathf.Max(safeRect.Position.X, safeRect.Position.X + safeRect.Size.X - width);
 		float maxY = Mathf.Max(safeRect.Position.Y, safeRect.Position.Y + safeRect.Size.Y - height - barHeight);
@@ -1463,6 +1469,18 @@ public partial class QuickButtons : CanvasLayer
 		configuredFloating = cfg.GetValue(SettingsSection, QuickFloatingKey, false).AsBool();
 		configuredFloatingX = Mathf.RoundToInt((float)(double)cfg.GetValue(SettingsSection, QuickFloatingXKey, -1));
 		configuredFloatingY = Mathf.RoundToInt((float)(double)cfg.GetValue(SettingsSection, QuickFloatingYKey, -1));
+		// 位置语义版本迁移：v2 起默认位置改为「贴着系统菜单栏」（旧版默认在右下角，
+		// 竖屏下与唤出它的右上角按钮相距整屏）。旧配置里存的坐标多半是旧默认的产物，
+		// 直接沿用会看不到新行为，故一次性清空让引擎重新计算默认位置。
+		int positionVersion = cfg.GetValue(
+			SettingsSection, QuickFloatingPositionVersionKey, 1).AsInt32();
+		if (positionVersion < QuickFloatingPositionVersion)
+		{
+			configuredFloatingX = -1;
+			configuredFloatingY = -1;
+			cfg.SetValue(SettingsSection, QuickFloatingPositionVersionKey, QuickFloatingPositionVersion);
+			cfg.Save(SettingsPath);
+		}
 	}
 
 	static void SaveSetting(string key, int value)
