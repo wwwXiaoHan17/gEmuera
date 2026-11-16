@@ -144,3 +144,17 @@ fullSensor 语义 = 4 方向跟随传感器**且忽略用户方向锁定**，旋
 >
 > 验证 [实测]：`dotnet build` 0 error。[未验证] 真机上迁移后的实际表现（需安装后确认
 > settings.cfg 出现 `RotationFollowSemanticsV2=true` 且 `FollowDeviceOrientation=true`）。
+
+> 补遗 4（2026-11-16，用户反馈「rotate 的中文没有」）
+>
+> 排查：中文键 `FirstWindow.Rotate=旋转` 确实在 `assets/lang/zh_cn.txt`；真机显示英文是因为
+> `settings.cfg` 没有 Language 键 → `MultiLanguage` 回退 `default`（英文，`FirstWindow.Rotate=Rotate`）。
+>
+> 修复（`scripts/MultiLanguage.cs`）：未保存语言偏好时按系统区域选择语言文件。
+> - `LoadSavedLanguage` 改为无配置时返回 null（原先直接返回 "default"，无法区分"未设置"与"显式选 default"）
+> - 新增 `DetectSystemLanguage`：`zh*`→zh_cn、`ja*`→jp、`en*`→en_us、其它→default
+> - `CurrentLanguage` 同步改为按同一顺序推导（未加载时也不返回 null），避免设置窗下拉框与界面文字不一致
+> - 用户显式选过语言（含显式选 "default"）不受影响
+>
+> 验证 [实测]：桌面删除 settings.cfg 的 Language 键后启动（系统 locale=zh_CN），
+> 启动器完整显示中文（游戏/调试·日志/操作手册/界面 100%/开始游戏）；构建 0 error。
