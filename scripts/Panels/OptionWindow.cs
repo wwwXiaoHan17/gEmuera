@@ -158,7 +158,7 @@ public partial class OptionWindow : Control
 		// 整体视图缩放与字号严格分离，请用 Scalepad（SetContentScale）。
 		fontSizeSlider.Editable = true;
 		fontSizeSlider.TooltipText = MultiLanguage.Get("OptionWindow.FontSizeHint",
-			"Adjust the console font size (applies to newly printed lines). Use the scale pad to zoom the whole view.");
+			"缩放游戏画面：文本、行内图片与立绘一起放大/缩小（含已有输出行）。界面按钮不受影响。");
 		fontSizeSlider.ValueChanged += OnFontSizeChanged;
 		fontRow.AddChild(fontSizeSlider);
 		fontSizeLabel = CreateValueLabel();
@@ -601,18 +601,22 @@ public partial class OptionWindow : Control
 		EmitSignal(SignalName.PopupOpened);
 	}
 
-	// 字号滑杆直接反映/驱动核心字号 Config.FontSize（运行时字号 API），
-	// 与内容缩放（Scalepad / SetContentScale）严格分离。
+	// 字号滑杆驱动内容层缩放（SetContentScale），滑杆显示「渲染后字号」：
+	// 核心字号 × 有效缩放（contentScale × UI 补偿）。打开设置看到的就是屏幕上的
+	// 真实字号，且与 UI 缩放解耦（UI 缩放不改物理字号）。
 	void SyncFontSizeFromConfig()
 	{
 		if (fontSizeSlider == null || fontSizeLabel == null)
 			return;
 		int coreSize = MinorShift.Emuera.Config.FontSize > 0 ? MinorShift.Emuera.Config.FontSize : 18;
-		int size = Mathf.Clamp(coreSize, 8, 48);
+		float effective = (EmueraContent.instance?.ContentScale ?? 1.0f) * EmueraContent.UiScaleCompensation;
+		if (effective <= 0.0005f)
+			effective = 1.0f;
+		int rendered = Mathf.Clamp(Mathf.RoundToInt(coreSize * effective), 8, 48);
 		fontSizeSlider.SetBlockSignals(true);
-		fontSizeSlider.Value = size;
+		fontSizeSlider.Value = rendered;
 		fontSizeSlider.SetBlockSignals(false);
-		fontSizeLabel.Text = size.ToString();
+		fontSizeLabel.Text = rendered.ToString();
 	}
 
 	void ClampPopupToSafeArea()
@@ -670,11 +674,15 @@ public partial class OptionWindow : Control
 
 	void OnFontSizeChanged(double value)
 	{
+		int coreSize = MinorShift.Emuera.Config.FontSize > 0 ? MinorShift.Emuera.Config.FontSize : 18;
 		int requested = Mathf.Clamp((int)System.Math.Round(value), 8, 48);
 		fontSizeLabel.Text = requested.ToString();
-		// 运行时字号 API：会话内生效（不写回 emuera.config），在解释器空闲帧应用；
-		// 内容缩放互不影响，请用 Scalepad。
-		EmueraContent.instance?.RequestFontSize(requested);
+		// 内容层缩放：一次 SetContentScale 同时缩放文本、行内图片与立绘（同一 Scale 变换），
+		// 旧输出行也一起缩放。滑条值按物理字号换算：contentScale × UI 补偿 = 实际渲染，
+		// 故目标 contentScale 要除以 UI 补偿，保证滑条数值 = 屏幕上的真实字号。
+		float compensation = EmueraContent.UiScaleCompensation;
+		float scale = requested / (float)coreSize / (compensation > 0.001f ? compensation : 1.0f);
+		EmueraContent.instance?.SetContentScale(scale);
 	}
 
 	void OnQuickButtonWidthChanged(double value)

@@ -44,3 +44,30 @@
 - P2：极小窗口（高度 <600px）+ 高倍率下 OptionWindow 弹窗钳位后可用面积紧张。为什么不在本轮做：桌面 648p 基准窗口下已验证可滚动兜底，真机小屏优先级更高，归入 P1 真机核对。
 - P2：`user://settings.cfg` 的分辨率键已被自动推导值覆盖（540p），若用户原设其他档需在设置里重选一次。为什么不在本轮做：原值不可考，任何写入都是猜测。
 - 无其他（本轮范围：系统 UI 缩放全链路已落地）。
+
+> 补遗（2026-11-16，用户裁定方案 B：字体滑条回归内容层缩放）
+>
+> 背景：本分支 rebase 到最新 dev 时发现 dev 已合入 PR #2「separate font size API from content scale」
+> （`EmueraContent.RequestFontSize` + `Config.SetRuntimeFontSize` + `src/Core/Ui/FontSizeScaling`），
+> 它把 OptionWindow 字号滑条改为独立字号 API——只改字号、只对新输出行生效、**不缩放图片**。
+> 这与用户本轮诉求「字体缩放也要把图片一同缩放」相反。用户明确选择方案 B。
+>
+> 改动（`scripts/Panels/OptionWindow.cs`）：
+> - `OnFontSizeChanged` 改回 `EmueraContent.SetContentScale(scale)`：一次 Scale 变换作用于
+>   lineContainer / consoleRenderSurface / cbgContainer / htmlIslandContainer，文本、行内图片、
+>   立绘、CBG 背景、HTML 岛一起缩放，**旧输出行同样缩放**。
+> - 换算按物理字号解耦：目标 `contentScale = requested / coreSize / UiScaleCompensation`
+>   （UI 补偿见 §2-1 补遗），保证滑条数值 = 屏幕上的真实字号，与 UI 缩放互不干扰。
+> - `SyncFontSizeFromConfig` 改为按 `coreSize × (ContentScale × UiScaleCompensation)` 反算显示值
+>   （打开设置看到的是渲染后字号）。
+> - 四语言 `OptionWindow.FontSizeHint` 文案改为「缩放游戏画面：文本、行内图片与立绘一起放大/缩小
+>   （含已有输出行）」。
+> - dev#2 引入的 `RequestFontSize` / `Config.SetRuntimeFontSize` / `FontSizeScaling` 及其 xUnit
+>   测试**保留不删**：它们仍是有效基础设施（可被其他入口调用、测试仍绿），只是 UI 滑条不再走该路径。
+>
+> 验证 [实测]：eraTW（v24pure）窗口模式，滑条由 16→30 后 `ContentScale=1.875`（=30/16）且
+> `Config.FontSize` 保持 16 不变（证明走内容层而非字号 API）；截图对比——启动时输出的旧行
+> 与文本一起放大，设置窗自身尺寸不变。构建 error CS 计 0。
+>
+> 被推翻的中间结论：上文未涉及字号路径，故无推翻；本条取代 dev#2「字号与缩放严格分离」在
+> UI 滑条上的适用性，属用户裁定的产品语义选择，非遗漏。
