@@ -274,3 +274,18 @@ fullSensor 语义 = 4 方向跟随传感器**且忽略用户方向锁定**，旋
 > 验证 [实测]：`dotnet build` 0 error。[未验证] 视觉位置——eraTW 的 ERB 未定义
 > `QUICKBUTTON`，桌面 `ShowPad()` 调用成功但面板为空（无按钮即无尺寸），
 > 无法截图确认。需要用户真机确认。
+
+> 补遗 12（2026-11-16，用户裁定菜单栏保持单列竖排）
+>
+> 我曾把竖屏菜单栏改成 GridContainer 两列（想缩短 12 个图标约 576px 的高度），
+> 用户明确要求「应该竖着一列」，已回退为 `BoxContainer { Vertical = true }` 单列。
+>
+> 遗留观察（本轮未修，待用户确认是否处理）：
+> 1. 用户截图中菜单栏几乎贴屏幕最上沿（约 10px），沉浸全屏 + 刘海设备下会被切槽压住。
+>    `menuSafeArea` 配置为 `OffsetOverrides` + `BaseTop=4` + `ApplyTop=true`，理论上
+>    `OffsetTop = 4 + 安全区inset`；启动器同一套 Applicator 能正确避让，游戏内却未生效，
+>    怀疑 `DisplayServer.GetDisplaySafeArea()` 在 ExclusiveFullscreen 下返回 0 或调用时机过早。
+> 2. 截图中菜单 toggle（四宫格图标）悬在菜单栏外上方，未与栏体对齐——
+>    menuRoot 是 HBox `[panel][toggle]`，竖排后 panel 很高，toggle 的垂直对齐不合适。
+>
+> 验证 [实测]：回退后 `dotnet build` 0 error；单列竖排实现与 520ebdf 完全一致。
