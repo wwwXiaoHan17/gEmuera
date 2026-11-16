@@ -34,6 +34,8 @@ public partial class EmueraContent : Control
 	// Overlay and tool UI. These are Canvas/Control overlays above the console and
 	// should not own emuera state directly.
 	BoxContainer menuBar;
+	// 系统菜单栏里的「旋转」入口（非 Android 置灰）。
+	TextureButton rotateMenuButton;
 	SafeAreaApplicator menuSafeArea;
 	Inputpad inputpad;
 	QuickButtons quickButtons;
@@ -982,9 +984,10 @@ public partial class EmueraContent : Control
 		AddIconButton("res://assets/icons/exit.svg", OnExitPressed);
 		scaleMenuButton = AddIconButton("res://assets/icons/scale.svg", OnScaleTogglePressed);
 		mouseMenuButton = AddIconButton("res://assets/icons/mouse.svg", OnVirtualMouseTogglePressed);
-		// 手动旋转（仅 Android 有意义）：入口与其它系统功能并列，免去进设置页找。
-		if (OS.GetName() == "Android")
-			AddIconButton("res://assets/icons/rotate.svg", OnRotateScreenPressed);
+		// 手动旋转：入口与其它系统功能并列，免去进设置页找。
+		// 全平台显示，非 Android 置灰（便于确认功能存在）。
+		rotateMenuButton = AddIconButton("res://assets/icons/rotate.svg", OnRotateScreenPressed);
+		rotateMenuButton.Disabled = OS.GetName() != "Android";
 
 		// Toggle at the right edge (last child = rightmost in HBox).
 		var menuToggleBtn = new TextureButton();

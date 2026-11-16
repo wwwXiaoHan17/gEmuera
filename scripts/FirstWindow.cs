@@ -258,19 +258,20 @@ public partial class FirstWindow : Control
 
 		header.AddChild(CreateUiScaleOption());
 
-		// 手动旋转（仅 Android）：整界面转 90°，隐含关闭「跟随手机朝向」改为固定方向。
-		if (OS.GetName() == "Android")
-		{
-			var rotateButton = new Button();
-			rotateButton.Text = MultiLanguage.Get("FirstWindow.Rotate", "旋转");
-			rotateButton.TooltipText = MultiLanguage.Get("FirstWindow.RotateHint",
-				"旋转整个界面 90°（会关闭「跟随手机朝向」，改为固定方向）。");
-			rotateButton.CustomMinimumSize = new Vector2(72, 36);
-			rotateButton.AddThemeFontSizeOverride("font_size", 14);
-			GEmueraTheme.ApplyButton(rotateButton, GEmueraTheme.Surface, GEmueraTheme.Border);
-			rotateButton.Pressed += () => RotateChoiceDialog.Show(this);
-			header.AddChild(rotateButton);
-		}
+		// 手动旋转：整界面转 90°。全平台显示（便于确认功能存在），非 Android 禁用。
+		bool rotationAvailable = OS.GetName() == "Android";
+		var rotateButton = new Button();
+		rotateButton.Text = MultiLanguage.Get("FirstWindow.Rotate", "旋转");
+		rotateButton.Disabled = !rotationAvailable;
+		rotateButton.TooltipText = rotationAvailable
+			? MultiLanguage.Get("FirstWindow.RotateHint",
+				"旋转整个界面 90°（会关闭「自动旋转」，改为固定方向）。")
+			: MultiLanguage.Get("FirstWindow.RotationAndroidOnly", "仅在 Android 设备上可用。");
+		rotateButton.CustomMinimumSize = new Vector2(72, 36);
+		rotateButton.AddThemeFontSizeOverride("font_size", 14);
+		GEmueraTheme.ApplyButton(rotateButton, GEmueraTheme.Surface, GEmueraTheme.Border);
+		rotateButton.Pressed += () => RotateChoiceDialog.Show(this);
+		header.AddChild(rotateButton);
 
 		return header;
 	}

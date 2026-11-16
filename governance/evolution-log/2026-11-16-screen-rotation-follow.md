@@ -289,3 +289,16 @@ fullSensor 语义 = 4 方向跟随传感器**且忽略用户方向锁定**，旋
 >    menuRoot 是 HBox `[panel][toggle]`，竖排后 panel 很高，toggle 的垂直对齐不合适。
 >
 > 验证 [实测]：回退后 `dotnet build` 0 error；单列竖排实现与 520ebdf 完全一致。
+
+> 补遗 13（2026-11-16，用户要求方向控件全平台可见）
+>
+> 用户反馈 PC 设置里看不到「自动旋转」，认为应该保持一致以便确认功能存在。
+>
+> 改动：三处方向入口从「仅 Android 创建」改为「全平台创建 + 非 Android 禁用」：
+> - `OptionWindow`：「自动旋转（跟随手机）」开关、 「旋转屏幕」按钮 → `Disabled = !isAndroid`
+> - `FirstWindow` header：「旋转」按钮 → 同上
+> - `EmueraContent` 系统菜单栏：旋转图标（`rotateMenuButton`）→ 同上
+> - 非 Android 的 tooltip 改为「仅在 Android 设备上可用。」（四语言 `*RotationAndroidOnly` 键）
+>
+> 验证 [实测]：桌面打开设置窗截图——「自动旋转（跟随手机）」开关与「旋转屏幕」按钮
+> 均以灰色禁用态正常显示在「界面缩放」下方；构建 0 error。

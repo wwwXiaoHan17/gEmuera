@@ -151,30 +151,35 @@ public partial class OptionWindow : Control
 		uiScaleValue.Text = FormatUiScalePercent(UiScaleHelper.current);
 		uiScaleRow.AddChild(uiScaleValue);
 
-		// 方向控制（仅 Android）：跟随手机朝向（Sensor 忽略系统方向锁定）+ 手动旋转。
-		if (OS.GetName() == "Android")
-		{
-			var followRow = CreateRow(displayGroup, out followOrientationLabel);
-			followOrientationToggle = new CheckButton();
-			followOrientationToggle.ButtonPressed = AndroidWindowOrientationController.FollowDeviceOrientation;
-			followOrientationToggle.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-			followOrientationToggle.CustomMinimumSize = new Vector2(0, 44);
-			followOrientationToggle.TooltipText = MultiLanguage.Get("OptionWindow.FollowOrientationHint",
-				"开启后即使系统开启了方向锁定，转动手机也会旋转整个界面。");
-			followOrientationToggle.Toggled += OnFollowOrientationToggled;
-			followRow.AddChild(followOrientationToggle);
+		// 方向控制：跟随手机朝向（fullSensor 忽略系统方向锁定）+ 手动旋转。
+		// 全平台都创建（便于在桌面确认功能存在）；非 Android 置为不可用并说明原因。
+		bool rotationAvailable = OS.GetName() == "Android";
+		var followRow = CreateRow(displayGroup, out followOrientationLabel);
+		followOrientationToggle = new CheckButton();
+		followOrientationToggle.ButtonPressed = AndroidWindowOrientationController.FollowDeviceOrientation;
+		followOrientationToggle.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		followOrientationToggle.CustomMinimumSize = new Vector2(0, 44);
+		followOrientationToggle.Disabled = !rotationAvailable;
+		followOrientationToggle.TooltipText = rotationAvailable
+			? MultiLanguage.Get("OptionWindow.FollowOrientationHint",
+				"开启后即使系统开启了方向锁定，转动手机也会旋转整个界面。")
+			: MultiLanguage.Get("OptionWindow.RotationAndroidOnly", "仅在 Android 设备上可用。");
+		followOrientationToggle.Toggled += OnFollowOrientationToggled;
+		followRow.AddChild(followOrientationToggle);
 
-			var rotateRow = CreateRow(displayGroup, out rotateScreenLabel);
-			rotateScreenButton = new Button();
-			rotateScreenButton.Text = MultiLanguage.Get("OptionWindow.RotateScreen", "旋转屏幕");
-			rotateScreenButton.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-			rotateScreenButton.CustomMinimumSize = new Vector2(0, 44);
-			rotateScreenButton.TooltipText = MultiLanguage.Get("OptionWindow.RotateScreenHint",
-				"手动把整个界面旋转 90°（会关闭「跟随手机朝向」，改为固定方向）。");
-			GEmueraTheme.ApplyButton(rotateScreenButton, GEmueraTheme.Surface, GEmueraTheme.Border);
-			rotateScreenButton.Pressed += OnRotateScreenPressed;
-			rotateRow.AddChild(rotateScreenButton);
-		}
+		var rotateRow = CreateRow(displayGroup, out rotateScreenLabel);
+		rotateScreenButton = new Button();
+		rotateScreenButton.Text = MultiLanguage.Get("OptionWindow.RotateScreen", "旋转屏幕");
+		rotateScreenButton.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		rotateScreenButton.CustomMinimumSize = new Vector2(0, 44);
+		rotateScreenButton.Disabled = !rotationAvailable;
+		rotateScreenButton.TooltipText = rotationAvailable
+			? MultiLanguage.Get("OptionWindow.RotateScreenHint",
+				"手动把整个界面旋转 90°（会关闭「自动旋转」，改为固定方向）。")
+			: MultiLanguage.Get("OptionWindow.RotationAndroidOnly", "仅在 Android 设备上可用。");
+		GEmueraTheme.ApplyButton(rotateScreenButton, GEmueraTheme.Surface, GEmueraTheme.Border);
+		rotateScreenButton.Pressed += OnRotateScreenPressed;
+		rotateRow.AddChild(rotateScreenButton);
 
 		var fontRow = CreateRow(displayGroup, out fontLabel);
 		fontSizeSlider = new HSlider();
