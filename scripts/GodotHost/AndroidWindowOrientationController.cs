@@ -62,6 +62,10 @@ public partial class AndroidWindowOrientationController : Node
 			? DisplayServer.ScreenOrientation.Portrait
 			: DisplayServer.ScreenOrientation.Landscape;
 		SetFollowCache(false);
+		// 必须同时停掉 fullSensor 守护，否则守护会把这张手动方向再次覆盖回 FULL_SENSOR。
+		fullSensorApplied = false;
+		nextFullSensorGuardTime = 0.0;
+		fullSensorConsecutiveFailures = 0;
 		try
 		{
 			DisplayServer.ScreenSetOrientation(target);
@@ -114,6 +118,64 @@ public partial class AndroidWindowOrientationController : Node
 
 	// ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR —— 4 方向跟随传感器，忽略用户锁定。
 	const int AndroidFullSensorOrientation = 10;
+
+	// fullSensor 守护：真机反馈「仍被强制竖屏」。已知机制是 Activity 重建/resume 时
+	// Godot 会按 manifest（fullUser）重新设置方向，把运行时请求覆盖掉。因此定时校验
+	// 实际 requestedOrientation，被改写就重设；连续失败则判定系统不接受，退回重力轮询。
+	const double FullSensorGuardIntervalSeconds = 1.0;
+	const int FullSensorMaxConsecutiveFailures = 8;
+
+	static double nextFullSensorGuardTime;
+	static int fullSensorConsecutiveFailures;
+
+	/// <summary>读 Activity 实际持有的 requestedOrientation，确认 FULL_SENSOR 仍在我们手里。</summary>
+	static bool IsFullSensorActive()
+	{
+		try
+		{
+			GodotObject runtime = Engine.GetSingleton("AndroidRuntime");
+			if (runtime == null)
+				return false;
+			GodotObject activity = runtime.Call("getActivity").AsGodotObject();
+			if (activity == null)
+				return false;
+			Variant result = activity.Call("getRequestedOrientation");
+			// Java 方法抛异常时 Call 返回 Nil，且异常存于 JavaClassWrapper。
+			if (JavaClassWrapper.GetException() != null)
+				return false;
+			if (result.VariantType == Variant.Type.Nil)
+				return false;
+			return result.AsInt32() == AndroidFullSensorOrientation;
+		}
+		catch (Exception)
+		{
+			return false;
+		}
+	}
+
+	static void GuardFullSensor(double delta)
+	{
+		nextFullSensorGuardTime -= delta;
+		if (nextFullSensorGuardTime > 0.0)
+			return;
+		nextFullSensorGuardTime = FullSensorGuardIntervalSeconds;
+		if (IsFullSensorActive())
+		{
+			fullSensorConsecutiveFailures = 0;
+			return;
+		}
+		if (TryApplyFullSensor())
+		{
+			fullSensorConsecutiveFailures = 0;
+			MobileLayoutDiagnostics.PublishOrientation("[ORIENTATION] 守护：检测到方向被系统改写，重新应用 FULL_SENSOR");
+			return;
+		}
+		if (++fullSensorConsecutiveFailures >= FullSensorMaxConsecutiveFailures)
+		{
+			fullSensorApplied = false;
+			MobileLayoutDiagnostics.Warn("[ORIENTATION] fullSensor 连续无效 → 退回重力轮询");
+		}
+	}
 
 	/// <summary>
 	/// 通过 AndroidRuntime 直接调用 Activity.setRequestedOrientation(FULL_SENSOR)。
@@ -180,8 +242,15 @@ public partial class AndroidWindowOrientationController : Node
 
 	public override void _Process(double delta)
 	{
-		if (OS.GetName() != "Android" || !FollowDeviceOrientation || fullSensorApplied)
+		if (OS.GetName() != "Android" || !FollowDeviceOrientation)
 			return;
+		// fullSensor 生效时旋转交给系统，但需守护：Activity 重建/resume 会让系统
+		// 按 manifest 的 fullUser 重置方向（真机实测仍被强制竖屏的原因）。
+		if (fullSensorApplied)
+		{
+			GuardFullSensor(delta);
+			return;
+		}
 		// 冷却期内不响应：旋转过渡帧会同时改变窗口尺寸与传感器姿态读数。
 		if (Time.GetTicksMsec() < orientationCooldownUntilMs)
 			return;
