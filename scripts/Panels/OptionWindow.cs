@@ -558,7 +558,7 @@ public partial class OptionWindow : Control
 		}
 		if (followOrientationLabel != null)
 		{
-			followOrientationLabel.Text = MultiLanguage.Get("OptionWindow.FollowOrientation", "跟随手机朝向");
+			followOrientationLabel.Text = MultiLanguage.Get("OptionWindow.FollowOrientation", "自动旋转（跟随手机）");
 			if (followOrientationToggle != null)
 				followOrientationToggle.TooltipText = MultiLanguage.Get(
 					"OptionWindow.FollowOrientationHint",

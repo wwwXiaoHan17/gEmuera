@@ -1197,9 +1197,12 @@ public partial class QuickButtons : CanvasLayer
 		Vector2 pos = floatingPanelPosition;
 		if (pos.X < 0 || pos.Y < 0)
 		{
+			// 默认贴右上角、系统菜单栏正下方：用户是从右上角菜单里的「快捷」按钮
+			// 唤出本面板的，面板出现在该按钮下方才符合视线预期。
+			//（原实现默认在右下角，竖屏下要跨屏寻找，体验割裂。）
 			pos = new Vector2(
 				safeRect.Position.X + safeRect.Size.X - width - 20,
-				safeRect.Position.Y + safeRect.Size.Y - height - barHeight - 20);
+				safeRect.Position.Y + 48 + 16);
 		}
 		float maxX = Mathf.Max(safeRect.Position.X, safeRect.Position.X + safeRect.Size.X - width);
 		float maxY = Mathf.Max(safeRect.Position.Y, safeRect.Position.Y + safeRect.Size.Y - height - barHeight);

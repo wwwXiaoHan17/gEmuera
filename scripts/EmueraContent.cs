@@ -982,6 +982,9 @@ public partial class EmueraContent : Control
 		AddIconButton("res://assets/icons/exit.svg", OnExitPressed);
 		scaleMenuButton = AddIconButton("res://assets/icons/scale.svg", OnScaleTogglePressed);
 		mouseMenuButton = AddIconButton("res://assets/icons/mouse.svg", OnVirtualMouseTogglePressed);
+		// 手动旋转（仅 Android 有意义）：入口与其它系统功能并列，免去进设置页找。
+		if (OS.GetName() == "Android")
+			AddIconButton("res://assets/icons/rotate.svg", OnRotateScreenPressed);
 
 		// Toggle at the right edge (last child = rightmost in HBox).
 		var menuToggleBtn = new TextureButton();
@@ -6545,6 +6548,12 @@ public partial class EmueraContent : Control
 		if (menuExpandedBar.Vertical == portrait)
 			return;
 		menuExpandedBar.Vertical = portrait;
+	}
+
+	// 系统菜单里的「旋转」：与启动器/设置窗同一个入口，弹「仅本次/永久」选择框。
+	void OnRotateScreenPressed()
+	{
+		RotateChoiceDialog.Show(this);
 	}
 
 	// React to orientation/resolution changes. Android exports can resize when
