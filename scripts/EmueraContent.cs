@@ -993,6 +993,9 @@ public partial class EmueraContent : Control
 		var menuToggleBtn = new TextureButton();
 		menuToggleBtn.CustomMinimumSize = new Vector2(SystemButtonTouchSize, SystemButtonTouchSize);
 		menuToggleBtn.StretchMode = TextureButton.StretchModeEnum.KeepAspectCentered;
+		// 顶部对齐（不拉伸）：竖屏时面板很高（12 个图标竖排），HBox 会把 toggle 拉伸到
+		// 面板高度、图形垂直居中，导致展开/收起时按钮位置上下跳动（用户反馈「乱跑」）。
+		menuToggleBtn.SizeFlagsVertical = SizeFlags.ShrinkBegin;
 		menuToggleBtn.MouseFilter = MouseFilterEnum.Stop;
 		StyleSystemIconButton(menuToggleBtn);
 		if (ResourceLoader.Exists("res://assets/icons/menu.svg"))

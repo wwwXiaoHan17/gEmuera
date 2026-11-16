@@ -302,3 +302,16 @@ fullSensor 语义 = 4 方向跟随传感器**且忽略用户方向锁定**，旋
 >
 > 验证 [实测]：桌面打开设置窗截图——「自动旋转（跟随手机）」开关与「旋转屏幕」按钮
 > 均以灰色禁用态正常显示在「界面缩放」下方；构建 0 error。
+
+> 补遗 14（2026-11-16，用户反馈「快捷按钮会乱跑」）
+>
+> 现象：竖屏单列菜单栏下，展开/收起时 toggle（四宫格）位置上下跳动。
+> 根因：`menuRoot` 是 HBox `[panel][toggle]`，panel 竖排后高约 576px；toggle 的
+> `SizeFlagsVertical` 默认 Fill，被拉伸到面板高度、图形 `KeepAspectCentered` 垂直居中，
+> 于是展开时在栏体中部、收起时回顶部。
+>
+> 修复：`menuToggleBtn.SizeFlagsVertical = ShrinkBegin`（顶部对齐、不拉伸），
+> 横竖屏都固定在与栏体顶部同一水平线。
+>
+> 验证 [实测]：PC 竖屏（560x1200）截图——12 个图标单列、toggle 固定在栏顶右侧；
+> 构建 0 error。
