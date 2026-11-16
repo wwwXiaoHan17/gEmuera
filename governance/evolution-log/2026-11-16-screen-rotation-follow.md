@@ -88,3 +88,27 @@ fullSensor 语义 = 4 方向跟随传感器**且忽略用户方向锁定**，旋
   若 fullSensor 在真机生效则系统会自动处理 4 方向，届时该限制自动消失；兜底轮询路径仍只支持 2 方向。
 - P2：兜底轮询路径（fullSensor 不可用时）在真机上的实际表现未验证。为什么不在本轮做：
   无法在模拟器上构造 `AndroidRuntime` 不可用的环境。
+
+> 补遗（2026-11-16，用户提出手动旋转的持久化语义问题）
+>
+> 问题：`RotateScreen()` 原实现 `SetFollowCache(false)` 无条件写盘，点一次「旋转」就把
+> `FollowDeviceOrientation=false` 永久落盘，重启后仍不跟随——用户点旋转通常只是"这次想横着玩"，
+> 不该被记成永久偏好。
+>
+> 用户裁定方案：点旋转时弹窗让用户选择「仅本次 / 永久固定」。
+>
+> 实现（`scripts/Panels/RotateChoiceDialog.cs` 新增 + 两处调用点）：
+> - `AcceptDialog`：OK = 「永久固定」（写盘），右侧自定义按钮 = 「仅本次」（只改内存缓存，
+>   不写 settings.cfg，重启恢复配置值），X 关闭 = 取消（`CloseRequested` 释放节点，避免泄漏）。
+> - `RotateScreen(bool persist = true)` 重载；`SetFollowCache(bool value, bool persist = true)`。
+> - 跟随已关闭时（已是固定模式）不弹窗，直接旋转——此时没有"永久/本次"可选。
+> - 选择后回调 `SyncFollowOrientationToggle` 同步设置窗开关显示。
+> - 四语言 `RotateChoice.*` 4 个键（Title/Text/Permanent/Session）。
+>
+> 验证 [实测]：桌面窗口模式截图确认对话框渲染正常（标题「旋转屏幕」/说明/「永久固定」+
+> 「仅本次」双按钮/关闭按钮，中文文案生效）；`dotnet build` 0 error。
+> [未验证] Android 真机上两个选项的写盘/不写盘行为（需真机安装后检查 settings.cfg）。
+>
+> 顺带修复：本轮预览时发现桌面 `user://settings.cfg` 被早前手工恢复时写坏
+> （`Language=zh_cn` 缺引号 → ConfigFile 解析失败 → 语言回退英文），已修正为 `Language="zh_cn"`。
+> 教训：手工改 Godot cfg 的字符串值必须带双引号。

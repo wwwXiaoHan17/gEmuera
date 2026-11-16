@@ -728,14 +728,17 @@ public partial class OptionWindow : Control
 
 	void OnRotateScreenPressed()
 	{
-		// RotateScreen 隐含切到固定方向；同步开关显示，避免 UI 与真实模式不一致。
-		AndroidWindowOrientationController.RotateScreen();
-		if (followOrientationToggle != null)
-		{
-			followOrientationToggle.SetBlockSignals(true);
-			followOrientationToggle.ButtonPressed = false;
-			followOrientationToggle.SetBlockSignals(false);
-		}
+		// 由对话框决定「永久/仅本次」；应用后回调把开关显示同步为真实状态。
+		RotateChoiceDialog.Show(this, SyncFollowOrientationToggle);
+	}
+
+	void SyncFollowOrientationToggle()
+	{
+		if (followOrientationToggle == null)
+			return;
+		followOrientationToggle.SetBlockSignals(true);
+		followOrientationToggle.ButtonPressed = AndroidWindowOrientationController.FollowDeviceOrientation;
+		followOrientationToggle.SetBlockSignals(false);
 	}
 
 	void OnFontSizeChanged(double value)

@@ -265,7 +265,7 @@ public partial class FirstWindow : Control
 			rotateButton.CustomMinimumSize = new Vector2(72, 36);
 			rotateButton.AddThemeFontSizeOverride("font_size", 14);
 			GEmueraTheme.ApplyButton(rotateButton, GEmueraTheme.Surface, GEmueraTheme.Border);
-			rotateButton.Pressed += () => AndroidWindowOrientationController.RotateScreen();
+			rotateButton.Pressed += () => RotateChoiceDialog.Show(this);
 			header.AddChild(rotateButton);
 		}
 

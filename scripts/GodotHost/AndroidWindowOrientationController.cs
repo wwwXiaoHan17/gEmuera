@@ -53,7 +53,11 @@ public partial class AndroidWindowOrientationController : Node
 	}
 
 	/// <summary>手动旋转 90°（竖↔横）。隐含关闭「跟随手机」。</summary>
-	public static void RotateScreen()
+	/// <param name="persist">
+	/// true = 永久（写盘，重启后仍固定）；false = 仅本次运行（不写盘，重启恢复跟随）。
+	/// 由 <see cref="RotateChoiceDialog"/> 让用户选择。
+	/// </param>
+	public static void RotateScreen(bool persist = true)
 	{
 		if (OS.GetName() != "Android")
 			return;
@@ -61,7 +65,7 @@ public partial class AndroidWindowOrientationController : Node
 		DisplayServer.ScreenOrientation target = size.X > size.Y
 			? DisplayServer.ScreenOrientation.Portrait
 			: DisplayServer.ScreenOrientation.Landscape;
-		SetFollowCache(false);
+		SetFollowCache(false, persist);
 		// 必须同时停掉 fullSensor 守护，否则守护会把这张手动方向再次覆盖回 FULL_SENSOR。
 		fullSensorApplied = false;
 		nextFullSensorGuardTime = 0.0;
@@ -70,6 +74,7 @@ public partial class AndroidWindowOrientationController : Node
 		{
 			DisplayServer.ScreenSetOrientation(target);
 			MobileLayoutDiagnostics.PublishOrientation("[ORIENTATION] 手动旋转 → target=" + target
+				+ " persist=" + persist
 				+ " windowBefore=" + size);
 		}
 		catch (Exception ex)
@@ -78,9 +83,12 @@ public partial class AndroidWindowOrientationController : Node
 		}
 	}
 
-	static void SetFollowCache(bool value)
+	/// <param name="persist">false = 只改内存态，不写 settings.cfg（重启后恢复配置值）。</param>
+	static void SetFollowCache(bool value, bool persist = true)
 	{
 		followDeviceOrientationCache = value ? 1 : 0;
+		if (!persist)
+			return;
 		var cfg = new ConfigFile();
 		Error loadError = cfg.Load(SettingsPath);
 		if (loadError == Error.Ok || loadError == Error.FileNotFound)
