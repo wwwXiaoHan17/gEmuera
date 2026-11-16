@@ -12,10 +12,12 @@ public partial class AndroidWindowOrientationController : Node
 {
 	const double DebounceSeconds = 0.15;
 	const int MaxFailureWarnings = 3;
+	const int MaxWindowModeFailureWarnings = 3;
 
 	WindowLayoutKind previous = WindowLayoutKind.Unknown;
 	Timer debounceTimer;
 	int failureWarnings;
+	int windowModeFailureWarnings;
 	bool lastRequestedLandscape;
 
 	public override void _Ready()
@@ -28,8 +30,16 @@ public partial class AndroidWindowOrientationController : Node
 		debounceTimer = new Timer { OneShot = true, WaitTime = DebounceSeconds };
 		AddChild(debounceTimer);
 		debounceTimer.Timeout += Evaluate;
-		GetWindow().SizeChanged += OnWindowSizeChanged;
-		GetViewport().SizeChanged += OnWindowSizeChanged;
+		// Android 上 GetWindow() 与 GetViewport() 是同一根窗口对象，重复 Connect 同一
+		// callable 会在 logcat 报 "Signal 'size_changed' is already connected"（实测）。
+		var window = GetWindow();
+		if (window == GetViewport())
+			window.SizeChanged += OnWindowSizeChanged;
+		else
+		{
+			window.SizeChanged += OnWindowSizeChanged;
+			GetViewport().SizeChanged += OnWindowSizeChanged;
+		}
 		CallDeferred(nameof(Evaluate));
 	}
 
@@ -63,10 +73,14 @@ public partial class AndroidWindowOrientationController : Node
 		{
 			if (failureWarnings++ < MaxFailureWarnings)
 				MobileLayoutDiagnostics.Warn("[ORIENTATION] 多窗口检测失败 → AndroidRuntime/getActivity/isInMultiWindowMode 不可用");
+			// 检测失败时窗口模式按非小窗兜底：真在分屏/小窗下系统会拒绝全屏请求，无害。
+			// 方向逻辑维持原状（previous 不动，避免误判边沿）。
+			ApplyImmersiveWindowMode(WindowLayoutKind.Fullscreen, "query_fallback");
 			return;
 		}
 		failureWarnings = 0;
 		WindowLayoutKind current = isMultiWindow ? WindowLayoutKind.MultiWindow : WindowLayoutKind.Fullscreen;
+		ApplyImmersiveWindowMode(current, isMultiWindow ? "enter_multi_window" : "evaluate");
 		OrientationRequest request = WindowOrientationPolicy.Decide(previous, current);
 		previous = current;
 		MobileLayoutDiagnostics.Trace("[ORIENTATION] 状态 → multiWindow=" + isMultiWindow
@@ -76,6 +90,43 @@ public partial class AndroidWindowOrientationController : Node
 		if (request == OrientationRequest.None)
 			return;
 		RequestOrientation(request, isMultiWindow ? "enter_multi_window" : "exit_multi_window");
+	}
+
+	// 沉浸全屏（Android 专属语义）：非小窗形态一律 ExclusiveFullscreen——同时隐藏
+	// 状态栏与导航栏；进入小窗（分屏/浮动窗）恢复 Windowed，系统在小窗下不接受
+	// 全屏请求。以 WindowGetMode 读回去重，回前台（_Notification）后重新评估。
+	void ApplyImmersiveWindowMode(WindowLayoutKind kind, string reason)
+	{
+		DisplayServer.WindowMode target = kind == WindowLayoutKind.MultiWindow
+			? DisplayServer.WindowMode.Windowed
+			: DisplayServer.WindowMode.ExclusiveFullscreen;
+		try
+		{
+			if (DisplayServer.WindowGetMode() == target)
+				return;
+			DisplayServer.WindowSetMode(target);
+			windowModeFailureWarnings = 0;
+			MobileLayoutDiagnostics.PublishOrientation("[WINDOWMODE] 请求窗口模式 → reason=" + reason
+				+ " kind=" + kind
+				+ " target=" + target
+				+ " window=" + DisplayServer.WindowGetSize());
+		}
+		catch (Exception ex)
+		{
+			// 失败限流告警并降级：系统栏保留时由安全区管线兜底，绝不崩溃、不阻塞。
+			if (windowModeFailureWarnings++ < MaxWindowModeFailureWarnings)
+				MobileLayoutDiagnostics.Warn("[WINDOWMODE] request failed -> reason=" + reason + " " + ex.GetType().Name + ": " + ex.Message);
+		}
+	}
+
+	public override void _Notification(int what)
+	{
+		if (OS.GetName() != "Android")
+			return;
+		// 回到前台后系统可能已恢复系统栏（系统策略/切应用覆盖），重新评估一次；
+		// Evaluate 幂等（方向按边沿、窗口模式按读回去重），重复触发无害。
+		if (what == NotificationApplicationResumed || what == NotificationApplicationFocusIn)
+			CallDeferred(nameof(Evaluate));
 	}
 
 	void RequestOrientation(OrientationRequest request, string reason)

@@ -31,7 +31,12 @@ public static class UiScaleHelper
         if (!persist)
             return;
         var cfg = new ConfigFile();
-        cfg.Load(SettingsPath);
+        // 文件不存在（首次运行）是正常情况：新建只含 UiScale 的文件。
+        // 其它错误（如解析失败）时 cfg 可能只解析出一部分键，此时 Save 会把
+        // Language/分辨率等其他配置键一并覆盖掉——宁可本次不持久化。
+        Error loadError = cfg.Load(SettingsPath);
+        if (loadError != Error.Ok && loadError != Error.FileNotFound)
+            return;
         cfg.SetValue(Section, UiScaleKey, current);
         cfg.Save(SettingsPath);
     }
