@@ -219,3 +219,23 @@ fullSensor 语义 = 4 方向跟随传感器**且忽略用户方向锁定**，旋
 > 交付侧未做代码改动；仅记录排查结论与建议（清理 `.godot/imported/` 后重建、
 > 核对 APK 体积、必要时提供真机 logcat）。
 > 验证 [实测]：模拟器截图（12 图标齐全）；对照导出两版 APK 的 ctex 计数均为 15。
+
+> 补遗 9（2026-11-16，用户指出「仅本次」后会话内不应再弹窗）
+>
+> 上一版修 bug 时把弹窗判据改成了持久化配置（`PersistedFollowDeviceOrientation`），
+> 副作用是：选了「仅本次」后配置仍是 true，会话内每次点旋转都会再次弹窗。
+>
+> 正确语义（用户确认）：
+> - 会话内已固定（无论「仅本次」还是「永久」）→ 再点旋转直接切方向，不再询问
+> - 且必须 `persist: false`——否则会把「仅本次」悄悄写成永久
+>
+> 实现：`RotateChoiceDialog.Show` 判据改回内存态 `FollowDeviceOrientation`，直接转分支
+> 从 `persist: true` 改为 `persist: false`；删除已无调用方的 `PersistedFollowDeviceOrientation`。
+>
+> 行为矩阵（实测推演，构建 0 error）：
+> | 状态 | 内存 | 配置 | 点旋转 |
+> |---|---|---|---|
+> | 跟随中 | true | true | 弹窗询问 |
+> | 选「仅本次」后 | false | true | 直接转、不写盘、不弹窗 |
+> | 重启（仅本次） | true | true | 恢复跟随，点旋转弹窗 |
+> | 选「永久」后 / 重启 | false | false | 直接转、不弹窗 |

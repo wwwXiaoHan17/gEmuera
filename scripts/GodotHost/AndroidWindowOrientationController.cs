@@ -56,24 +56,6 @@ public partial class AndroidWindowOrientationController : Node
 		}
 	}
 
-	/// <summary>
-	/// 读取 settings.cfg 里用户持久化的偏好（不改动内存缓存）。
-	/// 用途：判断"用户偏好是否跟随"，用于决定手动旋转要不要询问永久/本次——
-	/// 不能用 <see cref="FollowDeviceOrientation"/>，后者含「仅本次」的会话覆盖，
-	/// 会把"这次固定"误判成"用户偏好固定"，从而把仅本次升级成永久。
-	/// </summary>
-	public static bool PersistedFollowDeviceOrientation
-	{
-		get
-		{
-			MigrateLegacyRotationSettingsIfNeeded();
-			var cfg = new ConfigFile();
-			if (cfg.Load(SettingsPath) != Error.Ok)
-				return true; // 文件缺失/损坏：按默认（跟随）处理
-			return cfg.GetValue(SettingsSection, FollowDeviceOrientationKey, true).AsBool();
-		}
-	}
-
 	/// <summary>跟随手机朝向（true）或固定当前方向（false）。写入 settings.cfg。</summary>
 	public static bool FollowDeviceOrientation
 	{

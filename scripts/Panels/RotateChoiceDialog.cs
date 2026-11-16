@@ -17,12 +17,11 @@ public partial class RotateChoiceDialog : AcceptDialog
     /// <param name="onApplied">选择并应用后回调（调用方用它同步开关显示）。</param>
     public static void Show(Node parent, System.Action onApplied = null)
     {
-        // 判断依据是「用户持久化偏好」而非当前内存态：点过「仅本次」后内存是关闭，
-        // 但配置仍是跟随——若按内存判断会直接走固定分支，把仅本次悄悄升级成永久。
-        if (!AndroidWindowOrientationController.PersistedFollowDeviceOrientation)
+        // 会话内已处于固定状态（选了「仅本次」或「永久」）→ 直接切换方向，不再询问。
+        // persist: false 保证不改动持久化配置：选过「仅本次」的用户重启后仍会恢复跟随。
+        if (!AndroidWindowOrientationController.FollowDeviceOrientation)
         {
-            // 用户偏好就是固定：(永久/本次) 无区别，直接转。
-            AndroidWindowOrientationController.RotateScreen(persist: true);
+            AndroidWindowOrientationController.RotateScreen(persist: false);
             onApplied?.Invoke();
             return;
         }
