@@ -170,3 +170,21 @@ fullSensor 语义 = 4 方向跟随传感器**且忽略用户方向锁定**，旋
 >
 > 验证 [实测]：桌面把逻辑宽度压到 540（约 1080 物理 @200% UI 缩放）并临时让旋转按钮
 > 在桌面显示，截图确认「界面 100%」与「旋转」两个控件均可见；构建 0 error。
+
+> 补遗 6（2026-11-16，用户要求「竖屏时游戏内那串功能按钮改为竖的」）
+>
+> 对象：展开的系统菜单栏 `menuExpandedBar`（11 个图标：返回/重启/设置/输入/快捷/
+> 自动跳过/保存日志/标题/退出/缩放/鼠标）。横排 11 个图标在竖屏窄宽度下会横向溢出，
+> 右侧按钮被裁切。
+>
+> 实现（`scripts/EmueraContent.cs`）：
+> - 字段类型 `HBoxContainer` → `BoxContainer`（HBoxContainer 的 vertical 不可改，引擎报错）
+> - 新增 `UpdateMenuBarOrientation()`：`Size.X < Size.Y` 时 `Vertical = true`，在
+>   `ApplySafeAreaLayout` 里调用（旋转/尺寸变化走既有 deferred 管线，无需新监听）
+> - menuRoot 是顶部锚定的 HBox，面板变高后自然向下展开，位置无需另调
+>
+> 验证 [实测]：桌面窗口模式加载 eraTW，真实窗口尺寸设为 560x1200（竖屏）与 1200x560
+> （横屏）：
+> - 竖屏 menubar `vertical=true`，截图确认 11 个图标竖向排列于右上角、全部可见
+> - 横屏 menubar `vertical=false`，截图确认保持横排
+> - 构建 0 error。

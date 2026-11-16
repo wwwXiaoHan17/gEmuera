@@ -33,7 +33,7 @@ public partial class EmueraContent : Control
 
 	// Overlay and tool UI. These are Canvas/Control overlays above the console and
 	// should not own emuera state directly.
-	HBoxContainer menuBar;
+	BoxContainer menuBar;
 	SafeAreaApplicator menuSafeArea;
 	Inputpad inputpad;
 	QuickButtons quickButtons;
@@ -451,7 +451,9 @@ public partial class EmueraContent : Control
 	Control rootContent;
 	CanvasLayer menuLayer;
 	HBoxContainer menuRoot;
-	HBoxContainer menuExpandedBar;
+	// 用 BoxContainer 而非 HBoxContainer：竖屏时需要运行时切换 Vertical（横排 11 个
+	// 图标在窄屏会横向溢出）。HBoxContainer 的 vertical 不可改（引擎会报错）。
+	BoxContainer menuExpandedBar;
 	bool menuExpanded = false;
 	TextureButton inputMenuButton;
 	TextureButton quickMenuButton;
@@ -678,6 +680,7 @@ public partial class EmueraContent : Control
 		ApplySafeRect(rootContent, safeRect);
 		ApplySafeRect(cbgContainer, safeRect);
 		menuSafeArea?.Apply();
+		UpdateMenuBarOrientation();
 		inputpad?.RefreshSafeAreaLayout();
 		scalepad?.RefreshSafeAreaLayout();
 		quickButtons?.RefreshSafeAreaLayout();
@@ -963,7 +966,7 @@ public partial class EmueraContent : Control
 		menuPanel.Visible = false;
 		menuRoot.AddChild(menuPanel);
 
-		menuExpandedBar = new HBoxContainer();
+		menuExpandedBar = new BoxContainer();
 		menuExpandedBar.AddThemeConstantOverride("separation", 6);
 		menuPanel.AddChild(menuExpandedBar);
 
@@ -6528,6 +6531,20 @@ public partial class EmueraContent : Control
 		menuExpanded = !menuExpanded;
 		if (menuExpandedBar != null && menuExpandedBar.GetParent() is Control panel)
 			panel.Visible = menuExpanded;
+	}
+
+	// 系统菜单栏朝向：竖屏改竖排。
+	// 为什么：横排 11 个图标在竖屏窄宽度下会横向溢出，右侧按钮被裁切不可用；
+	// 竖排后放进右上角面板向下展开，全部按钮可见。menuRoot 是顶部锚定的 HBox，
+	// 面板变高会自然下移，位置无需另调。
+	void UpdateMenuBarOrientation()
+	{
+		if (menuExpandedBar == null)
+			return;
+		bool portrait = Size.X > 0 && Size.X < Size.Y;
+		if (menuExpandedBar.Vertical == portrait)
+			return;
+		menuExpandedBar.Vertical = portrait;
 	}
 
 	// React to orientation/resolution changes. Android exports can resize when
