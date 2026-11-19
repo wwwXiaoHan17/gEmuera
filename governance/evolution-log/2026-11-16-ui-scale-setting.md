@@ -71,3 +71,19 @@
 >
 > 被推翻的中间结论：上文未涉及字号路径，故无推翻；本条取代 dev#2「字号与缩放严格分离」在
 > UI 滑条上的适用性，属用户裁定的产品语义选择，非遗漏。
+
+> 补遗（2026-11-20，用户裁定删除设置窗「字体大小」滑条）
+>
+> 方案 B 落地后，设置窗「字体大小」滑条与缩放板（Scalepad / 菜单第 10 个「缩放」）
+> 走同一 API `SetContentScale`，是同一功能的两个入口（仅刻度不同：字号 8–48 vs 倍率
+> 0.5–3.0）。用户确认冗余，裁定删除字体滑条、只保留缩放板。
+>
+> 移除内容（`scripts/Panels/OptionWindow.cs`）：fontRow 创建块、fontSizeSlider/
+> fontSizeLabel/fontLabel 字段、OnFontSizeChanged、SyncFontSizeFromConfig、
+> ShowPopup 里的同步调用、ApplyLanguageTexts 的 fontLabel 分支；
+> 四语言删除 `OptionWindow.FontSize` / `FontSizeHint` 键。
+> dev#2 的 RequestFontSize / FontSizeScaling / Config.SetRuntimeFontSize 基础设施
+> 与 xUnit 测试继续保留（仍有效，其他入口可用）。
+>
+> 验证 [实测]：桌面打开设置窗截图——显示组依次为 界面缩放/自动旋转/旋转屏幕/
+> 最大行数/左右留白/分辨率/帧率，无字体行、无空洞；构建 0 error。

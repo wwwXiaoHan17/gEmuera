@@ -13,8 +13,6 @@ public partial class OptionWindow : Control
 	Button rotateScreenButton;
 	Label followOrientationLabel;
 	Label rotateScreenLabel;
-	Slider fontSizeSlider;
-	Label fontSizeLabel;
 	Slider quickButtonWidthSlider;
 	Label quickButtonWidthLabel;
 	Slider quickFontSizeSlider;
@@ -51,7 +49,6 @@ public partial class OptionWindow : Control
 	// MultiLanguage-driven description labels (values are slider-derived numbers
 	// and stay untouched); refreshed together when the language changes.
 	Label uiScaleLabel;
-	Label fontLabel;
 	Label quickWidthLabel;
 	Label quickFontLabel;
 	Label sensitivityLabel;
@@ -181,24 +178,8 @@ public partial class OptionWindow : Control
 		rotateScreenButton.Pressed += OnRotateScreenPressed;
 		rotateRow.AddChild(rotateScreenButton);
 
-		var fontRow = CreateRow(displayGroup, out fontLabel);
-		fontSizeSlider = new HSlider();
-		fontSizeSlider.MinValue = 8;
-		fontSizeSlider.MaxValue = 48;
-		fontSizeSlider.Value = MinorShift.Emuera.Config.FontSize > 0 ? MinorShift.Emuera.Config.FontSize : 18;
-		fontSizeSlider.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-		fontSizeSlider.CustomMinimumSize = new Vector2(120, 44);
-		// 字号滑杆直接驱动核心字号 Config.FontSize（运行时字号 API，
-		// 仅影响之后输出的行，会话内生效不改 emuera.config）；
-		// 整体视图缩放与字号严格分离，请用 Scalepad（SetContentScale）。
-		fontSizeSlider.Editable = true;
-		fontSizeSlider.TooltipText = MultiLanguage.Get("OptionWindow.FontSizeHint",
-			"缩放游戏画面：文本、行内图片与立绘一起放大/缩小（含已有输出行）。界面按钮不受影响。");
-		fontSizeSlider.ValueChanged += OnFontSizeChanged;
-		fontRow.AddChild(fontSizeSlider);
-		fontSizeLabel = CreateValueLabel();
-		fontSizeLabel.Text = fontSizeSlider.Value.ToString();
-		fontRow.AddChild(fontSizeLabel);
+		// 字号调节已并入缩放板（Scalepad / 菜单第 10 个「缩放」按钮，SetContentScale）：
+		// 两者本是同一个内容层缩放的两种刻度（字号 vs 倍率），为避免重复入口只保留缩放板。
 
 		var maxLinesRow = CreateRow(displayGroup, out maxLinesTextLabel);
 		maxVisibleLinesSlider = new HSlider();
@@ -580,8 +561,6 @@ public partial class OptionWindow : Control
 					"手动把整个界面旋转 90°（会关闭「跟随手机朝向」，改为固定方向）。");
 			}
 		}
-		if (fontLabel != null)
-			fontLabel.Text = MultiLanguage.Get("OptionWindow.FontSize", "Font Size");
 		if (quickWidthLabel != null)
 			quickWidthLabel.Text = MultiLanguage.Get("OptionWindow.QuickButtonWidth", "Quick Width");
 		if (quickFontLabel != null)
@@ -649,28 +628,9 @@ public partial class OptionWindow : Control
 
 	public void ShowPopup()
 	{
-		SyncFontSizeFromConfig();
 		popup.PopupCentered();
 		CallDeferred(nameof(ClampPopupToSafeArea));
 		EmitSignal(SignalName.PopupOpened);
-	}
-
-	// 字号滑杆驱动内容层缩放（SetContentScale），滑杆显示「渲染后字号」：
-	// 核心字号 × 有效缩放（contentScale × UI 补偿）。打开设置看到的就是屏幕上的
-	// 真实字号，且与 UI 缩放解耦（UI 缩放不改物理字号）。
-	void SyncFontSizeFromConfig()
-	{
-		if (fontSizeSlider == null || fontSizeLabel == null)
-			return;
-		int coreSize = MinorShift.Emuera.Config.FontSize > 0 ? MinorShift.Emuera.Config.FontSize : 18;
-		float effective = (EmueraContent.instance?.ContentScale ?? 1.0f) * EmueraContent.UiScaleCompensation;
-		if (effective <= 0.0005f)
-			effective = 1.0f;
-		int rendered = Mathf.Clamp(Mathf.RoundToInt(coreSize * effective), 8, 48);
-		fontSizeSlider.SetBlockSignals(true);
-		fontSizeSlider.Value = rendered;
-		fontSizeSlider.SetBlockSignals(false);
-		fontSizeLabel.Text = rendered.ToString();
 	}
 
 	void ClampPopupToSafeArea()
@@ -744,19 +704,6 @@ public partial class OptionWindow : Control
 		followOrientationToggle.SetBlockSignals(true);
 		followOrientationToggle.ButtonPressed = AndroidWindowOrientationController.FollowDeviceOrientation;
 		followOrientationToggle.SetBlockSignals(false);
-	}
-
-	void OnFontSizeChanged(double value)
-	{
-		int coreSize = MinorShift.Emuera.Config.FontSize > 0 ? MinorShift.Emuera.Config.FontSize : 18;
-		int requested = Mathf.Clamp((int)System.Math.Round(value), 8, 48);
-		fontSizeLabel.Text = requested.ToString();
-		// 内容层缩放：一次 SetContentScale 同时缩放文本、行内图片与立绘（同一 Scale 变换），
-		// 旧输出行也一起缩放。滑条值按物理字号换算：contentScale × UI 补偿 = 实际渲染，
-		// 故目标 contentScale 要除以 UI 补偿，保证滑条数值 = 屏幕上的真实字号。
-		float compensation = EmueraContent.UiScaleCompensation;
-		float scale = requested / (float)coreSize / (compensation > 0.001f ? compensation : 1.0f);
-		EmueraContent.instance?.SetContentScale(scale);
 	}
 
 	void OnQuickButtonWidthChanged(double value)
