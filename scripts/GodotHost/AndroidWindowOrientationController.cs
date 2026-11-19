@@ -382,27 +382,59 @@ public partial class AndroidWindowOrientationController : Node
 	{
 		if (OS.GetName() != "Android")
 			return;
-		if (!TryQueryMultiWindow(out bool isMultiWindow))
+		WindowLayoutKind current;
+		bool multiWindowKnown = TryQueryMultiWindow(out bool isMultiWindow);
+		if (!multiWindowKnown)
 		{
 			if (failureWarnings++ < MaxFailureWarnings)
 				MobileLayoutDiagnostics.Warn("[ORIENTATION] 多窗口检测失败 → AndroidRuntime/getActivity/isInMultiWindowMode 不可用");
 			// 检测失败时窗口模式按非小窗兜底：真在分屏/小窗下系统会拒绝全屏请求，无害。
 			// 方向逻辑维持原状（previous 不动，避免误判边沿）。
 			ApplyImmersiveWindowMode(WindowLayoutKind.Fullscreen, "query_fallback");
+			// 多窗口状态未知：跟随机制维持现状（不暂停也不恢复），避免误切换。
+			if (FollowDeviceOrientation)
+				return;
+		}
+		else
+		{
+			failureWarnings = 0;
+			current = isMultiWindow ? WindowLayoutKind.MultiWindow : WindowLayoutKind.Fullscreen;
+			ApplyImmersiveWindowMode(current, isMultiWindow ? "enter_multi_window" : "evaluate");
+			MobileLayoutDiagnostics.Trace("[ORIENTATION] 状态 → multiWindow=" + isMultiWindow
+				+ " window=" + DisplayServer.WindowGetSize()
+				+ " screen=" + DisplayServer.ScreenGetSize()
+				+ " requestedRaw=" + (int)DisplayServer.ScreenGetOrientation());
+
+			// 跟随模式：方向由 fullSensor/重力轮询负责，绝不能走下面的 RequestOrientation——
+			// Sensor/SensorLandscape 请求会覆盖 FULL_SENSOR，随后守护又把它改回去，
+			// 两个机制互相覆盖形成循环（自查发现的 P0 冲突）。
+			// 唯一例外是小窗：小窗内不应随传感器旋转，暂停跟随、交给小窗方向策略。
+			if (FollowDeviceOrientation)
+			{
+				if (current == WindowLayoutKind.MultiWindow)
+				{
+					if (fullSensorApplied)
+					{
+						fullSensorApplied = false;
+						fullSensorConsecutiveFailures = 0;
+						ApplyScreenOrientation(DisplayServer.ScreenOrientation.SensorLandscape, "multiwindow:pause_follow");
+					}
+				}
+				else if (previous == WindowLayoutKind.MultiWindow)
+				{
+					// 刚退出小窗：恢复跟随（重设 FULL_SENSOR）。
+					ApplyOrientationMode("exit_multiwindow");
+				}
+				previous = current;
+				return;
+			}
+			OrientationRequest request = WindowOrientationPolicy.Decide(previous, current);
+			previous = current;
+			if (request == OrientationRequest.None)
+				return;
+			RequestOrientation(request, isMultiWindow ? "enter_multi_window" : "exit_multi_window");
 			return;
 		}
-		failureWarnings = 0;
-		WindowLayoutKind current = isMultiWindow ? WindowLayoutKind.MultiWindow : WindowLayoutKind.Fullscreen;
-		ApplyImmersiveWindowMode(current, isMultiWindow ? "enter_multi_window" : "evaluate");
-		OrientationRequest request = WindowOrientationPolicy.Decide(previous, current);
-		previous = current;
-		MobileLayoutDiagnostics.Trace("[ORIENTATION] 状态 → multiWindow=" + isMultiWindow
-			+ " window=" + DisplayServer.WindowGetSize()
-			+ " screen=" + DisplayServer.ScreenGetSize()
-			+ " requestedRaw=" + (int)DisplayServer.ScreenGetOrientation());
-		if (request == OrientationRequest.None)
-			return;
-		RequestOrientation(request, isMultiWindow ? "enter_multi_window" : "exit_multi_window");
 	}
 
 	// 沉浸全屏（Android 专属语义）：非小窗形态一律 ExclusiveFullscreen——同时隐藏

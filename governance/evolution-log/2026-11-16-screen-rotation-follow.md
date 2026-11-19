@@ -332,3 +332,35 @@ fullSensor 语义 = 4 方向跟随传感器**且忽略用户方向锁定**，旋
 >
 > 验证 [实测]：PC 竖屏 560x1200 截图——toggle 在最上、12 个图标顺次向下（含旋转图标），
 > `ROOT vertical=true`、`PANEL size=(72,822)` 不再溢出；构建 0 error。
+
+## 7. 自查（2026-11-18，应用户「自行审查一遍」要求，全分支 21 提交逐文件复核）
+
+### 发现并当场修复
+
+- **P0｜跟随模式与小窗方向策略互相覆盖**（`AndroidWindowOrientationController.Evaluate`）：
+  原实现不看 `FollowDeviceOrientation`，进入分屏/小窗就 `RequestOrientation(SensorLandscape)`，
+  把已应用的 FULL_SENSOR 覆盖掉；1 秒后 `GuardFullSensor` 又重设 FULL_SENSOR 覆盖小窗请求，
+  两机制无限互殴。修复：跟随模式下 Evaluate 不再走 RequestOrientation；进入小窗暂停跟随
+  （fullSensorApplied=false + SensorLandscape 交给小窗策略），退出小窗恢复跟随（重设 FULL_SENSOR）；
+  多窗口查询失败时跟随机制维持现状（不暂停也不恢复，避免误切换）。
+- **P1｜`RotateChoiceDialog.pendingCallback`（static）跨场景残留**：对话框被场景切换整体释放时
+  不触发 CloseRequested，static 字段继续持有调用方实例引用。修复：`_ExitTree` 兜底清空。
+
+### 复核后确认无需改动（排除项）
+
+- `RotateScreen` 固定模式下 `SetFollowCache(false, persist)`：跟随已关时重复写 false，幂等无害。
+- 迁移函数中迁移后重复 `cfg.Load` 一次：无害（结果一致）。
+- `_ExitTree` 仅在 `lastRequestedLandscape` 时恢复 Sensor：跟随（FULL_SENSOR）路径不恢复，
+  但 app 退出即 Activity 销毁、方向请求随之消失，无实际影响。
+- `QuickButtons` 竖屏 `rightMargin += 64` 仅用于贴右分支：flip（贴左）时不用，无浪费；
+  flip+竖屏时顶部仍让出 64px 属轻微冗余（无害，不改）。
+- `ApplyOrientationMode("resume")` 在多窗口+跟随开启时会短暂应用 FULL_SENSOR，
+  随后 deferred `Evaluate` 立即纠正为小窗暂停态——窗口期一个帧内，可接受。
+- 三处 `Disabled` 旋转入口在 PC 上不可点，`RotateScreen` 自身再有 OS 检查兜底，防御完整。
+
+### 遗留（此前已登记，本轮复核维持）
+
+- P1 真机验证：FULL_SENSOR 各 OEM 接受度、守护在真机的实际效果、快捷面板新默认位置。
+- P2 菜单栏贴顶未避让刘海（补遗 12）；倒持方向不支持（补遗 12）。
+
+验证 [实测]：`dotnet build` 0 error（仅既存无关 warning）。

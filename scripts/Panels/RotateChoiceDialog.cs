@@ -52,6 +52,13 @@ public partial class RotateChoiceDialog : AcceptDialog
         };
     }
 
+    // 兜底清理：若对话框未走 Apply/CloseRequested 就被销毁（如场景切换释放整棵树），
+    // static pendingCallback 仍持有调用方实例的引用，会跨场景残留到下一次 Show。
+    public override void _ExitTree()
+    {
+        pendingCallback = null;
+    }
+
     void Apply(bool persist)
     {
         AndroidWindowOrientationController.RotateScreen(persist);
