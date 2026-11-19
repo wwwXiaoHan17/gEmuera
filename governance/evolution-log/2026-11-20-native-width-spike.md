@@ -45,6 +45,17 @@
 3. (a) 本轮已执行：csproj glob 排除新工具目录（`gemuera-c#.csproj` tools\native-width-check 块），延续"新建 tools 子目录必须三行 Remove"惯例。
 4. 升级去向：建议在 `AGENTS.md`「构建与验证」节追加两行铁律——"仓库 .ps1 必须 UTF-8 BOM（PowerShell 5.1 兼容）"与"新增原生库统一走 native/ + tools/native-build + export/NativeLibs 可选复制模式"；本轮不动 AGENTS.md（主工作树另有会话在改同分支文件，避免跨任务混淆），随本分支合并后由下一任务落盘。
 
+## 复审/补遗（2026-11-20：Android 端到端测试轮）
+
+用户追加"通过模拟器来测试"后的第二轮，L1 部分落地：
+
+- **模拟器端到端 PASS [实测]**：Pixel_10 AVD（x86_64，Android API 36 镜像），`lib/x86_64/libgemuera_native.so`（440176B）随 APK 进 `lib/x86_64/`，启动后 logcat 实锤 `I godot: [LOAD] gemuera_native OK (abi=1, A=1,HIRAGANA_A=2,BULLET=1,U+FEFF=0)`，全程无 FATAL。P/Invoke 链路 Android 侧打通。
+- **真机 arm64 APK 已产出、未装 [未验证-设备受阻]**：设备 24129RT7CC（Android 16）已连 adb 且 arm64-v8a，但 ① 设备已装 versionCode 15 > 分支基线 14（`INSTALL_FAILED_VERSION_DOWNGRADE`，不降级覆盖用户数据）；② 旁路包名 `com.godot.gemuera.spike` 后遇 MIUI `INSTALL_FAILED_USER_RESTRICTED`（需手机端确认或开发者选项开启"USB 安装"）。arm64 `.so` 16KB p_align=16384 已在构建侧验证通过。
+- **新增探针**（本日志上文"不在本 PR 加 in-app interop"决策的**修订**：端到端可观测性需要最小探针）：`Scripts/Emuera/_Library/NativeTextWidth.cs`（P/Invoke + 异常吞并转日志文案）+ `FirstWindow._Ready` 钩子（`GenericUtils.InitializeLogging()` 后）。仍不接入行为路径。`GD.Print` 必达 logcat——`GenericUtils.Info` 是 `[Conditional("DEBUG")]`，Release 构建整行消失，logcat 证据不能依赖它。
+- **工作流坑（全部实测踩到）**：① Godot 4.7 CLI `--install-android-build-template` 必须放在 `--export-debug` **之前**（放在后面被解析为预设名）；worktree 首次导出需该旗标（模板不入库）。② x86_64 模拟器需临时工作流：preset 架构翻转（arm64→false/x86_64→true）+ NativeLibs 文件互换为 x86_64 `.so`，测后 `git checkout export_presets.cfg` + 重跑构建脚本还原；Skia/sqlite 的 arm64 ELF 会混入 x86_64 包（既有已知降级，依赖托管回退）。③ 版本号防降级：对装有新版构建的设备测试，要么 bump versionCode，要么旁路包名。④ csproj android 复制目标只在 `GodotTargetPlatform=android`（导出管线内部构建）时生效，桌面 `dotnet build` 不复制 `.so`，属预期。⑤ 尺寸指纹：arm64=460024、x86_64=440176、dll=117248。
+- **脚本修复**：`Build-GemueraNative.ps1` 原先只检查 NDK clang 路径未传给 cargo——补 `CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER`；否则 cargo 用默认 `aarch64-linux-android-clang`（PATH 上不存在）直接 exit 101。
+- NDK 安装：`sdkmanager --proxy=http --proxy_host=127.0.0.1 --proxy_port=7897 --install ndk;28.2.13676358`（走本地代理 7897，license 需先 `yes | --licenses`）。
+
 ## 遗留登记
 
 - **L1（P1，不在本轮原因：本机无 NDK，环境安装属用户决策）**：安装 Android NDK 后跑 `Build-GemueraNative.ps1`（含 16KB p_align 校验）产出 arm64 `.so`，导出 APK 并在模拟器/真机做 P/Invoke 冒烟；这是"Android 结论必须 APK 实测"铁律的必经步骤。

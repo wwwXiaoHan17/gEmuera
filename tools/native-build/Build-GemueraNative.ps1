@@ -79,6 +79,8 @@ if (-not $SkipAndroid) {
         Write-Warning "未找到 Android NDK（$sdk/ndk），跳过 Android 构建。桌面链路不受影响；安装 NDK 后重跑。"
     } else {
         # Android 15 要求 arm64 原生库按 16KB page 对齐。
+        # cargo 不读 PATH 里的 NDK，必须显式指定链接器（per-arch clang wrapper）。
+        $env:CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER = $clang
         $env:RUSTFLAGS = '-C link-arg=-Wl,-z,max-page-size=16384'
         & cargo build --release --target aarch64-linux-android --manifest-path $crateManifest --target-dir $targetDir
         if ($LASTEXITCODE -ne 0) { throw "cargo Android 构建失败 (exit $LASTEXITCODE)" }

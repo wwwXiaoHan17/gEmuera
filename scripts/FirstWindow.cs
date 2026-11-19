@@ -148,6 +148,13 @@ public partial class FirstWindow : Control
 		GenericUtils.SetMainThread();
 		GenericUtils.InitializeLogging();
 
+		// 原生库探针（native-width-spike）：gemuera_native 加载状态 + 宽度抽查。
+		// GD.Print 必达 logcat（GenericUtils.Info 是 Conditional(DEBUG)，Release 缺席），
+		// 失败/缺库也只落日志一行，不影响启动。
+		string nativeWidthProbe = MinorShift._Library.NativeTextWidth.ProbeForLog();
+		GD.Print(nativeWidthProbe);
+		GenericUtils.Info(nativeWidthProbe);
+
 		// 统一深色主题：Theme 资源提供基线样式，代码 overrides 覆盖交互控件。
 		Theme = GEmueraTheme.LoadTheme();
 
