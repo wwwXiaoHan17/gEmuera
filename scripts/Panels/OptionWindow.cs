@@ -206,8 +206,10 @@ public partial class OptionWindow : Control
 		rotateScreenButton.Pressed += OnRotateScreenPressed;
 		rotateRow.AddChild(rotateScreenButton);
 
-		// 字号调节已并入缩放板（Scalepad / 菜单第 10 个「缩放」按钮，SetContentScale）：
-		// 两者本是同一个内容层缩放的两种刻度（字号 vs 倍率），为避免重复入口只保留缩放板。
+		// 提示：本组两条缩放相关滑条是独立机制，不要合并——
+		//   界面缩放 = UiScaleHelper（root.ContentScaleFactor，只缩系统 UI）
+		//   字体大小 = RequestFontSize（XEmuera 排版级缩放，重算字号/行高/PRINTC，图片不变）
+		// 另有缩放板（菜单「缩放」图标 → Scalepad，SetContentScale）= 内容层矩阵缩放（含图片）。
 
 		var maxLinesRow = CreateRow(displayGroup, out maxLinesTextLabel);
 		maxVisibleLinesSlider = new HSlider();
