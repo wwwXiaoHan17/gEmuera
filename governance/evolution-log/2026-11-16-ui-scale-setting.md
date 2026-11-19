@@ -87,3 +87,27 @@
 >
 > 验证 [实测]：桌面打开设置窗截图——显示组依次为 界面缩放/自动旋转/旋转屏幕/
 > 最大行数/左右留白/分辨率/帧率，无字体行、无空洞；构建 0 error。
+
+> 补遗（2026-11-20，用户要求按 XEmuera/uEmuera 实现恢复字体大小滑条）
+>
+> 背景：上一条补遗删除了字体滑条（与缩放板同 API 冗余）。用户随后询问 uEmuera 的实现，
+> 查 `docs/xEmueraCodeWiki/ConfigSystem.md`：XEmuera 系用 `Config.FontSize`（基础字号）×
+> `Config.FontScale`（运行时缩放板乘数）做**排版级缩放**——字号/行高/窗口宽度/PRINTC 列数
+> 全部按新度量重算，文字重渲染（锐利），图片不跟随。用户裁定字体滑条按此语义恢复
+> （dev#2 的 `RequestFontSize`/`Config.SetRuntimeFontSize`/`FontSizeScaling` 基础设施正是其镜像）。
+>
+> 实现（`scripts/Panels/OptionWindow.cs`）：
+> - 字体滑条重新加入显示组（界面缩放之后）：8–48 步进 1，值 = 核心字号
+>   `EmueraContent.instance.ConsoleFontSize`（Config.FontSize）
+> - `OnFontSizeChanged` → `RequestFontSize(requested)`（解释器空闲帧应用，避免
+>   ClearFont 与解释器线程竞态；仅新输出行生效——旧行几何输出时已固化）
+> - `ShowPopup` → `SyncFontSizeFromCore`（显示 Config.FontSize 当前值，与缩放板倍率无换算关系）
+> - 四语言恢复 `FontSize`/`FontSizeHint` 键，文案写明排版级语义与「仅之后输出的行生效」
+>
+> 至此两条缩放机制并存且语义清晰：
+> - 字体大小 = 排版级（XEmuera 语义）：文字重渲染、行高/PRINTC 重算、图片不变、新行生效
+> - 缩放板 = 内容层矩阵：一切等比缩放（含图片与已有行）
+>
+> 验证 [实测]：桌面 + 测试游戏（PRINTBUTTON×2 + INPUT），滑条 18→32 后点击选项触发
+> 新输出——旧行保持 18 号、新行 `RESULT={RESULT}` 按 32 号锐利渲染；构建 0 error。
+> [未验证] PRINTC 分栏重算（需 PRINTC 密集输出的游戏）、真机表现。

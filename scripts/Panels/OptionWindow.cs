@@ -8,6 +8,12 @@ public partial class OptionWindow : Control
 	// 不影响游戏画面内容（其缩放独立走 Scalepad/双指捏合）。
 	Slider uiScaleSlider;
 	Label uiScaleValue;
+	// 字体大小（XEmuera 排版级缩放）：驱动核心字号 Config.FontSize 运行时重设，
+	// 行高/PRINTC 分栏按比例重算、文字按新字号重渲染（锐利）；图片不随字号缩放。
+	// 与缩放板（内容层矩阵缩放，含图片）是两条独立机制。
+	Slider fontSizeSlider;
+	Label fontSizeLabel;
+	Label fontLabel;
 	// 方向控制（仅 Android 构建时创建）：跟随手机朝向 / 手动旋转。
 	CheckButton followOrientationToggle;
 	Button rotateScreenButton;
@@ -147,6 +153,28 @@ public partial class OptionWindow : Control
 		uiScaleValue = CreateValueLabel();
 		uiScaleValue.Text = FormatUiScalePercent(UiScaleHelper.current);
 		uiScaleRow.AddChild(uiScaleValue);
+
+		// 字体大小：排版级缩放（XEmuera 语义）——改核心字号，行高/PRINTC 分栏按比例
+		// 重算、文字重渲染；仅新输出行生效（旧行几何已固化），图片不缩放。
+		// 与界面缩放（内容层矩阵，含图片）互相独立。
+		var fontRow = CreateRow(displayGroup, out fontLabel);
+		fontSizeSlider = new HSlider();
+		fontSizeSlider.MinValue = EmueraContent.FontSizeRequestMin;
+		fontSizeSlider.MaxValue = EmueraContent.FontSizeRequestMax;
+		fontSizeSlider.Step = 1;
+		fontSizeSlider.Value = EmueraContent.instance != null
+			? EmueraContent.instance.ConsoleFontSize
+			: (MinorShift.Emuera.Config.FontSize > 0 ? MinorShift.Emuera.Config.FontSize : 18);
+		fontSizeSlider.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		fontSizeSlider.CustomMinimumSize = new Vector2(120, 44);
+		fontSizeSlider.Editable = true;
+		fontSizeSlider.TooltipText = MultiLanguage.Get("OptionWindow.FontSizeHint",
+			"调整文字排版字号：文字按新字号重新渲染（清晰不糊），行高与 PRINTC 分栏按比例重算；仅对之后输出的行生效，图片不缩放。整体画面缩放（含图片）请用缩放板。");
+		fontSizeSlider.ValueChanged += OnFontSizeChanged;
+		fontRow.AddChild(fontSizeSlider);
+		fontSizeLabel = CreateValueLabel();
+		fontSizeLabel.Text = ((int)fontSizeSlider.Value).ToString();
+		fontRow.AddChild(fontSizeLabel);
 
 		// 方向控制：跟随手机朝向（fullSensor 忽略系统方向锁定）+ 手动旋转。
 		// 全平台都创建（便于在桌面确认功能存在）；非 Android 置为不可用并说明原因。
@@ -542,6 +570,13 @@ public partial class OptionWindow : Control
 				uiScaleSlider.TooltipText = MultiLanguage.Get("OptionWindow.UiScaleHint",
 					"调整界面整体大小，不影响游戏画面。");
 		}
+		if (fontLabel != null)
+		{
+			fontLabel.Text = MultiLanguage.Get("OptionWindow.FontSize", "Font Size");
+			if (fontSizeSlider != null)
+				fontSizeSlider.TooltipText = MultiLanguage.Get("OptionWindow.FontSizeHint",
+					"调整文字排版字号：文字按新字号重新渲染（清晰不糊），行高与 PRINTC 分栏按比例重算；仅对之后输出的行生效，图片不缩放。整体画面缩放（含图片）请用缩放板。");
+		}
 		if (followOrientationLabel != null)
 		{
 			followOrientationLabel.Text = MultiLanguage.Get("OptionWindow.FollowOrientation", "自动旋转（跟随手机）");
@@ -628,6 +663,7 @@ public partial class OptionWindow : Control
 
 	public void ShowPopup()
 	{
+		SyncFontSizeFromCore();
 		popup.PopupCentered();
 		CallDeferred(nameof(ClampPopupToSafeArea));
 		EmitSignal(SignalName.PopupOpened);
@@ -704,6 +740,30 @@ public partial class OptionWindow : Control
 		followOrientationToggle.SetBlockSignals(true);
 		followOrientationToggle.ButtonPressed = AndroidWindowOrientationController.FollowDeviceOrientation;
 		followOrientationToggle.SetBlockSignals(false);
+	}
+
+	// 打开设置时显示当前核心字号（Config.FontSize），与缩放板倍率无换算关系。
+	void SyncFontSizeFromCore()
+	{
+		if (fontSizeSlider == null || fontSizeLabel == null)
+			return;
+		int size = Mathf.Clamp(EmueraContent.instance != null
+			? EmueraContent.instance.ConsoleFontSize
+			: (MinorShift.Emuera.Config.FontSize > 0 ? MinorShift.Emuera.Config.FontSize : 18),
+			EmueraContent.FontSizeRequestMin, EmueraContent.FontSizeRequestMax);
+		fontSizeSlider.SetBlockSignals(true);
+		fontSizeSlider.Value = size;
+		fontSizeSlider.SetBlockSignals(false);
+		fontSizeLabel.Text = size.ToString();
+	}
+
+	void OnFontSizeChanged(double value)
+	{
+		int requested = Mathf.Clamp((int)System.Math.Round(value), EmueraContent.FontSizeRequestMin, EmueraContent.FontSizeRequestMax);
+		fontSizeLabel.Text = requested.ToString();
+		// XEmuera 排版级缩放：核心字号运行时重设，行高/PRINTC 按比例重算、文字重渲染；
+		// 解释器空闲帧应用，仅新输出行生效（会话内有效，不写回 emuera.config）。
+		EmueraContent.instance?.RequestFontSize(requested);
 	}
 
 	void OnQuickButtonWidthChanged(double value)
