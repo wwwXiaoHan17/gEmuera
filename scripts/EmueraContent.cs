@@ -6575,7 +6575,9 @@ public partial class EmueraContent : Control
 		}
 		menuRoot.Vertical = false;
 		menuRoot.GrowHorizontal = GrowDirection.Begin;
-		menuRoot.GrowVertical = GrowDirection.Begin;
+		// GrowVertical 必须是 End（从顶部锚点向下伸展）。此前误写 Begin（向上伸展），
+		// 竖屏转横屏后整条菜单栏被顶出屏幕上方（实测 root.pos.y=-68，用户反馈「看不见」）。
+		menuRoot.GrowVertical = GrowDirection.End;
 		menuExpandedBar.Vertical = false;
 		menuPanelContainer.SizeFlagsHorizontal = SizeFlags.ShrinkBegin;
 		menuPanelContainer.SizeFlagsVertical = SizeFlags.ShrinkBegin;
