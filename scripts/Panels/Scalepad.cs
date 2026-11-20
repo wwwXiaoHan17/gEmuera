@@ -136,7 +136,9 @@ public partial class Scalepad : Control
         float fitWidth = Mathf.Max(drawableWidth, visualWidth);
         float scale;
         if (fitWidth > 0)
-            scale = safeWidth / fitWidth;
+            // Fit 目标是实际渲染缩放填满安全区：contentScale × uiScaleCompensation =
+            // safeWidth / fitWidth，contentScale 是用户值语义，故补偿因子要除回去。
+            scale = safeWidth / fitWidth / EmueraContent.UiScaleCompensation;
         else
             scale = 1.0f;
         if (scale < 0.5f) scale = 0.5f;

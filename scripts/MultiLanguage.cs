@@ -18,7 +18,20 @@ internal static class MultiLanguage
 	static bool loaded = false;
 	static string currentLanguage = null;
 
-	public static string CurrentLanguage => currentLanguage ?? LoadSavedLanguage();
+	/// <summary>
+	/// 当前生效的语言 id。未加载时按"已保存偏好 → 系统区域 → default"推导，
+	/// 与 <see cref="Load"/> 的解析顺序保持一致，避免设置窗下拉框与界面文字不一致。
+	/// </summary>
+	public static string CurrentLanguage
+	{
+		get
+		{
+			if (currentLanguage != null)
+				return currentLanguage;
+			string saved = LoadSavedLanguage();
+			return string.IsNullOrEmpty(saved) ? DetectSystemLanguage() : saved;
+		}
+	}
 
 	public static void Load(string lang = null)
 	{
@@ -26,7 +39,9 @@ internal static class MultiLanguage
 		if (!explicitLanguage)
 			lang = LoadSavedLanguage();
 		if (string.IsNullOrEmpty(lang))
-			lang = "default";
+			// 未保存任何语言偏好时跟随系统区域：中文系统不该默认显示英文。
+			// 用户显式选过语言（含显式选 "default"）会由 LoadSavedLanguage 返回，不受影响。
+			lang = DetectSystemLanguage();
 
 		string previous = currentLanguage;
 		loaded = true;
@@ -75,8 +90,36 @@ internal static class MultiLanguage
 	static string LoadSavedLanguage()
 	{
 		var cfg = new ConfigFile();
-		cfg.Load(SettingsPath);
-		return (string)cfg.GetValue(Section, LanguageKey, "default");
+		if (cfg.Load(SettingsPath) != Error.Ok)
+			return null; // 无配置文件：交给 DetectSystemLanguage 决定
+		var value = (string)cfg.GetValue(Section, LanguageKey, "");
+		return string.IsNullOrEmpty(value) ? null : value;
+	}
+
+	/// <summary>
+	/// 按系统区域挑选语言文件；无匹配时回退 default（英文）。
+	/// 只覆盖仓库实际提供的语言：zh_cn / en_us / jp。
+	/// </summary>
+	static string DetectSystemLanguage()
+	{
+		try
+		{
+			string locale = OS.GetLocale(); // 例如 "zh_CN"、"ja_JP"
+			if (string.IsNullOrEmpty(locale))
+				return "default";
+			string lower = locale.ToLowerInvariant();
+			if (lower.StartsWith("zh"))
+				return "zh_cn";
+			if (lower.StartsWith("ja"))
+				return "jp";
+			if (lower.StartsWith("en"))
+				return "en_us";
+			return "default";
+		}
+		catch
+		{
+			return "default";
+		}
 	}
 
 	static void SaveLanguage(string lang)

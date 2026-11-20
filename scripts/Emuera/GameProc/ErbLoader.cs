@@ -65,7 +65,8 @@ namespace MinorShift.Emuera.GameProc
 				// 最先加载（覆盖声明次序优先），且不受 lazy 表跳过约束。
 				var firstDirs = new List<string>();
 				CollectHashDirectories(erbDir, Config.SearchSubdirectory, firstDirs);
-				List<string> loadedFirstFiles = new List<string>();
+				// HashSet：主循环逐文件 Contains 判重，List 是 O(n²)；字符串相等语义与 List.Contains 相同（序数比较）
+				HashSet<string> loadedFirstFiles = new HashSet<string>();
 				if (useLazyLoading)
 				{
 					parentProcess.LoadLazyLoadingTable(erbFiles);

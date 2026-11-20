@@ -489,7 +489,8 @@ namespace MinorShift.Emuera.GameProc
 						Color c = Color.FromName(colorName);
 						if (c.A == 0)
 						{
-							if (str.Equals("transparent", StringComparison.OrdinalIgnoreCase))
+							// colorName 判空：旧代码引用了未赋值的 doNormalFunction 局部 str，空/无效色名必 NRE
+							if (string.Equals(colorName, "transparent", StringComparison.OrdinalIgnoreCase))
 								throw new CodeEE("無色透明(Transparent)は色として指定できません");
 							throw new CodeEE("指定された色名\"" + colorName + "\"は無効な色名です");
 						}
@@ -536,7 +537,8 @@ namespace MinorShift.Emuera.GameProc
 						Color c = Color.FromName(colorName);
 						if (c.A == 0)
 						{
-							if (str.Equals("transparent", StringComparison.OrdinalIgnoreCase))
+							// colorName 判空：旧代码引用了未赋值的 doNormalFunction 局部 str，空/无效色名必 NRE
+							if (string.Equals(colorName, "transparent", StringComparison.OrdinalIgnoreCase))
 								throw new CodeEE("無色透明(Transparent)は色として指定できません");
 							throw new CodeEE("指定された色名\"" + colorName + "\"は無効な色名です");
 						}

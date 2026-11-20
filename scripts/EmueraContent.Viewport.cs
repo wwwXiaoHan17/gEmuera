@@ -110,6 +110,9 @@ public partial class EmueraContent : Control
 	}
 
 	// 只计算 fit 并写入 contentScale；尺寸/滚动范围由 deferred 入口统一落地。
+	// fit 目标是"实际渲染缩放恰好填满安全区"：contentScale × uiScaleCompensation =
+	// ContentSafeWidth / DrawableWidth，故 contentScale 目标要除以 UI 补偿因子。
+	// clamp(0.35, 1.0) 语义随之变为对基准（100% UI）物理大小的限制，与 UI 缩放解耦。
 	void ApplyOrientationAwareScale()
 	{
 		if (!IsMobilePlatform && !ForceMobileViewportForDiagnostics)
@@ -121,8 +124,8 @@ public partial class EmueraContent : Control
 			|| ContentSafeHeight <= 0
 			|| Config.DrawableWidth <= 0)
 			return;
-		float fitWidth = ContentSafeWidth / (float)Config.DrawableWidth;
-		float fitHeight = ContentSafeHeight / (float)Config.WindowY;
+		float fitWidth = ContentSafeWidth / ((float)Config.DrawableWidth * uiScaleCompensation);
+		float fitHeight = ContentSafeHeight / ((float)Config.WindowY * uiScaleCompensation);
 		float fit = Mathf.Clamp(Mathf.Min(fitWidth, fitHeight), 0.35f, 1.0f);
 		if (Mathf.Abs(fit - contentScale) > 0.001f)
 			ApplyContentScaleValue(fit);
@@ -145,7 +148,7 @@ public partial class EmueraContent : Control
 		var vbar = scrollContainer.GetVScrollBar();
 		int viewportY = Mathf.RoundToInt(scrollContainer.Size.Y);
 		int layoutY = Mathf.RoundToInt(lineContainer.Size.Y);
-		int scaledExtentY = Mathf.RoundToInt(Mathf.Max(scaledContentRoot.Size.Y, layoutY * contentScale));
+		int scaledExtentY = Mathf.RoundToInt(Mathf.Max(scaledContentRoot.Size.Y, layoutY * GetSafeContentScale()));
 		int nextMax = ContentScrollReconciliation.ComputeScrollMax(scaledExtentY, viewportY);
 		int engineMax = Mathf.RoundToInt(Mathf.Max(0.0f, vbar.MaxValue - vbar.Page));
 		int previousScrollY = layoutSnapshotScrollY;
@@ -197,4 +200,29 @@ public partial class EmueraContent : Control
 
 	// 设置页切换面板开关后立即生效（无需等待下一次视口变化）。
 	public void ApplyMobileLayoutPanelSetting() => RefreshMobileLayoutPanel();
+
+	// 系统级 UI 缩放（root.ContentScaleFactor，UiScaleHelper）变化后调用：改
+	// content_scale_factor 不保证触发 Viewport.SizeChanged，必须显式走既有
+	// deferred 管线重算安全区/滚动对账。游戏画面内容物理大小不变：补偿因子
+	// （1/factor）抵消画布第二层缩放，fit-clamp 贴下限时也依然成立（旧实现
+	// 只靠 fit 数值巧合抵消，贴 clamp 后游戏内容会跟着 UI 缩放一起变大）。
+	public void NotifyUiScaleChanged()
+	{
+		if (SyncUiScaleCompensation())
+			ApplyContentScaleTransform();
+		MarkViewportLayoutDirty();
+		ScheduleViewportLayoutApply();
+	}
+
+	// 从窗口属性现算补偿因子；有变化返回 true。UiScaleHelper.SetScale 先写窗口
+	// 属性再触发本方法，因此这里读到的一定是新因子。
+	bool SyncUiScaleCompensation()
+	{
+		float factor = (Engine.GetMainLoop() as SceneTree)?.Root?.ContentScaleFactor ?? 1.0f;
+		float next = factor > 0.001f ? 1.0f / factor : 1.0f;
+		if (Mathf.Abs(next - uiScaleCompensation) <= ContentScaleEpsilon)
+			return false;
+		uiScaleCompensation = next;
+		return true;
+	}
 }

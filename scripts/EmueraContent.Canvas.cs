@@ -1259,7 +1259,7 @@ public partial class EmueraContent
 			int scrollX = owner.scrollContainer.ScrollHorizontal;
 			int scrollY = owner.scrollContainer.ScrollVertical;
 			Vector2 viewportSize = owner.scrollContainer.Size;
-			float scale = owner.contentScale;
+			float scale = owner.GetSafeContentScale();
 			if (scrollX == lastScrollX && scrollY == lastScrollY && viewportSize == lastViewportSize && Mathf.IsEqualApprox(scale, lastScale))
 				return;
 			lastScrollX = scrollX;

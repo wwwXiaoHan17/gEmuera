@@ -91,6 +91,9 @@ Emuera 核心编译器以 C# 编写，为减少开发成本、方便 AI 对接�
 - **csproj 已排除 `Build\**`（已退役）、`export\**` 与 `reports\**` 的编译收录**：产物/工作区
   目录里若混入杂散 `.cs` 会以 CS0579 重复特性炸构建且报错文件毫不相干（csproj 已加
   `<Compile Remove>` 兜底，新建其它临时目录时仍需确认是否被默认 glob 收录）。
+  2026-11-21 新变体：gitignore 不删除文件——其他分支构建过的 `tools/*/obj/**/GlobalUsings.g.cs`
+  残留会被宿主 glob 收编，其 `global using System.Threading;` 引发 CS0104（`Timer` 等
+  Godot/SDK 同名类型歧义）；症状诡异（同内容分支一绿一红）时先查未跟踪 obj 残留。
 - **PowerShell 函数/别名命名避开内置别名**：别名解析优先于函数，`function Rd {...}` 会静默
   变成 `Remove-Item`。危险名至少包括 `rd`/`del`/`rm`/`mv`/`cp`/`ls`/`cd`/`cat`/`sc`/`gc`；
   脚本内联 `[IO.File]::ReadAllText(...)`，不要包成短名函数。

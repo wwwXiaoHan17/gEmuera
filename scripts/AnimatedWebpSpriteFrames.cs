@@ -332,6 +332,46 @@ internal static class AnimatedWebpSpriteFrames
 			callbacks[i](entry.Frames);
 	}
 
+	/// <summary>
+	/// 同步解码动画 WebP 的首帧为 Godot.Image（RGBA8）。
+	/// Godot 的 Image.LoadWebpFromBuffer 不支持动画 WebP（VP8X+ANIM，解码返回错误），
+	/// SpriteManager 的静态纹理路径据此回退本方法，保证脚本合成/绘制至少拿到真实首帧
+	/// 而非 1x1 透明占位。与 DecodeFrames 共用同一 Skia 解码语义（帧 0 含 RequiredFrame 依赖）。
+	/// </summary>
+	internal static bool TryDecodeFirstFrameImage(string path, out Image image)
+	{
+		image = null;
+		try
+		{
+			using var data = SKData.Create(path);
+			using var codec = SKCodec.Create(data);
+			if (codec == null || codec.FrameCount <= 0)
+				return false;
+			var info = new SKImageInfo(codec.Info.Width, codec.Info.Height, SKColorType.Rgba8888, SKAlphaType.Unpremul);
+			var pixels = new byte[info.BytesSize];
+			var handle = GCHandle.Alloc(pixels, GCHandleType.Pinned);
+			SKCodecResult result;
+			try
+			{
+				int priorFrame = codec.FrameInfo.Length > 0 ? codec.FrameInfo[0].RequiredFrame : -1;
+				result = codec.GetPixels(info, handle.AddrOfPinnedObject(), new SKCodecOptions(0, priorFrame));
+			}
+			finally
+			{
+				handle.Free();
+			}
+			if (result != SKCodecResult.Success)
+				return false;
+			image = Image.CreateFromData(info.Width, info.Height, false, Image.Format.Rgba8, pixels);
+			return image != null;
+		}
+		catch
+		{
+			image = null;
+			return false;
+		}
+	}
+
 	static void DecodeFrames(Entry entry)
 	{
 		// 并发解码上限：同一时刻最多允许 decodeConcurrency 个后台解码任务。
