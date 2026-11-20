@@ -97,6 +97,14 @@ Emuera 核心编译器以 C# 编写，为减少开发成本、方便 AI 对接�
 - **PowerShell 函数/别名命名避开内置别名**：别名解析优先于函数，`function Rd {...}` 会静默
   变成 `Remove-Item`。危险名至少包括 `rd`/`del`/`rm`/`mv`/`cp`/`ls`/`cd`/`cat`/`sc`/`gc`；
   脚本内联 `[IO.File]::ReadAllText(...)`，不要包成短名函数。
+- **仓库 `.ps1` 必须 UTF-8 BOM**（2026-11-21 实证）：Windows PowerShell 5.1 把无 BOM 文件按
+  ANSI/GBK 解析，中文注释会破坏语法；Write 工具产出无 BOM，需 `printf '\xEF\xBB\xBF' | cat -` 前置。
+- **原生库统一走 `native/` + `tools/native-build/` + `export/NativeLibs/` 可选复制模式**
+  （2026-11-21 起强制）：Rust/C++ 源码放 `native/<crate>/`（cdylib，产物 gitignore），
+  构建分发只用 `tools/native-build/Build-GemueraNative.ps1`（Android 产物必须 16KB page 对齐，
+  脚本内置 ELF PT_LOAD 校验）；csproj 的 Copy 目标一律 `Exists()` 条件——产物缺失不阻塞构建；
+  新原生模块在 crate 内加平级模块文件（勿每功能一个 .so）；导出函数 `gem_<模块>_<动作>` 命名，
+  加导出递增 `NATIVE_ABI_VERSION`，C# 探针用**最低版本语义**（`>= MinAbi`，勿用 `==`）。
 - **GDScript / 独立 addon 验证**：纯 GDScript 逻辑（如 `addons/markdownlabel/`）用自建契约测试跑
   `Godot --headless --path <项目根> --script res://tools/<suite>/run_tests.gd`（SceneTree 脚本，有失败 `quit(1)`；
   参考 `tools/markdownlabel-tests/`，2026-11-03 起）；RichTextLabel/UI 布局类改动必须再用**窗口模式**脚本截图核对
