@@ -8,13 +8,14 @@
 //   dotnet run --project tools/native-width-check -- gen-tables <输出 .rs 路径>
 // 退出码：0 = 全部通过；1 = 有失配或加载失败。
 using System.Globalization;
+using System.Reflection;
 using System.Runtime.InteropServices;
 
 namespace gEmuera.Tools.NativeWidthCheck;
 
 internal static class Program
 {
-    private const uint ExpectedAbiVersion = 1;
+    private const uint ExpectedAbiVersion = 2;
 
     private static int Main(string[] args)
     {
@@ -22,6 +23,12 @@ internal static class Program
         {
             GenTables(args[1]);
             return 0;
+        }
+
+        if (args.Length >= 2 && args[0] == "--vs-managed")
+        {
+            // 对照真实游戏程序集的 uEmuera.Utils.GetByteCount（进程内，非参考实现副本）
+            return VsManaged(args[1], args.Length >= 3 ? args[2] : null);
         }
 
         string dllPath = args.Length >= 1
@@ -46,15 +53,18 @@ internal static class Program
                 NativeLibrary.GetExport(lib, "gem_text_width_unit"));
             var widthUtf16 = Marshal.GetDelegateForFunctionPointer<WidthUtf16Delegate>(
                 NativeLibrary.GetExport(lib, "gem_text_width_utf16"));
+            var widthUnits = Marshal.GetDelegateForFunctionPointer<WidthUnitsUtf16Delegate>(
+                NativeLibrary.GetExport(lib, "gem_text_width_units_utf16"));
 
             int failures = 0;
 
             failures += CheckGolden(widthUnit);
             failures += SweepFullBmp(widthUnit);
             failures += CheckBatch(widthUtf16);
+            failures += CheckUnitsApi(widthUnit, widthUnits);
 
             Console.WriteLine(failures == 0
-                ? "PASS: golden + 全 BMP(65536) 扫描 + 批量接口 与托管参考实现逐码点一致。"
+                ? "PASS: golden + 全 BMP(65536) 扫描 + 批量接口 + 宽度序列 与托管参考实现逐码点一致。"
                 : $"FAIL: 共 {failures} 处失配。");
             return failures == 0 ? 0 : 1;
         }
@@ -326,4 +336,110 @@ internal static class Program
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate long WidthUtf16Delegate(ushort[] units, nuint len);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate long WidthUnitsUtf16Delegate(ushort[] units, nuint len, byte[] widths);
+
+    /// <summary>
+    /// 宽度序列 API 对照：gem_text_width_units_utf16 填充值必须与逐单元参考宽度一致，返回值 = 总宽。
+    /// </summary>
+    private static int CheckUnitsApi(WidthUnitDelegate widthUnit, WidthUnitsUtf16Delegate widthUnits)
+    {
+        int failures = 0;
+        string[] samples =
+        {
+            "ABあ•█　入れ子",
+            "🇯🇵🄰あ",
+            "a\u0301\uFE0F",
+            "´§¬±",
+            string.Empty,
+        };
+        foreach (string s in samples)
+        {
+            ushort[] units = s.Select(c => (ushort)c).ToArray();
+            byte[] widths = new byte[units.Length];
+            long total = widthUnits(units, (nuint)units.Length, widths);
+            long expectedTotal = 0;
+            for (int i = 0; i < units.Length; i++)
+            {
+                int expected = ReferenceWidthUnit((char)units[i]);
+                if (widths[i] != expected)
+                {
+                    Console.WriteLine($"FAIL units(\"{s}\"[{i}] U+{units[i]:X4}): native={widths[i]} managed={expected}");
+                    failures++;
+                }
+                expectedTotal += expected;
+            }
+            if (total != expectedTotal)
+            {
+                Console.WriteLine($"FAIL units total(\"{s}\"): native={total} managed={expectedTotal}");
+                failures++;
+            }
+        }
+        // out=null 时只算总宽（约定行为）。
+        ushort[] probe = { (ushort)'A', 0x3042 };
+        if (widthUnits(probe, 2, null) != 3)
+        {
+            Console.WriteLine("FAIL units out=null total: expected 3");
+            failures++;
+        }
+        return failures;
+    }
+
+    /// <summary>
+    /// 对照真实游戏程序集的 uEmuera.Utils.GetByteCount（进程内反射调用，非参考实现副本）：
+    /// dotnet run --project tools/native-width-check -- --vs-managed <gemuera-c#.dll 路径>
+    /// 全 BMP 逐码点比对；GodotSharp 等依赖从游戏 dll 同目录解析。
+    /// </summary>
+    private static int VsManaged(string gameDllPath, string? nativeDllPath)
+    {
+        nativeDllPath ??= FindDefaultNativeDll()
+            ?? throw new FileNotFoundException("未找到 gemuera_native.dll，请传入第二参数或先运行构建脚本。");
+        string gameDir = Path.GetDirectoryName(Path.GetFullPath(gameDllPath))!;
+
+        // 托管回退解析：游戏程序集引用 GodotSharp/GEmuera.Core 等，统一从其输出目录加载
+        AppDomain.CurrentDomain.AssemblyResolve += (_, e) =>
+        {
+            string name = new AssemblyName(e.Name).Name! + ".dll";
+            string candidate = Path.Combine(gameDir, name);
+            return File.Exists(candidate) ? Assembly.LoadFrom(candidate) : null;
+        };
+
+        Assembly gameAssembly = Assembly.LoadFrom(gameDllPath);
+        Type utilsType = gameAssembly.GetType("uEmuera.Utils")
+            ?? throw new InvalidOperationException("游戏程序集中未找到 uEmuera.Utils");
+        MethodInfo getByteCount = utilsType.GetMethod("GetByteCount", new[] { typeof(string) })
+            ?? throw new InvalidOperationException("未找到 uEmuera.Utils.GetByteCount(string)");
+
+        nint lib = NativeLibrary.Load(nativeDllPath);
+        try
+        {
+            var widthUnit = Marshal.GetDelegateForFunctionPointer<WidthUnitDelegate>(
+                NativeLibrary.GetExport(lib, "gem_text_width_unit"));
+
+            int failures = 0;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            for (int cp = 0; cp <= 0xFFFF; cp++)
+            {
+                char c = (char)cp;
+                int managed = (int)getByteCount.Invoke(null, new object[] { c.ToString() })!;
+                int native = widthUnit(c);
+                if (managed != native)
+                {
+                    if (failures < 20)
+                    {
+                        Console.WriteLine($"MISMATCH(vs-managed) U+{cp:X4}: managed={managed} native={native}");
+                    }
+                    failures++;
+                }
+            }
+            sw.Stop();
+            Console.WriteLine($"--vs-managed：真实 Utils.GetByteCount 全 BMP 对照完成（{sw.ElapsedMilliseconds} ms），失配 {failures} 处。");
+            return failures;
+        }
+        finally
+        {
+            NativeLibrary.Free(lib);
+        }
+    }
 }

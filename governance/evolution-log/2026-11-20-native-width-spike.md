@@ -61,10 +61,28 @@
 - 用户确认 MIUI USB 安装后，`adb install -r` 成功装入 arm64 spike 包（`com.godot.gemuera.spike`，versionCode 14，与设备上 versionCode 15 的正式包并行不冲突）。启动后 logcat 实锤：`I godot: [LOAD] gemuera_native OK (abi=1, A=1,HIRAGANA_A=2,BULLET=1,U+FEFF=0)`（Android 16，arm64-v8a 生产 ABI），无 FATAL；系统 ScnModule 的 native libs 清单亦含 `libgemuera_native.so`。**上文遗留 L1（Android 端到端验收）至此完成：模拟器 x86_64 + 真机 arm64 双证据 [实测]。**
 - 真机上 spike 包与正式包并存，用户验收后可 `adb shell pm uninstall -k --user 0 com.godot.gemuera.spike`（-k 保留数据）或直接在桌面卸载。
 
+### 补遗（2026-11-21）：接产——宽度函数接入生产热路径（ABI v2）
+
+用户指示"继续 rust/c++ 的内容"后的第三轮，上文遗留 L2（接产）落地：
+
+- **原生库**：新增导出 `gem_text_width_units_utf16(ptr,len,out)`（逐单元宽度序列填充 + 返回总宽，`out=null` 时只算总宽），`NATIVE_ABI_VERSION` 1→2，C# 探针/checker 的 ExpectedAbiVersion 同步。cargo 单测 10/10。
+- **C# 接线**（全部自动回退托管，库缺失/ABI 不符零风险）：
+  - `NativeTextWidth` 扩展：`IsAvailable`（进程内探测缓存一次）+ `TryGetByteCount` / `TryFillWidthUnits` / `TryGetWidthUnit`；
+  - `uEmuera.Utils.GetByteCount`：原生快路径早退；
+  - `uEmuera.Utils.GetDisplayLength(s,float)`：宽度序列 + 与原实现**同序**浮点累加（`fontsize/2` 常量提升位级一致），ArrayPool 租缓冲；
+  - `LangManager.GetUFTIndex`/`GetSubStringLang` 三处逐字符 `GetByteCount(c.ToString())`（每字符一次 string 分配 + UnicodeCategory/哈希查询）→ `TryGetWidthUnit` 单次 FFI。
+- **等价验证升级**：checker 新增 `--vs-managed <游戏dll>` 模式——反射加载真实游戏程序集调 `uEmuera.Utils.GetByteCount` 全 BMP 对照（比参考实现副本更强的进程内锚点）。实测：默认模式（参考对照，含序列 API 与 out=null 约定）PASS；`--vs-managed` 对接线后的真实程序集全 BMP **0 失配**（78ms）。构建 0 错误；xUnit 413+79+4 全绿。
+- **决策修订**：原计划 GDUnit C# 进程内测试——`tests/GDUnit4Test/` 目前只有 GDScript 套件，C# GDUnit 基建（api 包/runner/可失败断言约定）需独立立项，本轮以 `--vs-managed` 达成同等锚点强度，GDUnit C# 套件转独立遗留。
+- **踩坑**：①宿主工程未开 `AllowUnsafeBlocks`（CS0227）——撤掉 `fixed` 指针方案，改 DllImport 数组 marshal（string→ushort[] 一次 O(n) 拷贝，DLL 导入自动 pin，仍远优于原逐字符路径）；②checker 误传 `--no-restore` 且 obj 已被清 → NETSDK1004，去掉即可。
+- **行为影响面**：STRLEN/SUBSTRING/PRINTC/按钮布局折行（`GetDisplayLength`）等热路径自动走原生；原生库缺失环境（未分发 .so 的平台、纯托管 CI）自动回退，行为不变。
+
 ## 遗留登记
 
 - **L1（P1，不在本轮原因：本机无 NDK，环境安装属用户决策）**：安装 Android NDK 后跑 `Build-GemueraNative.ps1`（含 16KB p_align 校验）产出 arm64 `.so`，导出 APK 并在模拟器/真机做 P/Invoke 冒烟；这是"Android 结论必须 APK 实测"铁律的必经步骤。
 - **L2（P1，不在本轮原因：属行为变更，超出 spike 边界）**：接产 PR——新增 C# interop 包装（含 `NativeLibrary.TryLoad` 探测与托管回退），`LangManager.GetUFTIndex`/`StringMeasure` 宽度路径换调原生，并在 `tests/GDUnit4Test/` 加真实 `Utils.GetByteCount` 进程内对照测试。
+  > 补遗（2026-11-21）：接产已在"补遗（2026-11-21）：接产"小节落地（GetByteCount/GetDisplayLength/LangManager 接线 + `--vs-managed` 对照）；GDUnit C# 套件因仓库无 C# GDUnit 先例转为独立基建遗留（见下 L6）。
+- **L6（P2，不在本轮原因：tests/GDUnit4Test 无 C# 先例，基建独立立项）**：搭建 C# GDUnit 测试基建（gdUnit4 api 引用 + runner + 可失败断言约定），迁移 `--vs-managed` 的对照逻辑为进程内常驻测试。
+- **L7（P2，不在本轮原因：收益边际）**：`GetUFTIndex`/`GetSubStringLang` 的 prefix-sum 批量 API（单次 FFI 取整串宽度序列代替逐字符 FFI）；现有逐字符 FFI 已比原实现快一个量级，等 profile 数据再定。
 - **L3（P2，不在本轮原因：依赖 L1/L2 节奏，成本>本轮范围）**：候选 1 存档 codec spike（验收 = `tools/save-baseline` round-trip 门禁）。
 - **L4（P2，不在本轮原因：与仓库 android 链路 arm64-only 现状一致，需求未确认）**：emulator 用 x86_64 Android 产物支持（同 TargetPath 冲突需先解决分发命名）。
 - 本轮范围（桌面构建链 spike + 等价样板）已全部落地，无本轮内 P0。

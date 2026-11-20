@@ -182,6 +182,29 @@ mod tests {
     }
 
     #[test]
+    fn width_units_fill_matches_unit_values() {
+        // lib.rs 的 gem_text_width_units_utf16 逻辑锚点：填充值必须与 width_unit 逐单元一致。
+        let s: Vec<u16> = "Aあ•\u{FEFF}".encode_utf16().collect();
+        let mut widths = vec![9u8; s.len()];
+        let total: i64 = s
+            .iter()
+            .enumerate()
+            .map(|(i, &u)| {
+                let w = width_unit(u);
+                widths[i] = w as u8;
+                w as i64
+            })
+            .sum();
+        assert_eq!(widths, vec![1, 2, 1, 0]);
+        assert_eq!(total, 4);
+        // 全 BMP 值域防护：序列值恒 ∈ {0,1,2}。
+        for unit in 0u32..=0xFFFF {
+            let w = width_unit(unit as u16);
+            assert!(w == 0 || w == 1 || w == 2);
+        }
+    }
+
+    #[test]
     fn lookup_tables_are_strictly_ascending() {
         // 防回归：两个表都按二分查找消费，乱序会导致静默漏判（FULLSIZE 曾因此漏判 U+00AC）。
         for w in FULLSIZE.windows(2) {
