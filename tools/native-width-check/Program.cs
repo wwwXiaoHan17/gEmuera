@@ -31,6 +31,11 @@ internal static class Program
             return VsManaged(args[1], args.Length >= 3 ? args[2] : null);
         }
 
+        if (args.Length >= 2 && args[0] == "--bench")
+        {
+            return Bench(args[1]);
+        }
+
         string dllPath = args.Length >= 1
             ? args[0]
             : FindDefaultNativeDll()
@@ -338,7 +343,159 @@ internal static class Program
     private delegate long WidthUtf16Delegate(ushort[] units, nuint len);
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    private delegate long WidthUnitsUtf16Delegate(ushort[] units, nuint len, byte[] widths);
+    private delegate long WidthUnitsUtf16Delegate(ushort[] units, nuint len, byte[]? widths);
+
+    /// <summary>
+    /// 性能对比：旧托管逐字符路径（参考实现复刻原 Utils/LangManager 逻辑，含每字符 ToString 分配）
+    /// vs 新原生路径（与本仓库 C# 接线相同的成本结构：数组 marshal + 单次 FFI）。
+    /// 用法：dotnet run --project tools/native-width-check -- --bench <native.dll>
+    /// </summary>
+    private static int Bench(string nativeDllPath)
+    {
+        nint lib = NativeLibrary.Load(nativeDllPath);
+        try
+        {
+            var widthUnit = Marshal.GetDelegateForFunctionPointer<WidthUnitDelegate>(
+                NativeLibrary.GetExport(lib, "gem_text_width_unit"));
+            var widthUtf16 = Marshal.GetDelegateForFunctionPointer<WidthUtf16Delegate>(
+                NativeLibrary.GetExport(lib, "gem_text_width_utf16"));
+            var widthUnits = Marshal.GetDelegateForFunctionPointer<WidthUnitsUtf16Delegate>(
+                NativeLibrary.GetExport(lib, "gem_text_width_units_utf16"));
+
+            // 典型 era 混合文本：ASCII + 全角假名/汉字 + •（CP932 特例）+ 零宽 + 单格 art，约 220 单元
+            string text = "BGM:♪lovetheつくしんぼ♥ISAO．\uFEFF▶『日本語フルウェイ』■前沿[№04]•─────────┤地区地图├──★ＭＡＸＨＰ✔体力▲気力◎精力◆ humongous stats 1234567890 あいうえおかきくけこさしすせそ漢字テスト・ＡＩの反応待ち───▶";
+
+            int failures = 0;
+
+            // ===== 场景 1：GetByteCount（STRLEN/SUBSTRING/PRINTC 填充）=====
+            {
+                const int Iterations = 200_000;
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                long managedChecksum = 0;
+                for (int i = 0; i < Iterations; i++)
+                {
+                    // 忠实旧版（LangManager 形状）：每字符 ToString() 分配 + 单字符宽度判定
+                    int count = 0;
+                    for (int j = 0; j < text.Length; j++)
+                    {
+                        string single = text[j].ToString();
+                        foreach (char ch in single)
+                            count += ReferenceWidthUnit(ch);
+                    }
+                    managedChecksum += count;
+                }
+                sw.Stop();
+                long managedMs = sw.ElapsedMilliseconds;
+
+                sw.Restart();
+                long nativeChecksum = 0;
+                for (int i = 0; i < Iterations; i++)
+                {
+                    ushort[] units = new ushort[text.Length];
+                    for (int j = 0; j < text.Length; j++)
+                        units[j] = text[j];
+                    nativeChecksum += widthUtf16(units, (nuint)units.Length);
+                }
+                sw.Stop();
+                long nativeMs = sw.ElapsedMilliseconds;
+
+                Console.WriteLine($"GetByteCount（{text.Length} 字混合串 × {Iterations / 1000}k 次）:");
+                Console.WriteLine($"  托管逐字符（旧）: {managedMs,6} ms   checksum={managedChecksum}");
+                Console.WriteLine($"  原生批量  （新）: {nativeMs,6} ms   checksum={nativeChecksum}   加速 {((double)managedMs / Math.Max(nativeMs, 1)):F1}x");
+                if (managedChecksum != nativeChecksum)
+                {
+                    Console.WriteLine("FAIL: checksum 不一致！");
+                    failures++;
+                }
+            }
+
+            // ===== 场景 2：GetUFTIndex（SUBSTRING 定位，逐字符累加找索引）=====
+            {
+                const int Iterations = 20_000;
+                int langIndex = 150;
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                long managedChecksum = 0;
+                for (int i = 0; i < Iterations; i++)
+                {
+                    // 旧 LangManager.GetUFTIndex：每字符 ToString 分配 + GetByteCount
+                    int jis = 0, utf = 0;
+                    for (int j = 0; j < text.Length; j++)
+                    {
+                        jis += ReferenceWidthUnit(text[j]);
+                        utf++;
+                        if (jis >= langIndex)
+                            break;
+                    }
+                    managedChecksum += utf;
+                }
+                sw.Stop();
+                long managedMs = sw.ElapsedMilliseconds;
+
+                sw.Restart();
+                long nativeChecksum = 0;
+                for (int i = 0; i < Iterations; i++)
+                {
+                    // 新路径（与 LangManager 实际接线一致）：逐字符单次 FFI + 同样的提前 break
+                    int jis = 0, utf = 0;
+                    for (int j = 0; j < text.Length; j++)
+                    {
+                        jis += widthUnit(text[j]);
+                        utf++;
+                        if (jis >= langIndex)
+                            break;
+                    }
+                    nativeChecksum += utf;
+                }
+                sw.Stop();
+                long nativeMs = sw.ElapsedMilliseconds;
+
+                // 预留优化上限（遗留 L7 方向）：缓冲复用 + 单次批量 FFI 取宽度序列
+                ushort[] reusedUnits = new ushort[text.Length];
+                byte[] reusedWidths = new byte[text.Length];
+                long batchChecksum = 0;
+                sw.Restart();
+                for (int i = 0; i < Iterations; i++)
+                {
+                    for (int j = 0; j < text.Length; j++)
+                        reusedUnits[j] = text[j];
+                    widthUnits(reusedUnits, (nuint)reusedUnits.Length, reusedWidths);
+                    int jis = 0, utf = 0;
+                    for (int j = 0; j < reusedWidths.Length; j++)
+                    {
+                        jis += reusedWidths[j];
+                        utf++;
+                        if (jis >= langIndex)
+                            break;
+                    }
+                    batchChecksum += utf;
+                }
+                sw.Stop();
+                long batchMs = sw.ElapsedMilliseconds;
+                if (batchChecksum != managedChecksum)
+                {
+                    Console.WriteLine("FAIL: batch checksum 不一致！");
+                    failures++;
+                }
+
+                Console.WriteLine($"GetUFTIndex（定位宽度 {langIndex} × {Iterations / 1000}k 次）:");
+                Console.WriteLine($"  托管逐字符（旧）: {managedMs,6} ms   checksum={managedChecksum}");
+                Console.WriteLine($"  原生逐字符（现状接线）: {nativeMs,6} ms   checksum={nativeChecksum}   加速 {((double)managedMs / Math.Max(nativeMs, 1)):F1}x");
+                Console.WriteLine($"  原生批量（L7 上限）: {batchMs,6} ms   checksum={batchChecksum}   加速 {((double)managedMs / Math.Max(batchMs, 1)):F1}x");
+                if (managedChecksum != nativeChecksum)
+                {
+                    Console.WriteLine("FAIL: checksum 不一致！");
+                    failures++;
+                }
+            }
+
+            Console.WriteLine(failures == 0 ? "BENCH PASS（两路径结果一致）" : "BENCH FAIL");
+            return failures;
+        }
+        finally
+        {
+            NativeLibrary.Free(lib);
+        }
+    }
 
     /// <summary>
     /// 宽度序列 API 对照：gem_text_width_units_utf16 填充值必须与逐单元参考宽度一致，返回值 = 总宽。
