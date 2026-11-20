@@ -76,6 +76,10 @@
 - **踩坑**：①宿主工程未开 `AllowUnsafeBlocks`（CS0227）——撤掉 `fixed` 指针方案，改 DllImport 数组 marshal（string→ushort[] 一次 O(n) 拷贝，DLL 导入自动 pin，仍远优于原逐字符路径）；②checker 误传 `--no-restore` 且 obj 已被清 → NETSDK1004，去掉即可。
 - **行为影响面**：STRLEN/SUBSTRING/PRINTC/按钮布局折行（`GetDisplayLength`）等热路径自动走原生；原生库缺失环境（未分发 .so 的平台、纯托管 CI）自动回退，行为不变。
 
+### 补遗（2026-11-21）：真机接线版冒烟 PASS
+
+接产提交（49c02a5 + ae1e053）后重导 arm64 debug APK（接线程序集 + ABI v2 库）装真机 24129RT7CC：探针 `abi=2` 全对、启动器渲染（自动走 GetByteCount/GetDisplayLength 原生快路径）零宽度相关异常、无 FATAL [实测]。logcat 唯一 ERROR 为启动器既有的 `size_changed` 信号重复连接警告（旧问题，与本轮无关，未修）。临时包名改动已还原，工作树干净。
+
 ## 遗留登记
 
 - **L1（P1，不在本轮原因：本机无 NDK，环境安装属用户决策）**：安装 Android NDK 后跑 `Build-GemueraNative.ps1`（含 16KB p_align 校验）产出 arm64 `.so`，导出 APK 并在模拟器/真机做 P/Invoke 冒烟；这是"Android 结论必须 APK 实测"铁律的必经步骤。
