@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Threading.Tasks;
 //using Microsoft.VisualBasic;
 using MinorShift.Emuera.Sub;
@@ -39,6 +40,10 @@ namespace MinorShift.Emuera.GameProc
 		long profReadTicks, profLoopTicks, profMarkTicks;
 		long profSetArgTicks, profNestTicks, profJumpTicks;
 
+		// 解析缓存（Phase 1）：ERH 快照哈希进键；hit/miss 计数进 erb-parse 子段名
+		string cacheErhSnapshotHash;
+		int cacheHitCount, cacheMissCount;
+
 		/// <summary>
 		/// 複数のファイルを読む
 		/// </summary>
@@ -56,6 +61,19 @@ namespace MinorShift.Emuera.GameProc
 			//checkScript();の時点でExpressionPerserがProcess.instance.LabelDicを必要とするから。
 			labelDic = labelDictionary;
 			labelDic.Initialized = false;
+			cacheHitCount = cacheMissCount = 0;
+			try
+			{
+				// ERH 宏表快照进缓存键：宏变化会改变 ERB 解析结果
+				var erhPairs = new List<KeyValuePair<string, DateTime>>();
+				foreach (var kv in Config.GetFiles(erbDir, "*.ERH"))
+					erhPairs.Add(new KeyValuePair<string, DateTime>(kv.Key, System.IO.File.GetLastWriteTimeUtc(kv.Value)));
+				cacheErhSnapshotHash = ErbParseCache.BuildErhSnapshotHash(erhPairs);
+			}
+			catch
+			{
+				cacheErhSnapshotHash = null;
+			}
 			List<KeyValuePair<string, string>> erbFiles = Config.GetFiles(erbDir, "*.ERB");
 #if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
             erbFiles.AddRange(Config.GetFiles(erbDir, "*.erb"));
@@ -139,7 +157,7 @@ namespace MinorShift.Emuera.GameProc
 					}
 				});
 				ParserMediator.FlushWarningList();
-				Mark($"erb-parse(read={TicksToMs(profReadTicks)}ms lines={TicksToMs(profLoopTicks - profReadTicks)}ms)");
+				Mark($"erb-parse(read={TicksToMs(profReadTicks)}ms lines={TicksToMs(profLoopTicks - profReadTicks)}ms cache={cacheHitCount}h/{cacheMissCount}m)");
 #if UEMUERA_DEBUG
 				output.PrintSystemLine("経過時間:" + (WinmmTimer.TickCount - starttime).ToString("D4") + "ms:");
 #endif
@@ -477,6 +495,26 @@ namespace MinorShift.Emuera.GameProc
 				int funcCount = 0;
 				if (Program.AnalysisMode)
 					output.PrintSystemLine("　");
+				// === 解析缓存（Phase 1）命中路径：重建行链 + label 注册重放 ===
+				string cachePath = TryBuildCachePath(filepath, filename);
+				if (cachePath != null && System.IO.File.Exists(cachePath) && TryRestoreFromCache(cachePath, filename, isLazyLoading, tempFunctionLabels, ref lastLine, ref lastLabelLine))
+				{
+					cacheHitCount++;
+					if (isLazyLoading)
+					{
+						// 与原流程一致：lazy 文件解析后立即完成 label 参数解析与逐函数校验
+						foreach (FunctionLabelLine label in tempFunctionLabels)
+						{
+							setLabelsArg(label);
+							labelDic.SortLabel(label);
+						}
+						foreach (FunctionLabelLine label in tempFunctionLabels)
+							checkFunctionWithCatch(label);
+					}
+					return;
+				}
+				cacheMissCount++;
+				LogicalLine cacheHead = lastLine;
 				profReadTicks = profLoopTicks = profSetArgTicks = profNestTicks = profJumpTicks = 0;
 				long loopStart = Stopwatch.GetTimestamp();
 				profMarkTicks = loopStart;
@@ -612,6 +650,23 @@ namespace MinorShift.Emuera.GameProc
 				addLine(new NullLine(), lastLine);
 				position = new ScriptPosition(eReader.Filename, -1);
 				ppstate.FileEnd(position);
+				if (cachePath != null)
+				{
+					// 缓存写入失败（不支持词形/IO）绝不影响解析结果：tmp 隔离 + 全吞异常
+					try
+					{
+						string tmp = cachePath + ".tmp";
+						using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write))
+							ErbParseCache.WriteLines(fs, cacheHead);
+						if (System.IO.File.Exists(cachePath))
+							System.IO.File.Delete(cachePath);
+						System.IO.File.Move(tmp, cachePath);
+					}
+					catch
+					{
+						try { System.IO.File.Delete(cachePath + ".tmp"); } catch { }
+					}
+				}
 				if (isLazyLoading)
 				{
 					foreach (FunctionLabelLine label in tempFunctionLabels)
@@ -637,6 +692,65 @@ namespace MinorShift.Emuera.GameProc
 		}
 		
 		static int TicksToMs(long ticks) => (int)(ticks * 1000.0 / Stopwatch.Frequency);
+
+		/// <summary>构造本文件解析缓存路径；缓存不可用（无方言哈希/文件信息异常）返回 null。</summary>
+		private string TryBuildCachePath(string filepath, string filename)
+		{
+			try
+			{
+				if (string.IsNullOrEmpty(cacheErhSnapshotHash) || Program.AnalysisMode)
+					return null;
+				var fi = new System.IO.FileInfo(filepath);
+				if (!fi.Exists)
+					return null;
+				string planHash = Program.CurrentCompatibilityPlan?.CanonicalHash;
+				string cacheDir = System.IO.Path.Combine(Program.ExeDir, "cache", "erbparse");
+				return ErbParseCache.BuildCacheFilePath(cacheDir, filename, fi.LastWriteTimeUtc, fi.Length, planHash, cacheErhSnapshotHash);
+			}
+			catch
+			{
+				return null;
+			}
+		}
+
+		/// <summary>
+		/// 缓存命中重建：反序列化行序列并重放 label 注册（AddLabel/AddInvalidLabel/AddLabelDollar、
+		/// ParentLabelLine 串链）与 privateVar 声明重放（AddPrivateVariable）。
+		/// 与原解析路径的差异：重复 $label/重载函数的 warning 不重放（不影响行为，仅日志面）。
+		/// </summary>
+		private bool TryRestoreFromCache(string cachePath, string filename, bool isLazyLoading, List<FunctionLabelLine> tempFunctionLabels, ref LogicalLine lastLine, ref FunctionLabelLine lastLabelLine)
+		{
+			List<LogicalLine> lines;
+			using (var fs = new FileStream(cachePath, FileMode.Open, FileAccess.Read))
+				lines = ErbParseCache.ReadLines(fs);
+			foreach (LogicalLine line in lines)
+			{
+				if (line is FunctionLabelLine label)
+				{
+					lastLabelLine = label;
+					if (label is InvalidLabelLine)
+					{
+						noError = false;
+						labelDic.AddInvalidLabel(label);
+					}
+					else
+					{
+						labelDic.AddLabel(label);
+						if (isLazyLoading)
+							tempFunctionLabels.Add(label);
+					}
+				}
+				else if (line is GotoLabelLine gotoLabel)
+				{
+					gotoLabel.ParentLabelLine = lastLabelLine;
+					if (lastLabelLine != null)
+						labelDic.AddLabelDollar(gotoLabel);
+				}
+				line.ParentLabelLine = lastLabelLine;
+				lastLine = addLine(line, lastLine);
+			}
+			return true;
+		}
 
 		private LogicalLine addLine(LogicalLine nextLine, LogicalLine lastLine)
 		{

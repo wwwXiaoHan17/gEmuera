@@ -109,6 +109,8 @@ namespace MinorShift.Emuera.GameProc
 
 		WordCollection assigndest;
 		public OperatorCode AssignOperator { get; private set; }
+		/// <summary>解析缓存（ErbParseCache）用只读访问器：不消费 assigndest。</summary>
+		public WordCollection AssignmentDest => assigndest;
 		Int64 subData = 0;
 		public FunctionCode FunctionCode
 		{
@@ -254,6 +256,19 @@ namespace MinorShift.Emuera.GameProc
 			wc = null;
 			return ret;
 		}
+		/// <summary>解析缓存（ErbParseCache）用只读访问器：不消费 wc。</summary>
+		internal WordCollection PeekRowArgs => wc;
+		/// <summary>解析缓存（ErbParseCache）重建路径：回填词集（等价于解析期赋值）。</summary>
+		internal void RestoreRowArgs(WordCollection wordCollection)
+		{
+			wc = wordCollection;
+		}
+		// 解析缓存用：AddPrivateVariable 成功时的声明数据记录（token 不保留 data，重放需要）
+		List<UserDefinedVariableData> privateVarDataCache;
+		internal IReadOnlyList<UserDefinedVariableData> PrivateVarDataCache
+		{
+			get { return privateVarDataCache; }
+		}
 
 		public string LabelName { get; protected set; }
 		public bool IsEvent { get; set; }
@@ -306,6 +321,8 @@ namespace MinorShift.Emuera.GameProc
 			//静的な変数のみの場合は関数呼び出し時に何もする必要がない
 			if (!data.Static)
 				hasPrivDynamicVar = true;
+			// 解析缓存（ErbParseCache）记录：token 不保留 data，重放需要声明数据
+			(privateVarDataCache ??= new List<UserDefinedVariableData>()).Add(data);
 			return true;
 		}
 		internal UserDefinedVariableToken GetPrivateVariable(string key)
