@@ -65,11 +65,16 @@ namespace MinorShift.Emuera.GameProc
             originalState = state;
             initialiing = true;
             Stopwatch loadStopwatch = Stopwatch.StartNew();
+            long lastMarkMs = 0;
             void MarkLoad(string stage)
             {
-                long ms = loadStopwatch.ElapsedMilliseconds;
+                long totalMs = loadStopwatch.ElapsedMilliseconds;
+                long segMs = totalMs - lastMarkMs;
+                lastMarkMs = totalMs;
+                // 分段值 + 累计值双列：seg 定位本阶段开销，total 保留旧口径可比性
+                string line = $"[LOADTIME] {stage}: {segMs}ms (total {totalMs}ms)";
                 if (Config.DisplayReport)
-                    GenericUtils.Info($"[LOADTIME] {stage}: {ms}ms");
+                    GenericUtils.Info(line);
                 // 始终落盘（Release APK 也生效）：定位 30k 图片加载耗时构成，避免盲优化。
                 try
                 {
@@ -77,8 +82,7 @@ namespace MinorShift.Emuera.GameProc
                     if (!string.IsNullOrEmpty(dir))
                     {
                         Directory.CreateDirectory(dir);
-                        File.AppendAllText(Path.Combine(dir, "load_times.log"),
-                            $"[LOADTIME] {stage}: {ms}ms\n");
+                        File.AppendAllText(Path.Combine(dir, "load_times.log"), line + "\n");
                     }
                 }
                 catch { }
@@ -248,11 +252,16 @@ namespace MinorShift.Emuera.GameProc
 				GenericUtils.Info("[LOAD] Loading ERB files...");
 				ErbLoader loader = new ErbLoader(console, exm, this);
                 if (Program.AnalysisMode)
+                {
                     noError = await loader.LoadErbsAsync(Program.AnalysisFiles, labelDic);
+                    MarkLoad("erb");
+                }
                 else
-                    noError = await loader.LoadErbFilesAsync(Program.ErbDir, Config.DisplayReport, labelDic, Config.UseLazyLoading && Program.SupportsLazyLoading);
+                {
+                    // erb 阶段细分埋点：parse/setlabels/check/lazy-save 各自落段，定位启动大头
+                    noError = await loader.LoadErbFilesAsync(Program.ErbDir, Config.DisplayReport, labelDic, Config.UseLazyLoading && Program.SupportsLazyLoading, MarkLoad);
+                }
 				GenericUtils.Info($"[LOAD] ERB loaded, noError={noError}");
-				MarkLoad("erb");
                 initSystemProcess();
                 initialiing = false;
             }
