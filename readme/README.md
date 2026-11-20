@@ -163,7 +163,9 @@ gemuera-c#/
 │   │   └── color_matrix.gdshader
 │   └── uEmuera/               # System.Drawing/Forms 兼容层
 ├── src/Core/                  # 纯 C# 核心契约（GEmuera.Core，独立编译）
-├── tools/                     # PowerShell 工具（governance/core-contracts 等）
+├── native/                    # Rust 原生库源码（P/Invoke cdylib，零第三方依赖）
+│   └── gemuera-native/        # gemuera_native：文本宽度规则（契约 = Scripts/uEmuera/Utils.cs GetByteCount）
+├── tools/                     # PowerShell/C# 工具（governance/core-contracts、native-build、native-width-check 等）
 ├── tests/                     # 测试唯一根（xUnitTest/ xUnit 工程、GDUnit4Test/ gdUnit 套件）
 ├── export/                    # APK 导出统一工作区（整体 gitignore）
 │   ├── android/               # Godot Android 导出工程（gradle 构建，不入库）

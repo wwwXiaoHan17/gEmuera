@@ -10,6 +10,10 @@
 # ============================================================
 # export/ = APK 导出统一工作区：android/（gradle 工程）、NativeLibs/（csproj 自愈还原的 .so）、releases/（APK 产物）、keystore/（签名密钥）
 /export/
+# native/ = Rust 原生库源码（入库）；native/target/ = cargo 产物（不入库）
+/native/target/
+/native/*/target/
+
 *.apk
 *.aab
 *.idsig
