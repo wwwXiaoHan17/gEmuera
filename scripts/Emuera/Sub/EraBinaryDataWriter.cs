@@ -248,6 +248,25 @@ namespace MinorShift.Emuera.Sub
 
 		private void writeData(Int64[] array)
 		{
+			// 原生快路径（native/gemuera-native/src/save.rs）：字节序列与下方托管实现逐字节一致，
+			// 门禁 tools/save-codec-check（参考对拍 + 反射真实 Writer 对拍）；库缺失回退托管
+			if (array.Length >= 0 && MinorShift._Library.NativeSaveCodec.IsAvailable)
+			{
+				var pool = System.Buffers.ArrayPool<byte>.Shared;
+				byte[] buf = pool.Rent(checked(array.Length * 10 + MinorShift._Library.NativeSaveCodec.EncodeBufferOverhead));
+				try
+				{
+					if (MinorShift._Library.NativeSaveCodec.TryEncodeInt64Array(array, buf, out int written))
+					{
+						writer.Write(buf, 0, written);
+						return;
+					}
+				}
+				finally
+				{
+					pool.Return(buf);
+				}
+			}
 			//配列の記憶。0が連続する場合には圧縮を試みる。
 			writer.Write((Int32)array.Length);
 			int countZero = 0;//0については0が連続する数を記憶する。その他の数はそのまま記憶する。

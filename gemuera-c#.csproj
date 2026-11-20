@@ -49,6 +49,15 @@
     <Compile Remove="tools\compat-pack\**" />
     <EmbeddedResource Remove="tools\compat-pack\**" />
     <None Remove="tools\compat-pack\**" />
+    <!-- native-width-check（native 宽度等价校验工具）独立编译为 net9.0 控制台程序，
+         其顶层语句 Program 不入 Godot 宿主 glob。 -->
+    <Compile Remove="tools\native-width-check\**" />
+    <EmbeddedResource Remove="tools\native-width-check\**" />
+    <None Remove="tools\native-width-check\**" />
+    <!-- save-codec-check（存档编码等价门禁）同上，独立编译。 -->
+    <Compile Remove="tools\save-codec-check\**" />
+    <EmbeddedResource Remove="tools\save-codec-check\**" />
+    <None Remove="tools\save-codec-check\**" />
     <!-- xUnit tests build independently via their own csproj; keep them out of the Godot host glob. -->
     <Compile Remove="tests\**" />
     <EmbeddedResource Remove="tests\**" />
@@ -89,6 +98,9 @@
 	<PackageDownload Include="SQLitePCLRaw.lib.e_sqlite3.android" Version="[2.1.12]" />
 	<None Include="export\NativeLibs\android\arm64-v8a\libe_sqlite3.so" CopyToOutputDirectory="PreserveNewest" TargetPath="libe_sqlite3.so" />
 	<None Include="$(NuGetPackageRoot)skiasharp.nativeassets.android\2.88.8\runtimes\android-arm64\native\libSkiaSharp.so" CopyToOutputDirectory="PreserveNewest" TargetPath="libSkiaSharp.so" />
+	<!-- gemuera_native（Rust，源码 native/gemuera-native）：产物缺失时不报错（可选增强），
+	     由 tools/native-build/Build-GemueraNative.ps1 生成。 -->
+	<None Include="export\NativeLibs\android\arm64-v8a\libgemuera_native.so" CopyToOutputDirectory="PreserveNewest" TargetPath="libgemuera_native.so" />
   </ItemGroup>
 
   <!-- export/NativeLibs/ 已被 gitignore（编译产物不入库）。Android 构建前如缺失，
@@ -114,6 +126,16 @@
 
   <Target Name="CopyAndroidSkiaSharpNativeLibrary" AfterTargets="Build" Condition=" '$(GodotTargetPlatform)' == 'android' And Exists('$(NuGetPackageRoot)skiasharp.nativeassets.android\2.88.8\runtimes\android-arm64\native\libSkiaSharp.so') ">
     <Copy SourceFiles="$(NuGetPackageRoot)skiasharp.nativeassets.android\2.88.8\runtimes\android-arm64\native\libSkiaSharp.so" DestinationFiles="$(OutputPath)libSkiaSharp.so" SkipUnchangedFiles="true" />
+  </Target>
+
+  <!-- gemuera_native（Rust cdylib）：export/NativeLibs 产物存在时复制进输出目录。
+       桌面供等价校验/运行时 P/Invoke，Android 进 APK jniLibs（16KB page 对齐，见构建脚本）。 -->
+  <Target Name="CopyGemueraNativeLibrary" AfterTargets="Build" Condition=" Exists('export\NativeLibs\windows-x64\gemuera_native.dll') ">
+    <Copy SourceFiles="export\NativeLibs\windows-x64\gemuera_native.dll" DestinationFiles="$(OutputPath)gemuera_native.dll" SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="CopyGemueraNativeAndroidLibrary" AfterTargets="Build" Condition=" '$(GodotTargetPlatform)' == 'android' And Exists('export\NativeLibs\android\arm64-v8a\libgemuera_native.so') ">
+    <Copy SourceFiles="export\NativeLibs\android\arm64-v8a\libgemuera_native.so" DestinationFiles="$(OutputPath)libgemuera_native.so" SkipUnchangedFiles="true" />
   </Target>
 
   <Target Name="ExcludeGodotEditorIntermediates" BeforeTargets="CoreCompile">

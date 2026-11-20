@@ -58,10 +58,13 @@ namespace MinorShift.Emuera.Sub
 				return;
 			if (Directory.Exists(path))
 			{
+				// 先过滤再并行化：lazy 开启时 ERB 树里大量 .erb 不属于预读目标，
+				// 排在 AsParallel 之前可避免无关文件进入并行调度管线。
 				var query = Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
+					.Where(file => IsPreloadTarget(file, includeErb))
 					.AsParallel()
 					.WithDegreeOfParallelism(GetPreloadDegree());
-				query.Where(file => IsPreloadTarget(file, includeErb)).ForAll(LoadFile);
+				query.ForAll(LoadFile);
 			}
 			else if (File.Exists(path) && IsPreloadTarget(path, includeErb))
 			{
