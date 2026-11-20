@@ -37,13 +37,15 @@ namespace MinorShift.Emuera.GameProc
 		/// 複数のファイルを読む
 		/// </summary>
 		/// <param name="filepath"></param>
-		public bool LoadErbFiles(string erbDir, bool displayReport, LabelDictionary labelDictionary, bool useLazyLoading = false)
+		public bool LoadErbFiles(string erbDir, bool displayReport, LabelDictionary labelDictionary, bool useLazyLoading = false, Action<string> markStage = null)
 		{
-			return LoadErbFilesAsync(erbDir, displayReport, labelDictionary, useLazyLoading).GetAwaiter().GetResult();
+			return LoadErbFilesAsync(erbDir, displayReport, labelDictionary, useLazyLoading, markStage).GetAwaiter().GetResult();
 		}
 
-		public async Task<bool> LoadErbFilesAsync(string erbDir, bool displayReport, LabelDictionary labelDictionary, bool useLazyLoading = false)
+		public async Task<bool> LoadErbFilesAsync(string erbDir, bool displayReport, LabelDictionary labelDictionary, bool useLazyLoading = false, Action<string> markStage = null)
 		{
+			// 启动量化：erb 阶段子段埋点（Process.MarkLoad 回调，null 时零开销跳过）
+			void Mark(string stage) => markStage?.Invoke(stage);
 			//1.713 labelDicをnewする位置を変更。
 			//checkScript();の時点でExpressionPerserがProcess.instance.LabelDicを必要とするから。
 			labelDic = labelDictionary;
@@ -65,6 +67,7 @@ namespace MinorShift.Emuera.GameProc
 				// 最先加载（覆盖声明次序优先），且不受 lazy 表跳过约束。
 				var firstDirs = new List<string>();
 				CollectHashDirectories(erbDir, Config.SearchSubdirectory, firstDirs);
+				Mark("erb-enum");
 				// HashSet：主循环逐文件 Contains 判重，List 是 O(n²)；字符串相等语义与 List.Contains 相同（序数比较）
 				HashSet<string> loadedFirstFiles = new HashSet<string>();
 				if (useLazyLoading)
@@ -84,6 +87,7 @@ namespace MinorShift.Emuera.GameProc
 				{
 					parentProcess.ResetLazyLoadingState();
 				}
+				Mark("erb-lazy-index");
 				//N5: 全量加载改为单个 Task.Run 内的 foreach，消除逐文件 await 的线程跳跃。
 				//文件内顺序、警告顺序、首个异常传播行为与原逐文件 await 完全一致
 				//（loadErb 本身及其内部 output.PrintXxx 原本就已在 Task.Run 线程池线程上执行）。
@@ -129,6 +133,7 @@ namespace MinorShift.Emuera.GameProc
 					}
 				});
 				ParserMediator.FlushWarningList();
+				Mark("erb-parse");
 #if UEMUERA_DEBUG
 				output.PrintSystemLine("経過時間:" + (WinmmTimer.TickCount - starttime).ToString("D4") + "ms:");
 #endif
@@ -136,6 +141,7 @@ namespace MinorShift.Emuera.GameProc
 					output.PrintSystemLine("ユーザー定義関数のリストを構築中・・・");
 				await Task.Run(() => setLabelsArg());
 				ParserMediator.FlushWarningList();
+				Mark("erb-setlabels");
 				labelDic.Initialized = true;
 				//M8: 全量加载完成。LazyLoading 关闭时 ERB 解码文本不再被任何路径重读，
 				//释放 Preload 中整会话驻留的 ERB 条目（开启时保留，供懒加载命中后重读）。
@@ -149,6 +155,7 @@ namespace MinorShift.Emuera.GameProc
 					output.PrintSystemLine("スクリプトの構文チェック中・・・");
 				await Task.Run(() => checkScript());
 				ParserMediator.FlushWarningList();
+				Mark("erb-check");
 				if (parentProcess.LazyCurrentLazyStatus == Process.LazyStatus.BuildTable)
 				{
 					parentProcess.SaveLazyLoadingList(labelDic.GetAllLabels(false), erbFiles);
@@ -164,6 +171,7 @@ namespace MinorShift.Emuera.GameProc
 					if (parentProcess.SavePartialLazyLoadingList(labelDic.GetAllLabels(false)))
 						output.PrintSystemLine("LazyLoading: index table updated");
 				}
+				Mark("erb-lazy-save");
 
 #if UEMUERA_DEBUG
 				output.PrintSystemLine("経過時間:" + (WinmmTimer.TickCount - starttime).ToString("D4") + "ms:");
