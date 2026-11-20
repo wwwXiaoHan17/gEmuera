@@ -480,11 +480,16 @@ namespace MinorShift.Emuera.GameProc
 				profReadTicks = profLoopTicks = profSetArgTicks = profNestTicks = profJumpTicks = 0;
 				long loopStart = Stopwatch.GetTimestamp();
 				profMarkTicks = loopStart;
-				while ((st = eReader.ReadEnabledLine(ppstate.Disabled)) != null)
+				while (true)
 				{
 					long now = Stopwatch.GetTimestamp();
-					profReadTicks += now - profMarkTicks;
-					profMarkTicks = now;
+					st = eReader.ReadEnabledLine(ppstate.Disabled);
+					profReadTicks += Stopwatch.GetTimestamp() - now;
+					if (st == null)
+					{
+						profLoopTicks += Stopwatch.GetTimestamp() - loopStart;
+						break;
+					}
 					position = new ScriptPosition(eReader.Filename, eReader.LineNo);
 					//rename処理をEraStreamReaderに移管
 					//変換できなかった[[～～]]についてはLexAnalyzerがエラーを投げる
@@ -607,8 +612,6 @@ namespace MinorShift.Emuera.GameProc
 				addLine(new NullLine(), lastLine);
 				position = new ScriptPosition(eReader.Filename, -1);
 				ppstate.FileEnd(position);
-				profLoopTicks += Stopwatch.GetTimestamp() - profMarkTicks;
-				profMarkTicks = Stopwatch.GetTimestamp();
 				if (isLazyLoading)
 				{
 					foreach (FunctionLabelLine label in tempFunctionLabels)
