@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -838,7 +839,7 @@ namespace MinorShift.Emuera.GameData.Function
                 Regex reg;
                 try
                 {
-                    reg = new Regex(arguments[1].GetStrValue(exm));
+                    reg = EraRegexCache.GetOrAdd(arguments[1].GetStrValue(exm));
                 }
                 catch (ArgumentException e)
                 {
@@ -1013,7 +1014,7 @@ namespace MinorShift.Emuera.GameData.Function
                 Regex reg;
                 try
                 {
-                    reg = new Regex(arguments[1].GetStrValue(exm));
+                    reg = EraRegexCache.GetOrAdd(arguments[1].GetStrValue(exm));
                 }
                 catch (ArgumentException e)
                 {
@@ -6445,4 +6446,24 @@ namespace MinorShift.Emuera.GameData.Function
 
 			#endregion
 		}
+
+    /// <summary>
+    /// STRCOUNT/REPLACE 等内建函数的正则缓存：脚本模式集合小且重复率高，
+    /// 原实现每次调用 new Regex（构造+解析是调用里的主要开销）。
+    /// 语义不变：无效模式照旧抛 ArgumentException（不缓存失败），由调用方转 CodeEE。
+    /// </summary>
+    internal static class EraRegexCache
+    {
+        // 有上限：模式来自脚本，防御性封顶避免病态脚本撑爆内存；清空只损失一次重编译。
+        private const int MaxEntries = 256;
+
+        private static readonly ConcurrentDictionary<string, Regex> cache = new ConcurrentDictionary<string, Regex>(StringComparer.Ordinal);
+
+        public static Regex GetOrAdd(string pattern)
+        {
+            if (cache.Count >= MaxEntries)
+                cache.Clear();
+            return cache.GetOrAdd(pattern, p => new Regex(p));
+        }
+    }
 }

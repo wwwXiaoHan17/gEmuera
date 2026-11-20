@@ -822,20 +822,22 @@ namespace MinorShift.Emuera.GameProc
 		public string getRawTextFormFilewithLine(ScriptPosition position)
         {
 			string extents = position.Filename.Substring(position.Filename.Length - 4).ToLower();
+			string dir;
 			if (extents == ".erb")
-			{
-				return uEmuera.Utils.FileExists(Program.ErbDir + position.Filename)
-					? position.LineNo > 0 ? uEmuera.Utils.ReadAllLines(Program.ErbDir + position.Filename, Config.Encode).Skip(position.LineNo - 1).First() : ""
-					: "";
-			}
+				dir = Program.ErbDir;
 			else if (extents == ".csv")
-			{
-				return uEmuera.Utils.FileExists(Program.CsvDir + position.Filename)
-					? position.LineNo > 0 ? uEmuera.Utils.ReadAllLines(Program.CsvDir + position.Filename, Config.Encode).Skip(position.LineNo - 1).First() : ""
-					: "";
-			}
+				dir = Program.CsvDir;
 			else
 				return "";
+			string path = dir + position.Filename;
+			// 优先命中启动期预读缓存：警告密集的游戏（上千文件）逐条警告都重读整个源文件
+			// 是 O(警告数 × 文件大小) 的重复 IO。缓存已释放（解析结束后 RemoveByExtension）时
+			// 回退到旧磁盘读取路径，行为不变。
+			if (Preload.TryGetFileLines(path, out var lines))
+				return position.LineNo > 0 && position.LineNo <= lines.Length ? lines[position.LineNo - 1] : "";
+			return uEmuera.Utils.FileExists(path) && position.LineNo > 0
+				? uEmuera.Utils.ReadAllLines(path, Config.Encode).Skip(position.LineNo - 1).First()
+				: "";
 		}
 
 	}
