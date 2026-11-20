@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading.Tasks;
 //using Microsoft.VisualBasic;
 using MinorShift.Emuera.Sub;
@@ -32,6 +33,11 @@ namespace MinorShift.Emuera.GameProc
 		LabelDictionary labelDic;
 
 		bool noError = true;
+
+		// erb-parse/check 内部构成剖析（ticks 累计，LoadErbFilesAsync 末尾换算 ms 输出进子段名；
+		// read/line 用 mark-and-measure 差分：循环总耗 - ReadEnabledLine 耗 = 行处理耗）
+		long profReadTicks, profLoopTicks, profMarkTicks;
+		long profSetArgTicks, profNestTicks, profJumpTicks;
 
 		/// <summary>
 		/// 複数のファイルを読む
@@ -133,7 +139,7 @@ namespace MinorShift.Emuera.GameProc
 					}
 				});
 				ParserMediator.FlushWarningList();
-				Mark("erb-parse");
+				Mark($"erb-parse(read={TicksToMs(profReadTicks)}ms lines={TicksToMs(profLoopTicks - profReadTicks)}ms)");
 #if UEMUERA_DEBUG
 				output.PrintSystemLine("経過時間:" + (WinmmTimer.TickCount - starttime).ToString("D4") + "ms:");
 #endif
@@ -155,7 +161,7 @@ namespace MinorShift.Emuera.GameProc
 					output.PrintSystemLine("スクリプトの構文チェック中・・・");
 				await Task.Run(() => checkScript());
 				ParserMediator.FlushWarningList();
-				Mark("erb-check");
+				Mark($"erb-check(setarg={TicksToMs(profSetArgTicks)}ms nest={TicksToMs(profNestTicks)}ms jump={TicksToMs(profJumpTicks)}ms)");
 				if (parentProcess.LazyCurrentLazyStatus == Process.LazyStatus.BuildTable)
 				{
 					parentProcess.SaveLazyLoadingList(labelDic.GetAllLabels(false), erbFiles);
@@ -471,8 +477,14 @@ namespace MinorShift.Emuera.GameProc
 				int funcCount = 0;
 				if (Program.AnalysisMode)
 					output.PrintSystemLine("　");
+				profReadTicks = profLoopTicks = profSetArgTicks = profNestTicks = profJumpTicks = 0;
+				long loopStart = Stopwatch.GetTimestamp();
+				profMarkTicks = loopStart;
 				while ((st = eReader.ReadEnabledLine(ppstate.Disabled)) != null)
 				{
+					long now = Stopwatch.GetTimestamp();
+					profReadTicks += now - profMarkTicks;
+					profMarkTicks = now;
 					position = new ScriptPosition(eReader.Filename, eReader.LineNo);
 					//rename処理をEraStreamReaderに移管
 					//変換できなかった[[～～]]についてはLexAnalyzerがエラーを投げる
@@ -595,6 +607,8 @@ namespace MinorShift.Emuera.GameProc
 				addLine(new NullLine(), lastLine);
 				position = new ScriptPosition(eReader.Filename, -1);
 				ppstate.FileEnd(position);
+				profLoopTicks += Stopwatch.GetTimestamp() - profMarkTicks;
+				profMarkTicks = Stopwatch.GetTimestamp();
 				if (isLazyLoading)
 				{
 					foreach (FunctionLabelLine label in tempFunctionLabels)
@@ -619,6 +633,8 @@ namespace MinorShift.Emuera.GameProc
 			return;
 		}
 		
+		static int TicksToMs(long ticks) => (int)(ticks * 1000.0 / Stopwatch.Frequency);
+
 		private LogicalLine addLine(LogicalLine nextLine, LogicalLine lastLine)
 		{
 			if (nextLine == null)
@@ -1100,9 +1116,15 @@ namespace MinorShift.Emuera.GameProc
 			{
 				//System.Windows.Forms.//Application.DoEvents();
 				string filename = label.Position.Filename.ToUpper();
+				long t = Stopwatch.GetTimestamp();
 				setArgument(label);
+				profSetArgTicks += Stopwatch.GetTimestamp() - t;
+				t = Stopwatch.GetTimestamp();
 				nestCheck(label);
-                setJumpTo(label);
+				profNestTicks += Stopwatch.GetTimestamp() - t;
+				t = Stopwatch.GetTimestamp();
+				setJumpTo(label);
+				profJumpTicks += Stopwatch.GetTimestamp() - t;
 			}
 			catch (Exception exc)
 			{
