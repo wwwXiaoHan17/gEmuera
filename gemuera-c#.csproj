@@ -54,6 +54,10 @@
     <Compile Remove="tools\native-width-check\**" />
     <EmbeddedResource Remove="tools\native-width-check\**" />
     <None Remove="tools\native-width-check\**" />
+    <!-- save-codec-check（存档编码等价门禁）同上，独立编译。 -->
+    <Compile Remove="tools\save-codec-check\**" />
+    <EmbeddedResource Remove="tools\save-codec-check\**" />
+    <None Remove="tools\save-codec-check\**" />
     <!-- xUnit tests build independently via their own csproj; keep them out of the Godot host glob. -->
     <Compile Remove="tests\**" />
     <EmbeddedResource Remove="tests\**" />

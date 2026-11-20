@@ -15,7 +15,7 @@ namespace gEmuera.Tools.NativeWidthCheck;
 
 internal static class Program
 {
-    private const uint ExpectedAbiVersion = 2;
+    private const uint MinAbiVersion = 2; // 宽度导出于 v2 引入，向后兼容
 
     private static int Main(string[] args)
     {
@@ -48,9 +48,9 @@ internal static class Program
             var abi = Marshal.GetDelegateForFunctionPointer<AbiVersionDelegate>(
                 NativeLibrary.GetExport(lib, "gem_native_abi_version"));
             uint abiVersion = abi();
-            if (abiVersion != ExpectedAbiVersion)
+            if (abiVersion < MinAbiVersion)
             {
-                Console.WriteLine($"FAIL: ABI 版本不匹配 native={abiVersion} expected={ExpectedAbiVersion}");
+                Console.WriteLine($"FAIL: ABI 版本过低 native={abiVersion} min={MinAbiVersion}");
                 return 1;
             }
 
