@@ -56,6 +56,11 @@
 - **脚本修复**：`Build-GemueraNative.ps1` 原先只检查 NDK clang 路径未传给 cargo——补 `CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER`；否则 cargo 用默认 `aarch64-linux-android-clang`（PATH 上不存在）直接 exit 101。
 - NDK 安装：`sdkmanager --proxy=http --proxy_host=127.0.0.1 --proxy_port=7897 --install ndk;28.2.13676358`（走本地代理 7897，license 需先 `yes | --licenses`）。
 
+### 补遗（2026-11-21）：真机 arm64 安装测试 PASS——L1 全部落地
+
+- 用户确认 MIUI USB 安装后，`adb install -r` 成功装入 arm64 spike 包（`com.godot.gemuera.spike`，versionCode 14，与设备上 versionCode 15 的正式包并行不冲突）。启动后 logcat 实锤：`I godot: [LOAD] gemuera_native OK (abi=1, A=1,HIRAGANA_A=2,BULLET=1,U+FEFF=0)`（Android 16，arm64-v8a 生产 ABI），无 FATAL；系统 ScnModule 的 native libs 清单亦含 `libgemuera_native.so`。**上文遗留 L1（Android 端到端验收）至此完成：模拟器 x86_64 + 真机 arm64 双证据 [实测]。**
+- 真机上 spike 包与正式包并存，用户验收后可 `adb shell pm uninstall -k --user 0 com.godot.gemuera.spike`（-k 保留数据）或直接在桌面卸载。
+
 ## 遗留登记
 
 - **L1（P1，不在本轮原因：本机无 NDK，环境安装属用户决策）**：安装 Android NDK 后跑 `Build-GemueraNative.ps1`（含 16KB p_align 校验）产出 arm64 `.so`，导出 APK 并在模拟器/真机做 P/Invoke 冒烟；这是"Android 结论必须 APK 实测"铁律的必经步骤。
