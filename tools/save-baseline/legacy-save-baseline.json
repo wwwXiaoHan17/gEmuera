@@ -12,8 +12,8 @@
     },
     {
       "relativePath": "Scripts/Emuera/Sub/EraBinaryDataWriter.cs",
-      "sha256": "84a83e595a339d48f6ebd0e50d9407f7bd19f013110c1fe23cb4180b61794bd4",
-      "byteLength": 15446
+      "sha256": "a4816c6f9d3b9598b3951e96a6121a75c156b6f007ce8998153e41e56747f570",
+      "byteLength": 16151
     },
     {
       "relativePath": "Scripts/Emuera/GameData/Variable/VariableEvaluator.cs",
