@@ -81,6 +81,7 @@ Inputpad.Repeat=重复
 MsgBox.Confirm=确定
 MsgBox.Cancel=取消
 OptionWindow.FontSize=字体大小
+OptionWindow.FontSizeHint=调整控制台字号（对之后输出的行生效）。整体视图缩放请使用悬浮缩放面板。
 OptionWindow.QuickButtonWidth=Quick宽度
 OptionWindow.QuickFontSize=Quick字体
 OptionWindow.ButtonDragSensitivity=滚动灵敏度
