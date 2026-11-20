@@ -13,7 +13,8 @@ namespace MinorShift._Library
 	internal static class NativeTextWidth
 	{
 		private const string LibraryName = "gemuera_native";
-		private const uint ExpectedAbiVersion = 2;
+		// 宽度导出于 ABI v2 引入；库为 v3+ 时向后兼容可用（最低版本语义）
+		private const uint MinAbiVersion = 2;
 
 		// 探测缓存：0=可用，1=不可用。库缺失只探测一次，热路径零额外开销。
 		private static int probeState;
@@ -39,7 +40,7 @@ namespace MinorShift._Library
 					return probeState == 0;
 				try
 				{
-					probeState = AbiVersion() == ExpectedAbiVersion ? 0 : 1;
+					probeState = AbiVersion() >= MinAbiVersion ? 0 : 1;
 				}
 				catch (System.Exception)
 				{
@@ -104,9 +105,9 @@ namespace MinorShift._Library
 			try
 			{
 				uint abi = AbiVersion();
-				if (abi != ExpectedAbiVersion)
+				if (abi < MinAbiVersion)
 				{
-					return $"[LOAD] gemuera_native ABI mismatch: {abi} != {ExpectedAbiVersion}";
+					return $"[LOAD] gemuera_native ABI mismatch: {abi} < {MinAbiVersion}";
 				}
 				int ascii = WidthUnit('A');
 				int fullWidth = WidthUnit('あ');
