@@ -46,6 +46,10 @@
 2. (a) 本轮已执行：C# 探针统一最低版本语义（`AbiVersion() >= MinAbi`），消除"加导出必须改全部探针"的耦合（NativeTextWidth/NativeSaveCodec/native-width-check 三处已统一）。
 3. (a) 本轮已执行：AGENTS.md 构建节补丁已在前一任务落地（CS0104 变体），本轮无新规范级教训；native/README.md 待 save 稳定后补模块清单（本轮不做，见遗留）。
 
+### 补遗（2026-11-21）：git add 路径大小写静默丢失（连续第二次踩中）
+
+codec 提交（bc2b4fd）再次漏 3 个 C# 文件——与 width 接线时（49c02a5 漏 3 个）**同一模式**：`git add 'Scripts/...'`（大写）对 index 中已跟踪的小写 `scripts/` 路径**静默不暂存**（无报错、commit 照常成功），而写小写路径的提交（ca62775）从未漏过。根因是 worktree 的 git 在 core.ignorecase 下对已跟踪文件的大小写路径匹配行为；本仓库 index 实际全为小写 `scripts/`。修复：小写路径补提交 47468d3。可复用动作：**本仓库 git add 一律写小写 `scripts/` 路径，且提交后必须 `git status --short` 全量核对（勿 head 截断）**。升级去向：暂不升级（AGENTS.md 协作节已有"只记本任务"的核对要求；此坑属工具行为，若再犯第三次进 AGENTS.md 构建节）。
+
 ## 遗留登记
 
 - **L1（P1，不在本轮原因：流式 token 状态机接 FFI 复杂度高、收益待量化）**：读侧原生化——`EraBinaryDataReader` 的 Int64 数组段解码（消勘察确认的双拷贝 + 逐元素循环），可用 `save::decode_int64_array` 现成组件，需设计"框段字节→一次解码"的读法。
