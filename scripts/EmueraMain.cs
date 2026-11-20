@@ -84,6 +84,7 @@ public partial class EmueraMain : Node
 	{
 		FrameRateHelper.Apply();
 		ResolutionHelper.Apply();
+		UiScaleHelper.Apply();
 		GenericUtils.SetMainThread();
 		GenericUtils.InitializeLogging();
 		uEmuera.Logger.isEnabled = GenericUtils.IsLogEnabled;

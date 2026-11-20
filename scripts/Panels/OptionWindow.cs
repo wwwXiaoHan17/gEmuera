@@ -4,8 +4,21 @@ using System.Collections.Generic;
 public partial class OptionWindow : Control
 {
 	PopupPanel popup;
+	// 系统级 UI 缩放（root.ContentScaleFactor）：启动器与游戏内面板整体放大缩小，
+	// 不影响游戏画面内容（其缩放独立走 Scalepad/双指捏合）。
+	Slider uiScaleSlider;
+	Label uiScaleValue;
+	// 字体大小（XEmuera 排版级缩放）：驱动核心字号 Config.FontSize 运行时重设，
+	// 行高/PRINTC 分栏按比例重算、文字按新字号重渲染（锐利）；图片不随字号缩放。
+	// 与缩放板（内容层矩阵缩放，含图片）是两条独立机制。
 	Slider fontSizeSlider;
 	Label fontSizeLabel;
+	Label fontLabel;
+	// 方向控制（仅 Android 构建时创建）：跟随手机朝向 / 手动旋转。
+	CheckButton followOrientationToggle;
+	Button rotateScreenButton;
+	Label followOrientationLabel;
+	Label rotateScreenLabel;
 	Slider quickButtonWidthSlider;
 	Label quickButtonWidthLabel;
 	Slider quickFontSizeSlider;
@@ -41,7 +54,7 @@ public partial class OptionWindow : Control
 
 	// MultiLanguage-driven description labels (values are slider-derived numbers
 	// and stay untouched); refreshed together when the language changes.
-	Label fontLabel;
+	Label uiScaleLabel;
 	Label quickWidthLabel;
 	Label quickFontLabel;
 	Label sensitivityLabel;
@@ -121,27 +134,82 @@ public partial class OptionWindow : Control
 		content.AddThemeConstantOverride("separation", 16); // 组间距
 		scroll.AddChild(content);
 
-		// ---- Display: 字体大小 / 最大行数 / 分辨率 / 帧率 ----
+		// ---- Display: 界面缩放 / 字体大小 / 最大行数 / 分辨率 / 帧率 ----
 		var displayGroup = CreateGroup(content, out displayGroupTitle);
 
+		var uiScaleRow = CreateRow(displayGroup, out uiScaleLabel);
+		uiScaleSlider = new HSlider();
+		uiScaleSlider.MinValue = UiScaleHelper.MinScale;
+		uiScaleSlider.MaxValue = UiScaleHelper.MaxScale;
+		uiScaleSlider.Step = 0.05;
+		uiScaleSlider.Value = UiScaleHelper.current;
+		uiScaleSlider.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		uiScaleSlider.CustomMinimumSize = new Vector2(120, 44);
+		uiScaleSlider.TooltipText = MultiLanguage.Get("OptionWindow.UiScaleHint",
+			"调整界面整体大小，不影响游戏画面。");
+		uiScaleSlider.ValueChanged += OnUiScaleChanged;
+		uiScaleSlider.DragEnded += OnUiScaleDragEnded;
+		uiScaleRow.AddChild(uiScaleSlider);
+		uiScaleValue = CreateValueLabel();
+		uiScaleValue.Text = FormatUiScalePercent(UiScaleHelper.current);
+		uiScaleRow.AddChild(uiScaleValue);
+
+		// 字体大小：排版级缩放（XEmuera 语义）——改核心字号，行高/PRINTC 分栏按比例
+		// 重算、文字重渲染；仅新输出行生效（旧行几何已固化），图片不缩放。
+		// 与界面缩放（内容层矩阵，含图片）互相独立。
 		var fontRow = CreateRow(displayGroup, out fontLabel);
 		fontSizeSlider = new HSlider();
-		fontSizeSlider.MinValue = 8;
-		fontSizeSlider.MaxValue = 48;
-		fontSizeSlider.Value = MinorShift.Emuera.Config.FontSize > 0 ? MinorShift.Emuera.Config.FontSize : 18;
+		fontSizeSlider.MinValue = EmueraContent.FontSizeRequestMin;
+		fontSizeSlider.MaxValue = EmueraContent.FontSizeRequestMax;
+		fontSizeSlider.Step = 1;
+		fontSizeSlider.Value = EmueraContent.instance != null
+			? EmueraContent.instance.ConsoleFontSize
+			: (MinorShift.Emuera.Config.FontSize > 0 ? MinorShift.Emuera.Config.FontSize : 18);
 		fontSizeSlider.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 		fontSizeSlider.CustomMinimumSize = new Vector2(120, 44);
-		// 字号滑杆直接驱动核心字号 Config.FontSize（运行时字号 API，
-		// 仅影响之后输出的行，会话内生效不改 emuera.config）；
-		// 整体视图缩放与字号严格分离，请用 Scalepad（SetContentScale）。
 		fontSizeSlider.Editable = true;
 		fontSizeSlider.TooltipText = MultiLanguage.Get("OptionWindow.FontSizeHint",
-			"Adjust the console font size (applies to newly printed lines). Use the scale pad to zoom the whole view.");
+			"调整文字排版字号：文字按新字号重新渲染（清晰不糊），行高与 PRINTC 分栏按比例重算；仅对之后输出的行生效，图片不缩放。整体画面缩放（含图片）请用缩放板。");
 		fontSizeSlider.ValueChanged += OnFontSizeChanged;
 		fontRow.AddChild(fontSizeSlider);
 		fontSizeLabel = CreateValueLabel();
-		fontSizeLabel.Text = fontSizeSlider.Value.ToString();
+		fontSizeLabel.Text = ((int)fontSizeSlider.Value).ToString();
 		fontRow.AddChild(fontSizeLabel);
+
+		// 方向控制：跟随手机朝向（fullSensor 忽略系统方向锁定）+ 手动旋转。
+		// 全平台都创建（便于在桌面确认功能存在）；非 Android 置为不可用并说明原因。
+		bool rotationAvailable = OS.GetName() == "Android";
+		var followRow = CreateRow(displayGroup, out followOrientationLabel);
+		followOrientationToggle = new CheckButton();
+		followOrientationToggle.ButtonPressed = AndroidWindowOrientationController.FollowDeviceOrientation;
+		followOrientationToggle.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		followOrientationToggle.CustomMinimumSize = new Vector2(0, 44);
+		followOrientationToggle.Disabled = !rotationAvailable;
+		followOrientationToggle.TooltipText = rotationAvailable
+			? MultiLanguage.Get("OptionWindow.FollowOrientationHint",
+				"开启后即使系统开启了方向锁定，转动手机也会旋转整个界面。")
+			: MultiLanguage.Get("OptionWindow.RotationAndroidOnly", "仅在 Android 设备上可用。");
+		followOrientationToggle.Toggled += OnFollowOrientationToggled;
+		followRow.AddChild(followOrientationToggle);
+
+		var rotateRow = CreateRow(displayGroup, out rotateScreenLabel);
+		rotateScreenButton = new Button();
+		rotateScreenButton.Text = MultiLanguage.Get("OptionWindow.RotateScreen", "旋转屏幕");
+		rotateScreenButton.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		rotateScreenButton.CustomMinimumSize = new Vector2(0, 44);
+		rotateScreenButton.Disabled = !rotationAvailable;
+		rotateScreenButton.TooltipText = rotationAvailable
+			? MultiLanguage.Get("OptionWindow.RotateScreenHint",
+				"手动把整个界面旋转 90°（会关闭「自动旋转」，改为固定方向）。")
+			: MultiLanguage.Get("OptionWindow.RotationAndroidOnly", "仅在 Android 设备上可用。");
+		GEmueraTheme.ApplyButton(rotateScreenButton, GEmueraTheme.Surface, GEmueraTheme.Border);
+		rotateScreenButton.Pressed += OnRotateScreenPressed;
+		rotateRow.AddChild(rotateScreenButton);
+
+		// 提示：本组两条缩放相关滑条是独立机制，不要合并——
+		//   界面缩放 = UiScaleHelper（root.ContentScaleFactor，只缩系统 UI）
+		//   字体大小 = RequestFontSize（XEmuera 排版级缩放，重算字号/行高/PRINTC，图片不变）
+		// 另有缩放板（菜单「缩放」图标 → Scalepad，SetContentScale）= 内容层矩阵缩放（含图片）。
 
 		var maxLinesRow = CreateRow(displayGroup, out maxLinesTextLabel);
 		maxVisibleLinesSlider = new HSlider();
@@ -497,8 +565,39 @@ public partial class OptionWindow : Control
 	// Idempotent.
 	void ApplyLanguageTexts()
 	{
+		if (uiScaleLabel != null)
+		{
+			uiScaleLabel.Text = MultiLanguage.Get("OptionWindow.UiScale", "UI Scale");
+			if (uiScaleSlider != null)
+				uiScaleSlider.TooltipText = MultiLanguage.Get("OptionWindow.UiScaleHint",
+					"调整界面整体大小，不影响游戏画面。");
+		}
 		if (fontLabel != null)
+		{
 			fontLabel.Text = MultiLanguage.Get("OptionWindow.FontSize", "Font Size");
+			if (fontSizeSlider != null)
+				fontSizeSlider.TooltipText = MultiLanguage.Get("OptionWindow.FontSizeHint",
+					"调整文字排版字号：文字按新字号重新渲染（清晰不糊），行高与 PRINTC 分栏按比例重算；仅对之后输出的行生效，图片不缩放。整体画面缩放（含图片）请用缩放板。");
+		}
+		if (followOrientationLabel != null)
+		{
+			followOrientationLabel.Text = MultiLanguage.Get("OptionWindow.FollowOrientation", "自动旋转（跟随手机）");
+			if (followOrientationToggle != null)
+				followOrientationToggle.TooltipText = MultiLanguage.Get(
+					"OptionWindow.FollowOrientationHint",
+					"开启后即使系统开启了方向锁定，转动手机也会旋转整个界面。");
+		}
+		if (rotateScreenLabel != null)
+		{
+			rotateScreenLabel.Text = MultiLanguage.Get("OptionWindow.RotateScreen", "旋转屏幕");
+			if (rotateScreenButton != null)
+			{
+				rotateScreenButton.Text = MultiLanguage.Get("OptionWindow.RotateScreen", "旋转屏幕");
+				rotateScreenButton.TooltipText = MultiLanguage.Get(
+					"OptionWindow.RotateScreenHint",
+					"手动把整个界面旋转 90°（会关闭「跟随手机朝向」，改为固定方向）。");
+			}
+		}
 		if (quickWidthLabel != null)
 			quickWidthLabel.Text = MultiLanguage.Get("OptionWindow.QuickButtonWidth", "Quick Width");
 		if (quickFontLabel != null)
@@ -566,24 +665,10 @@ public partial class OptionWindow : Control
 
 	public void ShowPopup()
 	{
-		SyncFontSizeFromConfig();
+		SyncFontSizeFromCore();
 		popup.PopupCentered();
 		CallDeferred(nameof(ClampPopupToSafeArea));
 		EmitSignal(SignalName.PopupOpened);
-	}
-
-	// 字号滑杆直接反映/驱动核心字号 Config.FontSize（运行时字号 API），
-	// 与内容缩放（Scalepad / SetContentScale）严格分离。
-	void SyncFontSizeFromConfig()
-	{
-		if (fontSizeSlider == null || fontSizeLabel == null)
-			return;
-		int coreSize = MinorShift.Emuera.Config.FontSize > 0 ? MinorShift.Emuera.Config.FontSize : 18;
-		int size = Mathf.Clamp(coreSize, 8, 48);
-		fontSizeSlider.SetBlockSignals(true);
-		fontSizeSlider.Value = size;
-		fontSizeSlider.SetBlockSignals(false);
-		fontSizeLabel.Text = size.ToString();
 	}
 
 	void ClampPopupToSafeArea()
@@ -614,12 +699,72 @@ public partial class OptionWindow : Control
 			Mathf.Clamp(popup.Position.Y, top, bottom));
 	}
 
+	static string FormatUiScalePercent(float scale)
+	{
+		return Mathf.RoundToInt(scale * 100) + "%";
+	}
+
+	// 拖动中实时预览：只改运行态不写盘（ConfigFile.Save 每帧写文件代价高）。
+	// 缩放变化会让弹窗在画布单位下超出可视区，deferred 钳位保持可见。
+	void OnUiScaleChanged(double value)
+	{
+		float scale = (float)value;
+		UiScaleHelper.SetScale(scale, persist: false);
+		if (uiScaleValue != null)
+			uiScaleValue.Text = FormatUiScalePercent(scale);
+		EmueraContent.instance?.NotifyUiScaleChanged();
+		CallDeferred(nameof(ClampPopupToSafeArea));
+	}
+
+	// 拖动结束才持久化；弹窗开着时整体缩放已变，重新钳位到安全区。
+	void OnUiScaleDragEnded(bool valueChanged)
+	{
+		UiScaleHelper.SetScale((float)uiScaleSlider.Value, persist: true);
+		EmueraContent.instance?.NotifyUiScaleChanged();
+		CallDeferred(nameof(ClampPopupToSafeArea));
+	}
+
+	void OnFollowOrientationToggled(bool enabled)
+	{
+		AndroidWindowOrientationController.FollowDeviceOrientation = enabled;
+	}
+
+	void OnRotateScreenPressed()
+	{
+		// 由对话框决定「永久/仅本次」；应用后回调把开关显示同步为真实状态。
+		RotateChoiceDialog.Show(this, SyncFollowOrientationToggle);
+	}
+
+	void SyncFollowOrientationToggle()
+	{
+		if (followOrientationToggle == null)
+			return;
+		followOrientationToggle.SetBlockSignals(true);
+		followOrientationToggle.ButtonPressed = AndroidWindowOrientationController.FollowDeviceOrientation;
+		followOrientationToggle.SetBlockSignals(false);
+	}
+
+	// 打开设置时显示当前核心字号（Config.FontSize），与缩放板倍率无换算关系。
+	void SyncFontSizeFromCore()
+	{
+		if (fontSizeSlider == null || fontSizeLabel == null)
+			return;
+		int size = Mathf.Clamp(EmueraContent.instance != null
+			? EmueraContent.instance.ConsoleFontSize
+			: (MinorShift.Emuera.Config.FontSize > 0 ? MinorShift.Emuera.Config.FontSize : 18),
+			EmueraContent.FontSizeRequestMin, EmueraContent.FontSizeRequestMax);
+		fontSizeSlider.SetBlockSignals(true);
+		fontSizeSlider.Value = size;
+		fontSizeSlider.SetBlockSignals(false);
+		fontSizeLabel.Text = size.ToString();
+	}
+
 	void OnFontSizeChanged(double value)
 	{
-		int requested = Mathf.Clamp((int)System.Math.Round(value), 8, 48);
+		int requested = Mathf.Clamp((int)System.Math.Round(value), EmueraContent.FontSizeRequestMin, EmueraContent.FontSizeRequestMax);
 		fontSizeLabel.Text = requested.ToString();
-		// 运行时字号 API：会话内生效（不写回 emuera.config），在解释器空闲帧应用；
-		// 内容缩放互不影响，请用 Scalepad。
+		// XEmuera 排版级缩放：核心字号运行时重设，行高/PRINTC 按比例重算、文字重渲染；
+		// 解释器空闲帧应用，仅新输出行生效（会话内有效，不写回 emuera.config）。
 		EmueraContent.instance?.RequestFontSize(requested);
 	}
 

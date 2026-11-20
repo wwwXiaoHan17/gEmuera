@@ -142,6 +142,7 @@ public partial class FirstWindow : Control
 		FrameRateHelper.Apply();
 		VSyncHelper.Apply();
 		ResolutionHelper.Apply();
+		UiScaleHelper.Apply();
 
 		// 企业级说明：Android APK 首屏可能停留在启动器和权限流程，尚未进入 EmueraMain。
 		// 这里提前初始化诊断系统，确保冷启动、权限失败和游戏路径选择都能写入 breadcrumb。
@@ -244,15 +245,91 @@ public partial class FirstWindow : Control
 		title.Text = MultiLanguage.Get("FirstWindow.Title", "gEmuera(Emuera for Godot)");
 		// 布局回归修复（2026-09-22）：HBox 默认只给子控件最小宽度，带 autowrap 的
 		// Label 最小宽度会塌缩到单字符并逐字换行（实测把头部撑满全屏高、其余控件
-		// 全部被挤出可视区）。标题是短文本：关闭 autowrap + 横向占满，最小宽度恒为
-		// 全文宽，任何容器里都不会塌缩。
+		// 全部被挤出可视区）。标题是短文本：关闭 autowrap + 横向占满。
+		// 2026-11-16：再加 ClipText——标题最小宽度恒为全文宽时，窄屏/大 UI 缩放下
+		// header 总最小宽度会超过容器，把右侧「界面缩放」「旋转」挤出屏幕（用户实测
+		// 看不到旋转按钮）。允许裁剪后标题可被压缩，右侧控件始终可见。
 		title.AutowrapMode = TextServer.AutowrapMode.Off;
+		title.ClipText = true;
 		title.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 		title.AddThemeFontSizeOverride("font_size", 18);
 		title.AddThemeColorOverride("font_color", GEmueraTheme.TextPrimary);
 		header.AddChild(title);
 
+		header.AddChild(CreateUiScaleOption());
+
+		// 手动旋转：整界面转 90°。全平台显示（便于确认功能存在），非 Android 禁用。
+		bool rotationAvailable = OS.GetName() == "Android";
+		var rotateButton = new Button();
+		rotateButton.Text = MultiLanguage.Get("FirstWindow.Rotate", "旋转");
+		rotateButton.Disabled = !rotationAvailable;
+		rotateButton.TooltipText = rotationAvailable
+			? MultiLanguage.Get("FirstWindow.RotateHint",
+				"旋转整个界面 90°（会关闭「自动旋转」，改为固定方向）。")
+			: MultiLanguage.Get("FirstWindow.RotationAndroidOnly", "仅在 Android 设备上可用。");
+		rotateButton.CustomMinimumSize = new Vector2(72, 36);
+		rotateButton.AddThemeFontSizeOverride("font_size", 14);
+		GEmueraTheme.ApplyButton(rotateButton, GEmueraTheme.Surface, GEmueraTheme.Border);
+		rotateButton.Pressed += () => RotateChoiceDialog.Show(this);
+		header.AddChild(rotateButton);
+
 		return header;
+	}
+
+	// 系统级 UI 缩放（启动器 + 游戏内面板）选择器：root.ContentScaleFactor，
+	// 不影响游戏画面内容（其缩放由 Scalepad/双指捏合独立控制）。
+	Control CreateUiScaleOption()
+	{
+		var option = new OptionButton();
+		option.TooltipText = MultiLanguage.Get("FirstWindow.UiScaleHint",
+			"调整界面整体大小，不影响游戏画面。");
+		option.CustomMinimumSize = new Vector2(128, 36);
+		foreach (int percent in UiScaleHelper.PresetPercents)
+			option.AddItem(percent + "%");
+		SelectUiScaleOption(option);
+		option.ItemSelected += index =>
+		{
+			if (index < 0 || index >= UiScaleHelper.PresetPercents.Length)
+				return;
+			UiScaleHelper.SetScale(UiScaleHelper.PresetPercents[index] / 100f, persist: true);
+			option.Text = MultiLanguage.Get("FirstWindow.UiScale", "界面") + " " + UiScaleHelper.PresetPercents[index] + "%";
+			// content_scale_factor 变化不保证触发 viewport SizeChanged，主动贴合一次。
+			CallDeferred(nameof(RefitLauncherToViewport));
+		};
+		// 语言切换时刷新前缀文案，保留当前档位。
+		MultiLanguage.LanguageChanged += () =>
+		{
+			if (!GodotObject.IsInstanceValid(option))
+				return;
+			int percent = Mathf.RoundToInt(UiScaleHelper.current * 100);
+			option.Text = MultiLanguage.Get("FirstWindow.UiScale", "界面") + " " + percent + "%";
+		};
+		return option;
+	}
+
+	void SelectUiScaleOption(OptionButton option)
+	{
+		int percent = Mathf.RoundToInt(UiScaleHelper.current * 100);
+		int index = System.Array.IndexOf(UiScaleHelper.PresetPercents, percent);
+		if (index < 0)
+		{
+			// 配置值不在预设档位（历史手改 cfg）：归一到最近档位并回写，保证 UI 与生效值一致。
+			int best = 0;
+			int bestDiff = int.MaxValue;
+			for (int i = 0; i < UiScaleHelper.PresetPercents.Length; i++)
+			{
+				int diff = Mathf.Abs(UiScaleHelper.PresetPercents[i] - percent);
+				if (diff < bestDiff)
+				{
+					bestDiff = diff;
+					best = i;
+				}
+			}
+			index = best;
+			UiScaleHelper.SetScale(UiScaleHelper.PresetPercents[best] / 100f, persist: true);
+		}
+		option.Select(index);
+		option.Text = MultiLanguage.Get("FirstWindow.UiScale", "界面") + " " + UiScaleHelper.PresetPercents[index] + "%";
 	}
 
 	Control CreateLauncherTabs()

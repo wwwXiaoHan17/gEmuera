@@ -59,8 +59,7 @@ public partial class EmueraContent : Control
 		if (scrollContainer == null)
 			return viewportPosition;
 		var scroll = new Vector2(NormalizeContentHorizontalScroll(scrollContainer.ScrollHorizontal), scrollContainer.ScrollVertical);
-		if (contentScale > 0.001f)
-			scroll /= contentScale;
+		scroll /= GetSafeContentScale();
 		return scroll + viewportPosition;
 	}
 
