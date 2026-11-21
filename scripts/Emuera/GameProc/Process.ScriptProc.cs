@@ -58,7 +58,11 @@ namespace MinorShift.Emuera.GameProc
 				//if (line == null)
 				//	throw new ExeEE("Emuera.exeは次に実行する行を見失いました");
 				if (line.IsError)
+				{
+					// TEMP-DIAG(parse-cache)：定位命中轮空流的 IsError 行身份（定位后移除）
+					try { if (line.ErrMes != null && line.ErrMes.Contains("ストリーム")) System.IO.File.AppendAllText(System.IO.Path.Combine(Program.DebugDir ?? "", "stream_line.txt"), line.Position.Filename + ":" + line.Position.LineNo + " func=" + (func != null ? func.FunctionCode.ToString() : "?") + " argNull=" + (func == null || func.Argument == null) + " hasPrim=" + (func != null && func.HasArgumentPrimitive) + System.Environment.NewLine + "  mes=" + line.ErrMes + System.Environment.NewLine); } catch { }
 					throw new CodeEE(line.ErrMes);
+				}
 				else if (func != null)
 				{//1753 InstructionLineを先に持ってきてみる。わずかに速くなった気がしないでもない
 					if (!Program.DebugMode && func.Function.IsDebug())

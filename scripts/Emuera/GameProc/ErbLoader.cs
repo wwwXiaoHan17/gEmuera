@@ -689,10 +689,20 @@ namespace MinorShift.Emuera.GameProc
 					try
 					{
 						var prims = new Dictionary<InstructionLine, string>();
+						bool entryUnsafe = false;
 						for (LogicalLine l = cacheHead; l != null; l = l.NextLine)
 						{
 							if (l is InstructionLine il)
-								prims[il] = il.PeekArgumentPrimitive();
+							{
+								// 三态快照：null=原语已被 parse 期消费（Peek 无法区分，用 HasArgumentPrimitive）；
+								// ""=真空参；其余=内容。
+								prims[il] = il.HasArgumentPrimitive ? il.PeekArgumentPrimitive() : null;
+								// 守卫：原语已消费且此刻 Argument 为 null 的行，恢复后（ARebuild）check 期会
+								// 拿空流重解析而炸（原生气路径：parse 期 Argument 已建，check 短路不碰原语）。
+								// 此刻（parse 末）Argument 为 null 说明 parse 期没建——但 check 期可能建；
+								// 真正不可安全恢复的是"check 建的 Argument 含不支持 term → ARebuild"，
+								// 这在写入时点（check 后）已可判定：见 SerializePendingCacheEntries 的二次守卫。
+							}
 						}
 						pendingCacheEntries.Add((cacheKey, cacheHead, prims));
 					}
@@ -746,6 +756,20 @@ namespace MinorShift.Emuera.GameProc
 			{
 				try
 				{
+					// 守卫（2026-11-21 空流根因）：原语被 parse 期消费（快照 null）且 check 后 Argument
+					// 仍为 null 的行——恢复端 ARebuild 会在 check 期拿空流炸（原生路径 parse 期已建参，
+					/// check 短路）。任一此类行 → 放弃整条目（该文件回退全量，行为与无缓存一致）。
+					for (LogicalLine l = head; l != null; l = l.NextLine)
+					{
+						if (l is InstructionLine guardLine
+							&& guardLine.Argument == null
+							&& prims.TryGetValue(guardLine, out string guardPrim)
+							&& guardPrim == null)
+						{
+							cacheWriteFailCount++;
+							goto nextEntry;
+						}
+					}
 					using (var ms = new MemoryStream())
 					{
 						ErbParseCache.WriteLines(ms, head, l => prims.TryGetValue(l, out string s) ? s : null);
@@ -757,6 +781,7 @@ namespace MinorShift.Emuera.GameProc
 				{
 					cacheWriteFailCount++;
 				}
+				nextEntry:;
 			}
 			pendingCacheEntries.Clear();
 		}

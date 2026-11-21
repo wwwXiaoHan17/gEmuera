@@ -80,6 +80,10 @@ namespace MinorShift.Emuera.GameProc
 		private const byte ACase = 6;
 		private const byte APrintData = 7;
 		private const byte AStrData = 8;
+		private const byte ASnakeVari = 13;
+		private const byte ASnakeVars = 14;
+		private const byte ASpSet = 11;
+		private const byte ASpSetArray = 12;
 		private const byte ASpCall = 9;         // terms + 标量；CallFunc/UDFArgument 留 null（check 期 setJumpTo 重填）
 		private const byte ASpCallSharp = 10;
 
@@ -457,6 +461,35 @@ namespace MinorShift.Emuera.GameProc
 					WriteTerms(w, spSharp.SubNames);
 					WriteTerms(w, spSharp.RowArgs);
 					return; // CallFunc(IPluginMethod 运行期句柄)同理留空重建
+			case SnakeVariArgument snakeVari:
+				w.Write(ASnakeVari);
+				WriteBase(w, snakeVari);
+				w.Write(snakeVari.Name ?? "");
+				WriteTerm(w, snakeVari.InitialValue);
+				return;
+			case SnakeVarsArgument snakeVars:
+				w.Write(ASnakeVars);
+				WriteBase(w, snakeVars);
+				w.Write(snakeVars.Name ?? "");
+				w.Write(snakeVars.InitialValue ?? "");
+				return;
+			case SpSetArgument spSet:
+				w.Write(ASpSet);
+				WriteBase(w, spSet);
+				w.Write(spSet.AddConst);
+				WriteTerm(w, spSet.VariableDest);
+				WriteTerm(w, spSet.Term);
+				return;
+			case SpSetArrayArgument spSetArray:
+				w.Write(ASpSetArray);
+				WriteBase(w, spSetArray);
+				WriteTerm(w, spSetArray.VariableDest);
+				WriteTerms(w, spSetArray.TermList);
+				// 三个 ConstList 按 dest 类型至多一个非空；全空 = TermList 路径
+				WriteInt64Array(w, spSetArray.ConstIntList);
+				WriteStringArray(w, spSetArray.ConstStrList);
+				WriteDoubleArray(w, spSetArray.ConstFloatList);
+				return;
 				default:
 					throw new ErbParseCache.CacheFormatException("unsupported argument " + arg.GetType().Name);
 			}
@@ -556,9 +589,90 @@ namespace MinorShift.Emuera.GameProc
 					var rowArgs = ReadTerms(r, labelDic);
 					return new SpCallSharpArgment(funcname, subNames, rowArgs) { IsConst = b.isConst, ConstStr = b.constStr, ConstInt = b.constInt, ConstFloat = b.constFloat };
 				}
+				case ASnakeVari:
+			{
+				var b = ReadBase(r);
+				string name = r.ReadString();
+				var init = ReadTerm(r, labelDic);
+				return new SnakeVariArgument(name, init) { IsConst = b.isConst, ConstStr = b.constStr, ConstInt = b.constInt, ConstFloat = b.constFloat };
+			}
+			case ASnakeVars:
+			{
+				var b = ReadBase(r);
+				string name = r.ReadString();
+				string init = r.ReadString();
+				return new SnakeVarsArgument(name, init.Length == 0 ? null : init) { IsConst = b.isConst, ConstStr = b.constStr, ConstInt = b.constInt, ConstFloat = b.constFloat };
+			}
+			case ASpSet:
+			{
+				var b = ReadBase(r);
+				bool addConst = r.ReadBoolean();
+				var dest = ReadTerm(r, labelDic);
+				var term = ReadTerm(r, labelDic);
+				return new SpSetArgument((VariableTerm)dest, term) { AddConst = addConst, IsConst = b.isConst, ConstStr = b.constStr, ConstInt = b.constInt, ConstFloat = b.constFloat };
+			}
+			case ASpSetArray:
+			{
+				var b = ReadBase(r);
+				var dest = ReadTerm(r, labelDic);
+				var terms = ReadTerms(r, labelDic);
+				var constInt = ReadInt64Array(r);
+				var constStr = ReadStringArray(r);
+				var constFloat = ReadDoubleArray(r);
+				if (constInt != null)
+					return new SpSetArrayArgument((VariableTerm)dest, terms, constInt) { IsConst = b.isConst, ConstStr = b.constStr, ConstInt = b.constInt, ConstFloat = b.constFloat };
+				if (constStr != null)
+					return new SpSetArrayArgument((VariableTerm)dest, terms, constStr) { IsConst = b.isConst, ConstStr = b.constStr, ConstInt = b.constInt, ConstFloat = b.constFloat };
+				return new SpSetArrayArgument((VariableTerm)dest, terms, constFloat ?? new double[0]) { IsConst = b.isConst, ConstStr = b.constStr, ConstInt = b.constInt, ConstFloat = b.constFloat };
+			}
 				default:
 					throw new ErbParseCache.CacheFormatException("unknown argument kind " + kind);
 			}
+		}
+
+		private static void WriteInt64Array(BinaryWriter w, long[] a)
+		{
+			w.Write(a == null ? -1 : a.Length);
+			if (a != null) foreach (long v in a) w.Write(v);
+		}
+
+		private static long[] ReadInt64Array(BinaryReader r)
+		{
+			int len = r.ReadInt32();
+			if (len < 0) return null;
+			var a = new long[len];
+			for (int i = 0; i < len; i++) a[i] = r.ReadInt64();
+			return a;
+		}
+
+		private static void WriteStringArray(BinaryWriter w, string[] a)
+		{
+			w.Write(a == null ? -1 : a.Length);
+			if (a != null) foreach (string v in a) w.Write(v ?? "");
+		}
+
+		private static string[] ReadStringArray(BinaryReader r)
+		{
+			int len = r.ReadInt32();
+			if (len < 0) return null;
+			var a = new string[len];
+			for (int i = 0; i < len; i++) a[i] = r.ReadString();
+			return a;
+		}
+
+		private static void WriteDoubleArray(BinaryWriter w, double[] a)
+		{
+			w.Write(a == null ? -1 : a.Length);
+			if (a != null) foreach (double v in a) w.Write(v);
+		}
+
+		private static double[] ReadDoubleArray(BinaryReader r)
+		{
+			int len = r.ReadInt32();
+			if (len < 0) return null;
+			var a = new double[len];
+			for (int i = 0; i < len; i++) a[i] = r.ReadDouble();
+			return a;
 		}
 
 		private static (bool isConst, string constStr, long constInt, double constFloat) ReadBase(BinaryReader r)

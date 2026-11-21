@@ -131,6 +131,9 @@ namespace MinorShift.Emuera.GameProc
 		{
 			return argprimitive == null ? "" : argprimitive.Substring();
 		}
+		/// <summary>解析缓存用：原语是否仍在（parse 期 SNAKE 系 builder 会 Pop 消费；被消费的行
+		/// 若 Argument 缓存降级（ARebuild），恢复后 check 期会拿空流重解析而炸——写入侧需识别）。</summary>
+		public bool HasArgumentPrimitive => argprimitive != null;
 		public WordCollection PopAssignmentDestStr()
 		{
 			WordCollection ret = assigndest;
