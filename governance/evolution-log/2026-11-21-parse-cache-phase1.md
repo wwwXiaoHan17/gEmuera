@@ -44,6 +44,16 @@ Phase 1 落地：**文件未变更的二次启动跳过 erb-parse 全阶段**（
 - **交互审查通过项 [静态]**：①运行期懒加载 labelDic.Initialized=true 与原路径一致，AddLabel 行为等价；②LazyStatus（Loaded/UpdateTable/BuildTable/NoLazy）只决定启动期文件集合，缓存键与状态无耦合；③UpdateTable 的变更文件启动期强制加载 → mtime 变 → 缓存键变 → 回退全量+写新缓存，自洽；④RemoveLazyLoadingEntriesForFiles 防重复加载不与缓存冲突；⑤重复 $label 的 warning 在缓存重放路径不重发（日志面差异，已登记）。
 - 用户两连冷启动数据显示 `cache=0h/1789m` 双零：除目录缺失 bug 外，此缺口使运行期懒加载文件（启动期跳过的部分）即便目录修好也不落缓存——本次修复后需要再测一轮。
 
+### 补遗（2026-11-21）：真机首测抓到阻断性 bug——SET 静态单例 + 读取路径未隔离
+
+用户真机首测（eraTW Snake，2336 files indexed）加载失败：`CacheFormatException: function identifier drifted: SET` 直接炸到 loadErb 外层 catch（"予期しないエラー"→整个加载失败）。两个根因一起修：
+
+1. **读取路径未隔离（实现缺陷，违反设计哲学）**：设计要求"任何缓存异常回退全量"，实现里 TryRestoreFromCache 的 CacheFormatException 未捕获、直接传播 → 整个加载失败；且中途抛出时 labelDic 已部分污染（回退会重复注册）。修复：**反序列化（纯新对象、零副作用）与注册重放分离**——ReadLines 失败置 null 回退全量；注册重放只做字典/链表操作（不抛格式异常）。
+2. **SET 标识符重建错误（格式契约盲点）**：赋值行（`A=1`）的 SET FunctionIdentifier 是**静态单例直引**（`FunctionIdentifier.cs:607 setFunc`，公共访问器 `SETFunction`），**不在字典查找链里**——解析端直引单例、缓存重建却按名查 `GetFunctionIdentifier("SET")` → snake 兼容字典链查不到 → "drifted"。修复：`funcCode==FunctionCode.SET` 特判走 `SETFunction`。通用性：`CreateMethodStatement` 产物经 routedInstructions 进字典查找链（按名可重建）✓。
+3. **附带确认**：用户设备上缓存条目从未成功写入（0 命中根因=目录缺失），故无旧格式污染；SET 行的序列化字节本身无错，读取特判后旧/新条目均兼容。
+
+教训：**外部类型的重建途径必须以"解析端实际构造方式"为准**（字典查找只是构造途径之一，静态单例/动态构造不走字典）；**隔离边界必须在实现层兑现**（设计写了"回退"不等于代码包了 try）。升级去向：暂不升级（缓存类实现经验，同类再犯再进 AGENTS.md）。
+
 ## 遗留登记
 
 - **L1（P1）**：真机两连冷启动验收（hit 计数 + 功能验证）——用户执行。

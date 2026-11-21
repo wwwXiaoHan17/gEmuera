@@ -486,25 +486,43 @@ namespace MinorShift.Emuera.GameProc
 				int funcCount = 0;
 				if (Program.AnalysisMode)
 					output.PrintSystemLine("　");
-				// === 解析缓存（Phase 1）命中路径：重建行链 + label 注册重放 ===
+				// === 解析缓存（Phase 1）命中路径：反序列化失败零副作用（回退全量），注册重放成功后不再回退 ===
 				string cachePath = TryBuildCachePath(filepath, filename);
-				if (cachePath != null && System.IO.File.Exists(cachePath) && TryRestoreFromCache(cachePath, filename, isLazyLoading, tempFunctionLabels, ref lastLine, ref lastLabelLine))
+				if (cachePath != null && System.IO.File.Exists(cachePath))
 				{
-					cacheHitCount++;
-					if (isLazyLoading)
+					List<LogicalLine> cachedLines = null;
+					try
 					{
-						// 与原流程一致：lazy 文件解析后立即完成 label 参数解析与逐函数校验
-						foreach (FunctionLabelLine label in tempFunctionLabels)
-						{
-							setLabelsArg(label);
-							labelDic.SortLabel(label);
-						}
-						foreach (FunctionLabelLine label in tempFunctionLabels)
-							checkFunctionWithCatch(label);
+						using (var fs = new FileStream(cachePath, FileMode.Open, FileAccess.Read))
+							cachedLines = ErbParseCache.ReadLines(fs);
 					}
-					return;
+					catch (Exception)
+					{
+						// 格式/重建失败：零副作用（反序列化只产生新对象），回退全量解析
+						cachedLines = null;
+					}
+					if (cachedLines != null && TryRestoreFromCache(cachedLines, isLazyLoading, tempFunctionLabels, ref lastLine, ref lastLabelLine))
+					{
+						cacheHitCount++;
+						if (isLazyLoading)
+						{
+							// 与原流程一致：lazy 文件解析后立即完成 label 参数解析与逐函数校验
+							foreach (FunctionLabelLine label in tempFunctionLabels)
+							{
+								setLabelsArg(label);
+								labelDic.SortLabel(label);
+							}
+							foreach (FunctionLabelLine label in tempFunctionLabels)
+								checkFunctionWithCatch(label);
+						}
+						return;
+					}
+					cacheMissCount++;
 				}
-				cacheMissCount++;
+				else
+				{
+					cacheMissCount++;
+				}
 				LogicalLine cacheHead = lastLine;
 				profReadTicks = profLoopTicks = profSetArgTicks = profNestTicks = profJumpTicks = 0;
 				long loopStart = Stopwatch.GetTimestamp();
@@ -728,15 +746,13 @@ namespace MinorShift.Emuera.GameProc
 		}
 
 		/// <summary>
-		/// 缓存命中重建：反序列化行序列并重放 label 注册（AddLabel/AddInvalidLabel/AddLabelDollar、
+		/// 缓存命中重建：重放 label 注册（AddLabel/AddInvalidLabel/AddLabelDollar、
 		/// ParentLabelLine 串链）与 privateVar 声明重放（AddPrivateVariable）。
+		/// 反序列化已在调用方隔离（失败零副作用）；本方法只做注册/串链（字典与链表操作，不抛格式异常）。
 		/// 与原解析路径的差异：重复 $label/重载函数的 warning 不重放（不影响行为，仅日志面）。
 		/// </summary>
-		private bool TryRestoreFromCache(string cachePath, string filename, bool isLazyLoading, List<FunctionLabelLine> tempFunctionLabels, ref LogicalLine lastLine, ref FunctionLabelLine lastLabelLine)
+		private bool TryRestoreFromCache(List<LogicalLine> lines, bool isLazyLoading, List<FunctionLabelLine> tempFunctionLabels, ref LogicalLine lastLine, ref FunctionLabelLine lastLabelLine)
 		{
-			List<LogicalLine> lines;
-			using (var fs = new FileStream(cachePath, FileMode.Open, FileAccess.Read))
-				lines = ErbParseCache.ReadLines(fs);
 			foreach (LogicalLine line in lines)
 			{
 				if (line is FunctionLabelLine label)

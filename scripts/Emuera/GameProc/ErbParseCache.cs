@@ -219,7 +219,11 @@ namespace MinorShift.Emuera.GameProc
 		{
 			int funcCode = r.ReadInt32();
 			string funcName = r.ReadString();
-			FunctionIdentifier func = GlobalStatic.IdentifierDictionary.GetFunctionIdentifier(funcName);
+			// SET（代入文）是静态单例直引（FunctionIdentifier.SETFunction），不在字典查找链里
+			// （解析端赋值行同样直引该单例）——按名查字典会得到 null → "drifted"。其余指令按名重建。
+			FunctionIdentifier func = (FunctionCode)funcCode == FunctionCode.SET
+				? FunctionIdentifier.SETFunction
+				: GlobalStatic.IdentifierDictionary.GetFunctionIdentifier(funcName);
 			if (func == null || (int)func.Code != funcCode)
 				throw new CacheFormatException("function identifier drifted: " + funcName);
 			byte assignOp = r.ReadByte();
