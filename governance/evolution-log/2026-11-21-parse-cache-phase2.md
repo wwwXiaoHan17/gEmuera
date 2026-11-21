@@ -64,6 +64,16 @@
 - **遗留**：1045 个降级文件的终解是 P2c（FixedVariableTerm 全字典路径重绑——term 链降级消失后守卫几乎不触发，命中率恢复 90+）。
 - 教训：**errors 等价验证必须消息级对比**（本轮之前多轮"等价"结论含未被发现的运行期错误——停靠帧定性让我放松了 errors.json 的检查标准）。
 
+### 补遗 4（2026-11-21）：v5 label Arg/Def 缓存——命中轮 label NRE 级联修复（提交 d55948d）
+
+用户指示 PC 测试后的第二轮闭环发现：空流修复后命中轮仍有 `ロード時に解析に失敗した関数が呼び出されました`——警告堆栈插桩定位 `parseLabel:964 wc.EOL NRE`，**写轮 0 vs 命中轮 5390 条 label NRE 警告**。
+
+- **根因**：序列化锚点在 checkScript 后——`parseLabel` 已把 label 词集（wc）Pop 消费；未缓存 `label.Arg` 的条目恢复后 `setLabelsArg` 重跑 `parseLabel(wc=null)` → NRE → 5390 label IsError → 首次 CALL 即抛。
+- **修复**：`FunctionLabelLine.Arg/Def`（parseLabel 产物，terms）直存（entry v5）；`setLabelsArg` 既有 `Arg!=null` 短路使恢复端完全不碰 wc。
+- **验证 [实测]**：双跑 label NRE 警告 **0/0**、errors **0/0**（消息级）、state/effects **EQUAL**、display 仅 hit-test count 停靠差；xUnit 429 绿。
+- **代价（诚实）**：命中率暂降至 246/1820——label Arg 的 term 链（FixedVariableTerm）降级触发条目回退；**P2c 完成后守卫/降级几乎消失，命中率与启动收益随之恢复**。当前版本为"正确性完整"基线。
+- 过程教训：多轮 python 整文件编辑曾造成写读不对称（写侧块丢失、版本错位）——**最终以 git diff 全量核对 + Edit 工具定点修复收口**；此类成对修改应以 diff 复核为收尾步骤。
+
 ## 遗留登记
 
 - **L1（P1）**：真机合并验收（Phase 1+1.5+2）。
