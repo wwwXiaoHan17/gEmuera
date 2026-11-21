@@ -63,6 +63,16 @@ Phase 1 落地：**文件未变更的二次启动跳过 erb-parse 全阶段**（
 - 附带确认 [实测]：命中路径本身已工作（TITLE.ERB 是运行期懒加载文件，经静态快照修复后命中恢复执行——静态哈希修复生效的实证）。
 - **教训 [升级去向：暂不升级]**：枚举序列化禁止窄化 cast（值域先查定义）；本轮靠用户真机报错文本（"二項演算子''"）+ 枚举定义比对定位，未走弯路。
 
+### 补遗 3（2026-11-21）：第四个真机 bug——WordCollection.Pointer 未序列化；桌面自动化等价闭环
+
+用户指示"直接通过电脑测试"后搭起的自动化链：游戏副本（robocopy 至 `D:\gemuera-reports\eratw-cache-test\game`）+ legacy-runner 单次运行 ×2 + 语义报告哈希对比。链路打通要点：①`config.toml [logging] mirror_non_error_to_godot=true`（临时开启已还原，Info 镜像到 stdout）；②第一方包 staging 需 `Build-FirstPartyPacks.ps1` 预构建；③G10 守卫在 runner 场景仍未过（snake 包未在 runner 会话启用，`ConfigureLegacyRunnerSession→ApplyCompatPackEnvironment` 链路待查，登记 L4）——但**守卫失败不阻止报告落盘**，单 repeat 手动连跑即可取数。
+
+- **根因 [dump+代码实锤]**：设备错误 `関数@背景图片打印 の引数のエラー:引数の書式が間違っています` 来自 `setLabelsArg:829` 包装 `parseLabel` 异常；`parseLabel:871` 直接取 `wc.Current as SymbolWord`（期望指针已越过函数名——解析期消费过）；我的 `WriteWordCollection` 未序列化 `Pointer`，恢复恒 0 → 首词 IdentifierWord 被当符号 → 报错。dump 的 `wcWords=[(A)背景图片打印 (()( (A)图片名 ()))]`（词全对）+ Pointer 缺失 = 决定性组合。修复：Pointer 进缓存（含越界校验），`ParserCacheVersion` 2→3。
+- **等价验证 [实测]**：清缓存跑两次（v3 写入 `write-ok1820/fail0` → 命中 `1820h/0m`），四份语义报告对比——`state.json`/`errors.json`/`effects.json`/归一化 `display.json` **哈希全部相等**（display.raw 唯一差异=游戏自打印"字典加载完毕 用时268/258毫秒"，正是 runner 归一化规则 `legacy_dictionary_load_elapsed_ms` 的设计对象）。
+- **性能 [实测]**：桌面副本启动 total 19270ms（含写缓存惩罚）→ 命中轮 **12977ms**；erb-parse 9205→3786ms。
+- 桌面未复现 CALL 报错的原因：runner 的 first-wait 停在 FORCEWAIT，未执行到 TITLE 的 CALL 行触发懒加载——**手机端仍需最终验收**（本补遗的等价哈希是比"没报错"更强的证据）。
+- 教训：**有状态容器（指针/游标）序列化必须连状态一起存**，词内容正确≠消费位置正确。升级去向：暂不升级（缓存实现类经验，Phase 2 visitor 设计时并入检查单）。
+
 ## 遗留登记
 
 - **L1（P1）**：真机两连冷启动验收（hit 计数 + 功能验证）——用户执行。
