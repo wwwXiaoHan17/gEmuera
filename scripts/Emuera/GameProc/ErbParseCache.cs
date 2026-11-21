@@ -23,8 +23,8 @@ namespace MinorShift.Emuera.GameProc
 	/// </summary>
 	internal static class ErbParseCache
 	{
-		internal const int ParserCacheVersion = 1;
-		private static readonly byte[] Magic = { (byte)'G', (byte)'P', (byte)'C', (byte)'1' };
+		internal const int ParserCacheVersion = 2;
+		private static readonly byte[] Magic = { (byte)'G', (byte)'P', (byte)'C', (byte)'2' };
 
 		// 行类型 tag
 		private const byte TagNullLine = 0;
@@ -92,7 +92,7 @@ namespace MinorShift.Emuera.GameProc
 			using (var w = new BinaryWriter(stream, Encoding.UTF8, true))
 			{
 				w.Write(Magic);
-				w.Write((byte)1); // 条目内格式版本
+				w.Write((byte)2); // 条目内格式版本（v2：AssignOperator 由 byte 改 int，修 (byte) 截断 510→254）
 				int count = 0;
 				for (var line = head; line != null; line = line.NextLine)
 					count++;
@@ -112,7 +112,7 @@ namespace MinorShift.Emuera.GameProc
 				if (magic.Length != 4 || magic[0] != Magic[0] || magic[1] != Magic[1] || magic[2] != Magic[2] || magic[3] != Magic[3])
 					throw new CacheFormatException("bad magic");
 				byte entryVersion = r.ReadByte();
-				if (entryVersion != 1)
+				if (entryVersion != 2)
 					throw new CacheFormatException("bad entry version");
 				int count = r.ReadInt32();
 				if (count < 0 || count > 1_000_000)
@@ -204,7 +204,8 @@ namespace MinorShift.Emuera.GameProc
 		{
 			w.Write((int)ins.FunctionCode);
 			w.Write(ins.Function.Name ?? "");
-			w.Write((byte)ins.AssignOperator);
+			// OperatorCode 值含标志位（Assignment=0x01FE 等，远超 byte）——必须 int 序列化
+			w.Write((int)ins.AssignOperator);
 			WordCollection dest = ins.AssignmentDest;
 			w.Write(dest == null ? (byte)0 : (byte)1);
 			if (dest != null)
@@ -226,7 +227,8 @@ namespace MinorShift.Emuera.GameProc
 				: GlobalStatic.IdentifierDictionary.GetFunctionIdentifier(funcName);
 			if (func == null || (int)func.Code != funcCode)
 				throw new CacheFormatException("function identifier drifted: " + funcName);
-			byte assignOp = r.ReadByte();
+			byte assignOpUnused = 0;
+			var assignOpCode = (OperatorCode)r.ReadInt32();
 			byte hasDest = r.ReadByte();
 			WordCollection dest = null;
 			if (hasDest != 0)
@@ -234,7 +236,7 @@ namespace MinorShift.Emuera.GameProc
 			string argPrimitive = r.ReadString();
 			InstructionLine line = dest == null
 				? new InstructionLine(position, func, new StringStream(argPrimitive))
-				: new InstructionLine(position, func, (OperatorCode)assignOp, dest, new StringStream(argPrimitive));
+				: new InstructionLine(position, func, assignOpCode, dest, new StringStream(argPrimitive));
 			line.LoopEnd = r.ReadInt64();
 			line.LoopStep = r.ReadInt64();
 			r.ReadByte(); // LoopCounter null 标记
