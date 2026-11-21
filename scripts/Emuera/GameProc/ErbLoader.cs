@@ -922,7 +922,7 @@ namespace MinorShift.Emuera.GameProc
 				uEmuera.Media.SystemSounds.Hand.Play();
 				string errmes = exc.Message;
 				if (!(exc is EmueraException))
-					errmes = exc.GetType().ToString() + ":" + errmes;
+					errmes = exc.GetType().ToString() + ":" + errmes + " @@STACK@@ " + exc.StackTrace;
 				ParserMediator.Warn("関数@" + label.LabelName + " の引数のエラー:" + errmes, label, 2, true, false);
 				label.ErrMes = "ロード時に解析に失敗した関数が呼び出されました";
 				label.IsError = true;

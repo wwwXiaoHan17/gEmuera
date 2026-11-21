@@ -261,6 +261,13 @@ namespace MinorShift.Emuera.GameProc
 		}
 		/// <summary>解析缓存（ErbParseCache）用只读访问器：不消费 wc。</summary>
 		internal WordCollection PeekRowArgs => wc;
+		/// <summary>解析缓存（ErbParseCache）恢复路径：直填 parseLabel 产物（setLabelsArg 的 Arg!=null 短路依赖它）。</summary>
+		internal void SetRestoredArgs(VariableTerm[] argTerms, SingleTerm[] defTerms)
+		{
+			Arg = argTerms;
+			Def = defTerms;
+		}
+
 		/// <summary>解析缓存（ErbParseCache）重建路径：回填词集（等价于解析期赋值）。</summary>
 		internal void RestoreRowArgs(WordCollection wordCollection)
 		{

@@ -104,7 +104,7 @@ namespace MinorShift.Emuera.GameProc
 			using (var w = new BinaryWriter(stream, Encoding.UTF8, true))
 			{
 				w.Write(Magic);
-				w.Write((byte)4); // 条目内格式版本（v4：InstructionLine 追加 Argument 段）
+				w.Write((byte)5); // 条目内格式版本（v5：FunctionLabelLine 追加 Arg/Def 段）
 				int count = 0;
 				for (var line = head; line != null; line = line.NextLine)
 					count++;
@@ -124,7 +124,7 @@ namespace MinorShift.Emuera.GameProc
 				if (magic.Length != 4 || magic[0] != Magic[0] || magic[1] != Magic[1] || magic[2] != Magic[2] || magic[3] != Magic[3])
 					throw new CacheFormatException("bad magic");
 				byte entryVersion = r.ReadByte();
-				if (entryVersion != 4)
+				if (entryVersion != 5)
 					throw new CacheFormatException("bad entry version");
 				int count = r.ReadInt32();
 				if (count < 0 || count > 1_000_000)
@@ -192,7 +192,7 @@ namespace MinorShift.Emuera.GameProc
 				case TagInvalidLine:
 					return new InvalidLine(position, r.ReadString());
 				case TagFunctionLabelLine:
-					return ReadFunctionLabel(r, position);
+					return ReadFunctionLabel(r, position, labelDic);
 				default:
 					throw new CacheFormatException("unknown line tag " + tag);
 			}
@@ -282,7 +282,20 @@ namespace MinorShift.Emuera.GameProc
 			w.Write(label.VariadicArgIndex);
 			w.Write(label.IsMethod);
 			w.Write((byte)label.MethodType);
-			w.Write((byte)0); // Arg：Phase 1 恒 null（setLabelsArg/setArgument 重建）
+			// v5：Arg/Def（parseLabel 产物）直存——锚点在 check 后，label 词集已被 parseLabel Pop
+			// 消费，不缓存 Arg 会让恢复端 parseLabel 拿 null wc 而 NRE；setLabelsArg 的
+			// Arg!=null 短路依赖它。写入失败（term 降级）→ 条目级回退全量（wc 完好）。
+			w.Write(label.Arg == null ? (byte)0 : (byte)1);
+			if (label.Arg != null)
+			{
+				w.Write(label.Arg.Length);
+				foreach (VariableTerm argTerm in label.Arg)
+					ErbParseTermCodec.WriteTerm(w, argTerm);
+				w.Write(label.Def == null ? -1 : label.Def.Length);
+				if (label.Def != null)
+					foreach (SingleTerm defTerm in label.Def)
+						ErbParseTermCodec.WriteTerm(w, defTerm);
+			}
 			WordCollection wc = label.PeekRowArgs;
 			w.Write(wc == null ? (byte)0 : (byte)1);
 			if (wc != null)
@@ -297,7 +310,7 @@ namespace MinorShift.Emuera.GameProc
 					WriteUserDefinedVariableData(w, data);
 		}
 
-		private static FunctionLabelLine ReadFunctionLabel(BinaryReader r, ScriptPosition position)
+		private static FunctionLabelLine ReadFunctionLabel(BinaryReader r, ScriptPosition position, LabelDictionary labelDic)
 		{
 			var label = new FunctionLabelLine(position, r.ReadString(), null);
 			label.IsEvent = r.ReadBoolean();
@@ -316,7 +329,24 @@ namespace MinorShift.Emuera.GameProc
 			label.VariadicArgIndex = r.ReadInt32();
 			label.IsMethod = r.ReadBoolean();
 			label.MethodType = (EraType)r.ReadByte();
-			r.ReadByte(); // Arg null 标记
+			if (r.ReadByte() != 0)
+			{
+				int argLen = r.ReadInt32();
+				if (argLen < 0 || argLen > 1_000_000) throw new CacheFormatException("label arg len");
+				var argTerms = new VariableTerm[argLen];
+				for (int i = 0; i < argLen; i++)
+					argTerms[i] = (VariableTerm)ErbParseTermCodec.ReadTerm(r, labelDic);
+				int defLen = r.ReadInt32();
+				SingleTerm[] defTerms = null;
+				if (defLen >= 0)
+				{
+					if (defLen > 1_000_000) throw new CacheFormatException("label def len");
+					defTerms = new SingleTerm[defLen];
+					for (int i = 0; i < defLen; i++)
+						defTerms[i] = (SingleTerm)ErbParseTermCodec.ReadTerm(r, labelDic);
+				}
+				label.SetRestoredArgs(argTerms, defTerms);
+			}
 			byte hasWc = r.ReadByte();
 			if (hasWc != 0)
 			{
