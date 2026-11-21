@@ -477,6 +477,26 @@ namespace MinorShift.Emuera.GameProc
 							.Append(" argsLen=").Append(label.ArgsLength).Append(" argFloatLen=").Append(label.ArgFloatLength)
 							.Append(" method=").Append(label.IsMethod).Append(" priv=").Append(label.PrivateVarDataCache == null ? -1 : label.PrivateVarDataCache.Count)
 							.Append(" wc=").Append(label.PeekRowArgs == null ? -1 : label.PeekRowArgs.Collection.Count);
+						if (label.PeekRowArgs != null)
+						{
+							sb.Append(" wcWords=[");
+							foreach (Word word in label.PeekRowArgs.Collection)
+							{
+								string payload = word switch
+								{
+									IdentifierWord ident => ident.Code ?? "",
+									LiteralIntegerWord litInt => litInt.Int.ToString(),
+									LiteralFloatWord litFloat => litFloat.Float.ToString(),
+									LiteralStringWord litStr => litStr.Str ?? "",
+									OperatorWord opWord => ((int)opWord.Code).ToString(),
+									SymbolWord symWord => symWord.Type.ToString(),
+									MacroWord macroWord => "M" + macroWord.Number,
+									_ => word.GetType().Name,
+								};
+								sb.Append('(').Append(word.Type).Append(')').Append(payload).Append(' ');
+							}
+							sb.Append(']');
+						}
 						break;
 					case GotoLabelLine gotoLabel:
 						sb.Append("GOTO ").Append(gotoLabel.LabelName);
