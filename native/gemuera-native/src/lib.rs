@@ -6,13 +6,14 @@
 //!
 //! 所有导出函数为纯计算，不得 panic（extern "C" 边界）。
 
+pub mod colormatrix;
 pub mod save;
 pub mod width;
 pub mod zero_width_tables;
 
 /// 导出 ABI 版本，宿主加载后校验**不低于**各自模块所需的最低版本，
 /// 防止库与 C# 侧签名漂移。新增导出函数时递增此版本并同步 C# 侧 MinAbi。
-pub const NATIVE_ABI_VERSION: u32 = 3;
+pub const NATIVE_ABI_VERSION: u32 = 4;
 
 #[no_mangle]
 pub extern "C" fn gem_native_abi_version() -> u32 {
@@ -99,4 +100,23 @@ pub extern "C" fn gem_save_encode_int64_array(
         }
     }
     encoded.len() as i32
+}
+
+/// RGBA8 ColorMatrix 原地变换（语义 = `GraphicsImage.ApplyColorMatrixBytes`，
+/// 位级契约见 colormatrix 模块注释）。`matrix` 指向 20 个行优先 f32
+///（= C# `cm[0..5][0..4]`）。返回 0 成功；空指针 / len%4!=0 返回 -1。
+///
+/// # Safety
+/// `ptr` 必须指向至少 `len` 个可写 `u8`；`matrix` 必须可读 20 个 `f32`。
+#[no_mangle]
+pub extern "C" fn gem_cm_apply_rgba8(ptr: *mut u8, len: usize, matrix: *const f32) -> i32 {
+    if ptr.is_null() || matrix.is_null() || len % 4 != 0 {
+        return -1;
+    }
+    let f = unsafe { std::slice::from_raw_parts(matrix, 20) };
+    let mut m = [0f32; 20];
+    m.copy_from_slice(f);
+    let data = unsafe { std::slice::from_raw_parts_mut(ptr, len) };
+    colormatrix::apply_rgba8(data, &m);
+    0
 }

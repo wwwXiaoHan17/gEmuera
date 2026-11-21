@@ -58,6 +58,10 @@
     <Compile Remove="tools\save-codec-check\**" />
     <EmbeddedResource Remove="tools\save-codec-check\**" />
     <None Remove="tools\save-codec-check\**" />
+    <!-- colormatrix-check（ColorMatrix 像素算子等价门禁）同上，独立编译。 -->
+    <Compile Remove="tools\colormatrix-check\**" />
+    <EmbeddedResource Remove="tools\colormatrix-check\**" />
+    <None Remove="tools\colormatrix-check\**" />
     <!-- xUnit tests build independently via their own csproj; keep them out of the Godot host glob. -->
     <Compile Remove="tests\**" />
     <EmbeddedResource Remove="tests\**" />
