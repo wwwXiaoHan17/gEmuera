@@ -41,7 +41,9 @@ namespace MinorShift.Emuera.GameProc
 		long profSetArgTicks, profNestTicks, profJumpTicks;
 
 		// 解析缓存（Phase 1）：ERH 快照哈希进键；hit/miss/写失败计数进 erb-parse 子段名
-		string cacheErhSnapshotHash;
+		// ERH 快照是进程级事实（运行期懒加载的新 ErbLoader 实例也必须拿到同一哈希，
+		// 否则 TryBuildCachePath 恒 null、懒加载文件永远不走缓存）——静态惰性计算
+		static string cacheErhSnapshotHash;
 		int cacheHitCount, cacheMissCount, cacheWriteOkCount, cacheWriteFailCount;
 
 		/// <summary>
@@ -62,18 +64,7 @@ namespace MinorShift.Emuera.GameProc
 			labelDic = labelDictionary;
 			labelDic.Initialized = false;
 			cacheHitCount = cacheMissCount = cacheWriteOkCount = cacheWriteFailCount = 0;
-			try
-			{
-				// ERH 宏表快照进缓存键：宏变化会改变 ERB 解析结果
-				var erhPairs = new List<KeyValuePair<string, DateTime>>();
-				foreach (var kv in Config.GetFiles(erbDir, "*.ERH"))
-					erhPairs.Add(new KeyValuePair<string, DateTime>(kv.Key, System.IO.File.GetLastWriteTimeUtc(kv.Value)));
-				cacheErhSnapshotHash = ErbParseCache.BuildErhSnapshotHash(erhPairs);
-			}
-			catch
-			{
-				cacheErhSnapshotHash = null;
-			}
+			EnsureCacheErhSnapshotHash(erbDir);
 			List<KeyValuePair<string, string>> erbFiles = Config.GetFiles(erbDir, "*.ERB");
 #if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
             erbFiles.AddRange(Config.GetFiles(erbDir, "*.erb"));
@@ -695,6 +686,25 @@ namespace MinorShift.Emuera.GameProc
 		}
 		
 		static int TicksToMs(long ticks) => (int)(ticks * 1000.0 / Stopwatch.Frequency);
+
+		/// <summary>ERH 宏表快照哈希（进程级惰性计算一次；宏变化会改变 ERB 解析结果，必须进缓存键）。</summary>
+		static void EnsureCacheErhSnapshotHash(string erbDir)
+		{
+			if (cacheErhSnapshotHash != null)
+				return;
+			try
+			{
+				var erhPairs = new List<KeyValuePair<string, DateTime>>();
+				foreach (var kv in Config.GetFiles(erbDir, "*.ERH"))
+					erhPairs.Add(new KeyValuePair<string, DateTime>(kv.Key, System.IO.File.GetLastWriteTimeUtc(kv.Value)));
+				cacheErhSnapshotHash = ErbParseCache.BuildErhSnapshotHash(erhPairs);
+			}
+			catch
+			{
+				// 枚举失败 → 缓存整体禁用（TryBuildCachePath 对 null 返回 null），回退全量解析
+				cacheErhSnapshotHash = null;
+			}
+		}
 
 		/// <summary>构造本文件解析缓存路径；缓存不可用（无方言哈希/文件信息异常）返回 null。</summary>
 		private string TryBuildCachePath(string filepath, string filename)

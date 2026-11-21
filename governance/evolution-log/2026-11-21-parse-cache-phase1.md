@@ -35,6 +35,15 @@ Phase 1 落地：**文件未变更的二次启动跳过 erb-parse 全阶段**（
 1. (a) 本轮已执行：缓存类"失败即回退全量"的兜底结构（tmp + catch-all + magic/version 头）。
 2. (a) 本轮已执行：git add 小写路径纪律贯彻（零漏文件）。
 
+### 补遗（2026-11-21）：lazy loading × 解析缓存交互补课——发现并修复快照实例化缺口
+
+用户质询"lazy loading 看过了吗"后的补课结论：
+
+- **看过的**：LoadErbFilesAsync 的 lazy 分支（LoadLazyLoadingTable/isLazyLoading 跳过/tempFunctionLabels 立即 setLabelsArg+check/SaveLazyLoadingList·SavePartialLazyLoadingList）、loadErb 的 isLazyLoading 参数、运行期入口 TryLazyLoadErb → LoadErbsAsync（经勘察代理报告）。
+- **补课后发现真实缺口 [实测]**：运行期懒加载经 `new ErbLoader(...)` 新实例进入 loadErb，而 `cacheErhSnapshotHash` 是实例字段且只在 LoadErbFilesAsync 赋值 → **运行期懒加载文件永远不走缓存**（TryBuildCachePath 恒 null）。无回归（回退全量=原行为），但零收益。已修：快照改进程级静态惰性计算（`EnsureCacheErhSnapshotHash`，枚举失败置 null 禁用缓存）。
+- **交互审查通过项 [静态]**：①运行期懒加载 labelDic.Initialized=true 与原路径一致，AddLabel 行为等价；②LazyStatus（Loaded/UpdateTable/BuildTable/NoLazy）只决定启动期文件集合，缓存键与状态无耦合；③UpdateTable 的变更文件启动期强制加载 → mtime 变 → 缓存键变 → 回退全量+写新缓存，自洽；④RemoveLazyLoadingEntriesForFiles 防重复加载不与缓存冲突；⑤重复 $label 的 warning 在缓存重放路径不重发（日志面差异，已登记）。
+- 用户两连冷启动数据显示 `cache=0h/1789m` 双零：除目录缺失 bug 外，此缺口使运行期懒加载文件（启动期跳过的部分）即便目录修好也不落缓存——本次修复后需要再测一轮。
+
 ## 遗留登记
 
 - **L1（P1）**：真机两连冷启动验收（hit 计数 + 功能验证）——用户执行。
