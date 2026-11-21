@@ -41,6 +41,8 @@ namespace MinorShift.Emuera.GameProc
 		long profSetArgTicks, profNestTicks, profJumpTicks;
 		// 临时诊断（Phase 2 覆盖率）：SetArgumentTo 触发数 vs 缓存短路数
 		int profSetArgCalls, profSetArgSkipped, profArgRestored;
+		// 临时诊断：check 期需重建 Argument 的指令分布
+		readonly System.Collections.Generic.Dictionary<string, int> profRebuildCodes = new System.Collections.Generic.Dictionary<string, int>();
 
 		// 解析缓存（Phase 1/1.5）：ERH 快照哈希进键；hit/miss/写失败计数进 erb-parse 子段名
 		// ERH 快照是进程级事实（运行期懒加载的新 ErbLoader 实例也必须拿到同一哈希，
@@ -1397,6 +1399,8 @@ namespace MinorShift.Emuera.GameProc
                     profSetArgCalls++;
                     if (func.Argument != null)
                         profSetArgSkipped++;
+                    else
+                        profRebuildCodes[func.FunctionCode.ToString()] = profRebuildCodes.GetValueOrDefault(func.FunctionCode.ToString()) + 1;
                     ArgumentParser.SetArgumentTo(func);
                 }
 			}

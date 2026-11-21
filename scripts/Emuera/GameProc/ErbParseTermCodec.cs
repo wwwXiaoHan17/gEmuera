@@ -80,6 +80,8 @@ namespace MinorShift.Emuera.GameProc
 		private const byte ACase = 6;
 		private const byte APrintData = 7;
 		private const byte AStrData = 8;
+		private const byte ASpCall = 9;         // terms + 标量；CallFunc/UDFArgument 留 null（check 期 setJumpTo 重填）
+		private const byte ASpCallSharp = 10;
 
 		internal static void WriteTerm(BinaryWriter w, IOperandTerm term)
 		{
@@ -111,7 +113,7 @@ namespace MinorShift.Emuera.GameProc
 					w.Write((byte)nullTerm.GetEraType());
 					return;
 				case VariableTerm variable:
-					// 子类（FixedVariableTerm 等）走 default 降级；精确匹配才走变量路径
+					// 其余子类走 default 降级；精确匹配才走变量路径
 					if (variable.GetType() != typeof(VariableTerm))
 						goto default;
 					if (variable.Identifier == null || string.IsNullOrEmpty(variable.Identifier.Name))
@@ -441,6 +443,20 @@ namespace MinorShift.Emuera.GameProc
 					WriteBase(w, strData);
 					WriteTerm(w, strData.Var);
 					return;
+				case SpCallArgment spCall:
+					w.Write(ASpCall);
+					WriteBase(w, spCall);
+					WriteTerm(w, spCall.FuncnameTerm);
+					WriteTerms(w, spCall.SubNames);
+					WriteTerms(w, spCall.RowArgs);
+					return; // CallFunc/UDFArgument 不缓存：check 期 setJumpTo 会为常量 CALL 重建（ConvertArg 同源）
+				case SpCallSharpArgment spSharp:
+					w.Write(ASpCallSharp);
+					WriteBase(w, spSharp);
+					WriteTerm(w, spSharp.FuncnameTerm);
+					WriteTerms(w, spSharp.SubNames);
+					WriteTerms(w, spSharp.RowArgs);
+					return; // CallFunc(IPluginMethod 运行期句柄)同理留空重建
 				default:
 					throw new ErbParseCache.CacheFormatException("unsupported argument " + arg.GetType().Name);
 			}
@@ -523,6 +539,22 @@ namespace MinorShift.Emuera.GameProc
 				{
 					var b = ReadBase(r);
 					return new StrDataArgument((VariableTerm)ReadTerm(r, labelDic)) { IsConst = b.isConst, ConstStr = b.constStr, ConstInt = b.constInt, ConstFloat = b.constFloat };
+				}
+				case ASpCall:
+				{
+					var b = ReadBase(r);
+					var funcname = ReadTerm(r, labelDic);
+					var subNames = ReadTerms(r, labelDic);
+					var rowArgs = ReadTerms(r, labelDic);
+					return new SpCallArgment(funcname, subNames, rowArgs) { IsConst = b.isConst, ConstStr = b.constStr, ConstInt = b.constInt, ConstFloat = b.constFloat };
+				}
+				case ASpCallSharp:
+				{
+					var b = ReadBase(r);
+					var funcname = ReadTerm(r, labelDic);
+					var subNames = ReadTerms(r, labelDic);
+					var rowArgs = ReadTerms(r, labelDic);
+					return new SpCallSharpArgment(funcname, subNames, rowArgs) { IsConst = b.isConst, ConstStr = b.constStr, ConstInt = b.constInt, ConstFloat = b.constFloat };
 				}
 				default:
 					throw new ErbParseCache.CacheFormatException("unknown argument kind " + kind);
