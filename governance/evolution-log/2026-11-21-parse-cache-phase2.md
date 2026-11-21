@@ -37,6 +37,14 @@
 2. (a) 本轮已执行：临时插桩（arg_types/dump）用后即删；常驻计数器（calls/skipped/restored）保留进 Mark 输出。
 3. (b) P2b 遗留见下。
 
+### 补遗（2026-11-21）：P2b——SpCall 覆盖 + FixedVariableTerm 负收益回退（提交 c36ea5d）
+
+- **SpCallArgment/SpCallSharpArgment 覆盖 [实测]**：terms + 基类标量入缓存；CallFunc/UDFArgument 留 null——check 期 setJumpTo 会为常量 CALL 重建（ConvertArg 同源），运行期 Clone 不受影响。skipped 248880→**261184**。
+- **诊断方法链 [实测]**：重建行 FunctionCode 直方图（SET 98099 原生即 null 不可缓存 / IF 系 6.2 万 / CALL 1.2 万）→ 重建后类型采样（SET→STILL-NULL 佐证）→ **写侧 term 降级直方图**（FixedVariableTerm 29828 / UserDefinedMethodTerm 4338）三层逼近。
+- **FixedVariableTerm 覆盖尝试后回退 [实测]**：其 token（CSV 别名/#DIM 变量）走 `GetVariableToken(name,null,true)` 查询返回 null → 读侧抛 → **1599 条目整体降级**（skipped 跌到 4511，净负收益）；改 VariableCode 权威校验无效（查询本身失败）。回退后恢复 1803h/17m、setarg 3214ms、总启动 10.9s。教训：**重绑路径必须与解析期构造路径同源**，"存什么键"取决于"写侧怎么查到"而非对象的标识字段。
+- **UserDefinedMethodTerm 不覆盖**：ConvertArg 转换不可逆（无原始 srcArgs），且仅 4338 处（<1%）。
+- 连续多轮 DIFF 定性：均为停靠帧形态（retainedLines 13 vs 18，命中轮进度更快）；等价结论维持（Phase 2 主验证轮 state/effects/display 全等）。
+
 ## 遗留登记
 
 - **L1（P1）**：真机合并验收（Phase 1+1.5+2）。
