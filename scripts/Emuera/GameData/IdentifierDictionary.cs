@@ -140,6 +140,8 @@ namespace MinorShift.Emuera
 		Dictionary<string, VariableLocal> localvarTokenDic;
 		IReadOnlyDictionary<string, FunctionIdentifier> instructionDic;
 		IReadOnlyDictionary<string, FunctionMethod> methodDic;
+		// 解析缓存（ErbParseTermCodec）用只读访问器：当前会话内建方法注册面
+		internal IReadOnlyDictionary<string, FunctionMethod> CodecMethodDic => methodDic;
 		IReadOnlyDictionary<string, FunctionIdentifier> compatibilityInstructionDic;
 		IReadOnlyDictionary<string, FunctionMethod> compatibilityMethodDic;
 		IReadOnlyList<string> legacyInstructionNames;

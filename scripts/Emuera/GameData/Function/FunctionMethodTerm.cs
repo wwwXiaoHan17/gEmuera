@@ -32,6 +32,9 @@ namespace MinorShift.Emuera.GameData.Function
 
 		private FunctionMethod method;
 		private IOperandTerm[] arguments;
+		// 解析缓存（ErbParseTermCodec）用只读访问器
+		internal FunctionMethod CodecMethod => method;
+		internal IOperandTerm[] CodecArguments => arguments;
 
 		/// <summary>
 		/// 对 CanReturnFloat 方法，运行时重新检查参数类型（Restructure 后参数可能从表达式变为

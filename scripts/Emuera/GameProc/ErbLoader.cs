@@ -39,6 +39,8 @@ namespace MinorShift.Emuera.GameProc
 		// read/line 用 mark-and-measure 差分：循环总耗 - ReadEnabledLine 耗 = 行处理耗）
 		long profReadTicks, profLoopTicks, profMarkTicks;
 		long profSetArgTicks, profNestTicks, profJumpTicks;
+		// 临时诊断（Phase 2 覆盖率）：SetArgumentTo 触发数 vs 缓存短路数
+		int profSetArgCalls, profSetArgSkipped, profArgRestored;
 
 		// 解析缓存（Phase 1/1.5）：ERH 快照哈希进键；hit/miss/写失败计数进 erb-parse 子段名
 		// ERH 快照是进程级事实（运行期懒加载的新 ErbLoader 实例也必须拿到同一哈希，
@@ -48,6 +50,9 @@ namespace MinorShift.Emuera.GameProc
 		static string cacheBundlePath;
 		static bool cacheMigrated;
 		int cacheHitCount, cacheMissCount, cacheWriteOkCount, cacheWriteFailCount;
+		// Phase 2 延迟序列化：条目在 check 完成后才含 Argument，且 setArgument 会 Pop 参数原语——
+		// loadErb 尾只挂行链引用 + 行化期原语快照，锚点（check 后）统一序列化落 bundle
+		readonly List<(string Key, LogicalLine Head, Dictionary<InstructionLine, string> Primitives)> pendingCacheEntries = new List<(string, LogicalLine, Dictionary<InstructionLine, string>)>();
 
 		/// <summary>
 		/// 複数のファイルを読む
@@ -67,6 +72,7 @@ namespace MinorShift.Emuera.GameProc
 			labelDic = labelDictionary;
 			labelDic.Initialized = false;
 			cacheHitCount = cacheMissCount = cacheWriteOkCount = cacheWriteFailCount = 0;
+			profSetArgCalls = profSetArgSkipped = profArgRestored = 0;
 			EnsureCacheErhSnapshotHash(erbDir);
 			List<KeyValuePair<string, string>> erbFiles = Config.GetFiles(erbDir, "*.ERB");
 #if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
@@ -151,9 +157,6 @@ namespace MinorShift.Emuera.GameProc
 					}
 				});
 				ParserMediator.FlushWarningList();
-				// Phase 1.5 锚点：启动期全部条目 pending 完毕，一次性落盘 bundle（全命中时零写）
-				EnsureCacheBundlePath();
-				ErbParseBundle.Flush(cacheBundlePath);
 				Mark($"erb-parse(read={TicksToMs(profReadTicks)}ms lines={TicksToMs(profLoopTicks - profReadTicks)}ms cache={cacheHitCount}h/{cacheMissCount}m/write-ok{cacheWriteOkCount}/fail{cacheWriteFailCount})");
 #if UEMUERA_DEBUG
 				output.PrintSystemLine("経過時間:" + (WinmmTimer.TickCount - starttime).ToString("D4") + "ms:");
@@ -176,7 +179,11 @@ namespace MinorShift.Emuera.GameProc
 					output.PrintSystemLine("スクリプトの構文チェック中・・・");
 				await Task.Run(() => checkScript());
 				ParserMediator.FlushWarningList();
-				Mark($"erb-check(setarg={TicksToMs(profSetArgTicks)}ms nest={TicksToMs(profNestTicks)}ms jump={TicksToMs(profJumpTicks)}ms)");
+				Mark($"erb-check(setarg={TicksToMs(profSetArgTicks)}ms calls={profSetArgCalls} skipped={profSetArgSkipped} restored={profArgRestored} nest={TicksToMs(profNestTicks)}ms jump={TicksToMs(profJumpTicks)}ms)");
+				// Phase 2/1.5 锚点（check 后）：setArgument 已为 FORCE_SETARG 行建好 Argument、
+				// setJumpTo 已算完 label.Depth——此刻序列化才能把两者一并入缓存（parse 后锚点拿到的全是 null）
+				SerializePendingCacheEntries();
+				ErbParseBundle.Flush(cacheBundlePath);
 				if (parentProcess.LazyCurrentLazyStatus == Process.LazyStatus.BuildTable)
 				{
 					parentProcess.SaveLazyLoadingList(labelDic.GetAllLabels(false), erbFiles);
@@ -259,8 +266,8 @@ namespace MinorShift.Emuera.GameProc
 				await Task.Run(() => checkScript());
 				ParserMediator.FlushWarningList();
 			}
-			// Phase 1.5 锚点：运行期懒加载批次完成，pending 条目并入 bundle（本批 miss 的新文件落缓存）
-			EnsureCacheBundlePath();
+			// Phase 2/1.5 锚点：运行期懒加载批次完成（其 loadErb 内部已含 check）→ 序列化+落盘
+			SerializePendingCacheEntries();
 			ErbParseBundle.Flush(cacheBundlePath);
 			parentProcess.scaningLine = null;
 			isOnlyEvent.Clear();
@@ -504,26 +511,20 @@ namespace MinorShift.Emuera.GameProc
 					try
 					{
 						using (var ms = new MemoryStream(cacheEntry))
-							cachedLines = ErbParseCache.ReadLines(ms);
+							cachedLines = ErbParseCache.ReadLines(ms, labelDic);
 					}
 					catch (Exception)
 					{
 						// 格式/重建失败：零副作用（反序列化只产生新对象），回退全量解析
 						cachedLines = null;
 					}
+					int restoredArgCount = 0;
+					if (cachedLines != null)
+						CountRestoredArguments(cachedLines, out restoredArgCount);
 					if (cachedLines != null && TryRestoreFromCache(cachedLines, isLazyLoading, tempFunctionLabels, ref lastLine, ref lastLabelLine))
 					{
 						cacheHitCount++;
-						try
-						{
-							// 诊断转储（Phase 1 验收期临时）：缓存恢复的行状态 vs 全量解析对照
-							string dumpDir = Program.DebugDir;
-							if (!string.IsNullOrEmpty(dumpDir))
-								System.IO.File.AppendAllText(
-									System.IO.Path.Combine(dumpDir, "parse_cache_dump.txt"),
-									"==== " + filename + " ====\n" + ErbParseCache.DumpLines(cachedLines));
-						}
-						catch { }
+						profArgRestored += restoredArgCount;
 						if (isLazyLoading)
 						{
 							// 与原流程一致：lazy 文件解析后立即完成 label 参数解析与逐函数校验
@@ -681,16 +682,17 @@ namespace MinorShift.Emuera.GameProc
 				ppstate.FileEnd(position);
 				if (cacheKey != null)
 				{
-					// 缓存写入失败（不支持词形/内存）绝不影响解析结果：全吞异常 + 计数进子段名
-					// （Phase 1.5：条目暂存内存 pending，由锚点 Flush 统一落盘单 bundle）
+					// Phase 2 延迟序列化：此刻只采行化期原语快照（check 的 setArgument 会 Pop 原语），
+					// 条目本体在锚点（check 完成后）序列化——届时 Argument 已建好可一并入缓存
 					try
 					{
-						using (var ms = new MemoryStream())
+						var prims = new Dictionary<InstructionLine, string>();
+						for (LogicalLine l = cacheHead; l != null; l = l.NextLine)
 						{
-							ErbParseCache.WriteLines(ms, cacheHead);
-							ErbParseBundle.Store(cacheBundlePath, cacheKey, ms.ToArray());
+							if (l is InstructionLine il)
+								prims[il] = il.PeekArgumentPrimitive();
 						}
-						cacheWriteOkCount++;
+						pendingCacheEntries.Add((cacheKey, cacheHead, prims));
 					}
 					catch
 					{
@@ -721,7 +723,41 @@ namespace MinorShift.Emuera.GameProc
 			return;
 		}
 		
+		static void CountRestoredArguments(List<LogicalLine> lines, out int count)
+		{
+			count = 0;
+			foreach (LogicalLine l in lines)
+				if (l is InstructionLine il && il.Argument != null)
+					count++;
+		}
+
 		static int TicksToMs(long ticks) => (int)(ticks * 1000.0 / Stopwatch.Frequency);
+
+		/// <summary>Phase 2 锚点序列化：check 已完成（Argument 就绪），把 pending 条目写入 bundle。
+		/// 单条目失败（不支持词形/图形状）计 fail 丢弃，不影响其它条目；计数进 erb-parse 子段名。</summary>
+		void SerializePendingCacheEntries()
+		{
+			if (pendingCacheEntries.Count == 0)
+				return;
+			EnsureCacheBundlePath();
+			foreach ((string key, LogicalLine head, Dictionary<InstructionLine, string> prims) in pendingCacheEntries)
+			{
+				try
+				{
+					using (var ms = new MemoryStream())
+					{
+						ErbParseCache.WriteLines(ms, head, l => prims.TryGetValue(l, out string s) ? s : null);
+						ErbParseBundle.Store(cacheBundlePath, key, ms.ToArray());
+					}
+					cacheWriteOkCount++;
+				}
+				catch
+				{
+					cacheWriteFailCount++;
+				}
+			}
+			pendingCacheEntries.Clear();
+		}
 
 		/// <summary>ERH 宏表快照哈希（进程级惰性计算一次；宏变化会改变 ERB 解析结果，必须进缓存键）。</summary>
 		static void EnsureCacheErhSnapshotHash(string erbDir)
@@ -1357,7 +1393,12 @@ namespace MinorShift.Emuera.GameProc
 					}
 				}
                 if (Config.NeedReduceArgumentOnLoad || Program.AnalysisMode || func.Function.IsForceSetArg())
+                {
+                    profSetArgCalls++;
+                    if (func.Argument != null)
+                        profSetArgSkipped++;
                     ArgumentParser.SetArgumentTo(func);
+                }
 			}
 		}
 

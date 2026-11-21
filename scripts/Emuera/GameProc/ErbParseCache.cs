@@ -90,22 +90,33 @@ namespace MinorShift.Emuera.GameProc
 		/// <summary>从链头序列化行序列。任何不支持的图形状抛 CacheFormatException。</summary>
 		public static void WriteLines(Stream stream, LogicalLine head)
 		{
+			WriteLines(stream, head, null);
+		}
+
+		/// <summary>
+		/// Phase 2：延迟序列化重载。primitiveOverride 提供行化期快照的参数原语——
+		/// check 阶段 setArgument 会 Pop 掉 argprimitive（不可逆），快照保证恢复行可重建。
+		/// Argument 经 ErbParseTermCodec 写入（不支持的类按行降级 ARebuild，恢复后由
+		/// checkScript.setArgument 重建——其 `Argument != null` 短路使缓存行自动跳过重建）。
+		/// </summary>
+		public static void WriteLines(Stream stream, LogicalLine head, Func<InstructionLine, string> primitiveOverride)
+		{
 			using (var w = new BinaryWriter(stream, Encoding.UTF8, true))
 			{
 				w.Write(Magic);
-				w.Write((byte)3); // 条目内格式版本（v3：WordCollection.Pointer 进缓存，修恢复后指针归零导致的"引数の書式"错误）
+				w.Write((byte)4); // 条目内格式版本（v4：InstructionLine 追加 Argument 段）
 				int count = 0;
 				for (var line = head; line != null; line = line.NextLine)
 					count++;
 				w.Write(count);
 				for (var line = head; line != null; line = line.NextLine)
-					WriteLine(w, line);
+					WriteLine(w, line, primitiveOverride);
 				w.Flush();
 			}
 		}
 
 		/// <summary>反序列化行序列（原序；调用方负责串 NextLine 链、label 注册与 privateVar 重放）。</summary>
-		public static List<LogicalLine> ReadLines(Stream stream)
+		public static List<LogicalLine> ReadLines(Stream stream, LabelDictionary labelDic)
 		{
 			using (var r = new BinaryReader(stream, Encoding.UTF8, true))
 			{
@@ -113,19 +124,19 @@ namespace MinorShift.Emuera.GameProc
 				if (magic.Length != 4 || magic[0] != Magic[0] || magic[1] != Magic[1] || magic[2] != Magic[2] || magic[3] != Magic[3])
 					throw new CacheFormatException("bad magic");
 				byte entryVersion = r.ReadByte();
-				if (entryVersion != 3)
+				if (entryVersion != 4)
 					throw new CacheFormatException("bad entry version");
 				int count = r.ReadInt32();
 				if (count < 0 || count > 1_000_000)
 					throw new CacheFormatException("bad line count");
 				var lines = new List<LogicalLine>(count);
 				for (int i = 0; i < count; i++)
-					lines.Add(ReadLine(r));
+					lines.Add(ReadLine(r, labelDic));
 				return lines;
 			}
 		}
 
-		private static void WriteLine(BinaryWriter w, LogicalLine line)
+		private static void WriteLine(BinaryWriter w, LogicalLine line, Func<InstructionLine, string> primitiveOverride)
 		{
 			switch (line)
 			{
@@ -136,7 +147,7 @@ namespace MinorShift.Emuera.GameProc
 				case InstructionLine ins:
 					w.Write(TagInstructionLine);
 					WritePosition(w, line);
-					WriteInstruction(w, ins);
+					WriteInstruction(w, ins, primitiveOverride);
 					break;
 				case GotoLabelLine gotoLabel:
 					w.Write(TagGotoLabelLine);
@@ -164,7 +175,7 @@ namespace MinorShift.Emuera.GameProc
 			}
 		}
 
-		private static LogicalLine ReadLine(BinaryReader r)
+		private static LogicalLine ReadLine(BinaryReader r, LabelDictionary labelDic)
 		{
 			byte tag = r.ReadByte();
 			ScriptPosition position = ReadPosition(r);
@@ -173,7 +184,7 @@ namespace MinorShift.Emuera.GameProc
 				case TagNullLine:
 					return new NullLine();
 				case TagInstructionLine:
-					return ReadInstruction(r, position);
+					return ReadInstruction(r, position, labelDic);
 				case TagGotoLabelLine:
 					return new GotoLabelLine(position, r.ReadString());
 				case TagInvalidLabelLine:
@@ -201,7 +212,7 @@ namespace MinorShift.Emuera.GameProc
 			return filename == "" && lineNo == -1 ? null : new ScriptPosition(filename, lineNo);
 		}
 
-		private static void WriteInstruction(BinaryWriter w, InstructionLine ins)
+		private static void WriteInstruction(BinaryWriter w, InstructionLine ins, Func<InstructionLine, string> primitiveOverride)
 		{
 			w.Write((int)ins.FunctionCode);
 			w.Write(ins.Function.Name ?? "");
@@ -211,13 +222,17 @@ namespace MinorShift.Emuera.GameProc
 			w.Write(dest == null ? (byte)0 : (byte)1);
 			if (dest != null)
 				WriteWordCollection(w, dest);
-			w.Write(ins.PeekArgumentPrimitive() ?? "");
+			// Phase 2：check 阶段 setArgument 会 Pop 原语；写入发生在 check 之后，
+			// 必须用行化期快照（primitiveOverride）保证 ARebuild 行恢复后可重建
+			string primitive = primitiveOverride != null ? primitiveOverride(ins) : ins.PeekArgumentPrimitive();
+			w.Write(primitive ?? "");
 			w.Write(ins.LoopEnd);
 			w.Write(ins.LoopStep);
-			w.Write((byte)0); // LoopCounter：Phase 1 恒 null（FOR 语义由 check/运行期重建）
+			w.Write((byte)0); // LoopCounter：Phase 3 再缓存（FOR 语义由 check/运行期重建）
+			ErbParseTermCodec.WriteArgument(w, ins.Argument); // 失败按行降级 ARebuild，不抛
 		}
 
-		private static InstructionLine ReadInstruction(BinaryReader r, ScriptPosition position)
+		private static InstructionLine ReadInstruction(BinaryReader r, ScriptPosition position, LabelDictionary labelDic)
 		{
 			int funcCode = r.ReadInt32();
 			string funcName = r.ReadString();
@@ -228,7 +243,6 @@ namespace MinorShift.Emuera.GameProc
 				: GlobalStatic.IdentifierDictionary.GetFunctionIdentifier(funcName);
 			if (func == null || (int)func.Code != funcCode)
 				throw new CacheFormatException("function identifier drifted: " + funcName);
-			byte assignOpUnused = 0;
 			var assignOpCode = (OperatorCode)r.ReadInt32();
 			byte hasDest = r.ReadByte();
 			WordCollection dest = null;
@@ -241,6 +255,11 @@ namespace MinorShift.Emuera.GameProc
 			line.LoopEnd = r.ReadInt64();
 			line.LoopStep = r.ReadInt64();
 			r.ReadByte(); // LoopCounter null 标记
+			// Phase 2：恢复的 Argument（SetArgumentTo 的 Argument!=null 短路使 check 期跳过重建）。
+			// 重建失败抛 CacheFormatException → 调用方（条目级 catch）回退全量，零副作用。
+			Argument restored = ErbParseTermCodec.ReadArgument(r, labelDic);
+			if (restored != null)
+				line.Argument = restored;
 			return line;
 		}
 
