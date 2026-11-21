@@ -73,6 +73,15 @@ Phase 1 落地：**文件未变更的二次启动跳过 erb-parse 全阶段**（
 - 桌面未复现 CALL 报错的原因：runner 的 first-wait 停在 FORCEWAIT，未执行到 TITLE 的 CALL 行触发懒加载——**手机端仍需最终验收**（本补遗的等价哈希是比"没报错"更强的证据）。
 - 教训：**有状态容器（指针/游标）序列化必须连状态一起存**，词内容正确≠消费位置正确。升级去向：暂不升级（缓存实现类经验，Phase 2 visitor 设计时并入检查单）。
 
+### 补遗 4（2026-11-21）：Phase 1.5 单 bundle 存储（`ErbParseBundle`，提交 4ff0ea8）
+
+用户指示实现 P1.5。散文件（107MB/1871 个）→ 单 `cache/erbparse/bundle.bin`（GPB4 魔数 + 条目表），IO 惩罚消除：
+
+- **设计**：进程级惰性整读（内存索引+pending）；锚点 Flush = 启动期 parse 末 + 每批运行期懒加载后（全命中零写）；tmp+Replace 原子；损坏→读禁用+pending 重建；>256MB 重建；首建时清散文件残留；键算法不变（ParserCacheVersion 仍 3，键空间兼容）。
+- **自动化闭环又抓 2 个真 bug [实测]**：①header count 取空 loaded 的 survivors → 写 count=0 跟 1820 条数据 → 下进程按 0 读全 miss（第二轮 0h/1820m 暴露）；②Flush 无跨轮记账 → 运行期懒加载的第二次 Flush 把首写 1820 条覆盖成 count=2（bundle 头检查暴露）。修复：count 与实际写入一致；Flush 成功后 pending 并入 loaded 记账。
+- **验证 [实测]**：清缓存两连跑——写轮 `write-ok1820`（bundle 104MB/1871 条，含运行期懒加载 51 条）；命中轮 `1820h/0m/write-ok0`（零写路径生效 + 懒加载文件也命中）；erb-parse 写轮 9205→7311ms、命中轮 3786→3257ms；**state/errors/effects/display 四报告哈希全等**。
+- 内存代价说明：进程 touch 的条目字节驻留（与行对象图同量级），会话结束释放；bundle 峰值整读 104MB 发生在首次 TryGet，反序列化后字节可被 GC（索引 Dictionary 持有全部条目字节——104MB 常驻！**登记 L5 优化**：可改为偏移索引+按需读段）。
+
 ## 遗留登记
 
 - **L1（P1）**：真机两连冷启动验收（hit 计数 + 功能验证）——用户执行。
