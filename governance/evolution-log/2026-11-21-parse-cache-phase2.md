@@ -45,6 +45,15 @@
 - **UserDefinedMethodTerm 不覆盖**：ConvertArg 转换不可逆（无原始 srcArgs），且仅 4338 处（<1%）。
 - 连续多轮 DIFF 定性：均为停靠帧形态（retainedLines 13 vs 18，命中轮进度更快）；等价结论维持（Phase 2 主验证轮 state/effects/display 全等）。
 
+### 补遗 2（2026-11-21）：Phase 3 尝试后整体回退（负结果存档，工作树回 0057984）
+
+实施内容（已全部回退）：entry v5 行间引用缓存（JumpTo/JumpToEndCatch/IfCaseList/dataList/callList 同文件索引两遍回填 + LoopCounter term）+ setJumpTo 幂等短路（JumpTo!=null && Argument!=null → continue）。
+
+- **性能 [实测]**：命中轮 jump 段 1855ms（基线 1478-1667）——**零收益**。根因：短路条件要求 Argument 非 null，而 IF/SIF/ELSEIF 6 万行 Argument 仍 ARebuild（FixedVariableTerm 未覆盖，P2c 卡点）→ 短路覆盖率不足；jump 段剩余成本在遍历 + nestCheck（不可省）+ 非短路行重算。
+- **正确性 [实测]**：命中轮 errors 出现 `CodeEE: 空のストリームを渡された at ProcessState.Return` + runner initial_wait_timeout——**短路跳过了 setJumpTo 的某个必要副作用**（RETURN/跳转族指令的 setJumpTo 不止设 JumpTo，或与恢复的 primitive/Argument 消费时序相关），游戏在 TITLE 崩溃。display 差异中 13/18 为停靠帧噪声，但该错误为真实行为差异。
+- **教训**：①幂等短路的前提是"重算与缓存值完全等价且无其它副作用"——setJumpTo 对部分指令存在未文档化副作用（useCallForm/Depth/流消费），**逐指令验证成本 > 收益**；②依赖关系倒置：P3 短路的收益被 P2c（IF 覆盖）卡死，**先 P2c 后 P3** 才有意义。
+- **操作事故与恢复**：回退用 `git stash && git stash drop` 误将用户未提交的 export_presets.cfg 一并丢弃——通过 `git fsck --unreachable` 找回 dropped stash 对象（16071d0）恢复该文件。**教训：含用户未提交改动的回退必须用路径限定 checkout（git checkout HEAD -- <我的文件>），禁用整树 stash**。升级去向：暂不升级（单次事故，git fsck 恢复路径已在此留档）。
+
 ## 遗留登记
 
 - **L1（P1）**：真机合并验收（Phase 1+1.5+2）。
