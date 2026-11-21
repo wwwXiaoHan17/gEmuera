@@ -40,10 +40,13 @@ namespace MinorShift.Emuera.GameProc
 		long profReadTicks, profLoopTicks, profMarkTicks;
 		long profSetArgTicks, profNestTicks, profJumpTicks;
 
-		// 解析缓存（Phase 1）：ERH 快照哈希进键；hit/miss/写失败计数进 erb-parse 子段名
+		// 解析缓存（Phase 1/1.5）：ERH 快照哈希进键；hit/miss/写失败计数进 erb-parse 子段名
 		// ERH 快照是进程级事实（运行期懒加载的新 ErbLoader 实例也必须拿到同一哈希，
 		// 否则 TryBuildCachePath 恒 null、懒加载文件永远不走缓存）——静态惰性计算
 		static string cacheErhSnapshotHash;
+		// bundle 路径同为进程级事实（Phase 1.5：全部条目合并单文件，消除 1800+ 散文件 IO）
+		static string cacheBundlePath;
+		static bool cacheMigrated;
 		int cacheHitCount, cacheMissCount, cacheWriteOkCount, cacheWriteFailCount;
 
 		/// <summary>
@@ -148,6 +151,9 @@ namespace MinorShift.Emuera.GameProc
 					}
 				});
 				ParserMediator.FlushWarningList();
+				// Phase 1.5 锚点：启动期全部条目 pending 完毕，一次性落盘 bundle（全命中时零写）
+				EnsureCacheBundlePath();
+				ErbParseBundle.Flush(cacheBundlePath);
 				Mark($"erb-parse(read={TicksToMs(profReadTicks)}ms lines={TicksToMs(profLoopTicks - profReadTicks)}ms cache={cacheHitCount}h/{cacheMissCount}m/write-ok{cacheWriteOkCount}/fail{cacheWriteFailCount})");
 #if UEMUERA_DEBUG
 				output.PrintSystemLine("経過時間:" + (WinmmTimer.TickCount - starttime).ToString("D4") + "ms:");
@@ -253,6 +259,9 @@ namespace MinorShift.Emuera.GameProc
 				await Task.Run(() => checkScript());
 				ParserMediator.FlushWarningList();
 			}
+			// Phase 1.5 锚点：运行期懒加载批次完成，pending 条目并入 bundle（本批 miss 的新文件落缓存）
+			EnsureCacheBundlePath();
+			ErbParseBundle.Flush(cacheBundlePath);
 			parentProcess.scaningLine = null;
 			isOnlyEvent.Clear();
 			return noError;
@@ -486,15 +495,16 @@ namespace MinorShift.Emuera.GameProc
 				int funcCount = 0;
 				if (Program.AnalysisMode)
 					output.PrintSystemLine("　");
-				// === 解析缓存（Phase 1）命中路径：反序列化失败零副作用（回退全量），注册重放成功后不再回退 ===
-				string cachePath = TryBuildCachePath(filepath, filename);
-				if (cachePath != null && System.IO.File.Exists(cachePath))
+				// === 解析缓存（Phase 1/1.5）命中路径：反序列化失败零副作用（回退全量），注册重放成功后不再回退 ===
+				string cacheKey = TryBuildCacheKey(filepath, filename);
+				byte[] cacheEntry = cacheKey == null ? null : ErbParseBundle.TryGet(cacheBundlePath, cacheKey);
+				if (cacheEntry != null)
 				{
 					List<LogicalLine> cachedLines = null;
 					try
 					{
-						using (var fs = new FileStream(cachePath, FileMode.Open, FileAccess.Read))
-							cachedLines = ErbParseCache.ReadLines(fs);
+						using (var ms = new MemoryStream(cacheEntry))
+							cachedLines = ErbParseCache.ReadLines(ms);
 					}
 					catch (Exception)
 					{
@@ -669,24 +679,22 @@ namespace MinorShift.Emuera.GameProc
 				addLine(new NullLine(), lastLine);
 				position = new ScriptPosition(eReader.Filename, -1);
 				ppstate.FileEnd(position);
-				if (cachePath != null)
+				if (cacheKey != null)
 				{
-					// 缓存写入失败（不支持词形/IO）绝不影响解析结果：tmp 隔离 + 全吞异常，
-					// 但失败必须计数进子段名——静默失败会让"0 命中"无法诊断（2026-11-21 实证）
+					// 缓存写入失败（不支持词形/内存）绝不影响解析结果：全吞异常 + 计数进子段名
+					// （Phase 1.5：条目暂存内存 pending，由锚点 Flush 统一落盘单 bundle）
 					try
 					{
-						string tmp = cachePath + ".tmp";
-						using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write))
-							ErbParseCache.WriteLines(fs, cacheHead);
-						if (System.IO.File.Exists(cachePath))
-							System.IO.File.Delete(cachePath);
-						System.IO.File.Move(tmp, cachePath);
+						using (var ms = new MemoryStream())
+						{
+							ErbParseCache.WriteLines(ms, cacheHead);
+							ErbParseBundle.Store(cacheBundlePath, cacheKey, ms.ToArray());
+						}
 						cacheWriteOkCount++;
 					}
 					catch
 					{
 						cacheWriteFailCount++;
-						try { System.IO.File.Delete(cachePath + ".tmp"); } catch { }
 					}
 				}
 				if (isLazyLoading)
@@ -734,24 +742,50 @@ namespace MinorShift.Emuera.GameProc
 			}
 		}
 
-		/// <summary>构造本文件解析缓存路径；缓存不可用（无方言哈希/文件信息异常）返回 null。</summary>
-		private string TryBuildCachePath(string filepath, string filename)
+		/// <summary>构造本文件缓存条目键；缓存不可用（无方言哈希/文件信息异常）返回 null。</summary>
+		private string TryBuildCacheKey(string filepath, string filename)
 		{
 			try
 			{
 				if (string.IsNullOrEmpty(cacheErhSnapshotHash) || Program.AnalysisMode)
 					return null;
+				EnsureCacheBundlePath();
+				if (cacheBundlePath == null)
+					return null;
 				var fi = new System.IO.FileInfo(filepath);
 				if (!fi.Exists)
 					return null;
 				string planHash = Program.CurrentCompatibilityPlan?.CanonicalHash;
-				string cacheDir = System.IO.Path.Combine(Program.ExeDir, "cache", "erbparse");
-				System.IO.Directory.CreateDirectory(cacheDir);
-				return ErbParseCache.BuildCacheFilePath(cacheDir, filename, fi.LastWriteTimeUtc, fi.Length, planHash, cacheErhSnapshotHash);
+				return ErbParseCache.BuildCacheKey(filename, fi.LastWriteTimeUtc, fi.Length, planHash, cacheErhSnapshotHash);
 			}
 			catch
 			{
 				return null;
+			}
+		}
+
+		/// <summary>bundle 路径静态惰性解析（进程级）；首次顺带迁移清理散文件时代的 *.bin（同目录，防手机存储双份占用）。</summary>
+		static void EnsureCacheBundlePath()
+		{
+			if (cacheMigrated)
+				return;
+			cacheMigrated = true;
+			try
+			{
+				string cacheDir = System.IO.Path.Combine(Program.ExeDir, "cache", "erbparse");
+				cacheBundlePath = ErbParseBundle.EnsureBundlePath(cacheDir);
+				if (cacheBundlePath != null && !System.IO.File.Exists(cacheBundlePath))
+				{
+					// 首建 bundle：清掉散文件时代残留（键空间一致，条目会以 bundle 形式重建）
+					foreach (string f in System.IO.Directory.GetFiles(cacheDir, "*.bin"))
+					{
+						try { System.IO.File.Delete(f); } catch { }
+					}
+				}
+			}
+			catch
+			{
+				cacheBundlePath = null;
 			}
 		}
 

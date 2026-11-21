@@ -50,8 +50,9 @@ namespace MinorShift.Emuera.GameProc
 			public CacheFormatException(string message) : base(message) { }
 		}
 
-		/// <summary>计算缓存文件全路径。键=解析器版本+相对路径+mtime+长度+方言哈希+ERH 快照哈希。</summary>
-		public static string BuildCacheFilePath(string cacheDir, string relativePath, DateTime mtimeUtc, long byteLength, string planHash, string erhSnapshotHash)
+		/// <summary>计算缓存条目键（32 hex）。键=解析器版本+相对路径+mtime+长度+方言哈希+ERH 快照哈希。
+		/// bundle 时代（Phase 1.5）以键索引条目；散文件时代的路径=键+".bin"，键空间一致。</summary>
+		public static string BuildCacheKey(string relativePath, DateTime mtimeUtc, long byteLength, string planHash, string erhSnapshotHash)
 		{
 			string key = string.Join("|",
 				ParserCacheVersion.ToString(),
@@ -63,10 +64,10 @@ namespace MinorShift.Emuera.GameProc
 			using (var sha = System.Security.Cryptography.SHA256.Create())
 			{
 				byte[] hash = sha.ComputeHash(Encoding.UTF8.GetBytes(key));
-				var sb = new StringBuilder(hash.Length * 2);
+				var sb = new StringBuilder(64);
 				foreach (byte b in hash)
 					sb.Append(b.ToString("x2"));
-				return Path.Combine(cacheDir, sb.ToString(0, 32) + ".bin");
+				return sb.ToString(0, 32);
 			}
 		}
 
