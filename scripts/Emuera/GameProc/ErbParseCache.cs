@@ -132,6 +132,7 @@ namespace MinorShift.Emuera.GameProc
 				var lines = new List<LogicalLine>(count);
 				for (int i = 0; i < count; i++)
 					lines.Add(ReadLine(r, labelDic));
+				ErbParseTermCodec.RestoreLabelContext = null;
 				return lines;
 			}
 		}
@@ -355,6 +356,8 @@ namespace MinorShift.Emuera.GameProc
 			label.Depth = r.ReadInt32();
 			label.Index = r.ReadInt32();
 			label.FileIndex = r.ReadInt32();
+			// 恢复上下文：后续行内 term 的 LOCAL 族重绑可能需要按本 label 创建 token
+			ErbParseTermCodec.RestoreLabelContext = label;
 			int privCount = r.ReadInt32();
 			for (int i = 0; i < privCount; i++)
 			{

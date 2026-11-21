@@ -24,6 +24,10 @@ namespace MinorShift.Emuera.GameProc
 	/// </summary>
 	internal static class ErbParseTermCodec
 	{
+		/// <summary>缓存恢复上下文：当前正在恢复的 label 行（LOCAL 族 token 的按需创建需要其
+		/// LocalLength/ArgLength 等尺寸字段；subId==ownerLabel.LabelName 时等价于原生创建路径）。
+		/// 由 ErbParseCache.ReadFunctionLabel 设置、ReadLines 结束时清空。</summary>
+		internal static FunctionLabelLine RestoreLabelContext;
 		// 内建 FunctionMethod 注册表（name→单例）的"类型全名→实例"视图。
 		// 以 methodDic 引用为缓存键：会话兼容面变化（引用更换）时自动重建。
 		static IReadOnlyDictionary<string, FunctionMethod> methodDicSource;
@@ -58,6 +62,7 @@ namespace MinorShift.Emuera.GameProc
 		private const byte TVariable = 0x10;      // name + args
 		private const byte TFuncMethod = 0x11;    // 内建 method：name + args（重建后引用校验）
 		private const byte TVariadic = 0x12;      // eraType + args
+		private const byte TFixedVariable = 0x15; // 变量头 + 常量索引数组（P2c：LOCAL 族经 subID 重绑）
 		private const byte TOperator = 0x14;      // kind + op + eraType + 子树（Reduce 系重建）
 		private const byte TStrForm = 0x13;       // strs + terms（槽位特例见下）
 		// StrForm 槽位特例（terms 元素）
@@ -116,15 +121,45 @@ namespace MinorShift.Emuera.GameProc
 					w.Write(TNullTerm);
 					w.Write((byte)nullTerm.GetEraType());
 					return;
+				case FixedVariableTerm fixedVariable:
+					{
+						// 常量索引折叠形态（Restructure/GetFixedVariableTerm 派生）：
+						// token + 常量索引数组（Int64[]，allArgIsConst 恒真）
+						VariableToken vt = fixedVariable.Identifier;
+						if (vt == null || string.IsNullOrEmpty(vt.Name))
+							throw new ErbParseCache.CacheFormatException("fixed variable name");
+						if (vt is UserDefinedVariableToken udtF && udtF.IsPrivate)
+							goto default;
+						var fvArgs = fixedVariable.CodecArguments;
+						var fvIdx = new long[fvArgs?.Length ?? 0];
+						for (int i = 0; i < fvIdx.Length; i++)
+						{
+							if (!(fvArgs[i] is SingleTerm fvIdxTerm))
+								goto default; // 非常量索引：不是折叠形态，降级
+							fvIdx[i] = fvIdxTerm.Int;
+						}
+						w.Write(TFixedVariable);
+						WriteVariableHeader(w, vt);
+						w.Write(fvIdx.Length);
+						foreach (long v in fvIdx)
+							w.Write(v);
+						return;
+					}
 				case VariableTerm variable:
-					// 其余子类走 default 降级；精确匹配才走变量路径
-					if (variable.GetType() != typeof(VariableTerm))
-						goto default;
-					if (variable.Identifier == null || string.IsNullOrEmpty(variable.Identifier.Name))
-						throw new ErbParseCache.CacheFormatException("variable token name");
-					w.Write(TVariable);
-					w.Write(variable.Identifier.Name);
-					WriteTerms(w, variable.CodecArguments);
+					{
+						// 精确匹配才走变量路径（其余子类已在上面或 default 处理）
+						if (variable.GetType() != typeof(VariableTerm))
+							goto default;
+						VariableToken vt = variable.Identifier;
+						if (vt == null || string.IsNullOrEmpty(vt.Name))
+							throw new ErbParseCache.CacheFormatException("variable token name");
+						if (vt is UserDefinedVariableToken udt && udt.IsPrivate)
+							goto default; // 私有 #DIM：绑定在 owner label 上，无行上下文不可重绑
+						w.Write(TVariable);
+						WriteVariableHeader(w, vt);
+						WriteTerms(w, variable.CodecArguments);
+						return;
+					}
 					return;
 				case FunctionMethodTerm funcMethod:
 					var method = funcMethod.CodecMethod;
@@ -201,13 +236,20 @@ namespace MinorShift.Emuera.GameProc
 					};
 				case TVariable:
 				{
-					string name = r.ReadString();
+					VariableToken token = ReadVariableHeader(r);
 					IOperandTerm[] args = ReadTerms(r, labelDic);
-					VariableToken token = GlobalStatic.IdentifierDictionary.GetVariableToken(name, null, true);
-					// 名校验：带 @ 子键/大小写折叠等场景下重绑结果与原名不一致 → 降级该行
-					if (token == null || !string.Equals(token.Name, name, StringComparison.Ordinal))
-						throw new ErbParseCache.CacheFormatException("variable rebind drifted: " + name);
 					return new VariableTerm(token, args);
+				}
+				case TFixedVariable:
+				{
+					VariableToken token = ReadVariableHeader(r);
+					int len = r.ReadInt32();
+					if (len < 0 || len > 8)
+						throw new ErbParseCache.CacheFormatException("fixed variable idx len");
+					var idx = new long[len];
+					for (int i = 0; i < len; i++)
+						idx[i] = r.ReadInt64();
+					return new FixedVariableTerm(token, idx);
 				}
 				case TFuncMethod:
 				{
@@ -260,6 +302,29 @@ namespace MinorShift.Emuera.GameProc
 				default:
 					throw new ErbParseCache.CacheFormatException("unknown term tag " + tag);
 			}
+		}
+
+		/// <summary>变量头（P2c）：name + subID(LOCAL 族 owner；空串=全局) + VariableCode（权威校验）。
+		/// 重绑走 IdentifierDictionary.CodecLookupVariable（不依赖 scaningLine 上下文）。</summary>
+		private static void WriteVariableHeader(BinaryWriter w, VariableToken token)
+		{
+			w.Write(token.Name);
+			string subId = (token as LocalVariableToken)?.CodecSubId ?? "";
+			w.Write(subId);
+			w.Write((int)token.Code);
+		}
+
+		private static VariableToken ReadVariableHeader(BinaryReader r)
+		{
+			string name = r.ReadString();
+			string subId = r.ReadString();
+			var expectedCode = (VariableCode)r.ReadInt32();
+			VariableToken token = GlobalStatic.IdentifierDictionary.CodecLookupVariable(name, subId.Length == 0 ? null : subId);
+			// 权威校验 = VariableCode：LOCAL 族按 (name, subId) 查回 per-label token，
+			// Code 是枚举唯一标识，防重绑漂移；查不到交条目级降级
+			if (token == null || token.Code != expectedCode)
+				throw new ErbParseCache.CacheFormatException("variable rebind drifted: " + name);
+			return token;
 		}
 
 		private static void WriteTerms(BinaryWriter w, IOperandTerm[] terms)
