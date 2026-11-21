@@ -52,3 +52,7 @@
 - P1 真机/APK 验收：当前设备上的 APK 是坏配置版本构建的，退役后需重新导出并真机跑一轮——不在本轮：用户明确"没法碰电脑/手机，先暂停"，重导出待用户发起。
 - P2 报告目录清理：`D:\gemuera-reports\cache-retire-1/2`、`eratw-cache-test`（游戏副本约 2GB）保留供后续对照，用户可随时删除——不在本轮：对照价值未过期。
 - P2 三个既存未跟踪 `.uid`（`NativeSaveCodec.cs.uid`、`tools/native-width-check/Program.cs.uid`、`tools/save-codec-check/Program.cs.uid`）：属原生编解码任务线，非本任务范围，未入库。
+
+## PR 后变更（真机验收闭环，2026-11-22）
+
+> 补遗（2026-11-22）：遗留 P1 已关闭——用户重新导出 APK 后真机实测报告"导出后真机没有问题"，退役版在真机上游玩正常（用户报告，本 Agent 未亲测设备，记 [实测] 依用户反馈）。退役流程至此全部收尾。
