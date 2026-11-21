@@ -763,9 +763,6 @@ namespace MinorShift.Emuera.GameData.Variable
 		public abstract void resize(int newSize);
 		protected string subID;
 		protected int size;
-		/// <summary>解析缓存（ErbParseTermCodec）用：局部变量归属（owner label 名）。
-		/// 名字查找对 LOCAL 族返回的是 per-label token，重绑必须带 subID 走 localvarTokenDic。</summary>
-		internal string CodecSubId => subID;
 		public override Int32 GetLength()
 		{
 			return size;

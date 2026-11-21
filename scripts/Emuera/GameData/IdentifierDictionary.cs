@@ -140,8 +140,6 @@ namespace MinorShift.Emuera
 		Dictionary<string, VariableLocal> localvarTokenDic;
 		IReadOnlyDictionary<string, FunctionIdentifier> instructionDic;
 		IReadOnlyDictionary<string, FunctionMethod> methodDic;
-		// 解析缓存（ErbParseTermCodec）用只读访问器：当前会话内建方法注册面
-		internal IReadOnlyDictionary<string, FunctionMethod> CodecMethodDic => methodDic;
 		IReadOnlyDictionary<string, FunctionIdentifier> compatibilityInstructionDic;
 		IReadOnlyDictionary<string, FunctionMethod> compatibilityMethodDic;
 		IReadOnlyList<string> legacyInstructionNames;
@@ -570,36 +568,6 @@ namespace MinorShift.Emuera
 		{
 			// 参考侧：返回全部变量名（varTokenDic.Keys，含系统变量），ENUMVAR 系可见
 			get { return varTokenDic.Keys; }
-		}
-
-		/// <summary>解析缓存（ErbParseTermCodec）重绑专用：不依赖 scaningLine 上下文的确定性查找。
-		/// LOCAL 族带 owner subID 走 localvarTokenDic（仅取已存在 token，不新建）；
-		/// 其余走 varTokenDic。查不到/私有变量返回 null（调用方降级该行）。</summary>
-		internal VariableToken CodecLookupVariable(string key, string subId)
-		{
-			if (string.IsNullOrEmpty(key))
-				return null;
-			if (Config.ICVariable)
-				key = key.ToUpper();
-			if (!string.IsNullOrEmpty(subId))
-			{
-				if (localvarTokenDic.TryGetValue(key, out VariableLocal vl))
-				{
-					LocalVariableToken exist = vl.GetExistLocalVariableToken(subId);
-					if (exist != null)
-						return exist;
-					// LOCAL 族 token 是运行期按 label 惰性创建的：缓存恢复早于 check，
-					// 新进程里尚不存在——用恢复上下文中的 owner label 按原路径创建
-					//（尺寸取自缓存恢复的 label 字段，与原生 parseLabel 创建等价）
-					var ownerLabel = MinorShift.Emuera.GameProc.ErbParseTermCodec.RestoreLabelContext;
-					if (ownerLabel != null && string.Equals(ownerLabel.LabelName, subId, Config.SCVariable))
-						return vl.GetNewLocalVariableToken(subId, ownerLabel);
-					return null;
-				}
-				return null;
-			}
-			varTokenDic.TryGetValue(key, out VariableToken ret);
-			return ret;
 		}
 
 		public VariableToken GetVariableToken(string key, string subKey, bool allowPrivate)

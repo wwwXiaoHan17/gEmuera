@@ -26,24 +26,6 @@ namespace MinorShift.Emuera.GameData
 		static FunctionMethodTerm NameAssi = null;// "///"
 		static FunctionMethodTerm CallnameTarget = null;// "$$$"
 
-		// 解析缓存（ErbParseTermCodec）用只读访问器：行化期构建的格式化槽位需引用相等特判后重建
-		internal string[] CodecStrs => strs;
-		internal IOperandTerm[] CodecTerms => terms;
-		internal static FunctionMethod CodecFormatCurlyBrace => formatCurlyBrace;
-		internal static FunctionMethod CodecFormatPercent => formatPercent;
-		internal static FunctionMethod CodecFormatYenAt => formatYenAt;
-		internal static FunctionMethodTerm CodecNameTarget => NameTarget;
-		internal static FunctionMethodTerm CodecCallnameMaster => CallnameMaster;
-		internal static FunctionMethodTerm CodecCallnamePlayer => CallnamePlayer;
-		internal static FunctionMethodTerm CodecNameAssi => NameAssi;
-		internal static FunctionMethodTerm CodecCallnameTarget => CallnameTarget;
-		internal static StrForm CodecRestore(string[] strs, IOperandTerm[] terms)
-		{
-			StrForm ret = new StrForm();
-			ret.strs = strs;
-			ret.terms = terms;
-			return ret;
-		}
 		public static void Initialize()
 		{
 			formatCurlyBrace = new FormatCurlyBrace();

@@ -233,55 +233,6 @@ namespace MinorShift.Emuera.GameData.Expression
                 throw new CodeEE(errMes);
 		}
 		
-		// ===== 解析缓存（ErbParseTermCodec）反查/重建接口 =====
-		// kind: 0=unary 1=unaryAfter 2=binary 3=ternary。索引从各注册字典+散字段一次性构建
-		//（同一 OperatorMethod 实例只属于一个字典条目/散字段，无冲突）。
-		static Dictionary<OperatorMethod, System.Tuple<byte, OperatorCode>> operatorIndex;
-
-		static void BuildOperatorIndex()
-		{
-			operatorIndex = new Dictionary<OperatorMethod, System.Tuple<byte, OperatorCode>>();
-			foreach (var kv in unaryDic) operatorIndex[kv.Value] = System.Tuple.Create((byte)0, kv.Key);
-			foreach (var kv in unaryAfterDic) operatorIndex[kv.Value] = System.Tuple.Create((byte)1, kv.Key);
-			foreach (var kv in binaryIntIntDic) operatorIndex[kv.Value] = System.Tuple.Create((byte)2, kv.Key);
-			foreach (var kv in binaryStrStrDic) operatorIndex[kv.Value] = System.Tuple.Create((byte)2, kv.Key);
-			foreach (var kv in binaryFloatFloatDic) operatorIndex[kv.Value] = System.Tuple.Create((byte)2, kv.Key);
-			foreach (var kv in binaryMixedFloatDic) operatorIndex[kv.Value] = System.Tuple.Create((byte)2, kv.Key);
-			if (binaryMultIntStr != null) operatorIndex[binaryMultIntStr] = System.Tuple.Create((byte)2, OperatorCode.Mult);
-			if (ternaryIntIntInt != null) operatorIndex[ternaryIntIntInt] = System.Tuple.Create((byte)3, OperatorCode.Ternary_a);
-			if (ternaryIntStrStr != null) operatorIndex[ternaryIntStrStr] = System.Tuple.Create((byte)3, OperatorCode.Ternary_a);
-			if (ternaryIntFloatFloat != null) operatorIndex[ternaryIntFloatFloat] = System.Tuple.Create((byte)3, OperatorCode.Ternary_a);
-		}
-
-		/// <summary>反查运算方法实例的 (kind, op)。未知实例（新散字段）返回 false → 该 term 降级。</summary>
-		internal static bool TryGetOperatorInfo(OperatorMethod method, out byte kind, out OperatorCode op)
-		{
-			if (operatorIndex == null)
-				BuildOperatorIndex();
-			if (method != null && operatorIndex.TryGetValue(method, out var info))
-			{
-				kind = info.Item1;
-				op = info.Item2;
-				return true;
-			}
-			kind = 0;
-			op = OperatorCode.NULL;
-			return false;
-		}
-
-		/// <summary>按 (kind, op) 重建运算项——Reduce 系纯函数按子树类型重选实现，结果与写侧实例一致。</summary>
-		internal static IOperandTerm ReduceByKind(byte kind, OperatorCode op, IOperandTerm[] args)
-		{
-			switch (kind)
-			{
-				case 0: return ReduceUnaryTerm(op, args[0]);
-				case 1: return ReduceUnaryAfterTerm(op, args[0]);
-				case 2: return ReduceBinaryTerm(op, args[0], args[1]);
-				case 3: return ReduceTernaryTerm(args[0], args[1], args[2]);
-				default: return null;
-			}
-		}
-
 		public static IOperandTerm ReduceTernaryTerm(IOperandTerm o1, IOperandTerm o2, IOperandTerm o3)
 		{
             OperatorMethod method = null;

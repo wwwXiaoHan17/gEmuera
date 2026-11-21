@@ -44,18 +44,6 @@ namespace MinorShift.Emuera.GameProc
 		// 临时诊断：check 期需重建 Argument 的指令分布
 		readonly System.Collections.Generic.Dictionary<string, int> profRebuildCodes = new System.Collections.Generic.Dictionary<string, int>();
 
-		// 解析缓存（Phase 1/1.5）：ERH 快照哈希进键；hit/miss/写失败计数进 erb-parse 子段名
-		// ERH 快照是进程级事实（运行期懒加载的新 ErbLoader 实例也必须拿到同一哈希，
-		// 否则 TryBuildCachePath 恒 null、懒加载文件永远不走缓存）——静态惰性计算
-		static string cacheErhSnapshotHash;
-		// bundle 路径同为进程级事实（Phase 1.5：全部条目合并单文件，消除 1800+ 散文件 IO）
-		static string cacheBundlePath;
-		static bool cacheMigrated;
-		int cacheHitCount, cacheMissCount, cacheWriteOkCount, cacheWriteFailCount;
-		// Phase 2 延迟序列化：条目在 check 完成后才含 Argument，且 setArgument 会 Pop 参数原语——
-		// loadErb 尾只挂行链引用 + 行化期原语快照，锚点（check 后）统一序列化落 bundle
-		readonly List<(string Key, LogicalLine Head, Dictionary<InstructionLine, string> Primitives)> pendingCacheEntries = new List<(string, LogicalLine, Dictionary<InstructionLine, string>)>();
-
 		/// <summary>
 		/// 複数のファイルを読む
 		/// </summary>
@@ -73,9 +61,7 @@ namespace MinorShift.Emuera.GameProc
 			//checkScript();の時点でExpressionPerserがProcess.instance.LabelDicを必要とするから。
 			labelDic = labelDictionary;
 			labelDic.Initialized = false;
-			cacheHitCount = cacheMissCount = cacheWriteOkCount = cacheWriteFailCount = 0;
 			profSetArgCalls = profSetArgSkipped = profArgRestored = 0;
-			EnsureCacheErhSnapshotHash(erbDir);
 			List<KeyValuePair<string, string>> erbFiles = Config.GetFiles(erbDir, "*.ERB");
 #if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
             erbFiles.AddRange(Config.GetFiles(erbDir, "*.erb"));
@@ -159,7 +145,7 @@ namespace MinorShift.Emuera.GameProc
 					}
 				});
 				ParserMediator.FlushWarningList();
-				Mark($"erb-parse(read={TicksToMs(profReadTicks)}ms lines={TicksToMs(profLoopTicks - profReadTicks)}ms cache={cacheHitCount}h/{cacheMissCount}m/write-ok{cacheWriteOkCount}/fail{cacheWriteFailCount})");
+				Mark($"erb-parse(read={TicksToMs(profReadTicks)}ms lines={TicksToMs(profLoopTicks - profReadTicks)}ms)");
 #if UEMUERA_DEBUG
 				output.PrintSystemLine("経過時間:" + (WinmmTimer.TickCount - starttime).ToString("D4") + "ms:");
 #endif
@@ -182,10 +168,6 @@ namespace MinorShift.Emuera.GameProc
 				await Task.Run(() => checkScript());
 				ParserMediator.FlushWarningList();
 				Mark($"erb-check(setarg={TicksToMs(profSetArgTicks)}ms calls={profSetArgCalls} skipped={profSetArgSkipped} restored={profArgRestored} nest={TicksToMs(profNestTicks)}ms jump={TicksToMs(profJumpTicks)}ms)");
-				// Phase 2/1.5 锚点（check 后）：setArgument 已为 FORCE_SETARG 行建好 Argument、
-				// setJumpTo 已算完 label.Depth——此刻序列化才能把两者一并入缓存（parse 后锚点拿到的全是 null）
-				SerializePendingCacheEntries();
-				ErbParseBundle.Flush(cacheBundlePath);
 				if (parentProcess.LazyCurrentLazyStatus == Process.LazyStatus.BuildTable)
 				{
 					parentProcess.SaveLazyLoadingList(labelDic.GetAllLabels(false), erbFiles);
@@ -268,9 +250,6 @@ namespace MinorShift.Emuera.GameProc
 				await Task.Run(() => checkScript());
 				ParserMediator.FlushWarningList();
 			}
-			// Phase 2/1.5 锚点：运行期懒加载批次完成（其 loadErb 内部已含 check）→ 序列化+落盘
-			SerializePendingCacheEntries();
-			ErbParseBundle.Flush(cacheBundlePath);
 			parentProcess.scaningLine = null;
 			isOnlyEvent.Clear();
 			return noError;
@@ -504,49 +483,6 @@ namespace MinorShift.Emuera.GameProc
 				int funcCount = 0;
 				if (Program.AnalysisMode)
 					output.PrintSystemLine("　");
-				// === 解析缓存（Phase 1/1.5）命中路径：反序列化失败零副作用（回退全量），注册重放成功后不再回退 ===
-				string cacheKey = TryBuildCacheKey(filepath, filename);
-				byte[] cacheEntry = cacheKey == null ? null : ErbParseBundle.TryGet(cacheBundlePath, cacheKey);
-				if (cacheEntry != null)
-				{
-					List<LogicalLine> cachedLines = null;
-					try
-					{
-						using (var ms = new MemoryStream(cacheEntry))
-							cachedLines = ErbParseCache.ReadLines(ms, labelDic);
-					}
-					catch (Exception)
-					{
-						// 格式/重建失败：零副作用（反序列化只产生新对象），回退全量解析
-						cachedLines = null;
-					}
-					int restoredArgCount = 0;
-					if (cachedLines != null)
-						CountRestoredArguments(cachedLines, out restoredArgCount);
-					if (cachedLines != null && TryRestoreFromCache(cachedLines, isLazyLoading, tempFunctionLabels, ref lastLine, ref lastLabelLine))
-					{
-						cacheHitCount++;
-						profArgRestored += restoredArgCount;
-						if (isLazyLoading)
-						{
-							// 与原流程一致：lazy 文件解析后立即完成 label 参数解析与逐函数校验
-							foreach (FunctionLabelLine label in tempFunctionLabels)
-							{
-								setLabelsArg(label);
-								labelDic.SortLabel(label);
-							}
-							foreach (FunctionLabelLine label in tempFunctionLabels)
-								checkFunctionWithCatch(label);
-						}
-						return;
-					}
-					cacheMissCount++;
-				}
-				else
-				{
-					cacheMissCount++;
-				}
-				LogicalLine cacheHead = lastLine;
 				profReadTicks = profLoopTicks = profSetArgTicks = profNestTicks = profJumpTicks = 0;
 				long loopStart = Stopwatch.GetTimestamp();
 				profMarkTicks = loopStart;
@@ -682,35 +618,6 @@ namespace MinorShift.Emuera.GameProc
 				addLine(new NullLine(), lastLine);
 				position = new ScriptPosition(eReader.Filename, -1);
 				ppstate.FileEnd(position);
-				if (cacheKey != null)
-				{
-					// Phase 2 延迟序列化：此刻只采行化期原语快照（check 的 setArgument 会 Pop 原语），
-					// 条目本体在锚点（check 完成后）序列化——届时 Argument 已建好可一并入缓存
-					try
-					{
-						var prims = new Dictionary<InstructionLine, string>();
-						bool entryUnsafe = false;
-						for (LogicalLine l = cacheHead; l != null; l = l.NextLine)
-						{
-							if (l is InstructionLine il)
-							{
-								// 三态快照：null=原语已被 parse 期消费（Peek 无法区分，用 HasArgumentPrimitive）；
-								// ""=真空参；其余=内容。
-								prims[il] = il.HasArgumentPrimitive ? il.PeekArgumentPrimitive() : null;
-								// 守卫：原语已消费且此刻 Argument 为 null 的行，恢复后（ARebuild）check 期会
-								// 拿空流重解析而炸（原生气路径：parse 期 Argument 已建，check 短路不碰原语）。
-								// 此刻（parse 末）Argument 为 null 说明 parse 期没建——但 check 期可能建；
-								// 真正不可安全恢复的是"check 建的 Argument 含不支持 term → ARebuild"，
-								// 这在写入时点（check 后）已可判定：见 SerializePendingCacheEntries 的二次守卫。
-							}
-						}
-						pendingCacheEntries.Add((cacheKey, cacheHead, prims));
-					}
-					catch
-					{
-						cacheWriteFailCount++;
-					}
-				}
 				if (isLazyLoading)
 				{
 					foreach (FunctionLabelLine label in tempFunctionLabels)
@@ -734,160 +641,8 @@ namespace MinorShift.Emuera.GameProc
 			}
 			return;
 		}
-		
-		static void CountRestoredArguments(List<LogicalLine> lines, out int count)
-		{
-			count = 0;
-			foreach (LogicalLine l in lines)
-				if (l is InstructionLine il && il.Argument != null)
-					count++;
-		}
 
 		static int TicksToMs(long ticks) => (int)(ticks * 1000.0 / Stopwatch.Frequency);
-
-		/// <summary>Phase 2 锚点序列化：check 已完成（Argument 就绪），把 pending 条目写入 bundle。
-		/// 单条目失败（不支持词形/图形状）计 fail 丢弃，不影响其它条目；计数进 erb-parse 子段名。</summary>
-		void SerializePendingCacheEntries()
-		{
-			if (pendingCacheEntries.Count == 0)
-				return;
-			EnsureCacheBundlePath();
-			foreach ((string key, LogicalLine head, Dictionary<InstructionLine, string> prims) in pendingCacheEntries)
-			{
-				try
-				{
-					// 守卫（2026-11-21 空流根因）：原语被 parse 期消费（快照 null）且 check 后 Argument
-					// 仍为 null 的行——恢复端 ARebuild 会在 check 期拿空流炸（原生路径 parse 期已建参，
-					/// check 短路）。任一此类行 → 放弃整条目（该文件回退全量，行为与无缓存一致）。
-					for (LogicalLine l = head; l != null; l = l.NextLine)
-					{
-						if (l is InstructionLine guardLine
-							&& guardLine.Argument == null
-							&& prims.TryGetValue(guardLine, out string guardPrim)
-							&& guardPrim == null)
-						{
-							cacheWriteFailCount++;
-							goto nextEntry;
-						}
-					}
-					using (var ms = new MemoryStream())
-					{
-						ErbParseCache.WriteLines(ms, head, l => prims.TryGetValue(l, out string s) ? s : null);
-						ErbParseBundle.Store(cacheBundlePath, key, ms.ToArray());
-					}
-					cacheWriteOkCount++;
-				}
-				catch
-				{
-					cacheWriteFailCount++;
-				}
-				nextEntry:;
-			}
-			pendingCacheEntries.Clear();
-		}
-
-		/// <summary>ERH 宏表快照哈希（进程级惰性计算一次；宏变化会改变 ERB 解析结果，必须进缓存键）。</summary>
-		static void EnsureCacheErhSnapshotHash(string erbDir)
-		{
-			if (cacheErhSnapshotHash != null)
-				return;
-			try
-			{
-				var erhPairs = new List<KeyValuePair<string, DateTime>>();
-				foreach (var kv in Config.GetFiles(erbDir, "*.ERH"))
-					erhPairs.Add(new KeyValuePair<string, DateTime>(kv.Key, System.IO.File.GetLastWriteTimeUtc(kv.Value)));
-				cacheErhSnapshotHash = ErbParseCache.BuildErhSnapshotHash(erhPairs);
-			}
-			catch
-			{
-				// 枚举失败 → 缓存整体禁用（TryBuildCachePath 对 null 返回 null），回退全量解析
-				cacheErhSnapshotHash = null;
-			}
-		}
-
-		/// <summary>构造本文件缓存条目键；缓存不可用（无方言哈希/文件信息异常）返回 null。</summary>
-		private string TryBuildCacheKey(string filepath, string filename)
-		{
-			try
-			{
-				if (string.IsNullOrEmpty(cacheErhSnapshotHash) || Program.AnalysisMode)
-					return null;
-				EnsureCacheBundlePath();
-				if (cacheBundlePath == null)
-					return null;
-				var fi = new System.IO.FileInfo(filepath);
-				if (!fi.Exists)
-					return null;
-				string planHash = Program.CurrentCompatibilityPlan?.CanonicalHash;
-				return ErbParseCache.BuildCacheKey(filename, fi.LastWriteTimeUtc, fi.Length, planHash, cacheErhSnapshotHash);
-			}
-			catch
-			{
-				return null;
-			}
-		}
-
-		/// <summary>bundle 路径静态惰性解析（进程级）；首次顺带迁移清理散文件时代的 *.bin（同目录，防手机存储双份占用）。</summary>
-		static void EnsureCacheBundlePath()
-		{
-			if (cacheMigrated)
-				return;
-			cacheMigrated = true;
-			try
-			{
-				string cacheDir = System.IO.Path.Combine(Program.ExeDir, "cache", "erbparse");
-				cacheBundlePath = ErbParseBundle.EnsureBundlePath(cacheDir);
-				if (cacheBundlePath != null && !System.IO.File.Exists(cacheBundlePath))
-				{
-					// 首建 bundle：清掉散文件时代残留（键空间一致，条目会以 bundle 形式重建）
-					foreach (string f in System.IO.Directory.GetFiles(cacheDir, "*.bin"))
-					{
-						try { System.IO.File.Delete(f); } catch { }
-					}
-				}
-			}
-			catch
-			{
-				cacheBundlePath = null;
-			}
-		}
-
-		/// <summary>
-		/// 缓存命中重建：重放 label 注册（AddLabel/AddInvalidLabel/AddLabelDollar、
-		/// ParentLabelLine 串链）与 privateVar 声明重放（AddPrivateVariable）。
-		/// 反序列化已在调用方隔离（失败零副作用）；本方法只做注册/串链（字典与链表操作，不抛格式异常）。
-		/// 与原解析路径的差异：重复 $label/重载函数的 warning 不重放（不影响行为，仅日志面）。
-		/// </summary>
-		private bool TryRestoreFromCache(List<LogicalLine> lines, bool isLazyLoading, List<FunctionLabelLine> tempFunctionLabels, ref LogicalLine lastLine, ref FunctionLabelLine lastLabelLine)
-		{
-			foreach (LogicalLine line in lines)
-			{
-				if (line is FunctionLabelLine label)
-				{
-					lastLabelLine = label;
-					if (label is InvalidLabelLine)
-					{
-						noError = false;
-						labelDic.AddInvalidLabel(label);
-					}
-					else
-					{
-						labelDic.AddLabel(label);
-						if (isLazyLoading)
-							tempFunctionLabels.Add(label);
-					}
-				}
-				else if (line is GotoLabelLine gotoLabel)
-				{
-					gotoLabel.ParentLabelLine = lastLabelLine;
-					if (lastLabelLine != null)
-						labelDic.AddLabelDollar(gotoLabel);
-				}
-				line.ParentLabelLine = lastLabelLine;
-				lastLine = addLine(line, lastLine);
-			}
-			return true;
-		}
 
 		private LogicalLine addLine(LogicalLine nextLine, LogicalLine lastLine)
 		{

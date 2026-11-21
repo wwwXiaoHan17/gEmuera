@@ -31,8 +31,6 @@ namespace MinorShift.Emuera.GameData.Variable
 		}
 		public VariableToken Identifier;
 		private readonly IOperandTerm[] arguments;
-		// 解析缓存（ErbParseTermCodec）用只读访问器
-		internal IOperandTerm[] CodecArguments => arguments;
 		protected Int64[] transporter;
 		protected bool allArgIsConst = false;
 

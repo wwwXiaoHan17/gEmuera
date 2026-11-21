@@ -1,5 +1,7 @@
 # ERB 解析缓存（P0-C）设计方案
 
+> **已废弃（2026-11-22）**：本设计的全部实现已从代码库移除（用户裁定"这个缓存功能给不到理想的效果，并且会导致游玩出现问题"）。裁決依据、正确性漏洞清单（缓存键未覆盖 `*.als`/`VariableSize.CSV`/`emuera.config` 输入）与验证证据见 `governance/evolution-log/2026-11-22-parse-cache-retirement.md`。本文仅作设计历史保留，勿按此实现。
+
 状态：设计定稿，分期实施。前置数据：真机实测 erb 阶段 13.8s 占启动 75%，内部构成 parse 5237ms（行解析≈100%，IO≈0 因 Preload 内存命中）+ check 6579ms（setarg 3591 / jump 2830 / nest 126）。
 
 ## 目标与非目标

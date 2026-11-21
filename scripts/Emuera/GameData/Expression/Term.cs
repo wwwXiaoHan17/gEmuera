@@ -173,8 +173,6 @@ namespace MinorShift.Emuera.GameData.Expression
 		}
 
 		readonly List<IOperandTerm> args;
-		// 解析缓存（ErbParseTermCodec）用只读访问器
-		internal List<IOperandTerm> CodecArgs => args;
 
 		public int Count { get { return args.Count; } }
 
