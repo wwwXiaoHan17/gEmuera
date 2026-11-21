@@ -40,9 +40,9 @@ namespace MinorShift.Emuera.GameProc
 		long profReadTicks, profLoopTicks, profMarkTicks;
 		long profSetArgTicks, profNestTicks, profJumpTicks;
 
-		// 解析缓存（Phase 1）：ERH 快照哈希进键；hit/miss 计数进 erb-parse 子段名
+		// 解析缓存（Phase 1）：ERH 快照哈希进键；hit/miss/写失败计数进 erb-parse 子段名
 		string cacheErhSnapshotHash;
-		int cacheHitCount, cacheMissCount;
+		int cacheHitCount, cacheMissCount, cacheWriteOkCount, cacheWriteFailCount;
 
 		/// <summary>
 		/// 複数のファイルを読む
@@ -61,7 +61,7 @@ namespace MinorShift.Emuera.GameProc
 			//checkScript();の時点でExpressionPerserがProcess.instance.LabelDicを必要とするから。
 			labelDic = labelDictionary;
 			labelDic.Initialized = false;
-			cacheHitCount = cacheMissCount = 0;
+			cacheHitCount = cacheMissCount = cacheWriteOkCount = cacheWriteFailCount = 0;
 			try
 			{
 				// ERH 宏表快照进缓存键：宏变化会改变 ERB 解析结果
@@ -157,7 +157,7 @@ namespace MinorShift.Emuera.GameProc
 					}
 				});
 				ParserMediator.FlushWarningList();
-				Mark($"erb-parse(read={TicksToMs(profReadTicks)}ms lines={TicksToMs(profLoopTicks - profReadTicks)}ms cache={cacheHitCount}h/{cacheMissCount}m)");
+				Mark($"erb-parse(read={TicksToMs(profReadTicks)}ms lines={TicksToMs(profLoopTicks - profReadTicks)}ms cache={cacheHitCount}h/{cacheMissCount}m/write-ok{cacheWriteOkCount}/fail{cacheWriteFailCount})");
 #if UEMUERA_DEBUG
 				output.PrintSystemLine("経過時間:" + (WinmmTimer.TickCount - starttime).ToString("D4") + "ms:");
 #endif
@@ -652,7 +652,8 @@ namespace MinorShift.Emuera.GameProc
 				ppstate.FileEnd(position);
 				if (cachePath != null)
 				{
-					// 缓存写入失败（不支持词形/IO）绝不影响解析结果：tmp 隔离 + 全吞异常
+					// 缓存写入失败（不支持词形/IO）绝不影响解析结果：tmp 隔离 + 全吞异常，
+					// 但失败必须计数进子段名——静默失败会让"0 命中"无法诊断（2026-11-21 实证）
 					try
 					{
 						string tmp = cachePath + ".tmp";
@@ -661,9 +662,11 @@ namespace MinorShift.Emuera.GameProc
 						if (System.IO.File.Exists(cachePath))
 							System.IO.File.Delete(cachePath);
 						System.IO.File.Move(tmp, cachePath);
+						cacheWriteOkCount++;
 					}
 					catch
 					{
+						cacheWriteFailCount++;
 						try { System.IO.File.Delete(cachePath + ".tmp"); } catch { }
 					}
 				}
@@ -705,6 +708,7 @@ namespace MinorShift.Emuera.GameProc
 					return null;
 				string planHash = Program.CurrentCompatibilityPlan?.CanonicalHash;
 				string cacheDir = System.IO.Path.Combine(Program.ExeDir, "cache", "erbparse");
+				System.IO.Directory.CreateDirectory(cacheDir);
 				return ErbParseCache.BuildCacheFilePath(cacheDir, filename, fi.LastWriteTimeUtc, fi.Length, planHash, cacheErhSnapshotHash);
 			}
 			catch
