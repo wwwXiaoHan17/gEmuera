@@ -23,8 +23,8 @@ namespace MinorShift.Emuera.GameProc
 	/// </summary>
 	internal static class ErbParseCache
 	{
-		internal const int ParserCacheVersion = 2;
-		private static readonly byte[] Magic = { (byte)'G', (byte)'P', (byte)'C', (byte)'2' };
+		internal const int ParserCacheVersion = 3;
+		private static readonly byte[] Magic = { (byte)'G', (byte)'P', (byte)'C', (byte)'3' };
 
 		// 行类型 tag
 		private const byte TagNullLine = 0;
@@ -92,7 +92,7 @@ namespace MinorShift.Emuera.GameProc
 			using (var w = new BinaryWriter(stream, Encoding.UTF8, true))
 			{
 				w.Write(Magic);
-				w.Write((byte)2); // 条目内格式版本（v2：AssignOperator 由 byte 改 int，修 (byte) 截断 510→254）
+				w.Write((byte)3); // 条目内格式版本（v3：WordCollection.Pointer 进缓存，修恢复后指针归零导致的"引数の書式"错误）
 				int count = 0;
 				for (var line = head; line != null; line = line.NextLine)
 					count++;
@@ -112,7 +112,7 @@ namespace MinorShift.Emuera.GameProc
 				if (magic.Length != 4 || magic[0] != Magic[0] || magic[1] != Magic[1] || magic[2] != Magic[2] || magic[3] != Magic[3])
 					throw new CacheFormatException("bad magic");
 				byte entryVersion = r.ReadByte();
-				if (entryVersion != 2)
+				if (entryVersion != 3)
 					throw new CacheFormatException("bad entry version");
 				int count = r.ReadInt32();
 				if (count < 0 || count > 1_000_000)
@@ -317,6 +317,10 @@ namespace MinorShift.Emuera.GameProc
 		private static void WriteWordCollection(BinaryWriter w, WordCollection wc)
 		{
 			w.Write(wc.Collection.Count);
+			// Pointer 必须序列化：parseLabel 直接从 wc.Current 开始消费（解析期 Pointer 已越过
+			// 函数名等已读词）；恢复为 0 会让首个 IdentifierWord 被当作符号 → "引数の書式" 错误。
+			// 同理 IsMacro（宏展开状态）也随词保存。
+			w.Write(wc.Pointer);
 			foreach (Word word in wc.Collection)
 			{
 				switch (word)
@@ -365,6 +369,9 @@ namespace MinorShift.Emuera.GameProc
 			int count = r.ReadInt32();
 			if (count < 0 || count > 1_000_000)
 				throw new CacheFormatException("bad word count");
+			int pointer = r.ReadInt32();
+			if (pointer < 0 || pointer > count)
+				throw new CacheFormatException("bad word pointer");
 			for (int i = 0; i < count; i++)
 			{
 				byte kind = r.ReadByte();
@@ -398,6 +405,7 @@ namespace MinorShift.Emuera.GameProc
 						throw new CacheFormatException("unknown word kind " + kind);
 				}
 			}
+			wc.Pointer = pointer;
 			return wc;
 		}
 
