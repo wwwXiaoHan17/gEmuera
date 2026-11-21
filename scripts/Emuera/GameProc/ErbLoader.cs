@@ -504,6 +504,16 @@ namespace MinorShift.Emuera.GameProc
 					if (cachedLines != null && TryRestoreFromCache(cachedLines, isLazyLoading, tempFunctionLabels, ref lastLine, ref lastLabelLine))
 					{
 						cacheHitCount++;
+						try
+						{
+							// 诊断转储（Phase 1 验收期临时）：缓存恢复的行状态 vs 全量解析对照
+							string dumpDir = Program.DebugDir;
+							if (!string.IsNullOrEmpty(dumpDir))
+								System.IO.File.AppendAllText(
+									System.IO.Path.Combine(dumpDir, "parse_cache_dump.txt"),
+									"==== " + filename + " ====\n" + ErbParseCache.DumpLines(cachedLines));
+						}
+						catch { }
 						if (isLazyLoading)
 						{
 							// 与原流程一致：lazy 文件解析后立即完成 label 参数解析与逐函数校验

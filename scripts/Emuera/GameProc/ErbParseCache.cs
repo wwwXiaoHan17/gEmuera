@@ -452,6 +452,50 @@ namespace MinorShift.Emuera.GameProc
 					w.Write(v);
 		}
 
+		/// <summary>诊断转储：把行序列的关键状态展开为多行文本（缓存恢复 vs 全量解析 对比用）。</summary>
+		internal static string DumpLines(IEnumerable<LogicalLine> lines)
+		{
+			var sb = new StringBuilder();
+			foreach (var line in lines)
+			{
+				switch (line)
+				{
+					case InstructionLine ins:
+						sb.Append("INSTR ").Append(ins.FunctionCode).Append(" name=").Append(ins.Function.Name)
+							.Append(" op=").Append((int)ins.AssignOperator)
+							.Append(" destWords=").Append(ins.AssignmentDest == null ? -1 : ins.AssignmentDest.Collection.Count)
+							.Append(" argPrim=").Append(ins.PeekArgumentPrimitive() == null ? "<null>" : "\"" + ins.PeekArgumentPrimitive() + "\"")
+							.Append(" arg=").Append(ins.Argument == null ? "null" : ins.Argument.GetType().Name)
+							.Append(" jumpTo=").Append(ins.JumpTo == null ? "null" : "set");
+						break;
+					case InvalidLabelLine invalidLabel:
+						sb.Append("INVALID_LABEL err=").Append(invalidLabel.ErrMes ?? "");
+						break;
+					case FunctionLabelLine label:
+						sb.Append("LABEL ").Append(label.LabelName).Append(" idx=").Append(label.Index).Append('/').Append(label.FileIndex)
+							.Append(" depth=").Append(label.Depth).Append(" localLen=").Append(label.LocalLength)
+							.Append(" argsLen=").Append(label.ArgsLength).Append(" argFloatLen=").Append(label.ArgFloatLength)
+							.Append(" method=").Append(label.IsMethod).Append(" priv=").Append(label.PrivateVarDataCache == null ? -1 : label.PrivateVarDataCache.Count)
+							.Append(" wc=").Append(label.PeekRowArgs == null ? -1 : label.PeekRowArgs.Collection.Count);
+						break;
+					case GotoLabelLine gotoLabel:
+						sb.Append("GOTO ").Append(gotoLabel.LabelName);
+						break;
+					case InvalidLine invalid:
+						sb.Append("INVALID err=").Append(invalid.ErrMes ?? "");
+						break;
+					case NullLine:
+						sb.Append("NULL");
+						break;
+					default:
+						sb.Append("UNKNOWN ").Append(line.GetType().Name);
+						break;
+				}
+				sb.Append('\n');
+			}
+			return sb.ToString();
+		}
+
 		private static int[] ReadInt32Array(BinaryReader r)
 		{
 			int len = r.ReadInt32();
