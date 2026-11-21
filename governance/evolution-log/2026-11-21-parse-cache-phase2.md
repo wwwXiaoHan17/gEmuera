@@ -54,6 +54,16 @@
 - **教训**：①幂等短路的前提是"重算与缓存值完全等价且无其它副作用"——setJumpTo 对部分指令存在未文档化副作用（useCallForm/Depth/流消费），**逐指令验证成本 > 收益**；②依赖关系倒置：P3 短路的收益被 P2c（IF 覆盖）卡死，**先 P2c 后 P3** 才有意义。
 - **操作事故与恢复**：回退用 `git stash && git stash drop` 误将用户未提交的 export_presets.cfg 一并丢弃——通过 `git fsck --unreachable` 找回 dropped stash 对象（16071d0）恢复该文件。**教训：含用户未提交改动的回退必须用路径限定 checkout（git checkout HEAD -- <我的文件>），禁用整树 stash**。升级去向：暂不升级（单次事故，git fsck 恢复路径已在此留档）。
 
+### 补遗 3（2026-11-21）：命中轮"空のストリーム"崩溃根因闭环与修复（提交 125c1d1）
+
+用户真机截图报告 TITLE.ERB:13 `空のストリームを渡された`——**审计发现该错误自 P2b 起每轮命中轮都存在**（此前轮次 errors 只比哈希未比消息，停靠帧定性掩盖了它；P3 复盘曾误归因于短路）。
+
+- **根因链 [三层插桩实锤]**：`ScriptProc:61` 是 IsError 行重抛（非 DoInstruction）→ 行级诊断定位 `TITLE:13 func=SET argNull=True hasPrim=True` → **parse 期消费原语的行**（SNAKE builder/私有赋值路径 pop 掉 argprimitive）依赖 parse 期建的 Argument（check 短路不碰原语）；codec 对其 Argument 降级 ARebuild（SpSet/Snake 类未覆盖或 term 链含 FixedVariableTerm）→ 恢复行 check 期重建拿空流 → CodeEE → BEFORE_ERROR 事件在 Return 重抛。
+- **修复**：①SpSetArgument/SpSetArrayArgument/SnakeVariArgument/SnakeVarsArgument codec（这些行 Argument 得以缓存，短路生效）；②原语快照改三态（null=已消费）；③条目级守卫：仍含"Argument==null 且原语已消费"行的文件放弃缓存（安全回退全量）。
+- **验证 [实测]**：连续双跑 stream 错误 0/0；命中 775/1820（守卫正确放弃 1045 个含不可缓存行文件）；xUnit 429 绿。
+- **遗留**：1045 个降级文件的终解是 P2c（FixedVariableTerm 全字典路径重绑——term 链降级消失后守卫几乎不触发，命中率恢复 90+）。
+- 教训：**errors 等价验证必须消息级对比**（本轮之前多轮"等价"结论含未被发现的运行期错误——停靠帧定性让我放松了 errors.json 的检查标准）。
+
 ## 遗留登记
 
 - **L1（P1）**：真机合并验收（Phase 1+1.5+2）。
