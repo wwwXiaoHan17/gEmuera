@@ -74,6 +74,13 @@
 - **代价（诚实）**：命中率暂降至 246/1820——label Arg 的 term 链（FixedVariableTerm）降级触发条目回退；**P2c 完成后守卫/降级几乎消失，命中率与启动收益随之恢复**。当前版本为"正确性完整"基线。
 - 过程教训：多轮 python 整文件编辑曾造成写读不对称（写侧块丢失、版本错位）——**最终以 git diff 全量核对 + Edit 工具定点修复收口**；此类成对修改应以 diff 复核为收尾步骤。
 
+### 补遗 5（2026-11-22）：P2c 变量重绑上下文化（提交 c0e9a41）
+
+- **实现**：变量头（name+subID+VariableCode）+ `CodecLookupVariable`（不依赖 scaningLine）+ LOCAL 族按恢复上下文（`RestoreLabelContext`）经 `GetNewLocalVariableToken` 原路径重建 + FixedVariableTerm（token+常量索引）覆盖；私有 #DIM 仍降级。
+- **验证 [实测]**：双跑 state/effects/display **EQUAL**、errors **0/0**、xUnit 429 绿。
+- **实测修正假设**：命中率 237/1820——LOCAL 重绑修好后命中率未大幅回升（skipped 7707→9721），**瓶颈实测在条目级守卫（1583/1820 文件被"prim 消费行+Argument==null"守卫放弃）而非 term 重绑**。守卫触发行的指令分布需专项直方图（遗留 L5）——此前"FixedVariableTerm 是钥匙"的推断被数据部分推翻。
+- 工程教训：输出目录冲突会让 runner 静默双失败（本轮 p2c 首跑 0 数据）；runner 输出目录必须先清理。
+
 ## 遗留登记
 
 - **L1（P1）**：真机合并验收（Phase 1+1.5+2）。
