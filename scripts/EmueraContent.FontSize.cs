@@ -49,7 +49,8 @@ public partial class EmueraContent
 
 	void ApplyFontSize(int fontSize)
 	{
-		// 核心侧：字号/行高/派生排版参数/字体缓存/ConfigData 同步（Config.SetRuntimeFontSize）。
+		// 核心侧：字号/行高/派生排版参数/字体缓存（Config.SetRuntimeFontSize；
+		// ConfigData/GETCONFIG 保持基准值不同步，见该方法注释）。
 		Config.SetRuntimeFontSize(fontSize);
 		// PRINTC 像素分栏阈值按字号懒计算且无过期机制，必须显式失效。
 		GlobalStatic.Console?.InvalidatePrintCWidthCache();

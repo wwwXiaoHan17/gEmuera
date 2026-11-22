@@ -601,8 +601,12 @@ namespace MinorShift.Emuera
 				DrawingParam_ShapePositionShift = Math.Max(2, FontSize / 6);
 			DrawableWidth = WindowX - DrawingParam_ShapePositionShift;
 			ClearFont();
-			ConfigData.Instance?.GetItem(ConfigCode.FontSize)?.SetValue<int>(FontSize);
-			ConfigData.Instance?.GetItem(ConfigCode.LineHeight)?.SetValue<int>(LineHeight);
+			// 不要把运行时字号同步进 ConfigData：ERB（EraTW グラフィック表示ライブラリ等）把
+			// GETCONFIG("フォントサイズ"/"一行の高さ") 当作布局标定基准——百分比尺寸按
+			// 「常量/基准字号」换算，渲染时再乘运行时字号，两者相除恰好放大 RuntimeFontScale 倍；
+			// 若此处同步运行时值，基准随字号漂移，图片渲染尺寸不再随排版缩放（实测：字 2×、
+			// div 2×、图片 1× → 图片相对变小、网格溢出视口）。XEmuera 同款语义：
+			// 配置=基准，FontScale=运行时乘数。
 		}
 		// 运行时字号基准（首次 SetRuntimeFontSize 时的字号；0=未做过运行时改字号）。
 		// 行内图像的 px 尺寸按 RuntimeFontScale 缩放以跟随排版（见 ConsoleImagePart）。
