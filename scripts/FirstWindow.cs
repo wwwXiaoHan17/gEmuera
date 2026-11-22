@@ -65,6 +65,9 @@ public partial class FirstWindow : Control
 		// v24/snake 双标签已合并（2026-09-22）：游戏条目自带 profile 路由（列表后缀
 		// 显示 v24/snake/手动），扫描也统一一次全扫，分类标签只剩导航噪音。
 		Game,
+		// 高级兼容设置独立页签（2026-11-22）：原为游戏页顶部内联折叠块，展开后其
+		// 滚动条被游戏页外层滚动条遮挡（用户反馈），独立成页后滚动链路只有一层。
+		Compat,
 		Diagnostics,
 		Manual
 	}
@@ -118,9 +121,11 @@ public partial class FirstWindow : Control
 	MarginContainer launcherMargin;
 	SafeAreaApplicator launcherSafeArea;
 	Button gameTabButton;
+	Button compatTabButton;
 	Button diagnosticsTabButton;
 	Button manualTabButton;
 	Control gameTabContent;
+	Control compatTabContent;
 	Control manualTabContent;
 	Control diagnosticsTabContent;
 	CheckButton emueraDebugModeToggle;
@@ -368,6 +373,11 @@ public partial class FirstWindow : Control
 		gameTabContent.SetAnchorsPreset(LayoutPreset.FullRect);
 		contentStack.AddChild(gameTabContent);
 
+		compatTabContent = CreateCompatTabContent();
+		compatTabContent.SetAnchorsPreset(LayoutPreset.FullRect);
+		compatTabContent.Visible = false;
+		contentStack.AddChild(compatTabContent);
+
 		manualTabContent = CreateManualContent();
 		manualTabContent.SetAnchorsPreset(LayoutPreset.FullRect);
 		manualTabContent.Visible = false;
@@ -390,10 +400,12 @@ public partial class FirstWindow : Control
 		rail.AddThemeConstantOverride("separation", 8);
 
 		gameTabButton = CreateRailButton(MultiLanguage.Get("FirstWindow.GameTab", "游戏"), () => SelectLauncherTab(LauncherTab.Game));
+		compatTabButton = CreateRailButton(MultiLanguage.Get("FirstWindow.CompatTab", "兼容"), () => SelectLauncherTab(LauncherTab.Compat));
 		diagnosticsTabButton = CreateRailButton(MultiLanguage.Get("FirstWindow.DebugLogButton", "调试/日志"), () => SelectLauncherTab(LauncherTab.Diagnostics));
 		manualTabButton = CreateRailButton(MultiLanguage.Get("FirstWindow.ManualButton", "操作手册"), () => SelectLauncherTab(LauncherTab.Manual));
 
 		rail.AddChild(gameTabButton);
+		rail.AddChild(compatTabButton);
 		rail.AddChild(diagnosticsTabButton);
 		rail.AddChild(manualTabButton);
 
@@ -425,6 +437,7 @@ public partial class FirstWindow : Control
 		// contentStack 规则：先隐藏全部子 content，再显示选中项。
 		// 不沿用 game/manual 的两两互斥判断，避免新增第三个 content 后出现显隐竞态。
 		gameTabContent.Visible = false;
+		compatTabContent.Visible = false;
 		manualTabContent.Visible = false;
 		if (diagnosticsTabContent != null)
 			diagnosticsTabContent.Visible = false;
@@ -437,17 +450,25 @@ public partial class FirstWindow : Control
 			return;
 		}
 
+		if (tab == LauncherTab.Compat)
+		{
+			// 兼容包候选依赖游戏扫描结果，但游戏列表此前已扫过；页签切换不重扫。
+			compatTabContent.Visible = true;
+			return;
+		}
+
 		bool showingManual = tab == LauncherTab.Manual;
 		gameTabContent.Visible = !showingManual;
 		manualTabContent.Visible = showingManual;
 
-		if (!showingManual)
+		if (tab == LauncherTab.Game)
 			ScanGames();
 	}
 
 	void UpdateTabButtonStyles()
 	{
 		ApplyRailButtonStyle(gameTabButton, currentTab == LauncherTab.Game);
+		ApplyRailButtonStyle(compatTabButton, currentTab == LauncherTab.Compat);
 		ApplyRailButtonStyle(diagnosticsTabButton, currentTab == LauncherTab.Diagnostics);
 		ApplyRailButtonStyle(manualTabButton, currentTab == LauncherTab.Manual);
 	}
@@ -599,13 +620,10 @@ public partial class FirstWindow : Control
 
 	Control CreateGameContent()
 	{
-		// Why（布局回归修复 2026-10-18）：展开「兼容设置」后（高级模式 + profile +
-		// 兼容包勾选列表 + 手动路径，最多再叠加 64 个包候选行）内容最小高度会超过
-		// 648p 窗口的可用内容区；VBox 在子项最小高度之和超出自身高度时不会收缩，
-		// 会把 ItemList/浏览按钮/Start 依次挤出 contentStack 底边并与状态行重叠
-		//（用户截图：展开后整块内容盖住游戏列表与底部按钮）。整块游戏页放进
-		// ScrollContainer 后：内容装得下时仍按窗口高度铺满（VBox 拿到视口高度），
-		// 装不下时出现滚动条，任何窗口高度都不会把控件渲染到 panel 之外。
+		// Why（2026-10-18 引入，2026-11-22 简化）：游戏页整体放进 ScrollContainer
+		// 作为小窗口/超长列表的兜底滚动。原顶部的「兼容设置」内联折叠块已整体迁移
+		// 到独立「兼容」页签（用户反馈：折叠块展开后其滚动条被游戏页外层滚动条
+		// 遮挡；独立页后滚动链路只有一层）。
 		var scroll = new ScrollContainer();
 		scroll.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 		scroll.SizeFlagsVertical = SizeFlags.ExpandFill;
@@ -618,16 +636,11 @@ public partial class FirstWindow : Control
 		content.AddThemeConstantOverride("separation", 12);
 		scroll.AddChild(content);
 
-		// 兼容设置默认折叠（移动端优先：游戏列表第一眼可见），折叠开关在
-		// CreateCompatibilitySettings 内部构建。
-		content.AddChild(CreateCompatibilitySettings());
-
 		gameList = new ItemList();
 		gameList.SizeFlagsVertical = SizeFlags.ExpandFill;
-		// 120 而非 260：展开兼容设置时（648p 窗口）让「高级模式/profile/兼容包/手动路径」
-		// 与列表、浏览行、Start 在可用高度内全部可见；窗口更高时 ExpandFill 会把列表
-		// 重新拉满。窗口更小或兼容包候选很多时由外层 ScrollContainer 兜底滚动。
-		gameList.CustomMinimumSize = new Vector2(0, 120);
+		// 最小高度仅兜底极矮窗口；常规窗口由 ExpandFill 拉满，超高列表由外层
+		// ScrollContainer 兜底滚动。
+		gameList.CustomMinimumSize = new Vector2(0, 160);
 		gameList.AddThemeFontSizeOverride("font_size", 20);
 		gameList.AddThemeConstantOverride("v_separation", 12);
 		gameList.AddThemeConstantOverride("line_separation", 8);
@@ -653,36 +666,36 @@ public partial class FirstWindow : Control
 		return scroll;
 	}
 
-	Control CreateCompatibilitySettings()
+	Control CreateCompatTabContent()
 	{
+		// 独立「兼容」页签（2026-11-22）：高级兼容开关 + profile 选择 + 兼容包选择
+		// 原是游戏页顶部的内联折叠块，展开后内容与游戏页外层滚动条互相遮挡。
+		// 独立成页后本页自持一层滚动，游戏页滚动条不再覆盖本页内容。
 		LoadCompatibilitySettings();
 
-		var settings = new VBoxContainer();
-		settings.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-		settings.AddThemeConstantOverride("separation", 6);
+		var scroll = new ScrollContainer();
+		scroll.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		scroll.SizeFlagsVertical = SizeFlags.ExpandFill;
+		scroll.HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled;
+		ApplyWideVerticalScrollbar(scroll.GetVScrollBar());
 
-		// 折叠开关：默认收起，点击展开高级兼容/profile/兼容包整块（移动端优先，
-		// 游戏列表上方只占一行）。状态不持久化——低频设置，每次进启动器默认收起。
-		var collapseToggle = new Button();
-		collapseToggle.Text = MultiLanguage.Get("FirstWindow.CompatSettingsToggle", "兼容设置") + " ▸";
-		collapseToggle.CustomMinimumSize = new Vector2(0, 40);
-		collapseToggle.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-		collapseToggle.AddThemeFontSizeOverride("font_size", 14);
-		GEmueraTheme.ApplyButton(collapseToggle, GEmueraTheme.Surface, GEmueraTheme.Border);
-		settings.AddChild(collapseToggle);
+		var content = new VBoxContainer();
+		content.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		content.AddThemeConstantOverride("separation", 12);
+		scroll.AddChild(content);
 
-		var body = new VBoxContainer();
-		body.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-		body.AddThemeConstantOverride("separation", 6);
-		body.Visible = false;
-		settings.AddChild(body);
-		collapseToggle.Pressed += () =>
-		{
-			body.Visible = !body.Visible;
-			collapseToggle.Text = MultiLanguage.Get(
-				"FirstWindow.CompatSettingsToggle",
-				"兼容设置") + (body.Visible ? " ▾" : " ▸");
-		};
+		content.AddChild(CreateSectionTitle(MultiLanguage.Get(
+			"FirstWindow.CompatTabTitle", "高级兼容设置")));
+
+		var hint = new Label();
+		hint.Text = MultiLanguage.Get(
+			"FirstWindow.CompatTabHint",
+			"覆盖下一次启动的兼容 profile 与兼容包。普通游戏保持默认路由即可，仅在游戏需要特殊兼容处理时调整。");
+		hint.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+		hint.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		hint.AddThemeColorOverride("font_color", GEmueraTheme.TextSecondary);
+		hint.AddThemeFontSizeOverride("font_size", 14);
+		content.AddChild(hint);
 
 		advancedCompatibilityToggle = new CheckButton();
 		advancedCompatibilityToggle.Text = MultiLanguage.Get(
@@ -696,7 +709,7 @@ public partial class FirstWindow : Control
 		advancedCompatibilityToggle.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 		advancedCompatibilityToggle.AddThemeFontSizeOverride("font_size", 15);
 		advancedCompatibilityToggle.Toggled += OnAdvancedCompatibilityToggled;
-		body.AddChild(advancedCompatibilityToggle);
+		content.AddChild(advancedCompatibilityToggle);
 
 		compatibilityProfileOption = new OptionButton();
 		compatibilityProfileOption.TooltipText = MultiLanguage.Get(
@@ -714,13 +727,13 @@ public partial class FirstWindow : Control
 		compatibilityProfileOption.Select(GetManualProfileOptionIndex());
 		compatibilityProfileOption.ItemSelected += OnManualProfileSelected;
 		compatibilityProfileOption.Visible = AdvancedCompatibilityEnabled;
-		body.AddChild(compatibilityProfileOption);
+		content.AddChild(compatibilityProfileOption);
 
 		// 兼容包选择 UI（扫描候选勾选 + 手动路径，移动端优先）整体在
 		// FirstWindow.CompatPackUi.cs（partial）构建，这里只挂接。
-		body.AddChild(CreateCompatPackPicker());
+		content.AddChild(CreateCompatPackPicker());
 
-		return settings;
+		return scroll;
 	}
 
 	void OnAdvancedCompatibilityToggled(bool enabled)
