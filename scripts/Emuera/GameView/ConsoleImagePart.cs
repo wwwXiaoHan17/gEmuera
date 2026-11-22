@@ -47,7 +47,7 @@ namespace MinorShift.Emuera.GameView
 			MappingGraphName = mappingGraphName;
 			cImageM = string.IsNullOrEmpty(MappingGraphName) ? null : AppContents.GetSprite(MappingGraphName);
 			Display = display;
-			PositionX = raw_xpos.isPx ? raw_xpos.num : (raw_xpos.num * Config.FontSize / 100);
+			PositionX = raw_xpos.isPx ? ScalePxValue(raw_xpos.num) : (raw_xpos.num * Config.FontSize / 100);
 			ColorMatrixVariableName = colorMatrixVariableName;
 			ColorMatrix = ResolveColorMatrix(colorMatrixVariableName);
 			// 成功加载的图片不会设置 AltText，但原生输出日志仍会保留 <img> 标签。
@@ -60,7 +60,7 @@ namespace MinorShift.Emuera.GameView
 			if (raw_height.num == 0)
 				height = Config.FontSize;
 			else
-				height = raw_height.isPx ? raw_height.num : (Config.FontSize * raw_height.num / 100);
+				height = raw_height.isPx ? ScalePxValue(raw_height.num) : (Config.FontSize * raw_height.num / 100);
 			// 防御性：百分比高度在字体较小时可能因整数除法变为0（如 height='1%' 且 FontSize=18 时 18*1/100=0）。
 			// destRect.Height 为0 会导致 AddPartToContainer 与 GetRelativeImagePartBottom 产生不一致，
 			// 表现为图片自然尺寸渲染但行高只有 EffectiveLineHeight，最终图片被覆盖或溢出。
@@ -72,9 +72,9 @@ namespace MinorShift.Emuera.GameView
 			if (raw_width.num == 0)
 				width = 0; // will use natural size when sprite is loaded dynamically
 			else
-				width = raw_width.isPx ? raw_width.num : (Config.FontSize * raw_width.num / 100);
+				width = raw_width.isPx ? ScalePxValue(raw_width.num) : (Config.FontSize * raw_width.num / 100);
 
-			top = raw_ypos.isPx ? raw_ypos.num : (raw_ypos.num * Config.FontSize / 100);
+			top = raw_ypos.isPx ? ScalePxValue(raw_ypos.num) : (raw_ypos.num * Config.FontSize / 100);
 			int rectX = 0;
 			int rectY = top;
 			int rectW = width;
@@ -275,6 +275,12 @@ namespace MinorShift.Emuera.GameView
 				return "";
 			return AltText;
 		}
+
+		// 运行时字号缩放（XEmuera FontScale 的布局整体缩放语义）：行内图像的 px 尺寸
+		// 随 RuntimeFontScale 缩放，使图像与放大后的文字/行高保持同一比例——否则 px
+		// 图像在字号增大后比文字小，且被按新行高排版的后续行压住（表现为立绘被裁切）。
+		// 默认（未运行时改字号）比例恒为 1，行为与原版逐字节一致。
+		static int ScalePxValue(int value) => (int)MathF.Round(value * Config.RuntimeFontScale);
 
 		static string DisplayModeToHtml(DisplayMode display)
 		{

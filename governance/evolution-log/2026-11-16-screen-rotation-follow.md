@@ -390,3 +390,25 @@ fullSensor 语义 = 4 方向跟随传感器**且忽略用户方向锁定**，旋
 > 翻转后=左下角（内容不镜像）。竖屏右侧菜单栏避让（本文件补遗 11 第 2 条）
 > 仍然保留。详情与验证记录见
 > [2026-11-22-quick-panel-pin-bottom-right.md](2026-11-22-quick-panel-pin-bottom-right.md)。
+
+> 补遗 17（2026-11-22，用户报「调整字体大小后图片比字体小、被压下去、立绘只加载一部分」）
+>
+> 根因（代码取证）：`ConsoleImagePart` 的几何在打印时刻一次性算死——百分比尺寸按当时
+> `Config.FontSize` 换算（随字号缩放 ✓），但 **px 尺寸是绝对值**（HTML_PRINT 的
+> `height='40px'`）。运行时字号改大后：文字按新字号渲染变大，px 图像保持原尺寸
+> →「图片比字体小」；后续行按新行高排版覆盖图像下缘 →「立绘只加载一部分」。
+> 这与 XEmuera `FontScale` 的「布局整体缩放」语义相悖（文档：窗口宽度相应调整）。
+>
+> 修复（布局整体缩放语义）：
+> - `Config.SetRuntimeFontSize`：首次调用时记录 `RuntimeFontSizeBase`（游戏配置基准字号），
+>   新增 `RuntimeFontScale = FontSize / RuntimeFontSizeBase`
+> - `ConsoleImagePart`：ctor 内 px 尺寸/偏移（height/width/ypos/xpos 的 px 分支）乘以
+>   `ScalePxValue = round(v × RuntimeFontScale)`；百分号分支本就随 FontSize 缩放不变
+> - 门控：比例仅在使用运行时字号后 ≠1；默认状态逐字节不变（v24pure 语义无漂移）
+>
+> 验证 [实测]：桌面 + 测试游戏（HTML_PRINT `<img height='40px'>` 前后两行 + WAIT 推进），
+> 字号 18→32 后下次文本更新：新行 px 图像 40→71px（=40×32/18）与 32 号文字比例一致，
+> 旧行文字/图像保持冻结；构建 0 error。
+> 语义确认（用户澄清）：字号改动不立即生效，在下次文本更新时生效——与 dev#2 空闲帧
+> 应用设计一致，测试流程据此推进。
+> [未验证] 真机表现；PRINTC 密集列布局在 px 图像缩放后的重排。

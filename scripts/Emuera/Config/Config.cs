@@ -589,6 +589,11 @@ namespace MinorShift.Emuera
 			if (clamped == FontSize)
 				return;
 			int oldFontSize = FontSize;
+			// 首次运行时改字号前记录游戏配置基准：RuntimeFontScale = FontSize/基准，
+			// 供行内 px 图像随排版缩放（XEmuera FontScale 的布局整体缩放语义）。
+			// 用户把字号改回基准值时比例回到 1；默认（从未调用本方法）行为逐字节不变。
+			if (RuntimeFontSizeBase == 0)
+				RuntimeFontSizeBase = oldFontSize;
 			FontSize = clamped;
 			LineHeight = FontSizeScaling.ComputeScaledLineHeight(oldFontSize, LineHeight, clamped);
 			DrawingParam_ShapePositionShift = 0;
@@ -599,6 +604,12 @@ namespace MinorShift.Emuera
 			ConfigData.Instance?.GetItem(ConfigCode.FontSize)?.SetValue<int>(FontSize);
 			ConfigData.Instance?.GetItem(ConfigCode.LineHeight)?.SetValue<int>(LineHeight);
 		}
+		// 运行时字号基准（首次 SetRuntimeFontSize 时的字号；0=未做过运行时改字号）。
+		// 行内图像的 px 尺寸按 RuntimeFontScale 缩放以跟随排版（见 ConsoleImagePart）。
+		public static int RuntimeFontSizeBase { get; private set; }
+		public static float RuntimeFontScale =>
+			RuntimeFontSizeBase > 0 ? (float)FontSize / RuntimeFontSizeBase : 1f;
+
 		public static int WindowY { get; private set; }
 		public static int WindowPosX { get; private set; }
 		public static int WindowPosY { get; private set; }
