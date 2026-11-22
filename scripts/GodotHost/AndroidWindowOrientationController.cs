@@ -145,6 +145,10 @@ public partial class AndroidWindowOrientationController : Node
 			// 旋转完全交给系统。Godot 的 ScreenOrientation 枚举没有该值（导出清单是
 			// fullUser = 尊重用户锁定，这才是锁定下不跟随的根因），故直接调 Java。
 			fullSensorApplied = TryApplyFullSensor();
+			// 模式（重新）应用的瞬间也是系统爱改写方向的时刻（启动 surface 就绪、
+			// resume、窗口模式切换）：打开加速收敛窗，下一拍从快节拍开始。
+			MarkGuardFastWindow();
+			nextFullSensorGuardTime = FullSensorGuardFastIntervalSeconds;
 			MobileLayoutDiagnostics.PublishOrientation("[ORIENTATION] 应用方向模式 → reason=" + reason
 				+ " mode=" + (fullSensorApplied ? "full_sensor" : "gravity_poll")
 				+ " window=" + DisplayServer.WindowGetSize());
@@ -164,10 +168,24 @@ public partial class AndroidWindowOrientationController : Node
 	// Godot 会按 manifest（fullUser）重新设置方向，把运行时请求覆盖掉。因此定时校验
 	// 实际 requestedOrientation，被改写就重设；连续失败则判定系统不接受，退回重力轮询。
 	const double FullSensorGuardIntervalSeconds = 1.0;
+	// 启动/窗口模式切换后的收敛期：surface 重建会连续改写方向请求，常规 1s 守护
+	// 节拍让用户感知为「刚启动转屏要等一下/偶尔不转」（2026-11-22 真机反馈）。
+	// 收敛期内把节拍提到 0.25s 尽快夺回，窗口过后回到 1s 常规节拍。
+	const double FullSensorGuardFastIntervalSeconds = 0.25;
+	const double FullSensorGuardFastWindowSeconds = 10.0;
 	const int FullSensorMaxConsecutiveFailures = 8;
 
 	static double nextFullSensorGuardTime;
 	static int fullSensorConsecutiveFailures;
+	static double fullSensorGuardFastUntilMs;
+
+	static double CurrentGuardIntervalSeconds()
+		=> Time.GetTicksMsec() < fullSensorGuardFastUntilMs
+			? FullSensorGuardFastIntervalSeconds
+			: FullSensorGuardIntervalSeconds;
+
+	static void MarkGuardFastWindow()
+		=> fullSensorGuardFastUntilMs = Time.GetTicksMsec() + FullSensorGuardFastWindowSeconds;
 
 	/// <summary>读 Activity 实际持有的 requestedOrientation，确认 FULL_SENSOR 仍在我们手里。</summary>
 	static bool IsFullSensorActive()
@@ -199,7 +217,7 @@ public partial class AndroidWindowOrientationController : Node
 		nextFullSensorGuardTime -= delta;
 		if (nextFullSensorGuardTime > 0.0)
 			return;
-		nextFullSensorGuardTime = FullSensorGuardIntervalSeconds;
+		nextFullSensorGuardTime = CurrentGuardIntervalSeconds();
 		if (IsFullSensorActive())
 		{
 			fullSensorConsecutiveFailures = 0;
@@ -451,6 +469,14 @@ public partial class AndroidWindowOrientationController : Node
 				return;
 			DisplayServer.WindowSetMode(target);
 			windowModeFailureWarnings = 0;
+			// 窗口模式切换伴随 surface 重建，系统会按 manifest（fullUser）重写方向
+			// 请求——必须同一拍立即夺回，否则要等守护 1s 节拍（用户感知为「启动后
+			// 转屏延迟甚至转不了」）；同时打开加速收敛窗防连续改写。
+			if (FollowDeviceOrientation && fullSensorApplied && TryApplyFullSensor())
+			{
+				MarkGuardFastWindow();
+				nextFullSensorGuardTime = FullSensorGuardFastIntervalSeconds;
+			}
 			MobileLayoutDiagnostics.PublishOrientation("[WINDOWMODE] 请求窗口模式 → reason=" + reason
 				+ " kind=" + kind
 				+ " target=" + target

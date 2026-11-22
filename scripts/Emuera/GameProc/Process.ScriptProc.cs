@@ -58,7 +58,9 @@ namespace MinorShift.Emuera.GameProc
 				//if (line == null)
 				//	throw new ExeEE("Emuera.exeは次に実行する行を見失いました");
 				if (line.IsError)
+				{
 					throw new CodeEE(line.ErrMes);
+				}
 				else if (func != null)
 				{//1753 InstructionLineを先に持ってきてみる。わずかに速くなった気がしないでもない
 					if (!Program.DebugMode && func.Function.IsDebug())

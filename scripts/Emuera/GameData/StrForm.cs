@@ -25,6 +25,7 @@ namespace MinorShift.Emuera.GameData
 		static FunctionMethodTerm CallnamePlayer = null;// "==="
 		static FunctionMethodTerm NameAssi = null;// "///"
 		static FunctionMethodTerm CallnameTarget = null;// "$$$"
+
 		public static void Initialize()
 		{
 			formatCurlyBrace = new FormatCurlyBrace();

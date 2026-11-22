@@ -6062,6 +6062,15 @@ public partial class EmueraContent : Control
 		quickButtons?.RefreshSizing();
 	}
 
+	// 「Quick面板翻转」开关切换后的即时响应：内嵌锚点模式由 RefreshSizing 的重排
+	// 覆盖；悬浮窗（桌面原生窗）与移动端浮层不经过锚点，需各自水平镜像到对侧，
+	// 否则开关拨了看不到任何变化（2026-11-22 用户反馈「翻转不灵敏」）。
+	public void NotifyQuickFlipChanged()
+	{
+		quickButtons?.NotifyFlipSettingChanged();
+		quickFloatingWindow?.OnFlipSettingChanged();
+	}
+
 	// 悬浮仅表示“面板可脱离右下角自由摆放”，不再等于“需要原生 OS 窗口”：
 	// 桌面端用 Godot Window 原生宿主；移动端用画布内拖拽浮层（QuickButtons
 	// FloatingOverlayMode），不依赖 Windows/嵌入 Window 组件，Android 同样可用。

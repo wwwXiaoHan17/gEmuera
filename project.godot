@@ -28,11 +28,6 @@ window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 window/handheld/orientation=6
 
-[input_devices]
-
-sensors/enable_accelerometer=true
-sensors/enable_gravity=true
-
 [dotnet]
 
 project/assembly_name="gemuera-c#"
@@ -40,6 +35,11 @@ project/assembly_name="gemuera-c#"
 [editor_plugins]
 
 enabled=PackedStringArray("res://addons/gdUnit4/plugin.cfg", "res://addons/markdownlabel/plugin.cfg")
+
+[input_devices]
+
+sensors/enable_accelerometer=true
+sensors/enable_gravity=true
 
 [launcher]
 

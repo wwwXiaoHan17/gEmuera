@@ -379,7 +379,8 @@ public partial class OptionWindow : Control
 		quickFontSizeLabel.Text = quickFontSizeSlider.Value.ToString();
 		quickFontRow.AddChild(quickFontSizeLabel);
 
-		// 面板翻转：默认靠右，翻转后靠左（宽度调节条同步翻到内侧）。即时生效。
+		// 面板翻转：默认靠右（右下角），翻转后靠左（左下角，纯位置换边不镜像，
+		// 宽度调节条同步翻到面板内侧）。即时生效。
 		var quickFlipRow = CreateRow(quickGroup, out quickFlipLabel);
 		quickFlipToggle = new CheckButton();
 		quickFlipToggle.ButtonPressed = QuickButtons.FlipEnabled;
@@ -788,6 +789,8 @@ public partial class OptionWindow : Control
 	{
 		QuickButtons.FlipEnabled = enabled;
 		EmueraContent.instance?.RefreshQuickButtonSettings();
+		// 悬浮窗/浮层不走锚点布局，需显式镜像位置，否则开关拨了没有可见变化。
+		EmueraContent.instance?.NotifyQuickFlipChanged();
 	}
 
 	void OnQuickFloatingToggled(bool enabled)

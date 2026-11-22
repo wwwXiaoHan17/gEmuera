@@ -7,8 +7,8 @@
   "sources": [
     {
       "relativePath": "Scripts/Emuera/Sub/EraBinaryDataReader.cs",
-      "sha256": "c923dcc6fffc4caf8aae66159f44146eac8ec7c4449809ac43aa671272819ea3",
-      "byteLength": 32849
+      "sha256": "b8b56536b864a4aece0a2bad6d183f1b6282f6830888ec51d59eff37cd3eb754",
+      "byteLength": 35848
     },
     {
       "relativePath": "Scripts/Emuera/Sub/EraBinaryDataWriter.cs",
