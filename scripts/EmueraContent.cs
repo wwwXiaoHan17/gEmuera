@@ -462,6 +462,7 @@ public partial class EmueraContent : Control
 	bool menuExpanded = false;
 	TextureButton inputMenuButton;
 	TextureButton quickMenuButton;
+	TextureButton quickRehomeMenuButton;
 	TextureButton autoSkipMenuButton;
 	TextureButton scaleMenuButton;
 	TextureButton mouseMenuButton;
@@ -982,6 +983,11 @@ public partial class EmueraContent : Control
 		AddIconButton("res://assets/icons/options.svg", OnOptionsPressed);
 		inputMenuButton = AddIconButton("res://assets/icons/io_input.svg", OnInputTogglePressed);
 		quickMenuButton = AddIconButton("res://assets/icons/quick.svg", OnQuickTogglePressed);
+		// 「面板回位」：悬浮浮层被拖远/跨方向坐标陈旧而难以看到时，从系统菜单
+		// 一键回当前方向目标角（右下；翻转开=左下）。入口必须放在面板之外——
+		// 面板本身不可见时，面板上的任何按钮都够不着（2026-11-22 用户裁定）。
+		quickRehomeMenuButton = AddIconButton("res://assets/icons/rehome.svg", OnQuickRehomePressed);
+		quickRehomeMenuButton.Disabled = !IsQuickFloatingOverlayActive;
 		autoSkipMenuButton = AddIconButton("res://assets/icons/auto_skip.svg", OnAutoSkipTogglePressed);
 		AddIconButton("res://assets/icons/menu_save_log.svg", OnSaveLogPressed);
 		AddIconButton("res://assets/icons/Title.svg", OnGotoTitlePressed);
@@ -6533,8 +6539,20 @@ public partial class EmueraContent : Control
 	}
 
 	// Reflect overlay/auto-skip state in the menu icon tint.
+	// 悬浮浮层模式是否生效（决定「面板回位」菜单项可用性）。
+	bool IsQuickFloatingOverlayActive =>
+		quickButtons != null && QuickButtons.FloatingEnabled && quickButtons.FloatingOverlayMode;
+
+	// 「面板回位」：不依赖面板本身可达（面板不可见时面板上的按钮同样够不着）。
+	void OnQuickRehomePressed()
+	{
+		quickButtons?.RehomeOverlayPanel();
+	}
+
 	void UpdateSystemButtonVisuals()
 	{
+		if (quickRehomeMenuButton != null)
+			quickRehomeMenuButton.Disabled = !IsQuickFloatingOverlayActive;
 		SetSystemButtonActive(inputMenuButton, inputpad != null && inputpad.IsShow);
 		SetSystemButtonActive(quickMenuButton, quickButtons != null && quickButtons.IsShow);
 		SetSystemButtonActive(autoSkipMenuButton, autoClickSkipEnabled);
