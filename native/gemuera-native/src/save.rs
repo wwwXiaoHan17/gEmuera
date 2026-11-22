@@ -300,7 +300,7 @@ mod tests {
         assert_eq!(
             encode_int64_array(&mid_run_207),
             {
-                let mut v = vec![208u8, 0, 0, 0, MARKER_ZERO, MARKER_BYTE, 0x09, MARKER_EOD];
+                let v = vec![208u8, 0, 0, 0, MARKER_ZERO, MARKER_BYTE, 0x09, MARKER_EOD];
                 v
             }
         );
