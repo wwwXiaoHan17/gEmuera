@@ -62,6 +62,10 @@
     <Compile Remove="tools\colormatrix-check\**" />
     <EmbeddedResource Remove="tools\colormatrix-check\**" />
     <None Remove="tools\colormatrix-check\**" />
+    <!-- blend-check（掩码混合算子等价门禁）同上，独立编译。 -->
+    <Compile Remove="tools\blend-check\**" />
+    <EmbeddedResource Remove="tools\blend-check\**" />
+    <None Remove="tools\blend-check\**" />
     <!-- xUnit tests build independently via their own csproj; keep them out of the Godot host glob. -->
     <Compile Remove="tests\**" />
     <EmbeddedResource Remove="tests\**" />

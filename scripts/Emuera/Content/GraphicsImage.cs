@@ -537,6 +537,14 @@ namespace MinorShift.Emuera.Content
 			byte[] maskData, int maskW,
 			int w, int h, int destX, int destY)
 		{
+			// 原生快路径（native/gemuera-native/src/blend.rs）：与下方托管实现逐字节一致，
+			// 门禁 tools/blend-check（参考对拍 + 反射本方法互证，毒化探针取托管真参考）；
+			// 缺库/ABI 低/缓冲异常回退托管参考实现（下半段，位级语义唯一权威）。
+			bool nativeModified;
+			if (NativeBlend.TryBlendWithMask(dstData, dw, dh, srcData, srcW, maskData, maskW,
+					w, h, destX, destY, Program.Compatibility.Snake.UsesMaskAlphaChannel,
+					out nativeModified))
+				return nativeModified;
 			bool modified = false;
 			for (int y = 0; y < h; y++)
 			{

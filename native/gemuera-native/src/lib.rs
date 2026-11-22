@@ -6,6 +6,7 @@
 //!
 //! 所有导出函数为纯计算，不得 panic（extern "C" 边界）。
 
+pub mod blend;
 pub mod colormatrix;
 pub mod save;
 pub mod width;
@@ -13,7 +14,7 @@ pub mod zero_width_tables;
 
 /// 导出 ABI 版本，宿主加载后校验**不低于**各自模块所需的最低版本，
 /// 防止库与 C# 侧签名漂移。新增导出函数时递增此版本并同步 C# 侧 MinAbi。
-pub const NATIVE_ABI_VERSION: u32 = 5;
+pub const NATIVE_ABI_VERSION: u32 = 6;
 
 #[no_mangle]
 pub extern "C" fn gem_native_abi_version() -> u32 {
@@ -137,6 +138,34 @@ pub extern "C" fn gem_save_decode_int64_segment(
         Err(save::DecodeError::BadIndex) => -3,
         Err(_) => -1,
     }
+}
+
+/// RGBA8 掩码混合（语义 = `GraphicsImage.BlendWithMaskBytes`，契约见 blend 模块注释）。
+/// `mask_alpha` 非 0 取掩码 A 通道（snake 参考），否则 B 通道。返回 -1 参数异常；
+/// 0/1 = modified（是否有像素经 mask≠0 且在裁剪内写入）。
+///
+/// # Safety
+/// 调用方（C# 包装）必须先校验：`dst` 可写 `dw*dh*4` 字节、`src` 可读
+/// `src_w*h*4` 字节、`mask` 可读 `mask_w*h*4` 字节（即托管越界 = IndexOutOfRange
+/// 的场景由 C# 回退托管路径抛出，本函数不重复校验、不 panic）。
+#[no_mangle]
+pub extern "C" fn gem_blend_with_mask(
+    dst_ptr: *mut u8, dw: usize, dh: usize,
+    src_ptr: *const u8, src_w: usize,
+    mask_ptr: *const u8, mask_w: usize,
+    w: usize, h: usize, dest_x: i32, dest_y: i32,
+    mask_alpha: i32,
+) -> i32 {
+    if dst_ptr.is_null() || src_ptr.is_null() || mask_ptr.is_null() {
+        return -1;
+    }
+    let dst = unsafe { std::slice::from_raw_parts_mut(dst_ptr, dw * dh * 4) };
+    let src = unsafe { std::slice::from_raw_parts(src_ptr, src_w * h * 4) };
+    let mask = unsafe { std::slice::from_raw_parts(mask_ptr, mask_w * h * 4) };
+    blend::blend_with_mask(
+        dst, dw, dh, src, src_w, mask, mask_w, w, h, dest_x as i64, dest_y as i64,
+        mask_alpha != 0,
+    ) as i32
 }
 
 /// RGBA8 ColorMatrix 原地变换（语义 = `GraphicsImage.ApplyColorMatrixBytes`，
