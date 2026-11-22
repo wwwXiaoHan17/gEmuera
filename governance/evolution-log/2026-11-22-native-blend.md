@@ -47,3 +47,10 @@
 - P1 真机验收：与 ColorMatrix/存档读侧合并为一次 APK 重导验收（三项原生化共用一轮真机流程）。
 - P2 runner `scrollIntent.count` 时序抖动本身：固定回放窗口的边界抖动会污染语义哈希门禁的严格性（本轮 7/8+结构化定位足够裁定，但每次都要人工甄别）——若复发频率高，建议 runner 把 coverage 计数器移出语义哈希输入集（独立任务，需 runner 维护者决策）。
 - P2 alpha 用例的三方互证缺口（全局通道模式绑定会话）：可通过反射注入带 MaskAlphaChannel capability 的 LegacyCompatibilityProfile 补齐，成本中等；现有覆盖（参考转写 + Rust fuzz）已充分，暂不做。
+
+## 补遗（2026-11-22）：遗留登记增补 + 端到端效果验证路线
+
+> 补遗（2026-11-22）：用户问"如何知道效果"后裁定"先这样"——补充两条遗留并固化 A/B 验收路线。只增不改，上文遗留段保留原样。
+
+- **P1（增补）端到端效果验证走 A/B 对比法**：导两个 APK——正常版（含 `export/NativeLibs/android/arm64-v8a/libgemuera_native.so`）与对照版（导出前暂时移走该 `.so`，C# 探针失败自动全托管回退，同一代码基线）；同一大存档在两版上秒表计时读档/存档等待，差值即原生化净收益；图片切换（ColorMatrix）与立绘合成（blend）场景同轮观察卡顿。**零代码**，一次导出同时完成三项原生化（ColorMatrix/存档解码/blend）的真机验收与效果数据。不在本轮做：用户裁定"先这样"，且导出需用户侧操作。
+- **P2（增补）读档/存档路径无端到端计时埋点**：`load_times.log` 只覆盖启动链，LOAD/SAVE 总时长无数据——A/B 秒表法足够时不做；若需每次导出自带数据，再在 `EraBinaryDataReader`/`EraBinaryDataWriter` 加 MarkLoad 风格 PERF 计时（独立小改动）。
