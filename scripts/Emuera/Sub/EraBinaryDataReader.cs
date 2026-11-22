@@ -313,6 +313,20 @@ namespace MinorShift.Emuera.Sub
 
                     length0 = Math.Min(length0, saveLength0);
                     isNewArray = true;
+                }
+				// 原生快路径（native/gemuera-native/src/save.rs 读侧）：整窗口读 + Rust 找 EoD
+				// + Seek 回退，门禁 tools/save-codec-check --vs-reader；库缺失/流不可 seek 回退
+				// 下方托管循环（位级语义唯一权威）。
+				// 异常与托管循环对齐：流截断 → EndOfStreamException；未知 marker/越界 → FileEE。
+				if (MinorShift._Library.NativeSaveCodec.DecodeAvailable && reader.BaseStream.CanSeek)
+				{
+					ReadIntArraySegmentNative(refArray, length0, needInit && !isNewArray);
+					if (oriArray != null)
+					{
+						for (x = 0; x < length0; x++)
+							oriArray[x] = refArray[x];
+					}
+					return;
 				}
 				while (true)
 				{
@@ -349,6 +363,65 @@ namespace MinorShift.Emuera.Sub
 						oriArray[x] = refArray[x];
 				}
 				return;
+			}
+
+			/// <summary>
+			/// 原生读侧路径（ReadIntArray(Int64[]) 专用）：整窗口读流（池化缓冲，64KB 起步，
+			/// -2 截断时 4 倍扩窗重试），段解码交给 gem_save_decode_int64_segment（Rust 找 EoD
+			/// 并回报消耗字节数），随后 Seek 回退到段尾——托管侧零逐字节扫描。
+			/// 异常与托管循环对齐：流耗尽 → EndOfStreamException；未知 marker / 越界（仅损坏
+			/// 存档）→ FileEE。要求流可 seek（两条真实路径 MemoryStream/FileStream 均满足）；
+			/// 不可 seek 的流由调用方先行回退托管循环。
+			/// </summary>
+			private void ReadIntArraySegmentNative(Int64[] work, int length0, bool writeZeros)
+			{
+				Stream stream = reader.BaseStream;
+				long startPos = stream.Position;
+				long remaining = stream.Length - startPos;
+				var pool = System.Buffers.ArrayPool<byte>.Shared;
+				int window = (int)Math.Min(remaining, 65536);
+				byte[] buf = pool.Rent(window);
+				try
+				{
+					int consumed;
+					while (true)
+					{
+						// 整窗填充（stream.Read 可能部分读，循环补齐）；不足窗口 = 流耗尽
+						int got = 0;
+						while (got < window)
+						{
+							int r = stream.Read(buf, got, window - got);
+							if (r <= 0)
+								break;
+							got += r;
+						}
+						if (!MinorShift._Library.NativeSaveCodec.TryDecodeInt64Segment(
+								buf, got, work, length0, writeZeros, out consumed, out int errorCode))
+						{
+							if (errorCode == MinorShift._Library.NativeSaveCodec.DecodeErrorFormat
+								&& got == window && (long)window < remaining)
+							{
+								// 段被窗口截断（EoD 未落入本窗）→ 扩窗重试；buffer 内容不变，解码从头再来
+								pool.Return(buf);
+								window = (int)Math.Min(remaining, (long)window * 4);
+								buf = pool.Rent(window);
+								stream.Position = startPos;
+								continue;
+							}
+							// 真截断/坏 marker/越界：托管对应 EndOfStreamException / FileEE
+							if (errorCode == MinorShift._Library.NativeSaveCodec.DecodeErrorFormat
+								&& got < window)
+								throw new EndOfStreamException();
+							throw new FileEE("バイナリデータの異常");
+						}
+						break;
+					}
+					stream.Position = startPos + consumed;
+				}
+				finally
+				{
+					pool.Return(buf);
+				}
 			}
 
 			public override void ReadIntArray(SparseArray<Int64> refArray, bool needInit)

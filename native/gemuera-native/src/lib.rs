@@ -13,7 +13,7 @@ pub mod zero_width_tables;
 
 /// 导出 ABI 版本，宿主加载后校验**不低于**各自模块所需的最低版本，
 /// 防止库与 C# 侧签名漂移。新增导出函数时递增此版本并同步 C# 侧 MinAbi。
-pub const NATIVE_ABI_VERSION: u32 = 4;
+pub const NATIVE_ABI_VERSION: u32 = 5;
 
 #[no_mangle]
 pub extern "C" fn gem_native_abi_version() -> u32 {
@@ -100,6 +100,43 @@ pub extern "C" fn gem_save_encode_int64_array(
         }
     }
     encoded.len() as i32
+}
+
+/// 读侧 Int64 一维数组段解码（语义 = `EraBinaryDataReader.ReadIntArray(Int64[])`，
+/// 契约见 save::decode_int64_segment_into 注释）。`seg` 为 Int32 长度前缀之后的负载+EoD。
+/// 返回 0 成功（`consumed` 写回消耗字节数）；-1 空指针/参数异常；-2 格式错
+///（EOF/未知 marker，C# 托管对应 FileEE）；-3 越界写（托管对应 IndexOutOfRange，
+/// 仅损坏存档可达）。
+///
+/// # Safety
+/// `seg_ptr` 必须可读 `seg_len` 字节；`out_ptr` 必须可写 `out_len` 个 `i64`；
+/// `consumed` 非 null。`length0` 必须 ≤ `out_len`（由 C# 构造保证，违反返回 -1）。
+#[no_mangle]
+pub extern "C" fn gem_save_decode_int64_segment(
+    seg_ptr: *const u8,
+    seg_len: usize,
+    out_ptr: *mut i64,
+    out_len: usize,
+    length0: usize,
+    write_zeros: i32,
+    consumed: *mut usize,
+) -> i32 {
+    if seg_ptr.is_null() || out_ptr.is_null() || length0 > out_len {
+        return -1;
+    }
+    let seg = unsafe { std::slice::from_raw_parts(seg_ptr, seg_len) };
+    let out = unsafe { std::slice::from_raw_parts_mut(out_ptr, out_len) };
+    match save::decode_int64_segment_into(seg, out, length0, write_zeros != 0) {
+        Ok(n) => {
+            if !consumed.is_null() {
+                unsafe { *consumed = n };
+            }
+            0
+        }
+        Err(save::DecodeError::UnexpectedEof) | Err(save::DecodeError::BadMarker) => -2,
+        Err(save::DecodeError::BadIndex) => -3,
+        Err(_) => -1,
+    }
 }
 
 /// RGBA8 ColorMatrix 原地变换（语义 = `GraphicsImage.ApplyColorMatrixBytes`，

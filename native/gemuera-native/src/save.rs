@@ -62,6 +62,10 @@ pub enum DecodeError {
     UnexpectedEof,
     BadLength,
     TrailingData,
+    /// 越界写（C# 托管对应 IndexOutOfRangeException；仅损坏存档可达）
+    BadIndex,
+    /// 未知 marker（C# 托管对应 FileEE("バイナリデータの異常")）
+    BadMarker,
 }
 
 /// `ReadIntArray` 对应的解码（用于 round-trip 自检；生产 Reader 仍是 C# 流式状态机）。
@@ -76,7 +80,7 @@ pub fn decode_int64_array(input: &[u8]) -> Result<Vec<i64>, DecodeError> {
     }
     let mut pos = 4usize;
     let mut array = Vec::with_capacity(len as usize);
-    let mut read_int = |pos: &mut usize| -> Result<i64, DecodeError> {
+    let read_int = |pos: &mut usize| -> Result<i64, DecodeError> {
         if *pos >= input.len() {
             return Err(DecodeError::UnexpectedEof);
         }
@@ -133,6 +137,110 @@ pub fn decode_int64_array(input: &[u8]) -> Result<Vec<i64>, DecodeError> {
         array.push(0);
     }
     Ok(array)
+}
+
+/// 读侧段解码（2026-11-22 原生化）：复刻 `EraBinaryDataReader.ReadIntArray(Int64[])`
+/// 的解码与写入语义。段 = **Int32 长度前缀之后**的负载 + EoD（前缀由 C# reader 消费）。
+///
+/// 语义逐条对齐托管循环（勿"优化"掉任何一条）：
+/// - `x` 自 0 递增；值写入 `out[x]`，越界（x<0 或 ≥out.len()）→ `BadIndex`
+///   （托管为 IndexOutOfRangeException，仅损坏存档可达）。
+/// - `0xF0` 零游程：cnt 经 `read_int` 后按 C# `(int)m_ReadInt()` **截断为 i32**
+///   （`cnt as i32`）；`write_zeros && cnt > 0` 时写零（越界 → `BadIndex`）；
+///   cnt ≤ 0 时零次迭代（负 cnt 仍使 x 回退——托管同此行为）。
+/// - `write_zeros` = C# `needInit && !isNewArray`：false 时跳过全部零写入
+///   （与"新数组零初始化"/"needInit=false"两分支等价）。
+/// - 终止后尾部补零 `x..min(length0, out.len())`（仅 write_zeros；x<0 → `BadIndex`，
+///   托管尾循环首访问 refArray[x] 即抛）。`length0` = C# min(旧长, 存档长)。
+/// - 返回消耗字节数（含 EoD）；段内字节不足 → `UnexpectedEof`；未知 marker → `BadMarker`。
+pub fn decode_int64_segment_into(
+    seg: &[u8],
+    out: &mut [i64],
+    length0: usize,
+    write_zeros: bool,
+) -> Result<usize, DecodeError> {
+    let mut pos = 0usize;
+    // 托管 x 为 int；此处 i64 足以容纳全部现实取值（越界由显式检查拦截）
+    let mut x: i64 = 0;
+    let capacity = out.len() as i64;
+
+    let read_int = |pos: &mut usize| -> Result<i64, DecodeError> {
+        if *pos >= seg.len() {
+            return Err(DecodeError::UnexpectedEof);
+        }
+        let marker = seg[*pos];
+        *pos += 1;
+        let size = match marker {
+            MARKER_INT16 => 2usize,
+            MARKER_INT32 => 4,
+            MARKER_INT64 => 8,
+            m if m <= MARKER_BYTE => return Ok(m as i64),
+            _ => return Err(DecodeError::BadMarker),
+        };
+        if *pos + size > seg.len() {
+            return Err(DecodeError::UnexpectedEof);
+        }
+        let v = match size {
+            2 => i16::from_le_bytes([seg[*pos], seg[*pos + 1]]) as i64,
+            4 => i32::from_le_bytes([
+                seg[*pos],
+                seg[*pos + 1],
+                seg[*pos + 2],
+                seg[*pos + 3],
+            ]) as i64,
+            _ => i64::from_le_bytes(seg[*pos..*pos + 8].try_into().unwrap()),
+        };
+        *pos += size;
+        Ok(v)
+    };
+
+    loop {
+        if pos >= seg.len() {
+            return Err(DecodeError::UnexpectedEof);
+        }
+        let b = seg[pos];
+        pos += 1;
+        if b == MARKER_EOD {
+            break;
+        }
+        if b == MARKER_ZERO {
+            // C# `int cnt = (int)m_ReadInt()`：i64 值截断为 i32 再按符号扩展参与运算
+            let run = read_int(&mut pos)? as i32 as i64;
+            if write_zeros && run > 0 {
+                if x < 0 || x + run > capacity {
+                    return Err(DecodeError::BadIndex);
+                }
+                for i in 0..run {
+                    out[(x + i) as usize] = 0;
+                }
+            }
+            x += run;
+            continue;
+        }
+        let v = if b <= MARKER_BYTE {
+            b as i64
+        } else {
+            pos -= 1; // read_int 从 marker 本身开始
+            read_int(&mut pos)?
+        };
+        if x < 0 || x >= capacity {
+            return Err(DecodeError::BadIndex);
+        }
+        out[x as usize] = v;
+        x += 1;
+    }
+    if write_zeros {
+        if x < 0 {
+            return Err(DecodeError::BadIndex);
+        }
+        let tail_end = (length0 as i64).min(capacity);
+        let mut i = x;
+        while i < tail_end {
+            out[i as usize] = 0;
+            i += 1;
+        }
+    }
+    Ok(pos)
 }
 
 #[cfg(test)]
@@ -266,5 +374,113 @@ mod tests {
             decode_int64_array(&[1, 0, 0, 0, 0xE0, MARKER_EOD]),
             Err(DecodeError::UnexpectedEof)
         );
+    }
+
+    // ===== decode_int64_segment_into（读侧，2026-11-22） =====
+
+    /// 编码后剥掉 Int32 前缀的段（读侧输入形态）
+    fn payload_of(array: &[i64]) -> Vec<u8> {
+        encode_int64_array(array)[4..].to_vec()
+    }
+
+    #[test]
+    fn segment_roundtrip_exact_capacity() {
+        let mut state: u64 = 0x2026_1122;
+        let mut next = |bound: u64| {
+            state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            (state >> 33) % bound
+        };
+        for case in 0..300u32 {
+            let len = next(1500) as usize;
+            let mut array = Vec::with_capacity(len);
+            for _ in 0..len {
+                let roll = next(100);
+                array.push(match roll {
+                    0..=69 => 0,
+                    70..=84 => next(208) as i64,
+                    85..=94 => next(65536) as i64 - 32768,
+                    95..=99 => next(1 << 40) as i64,
+                    _ => -(next(1 << 40) as i64),
+                });
+            }
+            let seg = payload_of(&array);
+            // write_zeros=false（新数组语义）：C# 侧新数组零初始化 → 工作数组预置零，
+            // 解码只填非零位，结果应等于原数组
+            let mut work = vec![0i64; array.len()];
+            let consumed =
+                decode_int64_segment_into(&seg, &mut work, array.len(), false).expect("decode");
+            assert_eq!(consumed, seg.len());
+            assert_eq!(work, array, "case {case}");
+        }
+    }
+
+    /// needInit && !isNewArray（write_zeros=true）：工作数组比存档长时尾部补零；
+    /// 且入参非零填充必须被游程/尾部补零覆盖。
+    #[test]
+    fn segment_tail_zero_with_write_zeros() {
+        // 存档 [5,0,7]；工作数组长度 6（更长，旧值 0x55）
+        let seg = payload_of(&[5, 0, 7]);
+        let mut work = vec![0x55i64; 6];
+        decode_int64_segment_into(&seg, &mut work, 6, true).expect("decode");
+        assert_eq!(work, [5, 0, 7, 0, 0, 0]);
+    }
+
+    /// write_zeros=false（新数组/needInit=false 语义）：尾部不补零，游程零不写——
+    /// 新数组零初始化由 C# 分配器保证，等价托管 isNewArray 分支。
+    #[test]
+    fn segment_skip_zero_writes_when_new_array() {
+        let seg = payload_of(&[5, 0, 7]);
+        let mut work = vec![0x55i64; 6];
+        decode_int64_segment_into(&seg, &mut work, 6, false).expect("decode");
+        assert_eq!(work, [5, 0x55, 7, 0x55, 0x55, 0x55]); // 游程位与尾部都保持原值
+    }
+
+    /// 长零游程（跨 207/208 边界）+ write_zeros 的游程写零/尾部补零路径
+    #[test]
+    fn segment_long_zero_run_writes_zeros() {
+        let mut array = vec![0i64; 207];
+        array.push(9);
+        let seg = payload_of(&array);
+        let mut work = vec![0x55i64; 210];
+        decode_int64_segment_into(&seg, &mut work, 210, true).expect("decode");
+        // 游程 [0,207) 写零、out[207]=9，尾循环 x=208..210 把哨兵 0x55 补成 0
+        let mut expect = vec![0i64; 207];
+        expect.push(9);
+        expect.extend([0i64; 2]);
+        assert_eq!(work, expect);
+    }
+
+    /// 越界与未知 marker 错误路径
+    #[test]
+    fn segment_error_paths() {
+        // 元素数超容量 → BadIndex
+        let seg = payload_of(&[1, 2, 3]);
+        let mut work = [0i64; 2];
+        assert_eq!(
+            decode_int64_segment_into(&seg, &mut work, 2, true),
+            Err(DecodeError::BadIndex)
+        );
+        // 未知 marker（EoA1 属 2D 语法）→ BadMarker
+        let bad = [0xE0u8, MARKER_EOD];
+        let mut work2 = [0i64; 4];
+        assert_eq!(
+            decode_int64_segment_into(&bad, &mut work2, 4, true),
+            Err(DecodeError::BadMarker)
+        );
+        // 截断（EoD 缺失）→ UnexpectedEof
+        let cut = [0x05u8];
+        assert_eq!(
+            decode_int64_segment_into(&cut, &mut work2, 4, true),
+            Err(DecodeError::UnexpectedEof)
+        );
+    }
+
+    /// 负值经 Int16/Int32 marker 的符号扩展（与 C# ReadInt16/ReadInt32 带符号一致）
+    #[test]
+    fn segment_negative_values_sign_extend() {
+        let seg = payload_of(&[-1, -70000, 1]);
+        let mut work = [0i64; 3];
+        decode_int64_segment_into(&seg, &mut work, 3, false).expect("decode");
+        assert_eq!(work, [-1, -70000, 1]);
     }
 }
