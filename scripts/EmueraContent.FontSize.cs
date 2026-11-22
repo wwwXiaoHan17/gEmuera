@@ -58,5 +58,8 @@ public partial class EmueraContent
 		// DrawableWidth 已随字号变化，内容最小宽/滚动范围需对账（QueueScaleBoundsUpdate）。
 		RefreshFontSize();
 		QueueScaleBoundsUpdate();
+		// WindowX 已随字号缩放：移动端按新 DrawableWidth 重算 fit（内容物理大小按
+		// 补偿后的 fit 呈现，避免横向溢出滚动）；桌面端此调用直接返回。
+		ApplyMobileViewportPolicy();
 	}
 }

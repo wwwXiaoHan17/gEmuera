@@ -593,8 +593,17 @@ namespace MinorShift.Emuera
 			// 供行内 px 图像随排版缩放（XEmuera FontScale 的布局整体缩放语义）。
 			// 用户把字号改回基准值时比例回到 1；默认（从未调用本方法）行为逐字节不变。
 			if (RuntimeFontSizeBase == 0)
+			{
 				RuntimeFontSizeBase = oldFontSize;
+				RuntimeWindowXBase = WindowX;
+			}
 			FontSize = clamped;
+			// 窗口宽度（布局像素）同乘 RuntimeFontScale——XEmuera FontScale 的「窗口宽度相应
+			// 调整」：不缩放则每行字符数随字号减半、ERB 按 CLIENTWIDTH() 的估宽全部偏小，
+			// 布局被压缩（用户实测 36 明显紧凑）。GETCONFIG(窗口幅) 仍报基准（ConfigData
+			// 不同步），与字号基准语义一致。
+			if (RuntimeWindowXBase > 0)
+				WindowX = Math.Max(1, (int)Math.Round(RuntimeWindowXBase * (double)clamped / RuntimeFontSizeBase));
 			LineHeight = FontSizeScaling.ComputeScaledLineHeight(oldFontSize, LineHeight, clamped);
 			DrawingParam_ShapePositionShift = 0;
 			if (TextDrawingMode != TextDrawingMode.WINAPI)
@@ -611,6 +620,8 @@ namespace MinorShift.Emuera
 		// 运行时字号基准（首次 SetRuntimeFontSize 时的字号；0=未做过运行时改字号）。
 		// 行内图像的 px 尺寸按 RuntimeFontScale 缩放以跟随排版（见 ConsoleImagePart）。
 		public static int RuntimeFontSizeBase { get; private set; }
+		// 窗口宽度基准（首次调用时的 WindowX），SetRuntimeFontSize 按字号比例缩放 WindowX。
+		static int RuntimeWindowXBase { get; set; }
 		public static float RuntimeFontScale =>
 			RuntimeFontSizeBase > 0 ? (float)FontSize / RuntimeFontSizeBase : 1f;
 

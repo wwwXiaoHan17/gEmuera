@@ -465,3 +465,26 @@ fullSensor 语义 = 4 方向跟随传感器**且忽略用户方向锁定**，旋
 > GETCONFIG 下任何字号输出同样的标签）：字号 18→32 后第二行立绘 y40-175
 > （修复前 40-104）≈2× 完整渲染、蓝条完整、与第一行比例逐项一致；构建 0 error。
 > [未验证] EraTW 真机复测（待用户）。
+
+> 补遗 20（2026-11-23，用户实测「36 明显布局紧凑、18 宽松」——WindowX 未随字号缩放）
+>
+> 根因：排版级缩放的 px 覆盖清单此前有 img/div/shape，唯独漏了**窗口布局宽度**
+> `Config.WindowX`（→DrawableWidth）。XEmuera FontScale 文档明确「窗口宽度相应调整」；
+> 不缩放时：每行可容纳字符数随字号减半（文本折行位置漂移）、ERB 按 `CLIENTWIDTH()`
+> 的字体无关估宽全部偏小（SET_IMAGE_WITH_HEADER 的 ELEMENT_WIDTH 等）——两层叠加
+> 造成字号越大布局越挤。
+>
+> 修复：
+> - `Config.SetRuntimeFontSize`：首次调用同时记录 `RuntimeWindowXBase`，此后
+>   `WindowX = RuntimeWindowXBase × (字号/基准)`（GETCONFIG 窗口幅仍报基准，ConfigData
+>   不同步——与字号基准语义一致）
+> - `ApplyFontSize` 追加 `ApplyMobileViewportPolicy()`：移动端按新 DrawableWidth 重算
+>   fit（走既有补偿管线，防横向溢出滚动）；桌面端该调用直接返回
+>
+> 至此 px 覆盖清单完整：img px + div/shape px + WindowX/DrawableWidth，百分比属性走
+> 运行时字号——字号改动在下次文本更新后等价于「整个控制台按倍率重排版的清晰放大」。
+>
+> 验证 [实测]：桌面 + 测试游戏（70 字符长行 + 短行 ×4 + WAIT 推进）：字号 18→32 后
+> 长行折行列位置与 18 完全相同（右缘同为 x≈418/424），行列结构一致、字形 2×——
+> 布局等价于整体放大，紧凑感消除；构建 0 error。[未验证] 真机移动端 refit 后的
+> 物理呈现。
