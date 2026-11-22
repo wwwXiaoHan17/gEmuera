@@ -105,7 +105,13 @@ namespace MinorShift.Emuera.GameView
 		{
 			if (value == null)
 				return 0;
-			return value.isPx ? value.num : (value.num * Config.FontSize / 100);
+			// px 值随运行时字号缩放（XEmuera FontScale 布局整体缩放语义）：ERB 侧按基准
+			// 字号计算 px div/边距（如 EraTW 所在地察觉网格），字号运行时调大后 div 内部的
+			// <p>/<img> 按新字号渲染，若 div 边界不跟着放大，名字会折两行、立绘被裁切。
+			// 默认（未运行时改字号）比例恒为 1，行为与原版逐字节一致。
+			return value.isPx
+				? (int)MathF.Round(value.num * Config.RuntimeFontScale)
+				: (value.num * Config.FontSize / 100);
 		}
 
 		static string BuildAltText(MixedNum xPos, MixedNum yPos, MixedNum width, MixedNum height, int depth, int color, StyledBoxModel box, DisplayMode display)

@@ -22,7 +22,7 @@ namespace MinorShift.Emuera.GameView
 		{
 			float[] pixels = new float[param.Length];
 			for (int i = 0; i < param.Length; i++)
-				pixels[i] = param[i].isPx ? param[i].num : ((float)param[i].num * Config.FontSize) / 100f;
+				pixels[i] = param[i].isPx ? (int)MathF.Round(param[i].num * Config.RuntimeFontScale) : ((float)param[i].num * Config.FontSize) / 100f;
 			return CreateShapeCore(shapeType, pixels, color, bcolor, colorchanged, FormatMixedParameters(param));
 		}
 

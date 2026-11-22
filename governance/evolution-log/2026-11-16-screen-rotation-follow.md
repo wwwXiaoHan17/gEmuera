@@ -412,3 +412,24 @@ fullSensor 语义 = 4 方向跟随传感器**且忽略用户方向锁定**，旋
 > 语义确认（用户澄清）：字号改动不立即生效，在下次文本更新时生效——与 dev#2 空闲帧
 > 应用设计一致，测试流程据此推进。
 > [未验证] 真机表现；PRINTC 密集列布局在 px 图像缩放后的重排。
+
+> 补遗 18（2026-11-22，用户指认 EraTW 所在地察觉网格：名字折两行 + 立绘被裁）
+>
+> 用户指认具体 ERB：EraTW_Snake `ERB/fromEN/IMG/IMAGE_HELPERS.ERB` 的
+> `QOL_WHEREABOUTS_OUTSIDE_PRINT_CHARA` → `SET_IMAGE_WITH_HEADER`
+> （`ERB/魔改内容/GRAPH系.ERB` 调用，高度=100+修正值百分比）。
+> 该函数用 ERB 在打印时把每个「名字+立绘」单元算成 **px div**：
+> `<div width='{ELEMENT_WIDTH}px' height='{ELEMENT_HEIGHT}px' xpos='…px'><p>名字</p><img …></div>`，
+> 其中 ELEMENT_WIDTH 依赖 `デフォルトキャラ画像横幅`（常量）与 `CLIENTWIDTH()/DRAWLINESTR` 估宽——
+> 均不随运行时字号缩放。字号调大后：div 内 `<p>` 名字与 `<img>` 按新字号渲染变宽，
+> div 的 px 边界不变 → 三个字的名字折两行、立绘被 div 裁掉下半（截图与用户描述逐项吻合）。
+>
+> 修复（与 ConsoleImagePart px 缩放同语义，补齐 div 侧）：
+> - `ConsoleDivPart.ToPixel`：px 分支乘 `Config.RuntimeFontScale`（HtmlManager 对 div
+>   width/height/xpos 与 margin/padding/border/radius 的全部 px 换算都经过该方法）
+> - `ConsoleShapePart`：px 参数分支同样缩放（所在地面板的分隔竖条）
+>
+> 验证 [实测]：桌面 + px-div 测试游戏（`<div width='120px' height='110px'>` 内含
+> `<p>三字名</p>` + `<img height='40px'>`）：字号 18→32 后下次文本更新，新 div 整体
+> 放大 ~1.78×（约 213px）——名字一行放下、立绘完整显示；旧行冻结；构建 0 error。
+> EraTW 本体（snake 包）真机复测待用户。
