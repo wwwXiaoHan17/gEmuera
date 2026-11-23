@@ -462,6 +462,7 @@ public partial class EmueraContent : Control
 	bool menuExpanded = false;
 	TextureButton inputMenuButton;
 	TextureButton quickMenuButton;
+	TextureButton quickRehomeMenuButton;
 	TextureButton autoSkipMenuButton;
 	TextureButton scaleMenuButton;
 	TextureButton mouseMenuButton;
@@ -982,6 +983,11 @@ public partial class EmueraContent : Control
 		AddIconButton("res://assets/icons/options.svg", OnOptionsPressed);
 		inputMenuButton = AddIconButton("res://assets/icons/io_input.svg", OnInputTogglePressed);
 		quickMenuButton = AddIconButton("res://assets/icons/quick.svg", OnQuickTogglePressed);
+		// 「面板回位」：悬浮浮层被拖远/跨方向坐标陈旧而难以看到时，从系统菜单
+		// 一键回当前方向目标角（右下；翻转开=左下）。入口必须放在面板之外——
+		// 面板本身不可见时，面板上的任何按钮都够不着（2026-11-22 用户裁定）。
+		quickRehomeMenuButton = AddIconButton("res://assets/icons/rehome.svg", OnQuickRehomePressed);
+		quickRehomeMenuButton.Disabled = !IsQuickFloatingOverlayActive;
 		autoSkipMenuButton = AddIconButton("res://assets/icons/auto_skip.svg", OnAutoSkipTogglePressed);
 		AddIconButton("res://assets/icons/menu_save_log.svg", OnSaveLogPressed);
 		AddIconButton("res://assets/icons/Title.svg", OnGotoTitlePressed);
@@ -6533,8 +6539,20 @@ public partial class EmueraContent : Control
 	}
 
 	// Reflect overlay/auto-skip state in the menu icon tint.
+	// 悬浮浮层模式是否生效（决定「面板回位」菜单项可用性）。
+	bool IsQuickFloatingOverlayActive =>
+		quickButtons != null && QuickButtons.FloatingEnabled && quickButtons.FloatingOverlayMode;
+
+	// 「面板回位」：不依赖面板本身可达（面板不可见时面板上的按钮同样够不着）。
+	void OnQuickRehomePressed()
+	{
+		quickButtons?.RehomeOverlayPanel();
+	}
+
 	void UpdateSystemButtonVisuals()
 	{
+		if (quickRehomeMenuButton != null)
+			quickRehomeMenuButton.Disabled = !IsQuickFloatingOverlayActive;
 		SetSystemButtonActive(inputMenuButton, inputpad != null && inputpad.IsShow);
 		SetSystemButtonActive(quickMenuButton, quickButtons != null && quickButtons.IsShow);
 		SetSystemButtonActive(autoSkipMenuButton, autoClickSkipEnabled);
@@ -6675,24 +6693,11 @@ public partial class EmueraContent : Control
 	public void RefreshFontSize()
 	{
 		int size = FontSize;
-// Update all existing lines
-		if (lineContainer != null)
-		{
-			foreach (var node in lineContainer.GetChildren())
-			{
-				if (node is Control lineCtrl)
-				{
-					foreach (var child in lineCtrl.GetChildren())
-					{
-						if (child is Control ctrl)
-						{
-							ctrl.AddThemeFontSizeOverride("font_size", size);
-						}
-					}
-				}
-			}
-		}
-		consoleRenderSurface?.MarkDirty();
+		// 既有控制台行一律不重刷（2026-11-23 契约修正）：排版级缩放只影响之后生成的行，
+		// 已显示行的几何/字号在输出时已固化。此前这里对 lineContainer 子控件重设 font_size
+		// 并 MarkDirty 重绘画布，导致字号变更后旧文本按新字号在「新行位」重绘一份、
+		// 而 div 内图片/旧 Control 内容停在原位——表现为内容重复、图片丢失、间距错乱
+		//（实测：3 行界面在 36 号下出现两套错位内容）。
 		// Update auxiliary UI
 		inputpad?.ApplyFont(mainFont, size);
 		quickButtons?.ApplyFont(mainFont, size);

@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tools/launcher-compat-tab/OverlayCheck.cs" id="1_overlaycheck"]
+
+[node name="OverlayCheck" type="Node"]
+script = ExtResource("1_overlaycheck")

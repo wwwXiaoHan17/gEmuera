@@ -390,3 +390,211 @@ fullSensor 语义 = 4 方向跟随传感器**且忽略用户方向锁定**，旋
 > 翻转后=左下角（内容不镜像）。竖屏右侧菜单栏避让（本文件补遗 11 第 2 条）
 > 仍然保留。详情与验证记录见
 > [2026-11-22-quick-panel-pin-bottom-right.md](2026-11-22-quick-panel-pin-bottom-right.md)。
+
+> 补遗 17（2026-11-22，用户报「调整字体大小后图片比字体小、被压下去、立绘只加载一部分」）
+>
+> 根因（代码取证）：`ConsoleImagePart` 的几何在打印时刻一次性算死——百分比尺寸按当时
+> `Config.FontSize` 换算（随字号缩放 ✓），但 **px 尺寸是绝对值**（HTML_PRINT 的
+> `height='40px'`）。运行时字号改大后：文字按新字号渲染变大，px 图像保持原尺寸
+> →「图片比字体小」；后续行按新行高排版覆盖图像下缘 →「立绘只加载一部分」。
+> 这与 XEmuera `FontScale` 的「布局整体缩放」语义相悖（文档：窗口宽度相应调整）。
+>
+> 修复（布局整体缩放语义）：
+> - `Config.SetRuntimeFontSize`：首次调用时记录 `RuntimeFontSizeBase`（游戏配置基准字号），
+>   新增 `RuntimeFontScale = FontSize / RuntimeFontSizeBase`
+> - `ConsoleImagePart`：ctor 内 px 尺寸/偏移（height/width/ypos/xpos 的 px 分支）乘以
+>   `ScalePxValue = round(v × RuntimeFontScale)`；百分号分支本就随 FontSize 缩放不变
+> - 门控：比例仅在使用运行时字号后 ≠1；默认状态逐字节不变（v24pure 语义无漂移）
+>
+> 验证 [实测]：桌面 + 测试游戏（HTML_PRINT `<img height='40px'>` 前后两行 + WAIT 推进），
+> 字号 18→32 后下次文本更新：新行 px 图像 40→71px（=40×32/18）与 32 号文字比例一致，
+> 旧行文字/图像保持冻结；构建 0 error。
+> 语义确认（用户澄清）：字号改动不立即生效，在下次文本更新时生效——与 dev#2 空闲帧
+> 应用设计一致，测试流程据此推进。
+> [未验证] 真机表现；PRINTC 密集列布局在 px 图像缩放后的重排。
+
+> 补遗 18（2026-11-22，用户指认 EraTW 所在地察觉网格：名字折两行 + 立绘被裁）
+>
+> 用户指认具体 ERB：EraTW_Snake `ERB/fromEN/IMG/IMAGE_HELPERS.ERB` 的
+> `QOL_WHEREABOUTS_OUTSIDE_PRINT_CHARA` → `SET_IMAGE_WITH_HEADER`
+> （`ERB/魔改内容/GRAPH系.ERB` 调用，高度=100+修正值百分比）。
+> 该函数用 ERB 在打印时把每个「名字+立绘」单元算成 **px div**：
+> `<div width='{ELEMENT_WIDTH}px' height='{ELEMENT_HEIGHT}px' xpos='…px'><p>名字</p><img …></div>`，
+> 其中 ELEMENT_WIDTH 依赖 `デフォルトキャラ画像横幅`（常量）与 `CLIENTWIDTH()/DRAWLINESTR` 估宽——
+> 均不随运行时字号缩放。字号调大后：div 内 `<p>` 名字与 `<img>` 按新字号渲染变宽，
+> div 的 px 边界不变 → 三个字的名字折两行、立绘被 div 裁掉下半（截图与用户描述逐项吻合）。
+>
+> 修复（与 ConsoleImagePart px 缩放同语义，补齐 div 侧）：
+> - `ConsoleDivPart.ToPixel`：px 分支乘 `Config.RuntimeFontScale`（HtmlManager 对 div
+>   width/height/xpos 与 margin/padding/border/radius 的全部 px 换算都经过该方法）
+> - `ConsoleShapePart`：px 参数分支同样缩放（所在地面板的分隔竖条）
+>
+> 验证 [实测]：桌面 + px-div 测试游戏（`<div width='120px' height='110px'>` 内含
+> `<p>三字名</p>` + `<img height='40px'>`）：字号 18→32 后下次文本更新，新 div 整体
+> 放大 ~1.78×（约 213px）——名字一行放下、立绘完整显示；旧行冻结；构建 0 error。
+> EraTW 本体（snake 包）真机复测待用户。
+
+> 补遗 19（2026-11-23，用户实测：18 完整 / 36 立绘被裁——GETCONFIG 基准漂移根因）
+>
+> 现象与测量：用户两张真机截图（EraTW 所在地察觉）像素测量——字号 18/36 下立绘
+> 像素宽度完全相同（111-120px），36 时立绘被推到视口外（colored y 至 1279 屏底截断）。
+> 即：**图片尺寸没变，布局溢出了**。
+>
+> 根因（数学推导 + 引擎复现）：EraTW グラフィック表示ライブラリ的
+> `画像表示単独HTML` 计算 `<img height='{常量×比率÷GETCONFIG("フォントサイズ")}'>`
+> ——设计意图：除以基准字号再乘回（渲染=运行时字号×百分比）→ 图片 px 随字号**等比放大**。
+> 但 dev#2 的 `SetRuntimeFontSize` 把 ConfigData 同步成运行时字号 → GETCONFIG 基准
+> 随字号漂移 → 除法与乘法相消 → 图片 px 恒定不变。配合补遗 18 的 div px 缩放（×2），
+> 结果：字 2×、div 2×、图片 1× → 「图片比字体小」+ 网格总高 2× 溢出视口 → 「立绘
+> 只显示一部分」。
+>
+> 修复：`Config.SetRuntimeFontSize` 不再同步 ConfigData 的 FontSize/LineHeight——
+> GETCONFIG 恒报游戏配置基准（XEmuera 语义：配置=基准、FontScale=运行时乘数）。
+> 自洽性验证（全部成立）：图片=常量×(运行时/基准)✓、div/行高推进 ✓、
+> ypos 行补偿=行数×lh_base×scale=行数×lh_runtime ✓。
+>
+> 排查弯路（记录防重蹈）：
+> 1. 自建复现中把两张重叠圆盘的并集误读为「被平切」，据此跑了两轮二分实验
+> （放大行/改 ZIndex），后经像素 diff（bbox=None）发现两轮实验**全无效果**——
+> 此前"解锁整圆"纯属看串对比格。教训：**UI 对比结论必须先做像素 diff/精确色块
+> 测量，肉眼对比格在元素重叠时会系统性误导**。
+> 2. 场景树黑盒转储三轮（clip 标志/祖先链/DrawSize）均无裁剪者——方向本身就错了
+> （复现没有 bug）。有效诊断是对**用户原始截图**做精确色块测量（立绘同宽+溢出）。
+>
+> 验证 [实测]：桌面 + 真实公式测试游戏（两行完全相同 html——真实 ERB 在基准
+> GETCONFIG 下任何字号输出同样的标签）：字号 18→32 后第二行立绘 y40-175
+> （修复前 40-104）≈2× 完整渲染、蓝条完整、与第一行比例逐项一致；构建 0 error。
+> [未验证] EraTW 真机复测（待用户）。
+
+> 补遗 20（2026-11-23，用户实测「36 明显布局紧凑、18 宽松」——WindowX 未随字号缩放）
+>
+> 根因：排版级缩放的 px 覆盖清单此前有 img/div/shape，唯独漏了**窗口布局宽度**
+> `Config.WindowX`（→DrawableWidth）。XEmuera FontScale 文档明确「窗口宽度相应调整」；
+> 不缩放时：每行可容纳字符数随字号减半（文本折行位置漂移）、ERB 按 `CLIENTWIDTH()`
+> 的字体无关估宽全部偏小（SET_IMAGE_WITH_HEADER 的 ELEMENT_WIDTH 等）——两层叠加
+> 造成字号越大布局越挤。
+>
+> 修复：
+> - `Config.SetRuntimeFontSize`：首次调用同时记录 `RuntimeWindowXBase`，此后
+>   `WindowX = RuntimeWindowXBase × (字号/基准)`（GETCONFIG 窗口幅仍报基准，ConfigData
+>   不同步——与字号基准语义一致）
+> - `ApplyFontSize` 追加 `ApplyMobileViewportPolicy()`：移动端按新 DrawableWidth 重算
+>   fit（走既有补偿管线，防横向溢出滚动）；桌面端该调用直接返回
+>
+> 至此 px 覆盖清单完整：img px + div/shape px + WindowX/DrawableWidth，百分比属性走
+> 运行时字号——字号改动在下次文本更新后等价于「整个控制台按倍率重排版的清晰放大」。
+>
+> 验证 [实测]：桌面 + 测试游戏（70 字符长行 + 短行 ×4 + WAIT 推进）：字号 18→32 后
+> 长行折行列位置与 18 完全相同（右缘同为 x≈418/424），行列结构一致、字形 2×——
+> 布局等价于整体放大，紧凑感消除；构建 0 error。[未验证] 真机移动端 refit 后的
+> 物理呈现。
+
+> 补遗 21（2026-11-23，用户报「排版问题，间距太大，图片渲染位置出错」）
+>
+> 排查历程（多轮测量陷阱，供复盘）：
+> 1. **僵尸进程污染**：一个 11-21 启动的 Godot 进程一直在后台跑旧 ERB 并覆盖截图文件，
+>    导致多轮"改了没生效/复现了"实为读取陈旧截图。清理后重建原子化流程（运行→测量单命令完成）。
+> 2. **launcher.cfg 回退丢失测试路径** → 游戏回落 AkumaMaid（Now Loading 卡住，控制台全黑）。
+> 3. **复现 ERB 两处建模错误**：双 `<p>` 触发「行頭以外」解析错误（需每格 div 包裹）；
+>    ypos 漏了 描画開始行数 每批重置（第 2 行起 -700% 把图甩出屏）。
+> 4. 中间一次"21px 新带"被判为重渲染 bug，实为脚本末尾错误信息按新字号打印（正常行为）。
+>
+> 真实发现与修复：
+> - **`RefreshFontSize` 违反"旧行冻结"契约**：对 lineContainer 既有子控件重设 font_size 并
+>   MarkDirty 重绘画布 → 字号变更后旧文本按新字号重绘、div 内图片停在原位（内容重复/错位）。
+>   修复：移除该段，仅刷新辅助 UI（pads/msgbox）。
+> - **决定性验证（用户场景：改字号→界面重新打印）**：按 EraTW 精确公式（D=180, ZOOM=60,
+>   GETCONFIG=基准, 每格 div 127px + img height 600% + ypos -105 + 6 行预留）构建测试游戏，
+>   字号 18→32 后新打印行：脸 49→89px、行距 86→154px、名字 12→22px——全部 1.8× 成比例，
+>   名字-脸相对位置一致。**桌面复现下引擎行为正确**。
+>
+> 结论：用户截图所示症状大概率产自 GETCONFIG 基准修复（750f60a）/WindowX 修复（64989cc）
+> 之前的构建；HEAD（含本轮 RefreshFontSize 冻结）在精确公式复现下已全部成比例。
+> 待用户以 HEAD 构建真机复测 EraTW 所在地界面确认。
+> 验证 [实测]：上述比例测量（3 次运行稳定）；构建 0 error。
+
+> 补遗 22（2026-11-23，用户真机复测通过「没问题了」——字号排版缩放链路验收闭环与任务收尾）
+>
+> 真机结论 [实测]：用户以自建 APK（项目根 `gemuera-1.10.0-dev-20261122-debug.apk`，文件时间
+> 2026-11-23 10:38，晚于 HEAD `bea08b7` 的提交时间 09:43）在真机复测，原话「没问题了」（场景=此前各轮
+> 反馈的 EraTW 所在地界面调整字号）。据此关闭三条 [未验证]：补遗 19「EraTW 真机复测」、补遗 20「真机移动端 refit 后的
+> 物理呈现」、补遗 21「HEAD 构建真机复测」。本分支字号链路（排版级缩放 `RequestFontSize` →
+> `Config.SetRuntimeFontSize`；px 图像/div/shape 与 `WindowX` 乘 `Config.RuntimeFontScale`；GETCONFIG
+> 恒报基准；已显示行冻结）验收通过。
+> 仍为 [未验证]：PRINTC 密集列布局（EraTW 所在地是 div 网格，不经过该路径），已入台账。
+>
+> 收尾核对发现的事故——桌面 `launcher.cfg` 被还原成了错误快照：
+> - 现象：`%APPDATA%\Godot\app_userdata\gemuera-c#\launcher.cfg`（我 09:43:14 写入，与提交 `bea08b7`
+>   同一分钟）和 11-20 的旧快照 `lc10.bak` 逐字节相同 [实测：`cmp`]；而最后一次测试开始前的真实快照是
+>   `lc13.bak`（2026-11-23 00:39）。即收尾还原时用错了备份，用户配置被回退 3 天。四处差异：
+>   `last_game_path`（EraTW-Magic_DLC-update_base → EraTW_Snake_Beta-open_source）、多出一行 `manual_games`、
+>   `emuera_debug_mode` / `debug_show_window` 两个调试开关被打开、Magic DLC 游戏的兼容包选择
+>   （`[compat_packs]` 第二行）丢失。
+> - 根因：还原命令里的快照编号是凭记忆手写的；另外两次测试中间态快照（`lc14`/`lc15`）显示，测试期间
+>   该文件曾只剩指向测试游戏的 131 字节残片——测试直接改写了用户配置，没有隔离。
+> - 处置 [实测]：现文件先备份到仓库外 `D:\gemuera-reports\launcher-cfg-backup\launcher.cfg.before-restore-20261123-094314`，
+>   再以 `lc13.bak` 覆盖，`cmp` 逐字节一致；`lc13` 引用的两个兼容包 DLL 均在磁盘上。18 份历史配置快照
+>   （`launcher.cfg.orig`、`settings.cfg.bak`、`cfg.bak`、`lc`–`lc15`）移至同目录 `history\` 保留，
+>   `/tmp` 不再留本任务文件。`settings.cfg` 未被 11-23 的测试运行改动（mtime 2026-11-22 19:47，早于当天全部测试运行）。
+>
+> 其他收尾 [实测]：
+> - 已删除：测试游戏 `D:\Godot_v4.7-stable_mono_win64\Godot_v4.7-stable_mono_win64\testgame-img\`、
+>   测试 APK `D:\gemuera\export\releases\gemuera-mobtest.apk`（131 MB）、`/tmp` 下我的源码备份与构建/导出日志。
+> - 保留（均在仓库外）：`D:\gemuera-reports\ui-scale-verify\`（各补遗引用的截图证据）、
+>   `D:\gemuera-reports\uEmuera-ref\`（uEmuera 参考源码）。
+> - 未能清理：模拟器内 `/storage/emulated/0/emuera/testgame-img`（`adb devices` 为空，设备未连接）→ 台账 P2。
+> - 基线对照（`git status --short`，不属于本任务、未提交）：`export_presets.cfg`（版本号/导出路径变更，
+>   非本任务所改）、`governance/backlog.md` 的「Emuera 36A 方言评估」段（另一会话未提交）、两份未跟踪
+>   evolution-log（`2026-11-22-console-ui-analysis.md`、`2026-11-23-emuera36a-changelog-adaptation-assessment.md`）、
+>   7 个 `.uid`（Godot 编辑器为脚本生成的侧车文件，非本任务创建）。本提交对 `backlog.md` 只暂存本任务新增段。
+>
+> AI 表现复盘：
+> - 有效：收尾时没有默认"还原过了就没问题"，而是把现文件与每份快照逐个 `cmp`，才发现回退。可复用动作：
+>   **测后还原必须 `cmp <live> <快照>`，并核对所用快照的时间戳确实是"最后一次测试开始前"**。
+> - 低效/返工：`launcher.cfg` 还原用错快照。触发点：提交 `bea08b7` 的收尾命令手写 `lc10`；可核对后果：
+>   用户配置在 09:43–17:41 处于 11-20 的旧状态（约 8 小时），返工 1 次。这是本任务第三次用户配置事故
+>   （11-16 删 `settings.cfg`、11-16 手写无引号 `Language`、本次错快照还原）。
+> - 低效：模拟器自动化跑字号路径多轮未跑通（被启动即现的旋转选择弹窗与点击坐标卡住），最终由用户真机复测闭环。
+>   可复用动作：涉及启动期弹窗/方向切换的移动端自动化，先请用户真机复测，或先把跟随开关置为固定方向再自动化。
+>
+> 教训 → 优化动作：
+> - (a) 已执行：`AGENTS.md`「构建与验证」新增「桌面窗口模式测试不得破坏用户真实配置」一条（同类教训已 3 次，
+>   按沉淀阶梯升级为首读铁律）；`governance/prompt-patterns/README.md` 新增模式 10「参考实现裁决型」
+>   （用户问「X 和 Y 的 API 是不是一样 / 有什么区别 / 参考实现怎么做」时，先给参考实现的语义对照再动手）。
+> - (b) 本轮不做：不把配置备份/还原做成脚本或门禁。升级去向：暂不自动化（手工两条 `cp` + 一条 `cmp`，
+>   脚本化收益低于成本；若再犯，则在 `tools/governance/Test-Governance.ps1` 加检查）。
+>
+> 遗留登记：本 PR 三份日志 §6 的 open 项与本次新增项已整体迁入 `governance/backlog.md`
+> 「界面缩放 / 沉浸全屏 / 方向锁定旋转 / 字号排版缩放」段。
+> 关闭：
+> - 真机验证方向锁定下旋转（仅用户机型）——证据：用户自建 APK 在真机经历多轮旋转反馈闭环（曾报
+>   「对于真机还是有强制竖屏的问题」，修复后未再出现；补遗 7 的真机截图；补遗 16「横屏后看不见菜单，
+>   自动手动都是」→ 修复后原话「好了」；解释 FULL_SENSOR 后原话「没问题」）。「方向锁定开启」这一前提
+>   按用户最初诉求的使用场景推定，未经我方复核；其他机型另立台账条目。
+> - 字号排版缩放真机验收（本补遗）。
+> - 菜单 toggle 与栏体未对齐（补遗 15 已修，用户原话「没问题」）。
+> 维持 open：各条原文见 §6 与 §7，现状见台账。
+
+> 补遗 23（2026-11-23，收尾核对分支交付状态——PR #4 / PR #10 均已合并，后续提交待开 PR）
+>
+> 核对 [实测]（GitHub API `repos/524122/gEmuera/pulls?state=all` + `git fetch origin dev` 后
+> `git log origin/dev..HEAD`，2026-11-23 17:57）：
+> - PR #4（`ai/ui-scale-setting` → `dev`，head `576d62c`，标题「系统级 UI 缩放 / 安卓沉浸全屏 / 方向锁定下
+>   跟随手机旋转」）已于 2026-11-21 02:44 合并。
+> - PR #10（同一分支，head `948395c`，批次标题「UI 快捷面板/方向守护/兼容页签 + 原生化五模块 + 解析缓存
+>   全生命周期退役闭环」）已于 2026-11-22 17:38 合并；`dev` tip = 合并提交 `203ff72`，其树与 `948395c`
+>   相同（从本分支再开 PR 无冲突）。
+> - 此后分支新增、尚未进入 `dev` 且没有任何开启的 PR 的提交：`2774415`（px 图像随字号缩放）、
+>   `b3d4df9`（悬浮面板位置持久化退役 + 系统菜单「面板回位」；**另一会话的提交**，记录在
+>   `evolution-log/2026-11-22-quick-panel-pin-bottom-right.md`）、`9233e97`（px div/shape）、
+>   `750f60a`（GETCONFIG 恒报基准）、`64989cc`（WindowX 随字号缩放）、`bea08b7`（已显示行冻结）、
+>   `dee6b36`（补遗 22 的收尾文档）。
+>
+> 澄清：补遗 17–22 里的「本 PR」指分支 `ai/ui-scale-setting` 上的这条工作线，不代表这些改动都已随 PR #4
+> 合入；字号排版缩放的 5 个修复提交真机验收已通过（补遗 22）但**仍待开 PR**。
+>
+> AI 表现复盘：会话从摘要恢复时沿用了「PR #4 → dev 仍开启」的旧认知，还准备去改它的描述；直到收尾读取
+> PR 列表才发现它两天前已合并（原计划中的「PR #4 描述过期、是否更新」一事作废）。可复用动作：恢复会话与
+> 收尾时先跑 `git fetch origin dev && git log --oneline origin/dev..HEAD` 并查 PR 列表，再谈 PR 相关动作。
+>
+> 遗留登记：为上述提交开 PR → 待用户决定，优先级 P1，已入 `governance/backlog.md` 本任务段首条。

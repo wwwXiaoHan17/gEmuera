@@ -155,3 +155,35 @@
 ## 环境障碍与打通
 
 `where Godot` 无（PATH 无 Godot）；实际位置 `D:/Godot_v4.7-stable_mono_win64/Godot_v4.7-stable_mono_win64/Godot_v4.7-stable_mono_win64_console.exe`。窗口模式截图判定：`root.get_texture().get_image().save_png()`（绝对路径指向项目外 `D:/gemuera-reports/`，符合「报告产物不入 res://」铁律）。
+
+---
+
+# 扩展任务 6（同日，PR#10 后变更）：回位功能入口改系统菜单 + 坐标陈旧判定重构 + 位置持久化整体移除
+
+用户反馈（真机）：①「关闭悬浮窗会直接钉死在最后移动的位置，这不是我所说的返回初始位置」——关闭必须**立即**回角，而非等下次打开；②「竖屏下的快捷键面板横屏很难看到，应该是坐标的问题」；③「不要在拖动条那加啊，看不到的话怎么办啊」——回位入口不能放在面板自身上（面板不可见时面板按钮同样够不着）。改动文件：`scripts/panels/QuickButtons.cs`、`scripts/EmueraContent.cs`、`assets/icons/rehome.svg`（新增）、`tools/launcher-compat-tab/OverlayCheck.cs`+`overlay_check.tscn`（新增验收）、语言文件 ×4（回滚 HomeButton 键）。
+
+## 关键决策与 Why
+
+- **位置持久化整体移除**（写入+读取+版本迁移块全部删除，`QuickFloatingX/Y` 键停止读写）：配置坐标是「重开/重启钉死在旧位置」的根源；用户两次向「永远回角」方向收敛，记忆位置已无需求方。旧配置文件中的遗留键**不删除**（遵守「不要删除用户配置」），只是无消费方。
+- **关闭即回角**：`HidePad` 在关闭瞬间重置为未定位态；`ShowPad` 边沿保留为幂等兜底，并改为**无条件重置+请求布局**——空面板（游戏未定义 QUICKBUTTON）没有任何其他布局触发器，原「有旧坐标才请求」的条件会让未定位态永不物化（run_overlay_check 首轮 FAIL 的根因）。
+- **坐标陈旧判定重构（锚定安全区）**：初版「基线+横竖翻转」有两个洞——①首次调用只建基线不重置，物化早于基线时陈旧坐标漏判；②只看宽高主从关系，同向尺寸变化（折叠/分屏）漏判。终版：`ApplyFloatingOverlayPanelSize` 物化坐标时记录 `floatingPanelAnchorRect`，`RefreshSafeAreaLayout` 对比当前安全区与锚定区，**不一致即重置**——坐标只对物化它时的安全区有效，转屏/折叠/分屏/留白调整全覆盖。
+- **回位入口在系统菜单栏**（「面板回位」图标，紧跟「快捷」开关，非浮层模式置灰）：面板不可见时面板上的按钮不可达，入口必须在面板之外（用户明确裁定拖动条方案作废）。
+
+## 验证记录
+
+- [实测] `dotnet build` 0 错误（每轮）。
+- [实测] `tools/launcher-compat-tab/run_overlay_check.gd`（GDScript）**不可用已删除**：GDScript 无法对 CSharpScript 调 `.new()`（`Nonexistent function 'new' in base 'CSharpScript'`，Godot mono 4.7 实证）——C# 类型验收驱动必须用 C# 节点 + `.tscn` 场景（`Godot --path . res://...tscn`）。
+- [实测] 终版 `overlay_check.tscn`（C# 驱动）**PASS**：初始位右下角物化 → 拖动生效 → 关闭→重开回初始位 → 窗口 1152x648→800x1280（视口 1152x648→1152x1843）后重落新方向下半屏 → `RehomeOverlayPanel` 一键回位。
+- [实测] `run_check.gd`（启动器页签回归）PASS。
+- [静态] 初版 run_overlay_check 曾暴露并修复 ShowPad 空面板物化缺陷（见上），验收驱动先于交付发现真实缺陷——驱动留存价值实证。
+- [未验证] Android 真机：菜单「面板回位」图标渲染与触控、转屏回角、关闭即回角——已并入 backlog P1 清单。
+
+## AI 表现复盘（扩展段 6）
+
+- **有效**：验收驱动两次在交付前抓到真实缺陷（空面板不物化、基线机制漏判）——「先写驱动再交付」在状态机类改动上收益明确。
+- **返工 1 次（用户裁定方向修正）**：回位入口初版放拖动条，用户指出「面板看不到时按钮也够不着」——**触发点**：用户原话；**可核对后果**：撤回拖动条按钮改系统菜单；**可复用动作**：给「可能不可见的对象」加功能入口时，入口必须放在对象自身之外，先问「对象不可见时这个入口在哪」。
+- **低效**：GDScript 驱动 C# 类的 `.new()` 不可用是跑完才发现——Godot mono 项目的 Node 级验收驱动应**默认直接用 C# 场景**，GDScript 只适合纯 GDScript 对象（升级去向：暂不升级，单次教训，memory 已记）。
+
+## 遗留登记
+
+无新增（P1 真机清单已在 backlog 更新；QuickFloatingX/Y 死键条目随本次关闭）。
