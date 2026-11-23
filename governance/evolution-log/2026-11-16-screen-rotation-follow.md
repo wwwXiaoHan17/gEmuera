@@ -598,3 +598,19 @@ fullSensor 语义 = 4 方向跟随传感器**且忽略用户方向锁定**，旋
 > 收尾时先跑 `git fetch origin dev && git log --oneline origin/dev..HEAD` 并查 PR 列表，再谈 PR 相关动作。
 >
 > 遗留登记：为上述提交开 PR → 待用户决定，优先级 P1，已入 `governance/backlog.md` 本任务段首条。
+
+> 补遗 24（2026-11-23，用户指示「pr」——PR #11 已创建）
+>
+> 用户看过收尾汇报（含「未合并的 8 个提交」清单）后回复「pr」，据此创建 PR #11：
+> https://github.com/524122/gEmuera/pull/11 （`ai/ui-scale-setting` → `dev`，非草稿，8 个提交、17 个文件，
+> head `5b57645`）。GitHub 判定 `mergeable=true` / `mergeable_state=clean` [实测：GitHub API，2026-11-23 18:09]。
+>
+> 标题：「fix(display): 字号排版缩放补全（px 图像/div/shape/WindowX、GETCONFIG 恒报基准、旧行冻结） /
+> 悬浮面板位置持久化退役」。描述按归属分三段——字号排版 5 个提交 / 另一会话的 `b3d4df9`（含其
+> `tools/launcher-compat-tab/` 验收脚本）/ 治理文档 2 个提交；验证记录沿用补遗 17–22 的 [实测]，保留两条
+> [未验证]（PRINTC 密集列布局、悬浮面板提交的真机验收）；含「进化记录」行。
+>
+> 创建前核对 [实测]：`pulls?state=open` 返回 0 条（无重复 PR）；请求体回读与拟稿逐字一致后才提交；
+> 提交后读取 PR 确认 8 提交 / 17 文件与 `git diff --stat origin/dev...HEAD` 一致。
+>
+> 遗留登记：PR #11 待用户合并；合并后把 `governance/backlog.md` 本任务段首条改为 closed。
