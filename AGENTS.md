@@ -109,6 +109,14 @@ Emuera 核心编译器以 C# 编写，为减少开发成本、方便 AI 对接�
   `Godot --headless --path <项目根> --script res://tools/<suite>/run_tests.gd`（SceneTree 脚本，有失败 `quit(1)`；
   参考 `tools/markdownlabel-tests/`，2026-11-03 起）；RichTextLabel/UI 布局类改动必须再用**窗口模式**脚本截图核对
   （`--headless` 无渲染；用 `root.get_texture().get_image().save_png(...)` 生成 PNG 后人工查看），不要只信无头输出。
+- **桌面窗口模式测试不得破坏用户真实配置**（2026-11-23 实证）：`%APPDATA%\Godot\app_userdata\gemuera-c#\`
+  下的 `settings.cfg` / `launcher.cfg` 是用户真实环境的配置（界面缩放/语言/分辨率/最近游戏/内核与
+  兼容包选择/调试开关），不是测试夹具：启动器一选中游戏或改兼容/调试设置就回写 `launcher.cfg`，
+  界面缩放/分辨率/旋转开关写 `settings.cfg`。跑桌面 gEmuera 前先把两份文件复制到
+  仓库外目录并记下**带时间戳的快照文件名**；测后按该文件名还原并 `cmp` 校验。禁止 `rm`（曾丢语言与
+  分辨率配置）、禁止凭记忆手写快照编号（收尾时曾把 `launcher.cfg` 还原成 3 天前的旧快照）、禁止手工
+  重写键值（字符串值必须带双引号，否则 `ConfigFile` 整份解析失败）。需要「干净首次启动」场景时改用
+  Android 模拟器验证。
 - Android 相关结论必须以 APK 实测为准；桌面端仅用于调试。
 
 ## 架构速览

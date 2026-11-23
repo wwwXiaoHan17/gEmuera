@@ -512,3 +512,65 @@ fullSensor 语义 = 4 方向跟随传感器**且忽略用户方向锁定**，旋
 > 之前的构建；HEAD（含本轮 RefreshFontSize 冻结）在精确公式复现下已全部成比例。
 > 待用户以 HEAD 构建真机复测 EraTW 所在地界面确认。
 > 验证 [实测]：上述比例测量（3 次运行稳定）；构建 0 error。
+
+> 补遗 22（2026-11-23，用户真机复测通过「没问题了」——字号排版缩放链路验收闭环与任务收尾）
+>
+> 真机结论 [实测]：用户以自建 APK（项目根 `gemuera-1.10.0-dev-20261122-debug.apk`，文件时间
+> 2026-11-23 10:38，晚于 HEAD `bea08b7` 的提交时间 09:43）在真机复测，原话「没问题了」（场景=此前各轮
+> 反馈的 EraTW 所在地界面调整字号）。据此关闭三条 [未验证]：补遗 19「EraTW 真机复测」、补遗 20「真机移动端 refit 后的
+> 物理呈现」、补遗 21「HEAD 构建真机复测」。本分支字号链路（排版级缩放 `RequestFontSize` →
+> `Config.SetRuntimeFontSize`；px 图像/div/shape 与 `WindowX` 乘 `Config.RuntimeFontScale`；GETCONFIG
+> 恒报基准；已显示行冻结）验收通过。
+> 仍为 [未验证]：PRINTC 密集列布局（EraTW 所在地是 div 网格，不经过该路径），已入台账。
+>
+> 收尾核对发现的事故——桌面 `launcher.cfg` 被还原成了错误快照：
+> - 现象：`%APPDATA%\Godot\app_userdata\gemuera-c#\launcher.cfg`（我 09:43:14 写入，与提交 `bea08b7`
+>   同一分钟）和 11-20 的旧快照 `lc10.bak` 逐字节相同 [实测：`cmp`]；而最后一次测试开始前的真实快照是
+>   `lc13.bak`（2026-11-23 00:39）。即收尾还原时用错了备份，用户配置被回退 3 天。四处差异：
+>   `last_game_path`（EraTW-Magic_DLC-update_base → EraTW_Snake_Beta-open_source）、多出一行 `manual_games`、
+>   `emuera_debug_mode` / `debug_show_window` 两个调试开关被打开、Magic DLC 游戏的兼容包选择
+>   （`[compat_packs]` 第二行）丢失。
+> - 根因：还原命令里的快照编号是凭记忆手写的；另外两次测试中间态快照（`lc14`/`lc15`）显示，测试期间
+>   该文件曾只剩指向测试游戏的 131 字节残片——测试直接改写了用户配置，没有隔离。
+> - 处置 [实测]：现文件先备份到仓库外 `D:\gemuera-reports\launcher-cfg-backup\launcher.cfg.before-restore-20261123-094314`，
+>   再以 `lc13.bak` 覆盖，`cmp` 逐字节一致；`lc13` 引用的两个兼容包 DLL 均在磁盘上。18 份历史配置快照
+>   （`launcher.cfg.orig`、`settings.cfg.bak`、`cfg.bak`、`lc`–`lc15`）移至同目录 `history\` 保留，
+>   `/tmp` 不再留本任务文件。`settings.cfg` 未被 11-23 的测试运行改动（mtime 2026-11-22 19:47，早于当天全部测试运行）。
+>
+> 其他收尾 [实测]：
+> - 已删除：测试游戏 `D:\Godot_v4.7-stable_mono_win64\Godot_v4.7-stable_mono_win64\testgame-img\`、
+>   测试 APK `D:\gemuera\export\releases\gemuera-mobtest.apk`（131 MB）、`/tmp` 下我的源码备份与构建/导出日志。
+> - 保留（均在仓库外）：`D:\gemuera-reports\ui-scale-verify\`（各补遗引用的截图证据）、
+>   `D:\gemuera-reports\uEmuera-ref\`（uEmuera 参考源码）。
+> - 未能清理：模拟器内 `/storage/emulated/0/emuera/testgame-img`（`adb devices` 为空，设备未连接）→ 台账 P2。
+> - 基线对照（`git status --short`，不属于本任务、未提交）：`export_presets.cfg`（版本号/导出路径变更，
+>   非本任务所改）、`governance/backlog.md` 的「Emuera 36A 方言评估」段（另一会话未提交）、两份未跟踪
+>   evolution-log（`2026-11-22-console-ui-analysis.md`、`2026-11-23-emuera36a-changelog-adaptation-assessment.md`）、
+>   7 个 `.uid`（Godot 编辑器为脚本生成的侧车文件，非本任务创建）。本提交对 `backlog.md` 只暂存本任务新增段。
+>
+> AI 表现复盘：
+> - 有效：收尾时没有默认"还原过了就没问题"，而是把现文件与每份快照逐个 `cmp`，才发现回退。可复用动作：
+>   **测后还原必须 `cmp <live> <快照>`，并核对所用快照的时间戳确实是"最后一次测试开始前"**。
+> - 低效/返工：`launcher.cfg` 还原用错快照。触发点：提交 `bea08b7` 的收尾命令手写 `lc10`；可核对后果：
+>   用户配置在 09:43–17:41 处于 11-20 的旧状态（约 8 小时），返工 1 次。这是本任务第三次用户配置事故
+>   （11-16 删 `settings.cfg`、11-16 手写无引号 `Language`、本次错快照还原）。
+> - 低效：模拟器自动化跑字号路径多轮未跑通（被启动即现的旋转选择弹窗与点击坐标卡住），最终由用户真机复测闭环。
+>   可复用动作：涉及启动期弹窗/方向切换的移动端自动化，先请用户真机复测，或先把跟随开关置为固定方向再自动化。
+>
+> 教训 → 优化动作：
+> - (a) 已执行：`AGENTS.md`「构建与验证」新增「桌面窗口模式测试不得破坏用户真实配置」一条（同类教训已 3 次，
+>   按沉淀阶梯升级为首读铁律）；`governance/prompt-patterns/README.md` 新增模式 10「参考实现裁决型」
+>   （用户问「X 和 Y 的 API 是不是一样 / 有什么区别 / 参考实现怎么做」时，先给参考实现的语义对照再动手）。
+> - (b) 本轮不做：不把配置备份/还原做成脚本或门禁。升级去向：暂不自动化（手工两条 `cp` + 一条 `cmp`，
+>   脚本化收益低于成本；若再犯，则在 `tools/governance/Test-Governance.ps1` 加检查）。
+>
+> 遗留登记：本 PR 三份日志 §6 的 open 项与本次新增项已整体迁入 `governance/backlog.md`
+> 「界面缩放 / 沉浸全屏 / 方向锁定旋转 / 字号排版缩放」段。
+> 关闭：
+> - 真机验证方向锁定下旋转（仅用户机型）——证据：用户自建 APK 在真机经历多轮旋转反馈闭环（曾报
+>   「对于真机还是有强制竖屏的问题」，修复后未再出现；补遗 7 的真机截图；补遗 16「横屏后看不见菜单，
+>   自动手动都是」→ 修复后原话「好了」；解释 FULL_SENSOR 后原话「没问题」）。「方向锁定开启」这一前提
+>   按用户最初诉求的使用场景推定，未经我方复核；其他机型另立台账条目。
+> - 字号排版缩放真机验收（本补遗）。
+> - 菜单 toggle 与栏体未对齐（补遗 15 已修，用户原话「没问题」）。
+> 维持 open：各条原文见 §6 与 §7，现状见台账。
