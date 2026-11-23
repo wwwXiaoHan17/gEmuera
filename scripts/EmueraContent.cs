@@ -6693,24 +6693,11 @@ public partial class EmueraContent : Control
 	public void RefreshFontSize()
 	{
 		int size = FontSize;
-// Update all existing lines
-		if (lineContainer != null)
-		{
-			foreach (var node in lineContainer.GetChildren())
-			{
-				if (node is Control lineCtrl)
-				{
-					foreach (var child in lineCtrl.GetChildren())
-					{
-						if (child is Control ctrl)
-						{
-							ctrl.AddThemeFontSizeOverride("font_size", size);
-						}
-					}
-				}
-			}
-		}
-		consoleRenderSurface?.MarkDirty();
+		// 既有控制台行一律不重刷（2026-11-23 契约修正）：排版级缩放只影响之后生成的行，
+		// 已显示行的几何/字号在输出时已固化。此前这里对 lineContainer 子控件重设 font_size
+		// 并 MarkDirty 重绘画布，导致字号变更后旧文本按新字号在「新行位」重绘一份、
+		// 而 div 内图片/旧 Control 内容停在原位——表现为内容重复、图片丢失、间距错乱
+		//（实测：3 行界面在 36 号下出现两套错位内容）。
 		// Update auxiliary UI
 		inputpad?.ApplyFont(mainFont, size);
 		quickButtons?.ApplyFont(mainFont, size);
