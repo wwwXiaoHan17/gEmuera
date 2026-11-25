@@ -460,6 +460,15 @@ per-game 启用配置（launcher 侧：游戏 → 包列表）给出**包文件�
   resume/再次扫描重试）；编辑器直接扫 `res://compat_packs`。
 - 用户更新语义：目标 SHA 与记录一致 = 接受内置升级；不一致 = 用户替换/改过，不覆盖（KeptUser）。
   失败逐包聚合、绝不阻断启动，launcher 映射预检失败按 §3.1 回退 v24 并提示。
+- **2026-11-24 补充（过期第一方包自愈，收窄上条的 KeptUser）**：引擎表面一变（重钉 `baseSurfaceHash`）后，
+  用户手放的旧包没有状态记录，按上条永远不会被内置包更新，游戏每次启动静默回退基线。现在释放器可注入
+  替换判定（`CompatPackStalePackPolicy`）：仅当目标是**与内置载荷同 `packId` 且对当前引擎必然被拒**的包、
+  而内置载荷可用时才替换，旧文件备份为 `.<packId>.dll.stale-bak`；目标读不出、是别的包、或仍然可用一律保留。
+  判定不装载包：`CompatPackManifestPeek` 从程序集字节读内嵌清单，走与规则层同一个头部判定
+  （`CompatPackRules.CollectHeaderErrors`：保留名 / 基线档案 / `baseSurfaceHash` / 双轴版本 / `saveProfileId`），
+  所以"预检不通过"等价于"真实加载必然拒载"；预检通过不保证可加载（能力词汇、表面符号等仍由真实加载校验）。
+  启动器侧对称：`CompatPackStaleSelectionRebinder` 在注入前把指向过期第一方包的选择改绑到内置同名包
+  （路径不同才换）并写回 `launcher.cfg [compat_packs]`；换不了的原样注入（整组拒载 = 回退基线）并在状态栏明示。
 - legacy-runner 对退役 profile 做"翻译 + 显式注入 `GEMUERA_COMPAT_PACKS` + 报告
   baseProfile/packIds + 断言 `[LOAD] CompatPack enabled`"；缺包/未加载即 FAIL（G10 不假绿）。
 

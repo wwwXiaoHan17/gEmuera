@@ -50,9 +50,20 @@
 - [P2][open] **两个生成物的换行符与 `.gitattributes` 不一致**——`src/Core/Compatibility/LegacyDialectInventories.Generated.cs`、`tools/legacy-runner/profiles.generated.json` 以 CRLF 提交而属性要求 LF，被生成器重写后内容零差异却显示为已修改。验收=重跑生成器后 `git status` 不列出这两文件。触发条件：用户决定做一次纯换行符提交时。来源：该日志 §3、§6 第 4 条。
 - [P2][open] **AGENTS.md 里其余三个参考实现路径在本机不存在**——`E:\MyCode\Era\emuera.em-master`（v24）、`E:\MyCode\GodotCode\gemuera\uEmuera-0.2.9d`、`XEmuera-0.5.1等`；`tools/dialect-inventory/README.md` 的 v24 示例路径同理（`PLAN.md:47-48` 为历史记录不算）。验收=AGENTS.md 四个参考路径都指向本机存在的目录。触发条件：用户提供 v24 等参考实现的位置时。来源：该日志 §6 第 5 条。
 - [P2][open] **`SnakeCompatibilityModule.ModuleVersion` 仍是 `1.1.0`**——snake 包已到 1.3.0，该常量目前无消费者。验收=定一条「模块版本是否随包版本联动」的规则并执行。触发条件：下次给 snake 包升版本时。来源：该日志 §6 第 6 条。
-- [P2][closed] **新 `.cs` 文件的 `.uid` 侧车尚未生成**——`scripts/Emuera/GameData/ConstArrayTable.cs`、`ConstArrayTableDiskFiles.cs`、`scripts/Emuera/GameData/Variable/VariableData.FloatTokens.cs`、`tests/xUnitTest/GEmuera.Core.Tests/ConstArrayTableTests.cs`。验收=在 Godot 编辑器里打开一次项目后，对应 `.cs.uid` 生成并入库。触发条件：下次打开编辑器后。来源：该日志 §6 第 7 条。→ 2026-11-24 关闭：编辑器已重扫项目，四个 `.uid` 都已出现在工作区（未跟踪，随各自源文件一起提交即可）。
+- [P2][closed] **新 `.cs` 文件的 `.uid` 侧车尚未生成**——`scripts/Emuera/GameData/ConstArrayTable.cs`、`ConstArrayTableDiskFiles.cs`、`scripts/Emuera/GameData/Variable/VariableData.FloatTokens.cs`、`tests/xUnitTest/GEmuera.Core.Tests/ConstArrayTableTests.cs`。验收=在 Godot 编辑器里打开一次项目后，对应 `.cs.uid` 生成并入库。触发条件：下次打开编辑器后。来源：该日志 §6 第 7 条。→ 2026-11-24 关闭：编辑器已重扫项目，四个 `.uid` 都已出现在工作区（未跟踪，随各自源文件一起提交即可；`scripts/FirstWindow.CompatPackSelfHeal.cs.uid` 同理）。
 - [P2][open] **已失效的旧上游差异工具是否清理**——`tools/dialect-inventory/Invoke-/Test-LegacyDialectUpstreamDiff.ps1`、`LegacyDialectUpstreamDiff.psm1`、`legacy-dialect-upstream-diff.json`、`LegacyDialectReflectionDiff/`（README 已标注失效）。验收=用户裁定删除或修复。触发条件：下次整理 `tools/dialect-inventory` 时。来源：该日志 §6 第 8 条。
 - [P2][open] **Android 真机上的常数表未验证**——桌面无头已通过（含走 `uEmuera.Utils` 的磁盘层），但 Android 走 Godot 文件 API 的分支与大小写不敏感路径索引未在真机跑过。验收=APK 上运行同一夹具输出一致。触发条件：下次出 APK 验收时顺带。来源：该日志 §3「未验证」。→ 2026-11-24 进展：x86_64 模拟器（API 37，16KB 页镜像）上用导出的 APK 跑同一夹具，输出与桌面逐项一致（`CTBL:3:4=18 … CONSTTABLE_OK`）；arm64 真机仍未验证，条目保持 open。
+
+### 过期第一方包自愈（2026-11-24）
+
+来源日志：`evolution-log/2026-11-24-stale-first-party-pack-self-heal.md`（清单预检 + 启动器改绑 + 释放器例外；执行设计 §6.2 的 KeptUser 由此收窄为「只保留仍然可用、读不出或并非同名包的用户文件」）。
+
+- [P1][open] **自愈的 Android 真机验收未做**——x86_64 模拟器上三种场景（内置路径被手动覆盖成旧版 → 释放器替换；保存的选择指向别处的旧包 → 启动器改绑并写回；过期社区包 → 只提示）均已通过，但 arm64 真机（用户的 MIUI/HyperOS 手机）未测。验收=真机上把一个旧版蛇版包手动放进 `/storage/emulated/0/emuera/packs/pack.gemuera.snake/`，启动 App 后日志出现 `replaced-stale=1`、包目录内出现 `.pack.gemuera.snake.dll.stale-bak`，eraTW 正常进入标题画面。为什么未做：设备未连接。触发条件：用户下次把手机连上电脑（USB 调试）时。
+- [P2][open] **自愈在首次调用时有一次引擎头部计算，冷启动耗时未在真机度量**——`FirstPartyPackBootstrap.TryGetEngineHeader` 进程内只算一次（`CompatPackHost.BuildValidationContext`），x86_64 模拟器 debug 包上从释放摘要到自愈日志约 0.8–1.2 秒。验收=arm64 真机 release 包上启动器首屏可交互时间不因它增加可感知的卡顿；若明显，改为在后台线程预热或仅在存在按游戏保存的选择时才计算。触发条件：做上一条真机验收时一并记录耗时。
+- [P2][open] **启动器原有告警在默认日志配置下不落盘**——`scripts/FirstWindow.cs` 的 `GetPackProfileMap` / `ApplyCompatPackEnvironment` 里几处 `GenericUtils.Warn(EmueraLogCategory.UI, …)`（映射文件打不开、解析失败、外部 `GEMUERA_COMPAT_PACKS` 与按游戏选择并存）显式指定了日志类别；默认配置的类别开关只放行未指定类别的非 Error 日志，这些行不会出现在 `gemuera_runtime_*.log`。验收=默认配置下人为弄坏 `assets/text/pack-profile-map.json`，运行日志里能搜到 `LOAD.WARN`。修法=改成不指定类别 + `[LOAD]` 前缀（同 `FirstPartyPackBootstrap` 与自愈日志的写法）。为什么未做：不在本次范围，且状态栏已有对应提示。触发条件：下次排查启动器映射问题时，或整理日志 convention 时。
+- [P2][open] **调试浮层在退役档案下弹 `Core prototype unavailable: Compatibility profile 'snake' was …`**——`scripts/GodotHost/PrototypeRuntimeNode.cs` 启动时按 launcher 档案名切换 Core 档案，退役档案解析失败；包加载成功时也出现，文字还在屏幕右侧被截断，容易被当成故障原因。验收=snake 等（由包供给的）档案启动游戏不再出现该提示。为什么未做：与包加载无关的独立界面瑕疵。触发条件：下次动调试浮层时。
+- [P2][open] **x86_64 模拟器上 `[LOAD] SQLite runtime initialization deferred: DllNotFoundException: e_sqlite3`**——eraTW 的 `SQL_*` 指令依赖 SQLite；未查它在 arm64 真机上是否同样延迟/失败、以及是否影响运行。验收=eraTW 在真机上执行到 `SQL_EXECUTE_*` 不报错。为什么未做：本轮没有在模拟器上跑 eraTW，也没有真机。触发条件：用户反馈 eraTW 在手机上报 SQL 相关错误时。
+- [P2][open] **`FirstWindow.cs` 本次净增 11 行（1840 → 1851）**——只加了接线钩子与一段注释，逻辑都在新的 partial `FirstWindow.CompatPackSelfHeal.cs`；该文件仍在 2000 行红线之下。验收=下次触碰该文件时把 `ApplyCompatPackEnvironment` 及其映射辅助（约 60 行）纯移动进 `FirstWindow.CompatPackSelfHeal.cs`。触发条件：下次改启动器兼容包逻辑时。
 
 ### 其他功能域
 

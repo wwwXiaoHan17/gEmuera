@@ -125,6 +125,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/compat-pack/Test-Compa
 哈希只随生成器/`LegacySurfaceHash` 的重算结果整批重钉，见 `governance/evolution-log/2026-11-24-snake-18.0-alignment.md`）。
 用户手装更新语义：安装根维护 `.first-party-packs.json`（packId → 上次内置释放 SHA256）；
 目标字节与记录一致时接受内置升级，不一致视为用户替换、不覆盖（执行设计 §6.2）。
+**过期第一方包例外（2026-11-24）**：目标虽是用户手装，但若它与内置载荷同 `packId`、且清单对当前引擎
+必然被拒（`baseSurfaceHash` 过期、版本轴不匹配等，判据见 `CompatPackStalePackPolicy`），而内置载荷可用，
+则会被内置包替换——旧文件备份为包目录内的 `.<packId>.dll.stale-bak`，日志为
+`[LOAD] FirstPartyPacks … replaced-stale=N`。目标读不出、是别的包、或仍然可用（哪怕字节不同）一律保留。
+启动器同理：按游戏保存的选择若指向过期的第一方包，注入前自动改用内置同名包并写回 `launcher.cfg`
+（`CompatPackStaleSelectionRebinder`），换不了的（社区包等）只在状态栏明示。
 
 ## 构建方式
 

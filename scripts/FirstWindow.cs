@@ -898,8 +898,11 @@ public partial class FirstWindow : Control
 	///     Warn 日志，兼容包状态提示行同步显示警告；
 	///   - 该游戏无选择 → 外部 env 仅作诊断输入透传（既有契约）；
 	///   - 两路皆空 → 清除变量，回到纯 v24。
+	/// 合并之后、注入之前经 <see cref="ResolveStaleFirstPartyPacks"/> 自愈：对当前引擎已不可用的
+	/// 第一方包换成内置同名包（FirstWindow.CompatPackSelfHeal.cs）。<paramref name="launcherProfileName"/>
+	/// 只影响 P2 映射默认值按哪个档案解析；缺省取上次启动用的档案，预览某个游戏时传它自己的档案。
 	/// </summary>
-	static void ApplyCompatPackEnvironment(string gameRoot)
+	static void ApplyCompatPackEnvironment(string gameRoot, string launcherProfileName = null)
 	{
 		bool hasStoredSelection = CompatPackLauncherConfig.TryGetSelectionForGame(
 			LauncherSettingsStore.LoadCompatPackSelections(),
@@ -908,7 +911,7 @@ public partial class FirstWindow : Control
 		string storedSelection = hasStoredSelection
 			? CompatPackLauncherConfig.SerializeSelection(paths)
 			: null;
-		TryGetMappedPackPath(SelectedCoreProfileName, out string mappedPath, out string mappedWarning);
+		TryGetMappedPackPath(launcherProfileName ?? SelectedCoreProfileName, out string mappedPath, out string mappedWarning);
 		bool mappedUsed = string.IsNullOrEmpty(storedSelection)
 			&& string.IsNullOrEmpty(externalCompatPacksOverride)
 			&& !string.IsNullOrEmpty(mappedPath);
@@ -918,6 +921,7 @@ public partial class FirstWindow : Control
 			storedSelection,
 			externalCompatPacksOverride,
 			mappedPath);
+		merged = ResolveStaleFirstPartyPacks(gameRoot, hasStoredSelection, merged);
 		if (hasStoredSelection && !string.IsNullOrEmpty(externalCompatPacksOverride))
 		{
 			GenericUtils.Warn(
@@ -1651,13 +1655,20 @@ public partial class FirstWindow : Control
 		if (statusLabel == null)
 			return;
 
+		// 先按这个游戏预检启用清单（过期第一方包就地改绑并写回），下面的提示才反映真实情况。
+		RefreshCompatPackSelectionHealth(entry);
+
 		string effectiveProfile = GetSelectedCoreProfileName(entry);
 		string routeDescription = GetEntryRouteDescription(entry);
 		string packWarning = "";
 		int selectedPackCount = GetSelectedCompatPackCount();
-		if (selectedPackCount > 0 && !string.Equals(effectiveProfile, CoreProfileV24Pure, System.StringComparison.Ordinal))
+		// 包只允许叠加 v24pure。已退役的 launcher 档案（snake/erafl/…）启动时会翻译成 v24pure + 包，
+		// 所以要比「引擎实际运行的档案」而不是 launcher 档案名——按档案名判会把正常组合说成将被拒载
+		//（2026-11-07 方言退役后遗留；与自愈提示并排出现时自相矛盾）。
+		string engineProfile = ResolveEngineProfileIdForBinding(effectiveProfile);
+		if (selectedPackCount > 0 && !string.Equals(engineProfile, CoreProfileV24Pure, System.StringComparison.Ordinal))
 		{
-			packWarning = $"；已选 {selectedPackCount} 项兼容包，但包要求 v24pure 基线——本次组合将被拒载并回退 {effectiveProfile}。";
+			packWarning = $"；已选 {selectedPackCount} 项兼容包，但包要求 v24pure 基线——本次组合将被拒载并回退 {engineProfile}。";
 		}
 		// 外部 GEMUERA_COMPAT_PACKS 与按游戏选择并存时的合并结果提示（E2-R3）：
 		// 注入链以按游戏选择为准，外部变量只作诊断输入——UI 在报告兼容包状态的既有

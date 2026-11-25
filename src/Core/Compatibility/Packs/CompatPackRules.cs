@@ -57,86 +57,11 @@ public static class CompatPackRules
         ArgumentNullException.ThrowIfNull(context);
         var collected = new List<string>();
 
-        // 保留名：packId 撞内置方言模块 id 即拒载（否则组装后引擎闭包校验会以未捕获
-        // 异常炸掉会话绑定，违反降级不变量——必须在加载/校验段挡下）。
-        if (context.ReservedModuleIds.Contains(manifest.PackId))
-            collected.Add("packId 与内置方言模块保留名冲突：" + manifest.PackId);
-
-        // v1 契约面硬约束：包只允许叠加 v24pure。即便宿主会话基线恰好同名，非 v24pure 的
-        // 声明也必须拒载——v1 没有承诺任何非 v24pure 基线的叠加语义。
-        if (!string.Equals(manifest.BaseProfileId, "v24pure", StringComparison.Ordinal))
-        {
-            collected.Add("包 " + manifest.PackId + " 声明 baseProfileId=" + manifest.BaseProfileId
-                + "，但 v1 只允许 v24pure（其他基线需 v2 契约面支持后开放）。");
-        }
-
-        // 包声明的是相对哪个基线 profile 的差量；若与实际会话基线不一致，加载期拒载，
-        // 避免在 v18/snake 等基线上静默错叠。
-        if (!string.Equals(manifest.BaseProfileId, context.BaselineProfileId, StringComparison.Ordinal))
-        {
-            collected.Add("包声明 baseProfileId=" + manifest.BaseProfileId
-                + " 与当前会话基线 " + context.BaselineProfileId + " 不一致（v1 包只允许叠加 v24pure 基线）。");
-        }
-
-        // baseSurfaceHash 强制声明（spec §5.2/R7，v1.1 硬要求）：
-        // 带非空 surface（add/hide 任一列表非空）或非空 variantSelections 的包必须声明
-        // 当前基线表面快照——否则 add/hide 与变体选择没有任何基线锚点，语义级对账对社区
-        // 包失效。纯 capability 包与空 surface 对象没有表面差量，仍可省略。
-        bool hasSurfaceDelta = manifest.Surface.AddInstructions.Count > 0
-            || manifest.Surface.HideInstructions.Count > 0
-            || manifest.Surface.AddFunctions.Count > 0
-            || manifest.Surface.HideFunctions.Count > 0
-            || manifest.Surface.AddInstructionCollisions.Count > 0;
-        bool hasVariantSelections = manifest.VariantSelections.Count > 0;
-        if ((hasSurfaceDelta || hasVariantSelections) && string.IsNullOrWhiteSpace(manifest.BaseSurfaceHash))
-        {
-            var triggers = new List<string>();
-            if (hasSurfaceDelta)
-                triggers.Add("surface（指令/函数 add/hide 任一列表非空）");
-            if (hasVariantSelections)
-                triggers.Add("variantSelections（非空）");
-            collected.Add("包 " + manifest.PackId + " 带有非空 " + string.Join(" 与 ", triggers)
-                + "，但未声明 baseSurfaceHash：有表面差量或变体选择的包必须声明当前基线表面快照"
-                + "（字段：baseSurfaceHash；纯 capability 包可省略）。");
-        }
-
-        // baseSurfaceHash 精确对账（E2-R6 / T7 语义级）：manifest 声明非空 baseSurfaceHash
-        // 时必须等于当前基线表面快照（<see cref="CompatPackValidationContext.BaselineSurfaceHash"/>，
-        // profile/engineApi/指令与函数描述符/METHOD 投影/内置变体/capability 的规范化 SHA256）——
-        // 包声称"基于某表面"而引擎表面已漂移时，其 add/hide 差量前提即失效，
-        // 静默错叠比拒载更危险。纯 capability 包不声明（null）时不触发本规则。
-        if (manifest.BaseSurfaceHash is not null
-            && !string.Equals(manifest.BaseSurfaceHash, context.BaselineSurfaceHash, StringComparison.Ordinal))
-        {
-            collected.Add("包 " + manifest.PackId + " 的 baseSurfaceHash 与当前基线表面快照不一致（声明 "
-                + manifest.BaseSurfaceHash + "，当前基线 " + context.BaselineSurfaceHash
-                + "；包需按新表面快照重发布，或由维护方再生生成清单后更新声明）。");
-        }
-
-        // 原则（3）双轴版本比较：两轴都是 major 相等且包 minor <= 引擎 minor（缺 API 就是缺 API，
-        // 不能因"引擎更新向下兼容"放宽）。两轴独立判定、独立文案——包作者必须能看出是
-        // contract（公开契约面）还是 engine（引擎行为/能力契约）不满足。
-        if (!manifest.ContractAbi.CanRunOn(context.CurrentContractAbi))
-        {
-            collected.Add("包 " + manifest.PackId + " 的 contractAbi=" + manifest.ContractAbi
-                + " 不能在引擎 contractAbi=" + context.CurrentContractAbi
-                + " 上运行（contract 轴要求 major 相等且包 minor <= 引擎 minor），包需按新契约面重编译后分发。");
-        }
-        if (!manifest.EngineApi.CanRunOn(context.CurrentEngineApi))
-        {
-            collected.Add("包 " + manifest.PackId + " 的 engineApi=" + manifest.EngineApi
-                + " 不能在引擎 engineApi=" + context.CurrentEngineApi
-                + " 上运行（engine 轴要求 major 相等且包 minor <= 引擎 minor），包需按新引擎能力重编译后分发。");
-        }
-
-        // saveProfileId v1 未接线：legacy 存档路径尚不消费 CompatibilityPlan.SaveProfileId，
-        // 声明后只会进 plan 元数据/哈希而不改变真实存档格式。按死契约纪律显式拒载，
-        // 避免"看起来生效"的静默误导；v2 宿主接线后删除本条即可恢复。
-        if (manifest.SaveProfileId is not null)
-        {
-            collected.Add("包 " + manifest.PackId + " 声明 saveProfileId=" + manifest.SaveProfileId
-                + "，但 v1 legacy 存档路径尚不消费 plan.SaveProfileId（v2 预留）；携带即拒载。");
-        }
+        // 只依赖清单头部与引擎头部值的规则（保留名 / 基线档案 / baseSurfaceHash / 双轴版本 /
+        // saveProfileId）：与加载前预检共用同一份判定，两处判据不可能漂移。
+        foreach (CompatPackHeaderError headerError in CollectHeaderErrors(
+            manifest, CompatPackEngineHeader.FromContext(context)))
+            collected.Add(headerError.Message);
 
         // 组合声明（T6）的单包可判定子集：自依赖/自冲突、override 目标不得是 v24 基线
         // instruction/function handler、variant override 目标必须是 v24 基线指令。跨包语义
@@ -545,6 +470,124 @@ public static class CompatPackRules
 
         errors = collected;
         return collected.Count == 0;
+    }
+
+    /// <summary>
+    /// 清单头部规则：只依赖清单本身与引擎头部值（<see cref="CompatPackEngineHeader"/>）的拒载判定——
+    /// 保留名、基线档案、baseSurfaceHash 的有无与对账、双轴版本、saveProfileId。
+    /// <see cref="Validate"/> 直接采信这里的错误文本；<see cref="CompatPackManifestPeek"/> 用同一份
+    /// 判定在装载程序集之前预判「这个包是否必然被拒」。本方法之外的能力词汇、表面符号、
+    /// handler 对账等规则需要完整上下文与包代码，不在此列——预检通过不等于一定可加载，
+    /// 预检不通过则一定被拒。
+    /// </summary>
+    internal static List<CompatPackHeaderError> CollectHeaderErrors(
+        CompatPackManifest manifest,
+        CompatPackEngineHeader engine)
+    {
+        ArgumentNullException.ThrowIfNull(manifest);
+        ArgumentNullException.ThrowIfNull(engine);
+        var collected = new List<CompatPackHeaderError>();
+
+        // 保留名：packId 撞内置方言模块 id 即拒载（否则组装后引擎闭包校验会以未捕获
+        // 异常炸掉会话绑定，违反降级不变量——必须在加载/校验段挡下）。
+        if (engine.ReservedModuleIds.Contains(manifest.PackId))
+        {
+            collected.Add(new CompatPackHeaderError(
+                CompatPackHeaderRule.ReservedModuleId,
+                "packId 与内置方言模块保留名冲突：" + manifest.PackId));
+        }
+
+        // v1 契约面硬约束：包只允许叠加 v24pure。即便宿主会话基线恰好同名，非 v24pure 的
+        // 声明也必须拒载——v1 没有承诺任何非 v24pure 基线的叠加语义。
+        if (!string.Equals(manifest.BaseProfileId, "v24pure", StringComparison.Ordinal))
+        {
+            collected.Add(new CompatPackHeaderError(
+                CompatPackHeaderRule.BaseProfileNotV24Pure,
+                "包 " + manifest.PackId + " 声明 baseProfileId=" + manifest.BaseProfileId
+                + "，但 v1 只允许 v24pure（其他基线需 v2 契约面支持后开放）。"));
+        }
+
+        // 包声明的是相对哪个基线 profile 的差量；若与实际会话基线不一致，加载期拒载，
+        // 避免在 v18/snake 等基线上静默错叠。
+        if (!string.Equals(manifest.BaseProfileId, engine.BaselineProfileId, StringComparison.Ordinal))
+        {
+            collected.Add(new CompatPackHeaderError(
+                CompatPackHeaderRule.BaseProfileMismatch,
+                "包声明 baseProfileId=" + manifest.BaseProfileId
+                + " 与当前会话基线 " + engine.BaselineProfileId + " 不一致（v1 包只允许叠加 v24pure 基线）。"));
+        }
+
+        // baseSurfaceHash 强制声明（spec §5.2/R7，v1.1 硬要求）：
+        // 带非空 surface（add/hide 任一列表非空）或非空 variantSelections 的包必须声明
+        // 当前基线表面快照——否则 add/hide 与变体选择没有任何基线锚点，语义级对账对社区
+        // 包失效。纯 capability 包与空 surface 对象没有表面差量，仍可省略。
+        bool hasSurfaceDelta = manifest.Surface.AddInstructions.Count > 0
+            || manifest.Surface.HideInstructions.Count > 0
+            || manifest.Surface.AddFunctions.Count > 0
+            || manifest.Surface.HideFunctions.Count > 0
+            || manifest.Surface.AddInstructionCollisions.Count > 0;
+        bool hasVariantSelections = manifest.VariantSelections.Count > 0;
+        if ((hasSurfaceDelta || hasVariantSelections) && string.IsNullOrWhiteSpace(manifest.BaseSurfaceHash))
+        {
+            var triggers = new List<string>();
+            if (hasSurfaceDelta)
+                triggers.Add("surface（指令/函数 add/hide 任一列表非空）");
+            if (hasVariantSelections)
+                triggers.Add("variantSelections（非空）");
+            collected.Add(new CompatPackHeaderError(
+                CompatPackHeaderRule.SurfaceHashMissing,
+                "包 " + manifest.PackId + " 带有非空 " + string.Join(" 与 ", triggers)
+                + "，但未声明 baseSurfaceHash：有表面差量或变体选择的包必须声明当前基线表面快照"
+                + "（字段：baseSurfaceHash；纯 capability 包可省略）。"));
+        }
+
+        // baseSurfaceHash 精确对账（E2-R6 / T7 语义级）：manifest 声明非空 baseSurfaceHash
+        // 时必须等于当前基线表面快照（profile/engineApi/指令与函数描述符/METHOD 投影/内置
+        // 变体/capability 的规范化 SHA256）——包声称"基于某表面"而引擎表面已漂移时，
+        // 其 add/hide 差量前提即失效，静默错叠比拒载更危险。纯 capability 包不声明（null）
+        // 时不触发本规则。
+        if (manifest.BaseSurfaceHash is not null
+            && !string.Equals(manifest.BaseSurfaceHash, engine.BaselineSurfaceHash, StringComparison.Ordinal))
+        {
+            collected.Add(new CompatPackHeaderError(
+                CompatPackHeaderRule.SurfaceHashMismatch,
+                "包 " + manifest.PackId + " 的 baseSurfaceHash 与当前基线表面快照不一致（声明 "
+                + manifest.BaseSurfaceHash + "，当前基线 " + engine.BaselineSurfaceHash
+                + "；包需按新表面快照重发布，或由维护方再生生成清单后更新声明）。"));
+        }
+
+        // 原则（3）双轴版本比较：两轴都是 major 相等且包 minor <= 引擎 minor（缺 API 就是缺 API，
+        // 不能因"引擎更新向下兼容"放宽）。两轴独立判定、独立文案——包作者必须能看出是
+        // contract（公开契约面）还是 engine（引擎行为/能力契约）不满足。
+        if (!manifest.ContractAbi.CanRunOn(engine.ContractAbi))
+        {
+            collected.Add(new CompatPackHeaderError(
+                CompatPackHeaderRule.ContractAbiMismatch,
+                "包 " + manifest.PackId + " 的 contractAbi=" + manifest.ContractAbi
+                + " 不能在引擎 contractAbi=" + engine.ContractAbi
+                + " 上运行（contract 轴要求 major 相等且包 minor <= 引擎 minor），包需按新契约面重编译后分发。"));
+        }
+        if (!manifest.EngineApi.CanRunOn(engine.EngineApi))
+        {
+            collected.Add(new CompatPackHeaderError(
+                CompatPackHeaderRule.EngineApiMismatch,
+                "包 " + manifest.PackId + " 的 engineApi=" + manifest.EngineApi
+                + " 不能在引擎 engineApi=" + engine.EngineApi
+                + " 上运行（engine 轴要求 major 相等且包 minor <= 引擎 minor），包需按新引擎能力重编译后分发。"));
+        }
+
+        // saveProfileId v1 未接线：legacy 存档路径尚不消费 CompatibilityPlan.SaveProfileId，
+        // 声明后只会进 plan 元数据/哈希而不改变真实存档格式。按死契约纪律显式拒载，
+        // 避免"看起来生效"的静默误导；v2 宿主接线后删除本条即可恢复。
+        if (manifest.SaveProfileId is not null)
+        {
+            collected.Add(new CompatPackHeaderError(
+                CompatPackHeaderRule.SaveProfileDeclared,
+                "包 " + manifest.PackId + " 声明 saveProfileId=" + manifest.SaveProfileId
+                + "，但 v1 legacy 存档路径尚不消费 plan.SaveProfileId（v2 预留）；携带即拒载。"));
+        }
+
+        return collected;
     }
 
     /// <summary>
