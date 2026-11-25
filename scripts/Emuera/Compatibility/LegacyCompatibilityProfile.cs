@@ -23,6 +23,10 @@ namespace MinorShift.Emuera.Compatibility
 
 		/// <summary>HTML div 的 align 属性接受并忽略（Skiav17.2；HtmlManager div 属性解析门控）。</summary>
 		bool IgnoresDivAlignAttribute { get; }
+		/// <summary>CONSTTABLE 常数表声明（Emuera-SKIA Skiav18.0；UserDefinedVariable/ConstArrayTable/HeaderFileLoader/静态二维 token 回填）。</summary>
+		bool SupportsConstTable { get; }
+		/// <summary>#DIMF CHARADATA 在声明处报错（Emuera-SKIA Skiav18.0；UserDefinedVariable 的 CHARADATA 分支）。</summary>
+		bool RejectsFloatCharaData { get; }
 		bool UsesLazyResourceIndex { get; }
 		bool UsesTimesClamp { get; }
 		bool UsesRandClamp { get; }

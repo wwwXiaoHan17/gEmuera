@@ -38,8 +38,8 @@
       "packId": "pack.gemuera.snake",
       "relativePath": "compat_packs/pack.gemuera.snake/pack.gemuera.snake.dll",
       "relativePathAndroid": "packs/pack.gemuera.snake/pack.gemuera.snake.dll",
-      "requiredPackVersion": "1.2.0",
-      "note": "snake 第一方数据包（最大差集、19 个 Wired capability、builtin:snake 变体、BITMAP_CACHE_ENABLE 碰撞态）"
+      "requiredPackVersion": "1.3.0",
+      "note": "snake 第一方数据包（最大差集、22 个 Wired capability、builtin:snake 变体、BITMAP_CACHE_ENABLE 碰撞态；对齐 Emuera-SKIA Skiav18.0.0）"
     }
   ]
 }

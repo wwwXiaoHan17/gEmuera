@@ -177,7 +177,7 @@ namespace MinorShift.Emuera.Compatibility
 			// 内置 profile 仍得到与旧实现相同的布尔组合；社区包在 v24pure 基线上声明同一组
 			// capability 即可激活对应行为，不再要求引擎内置模块仍在场（P-D 前提）。
 			// snake 内置模块已退役（P-D 步 5）：policy 只由 capability 派生；
-			// pack.gemuera.snake 声明 19 个 Wired capability ⇒ IsEnabled 为真。
+			// pack.gemuera.snake 声明全部 22 个 RequiredWired capability ⇒ IsEnabled 为真。
 			builder.SetSnakePolicy(LegacySnakeCompatibilityPolicy.FromCapabilities(
 				plan.CapabilityIds, moduleSelected: false));
 			// erafl 内置模块已退役（P-D 步 4）：policy 只由 capability 派生；
@@ -540,6 +540,8 @@ namespace MinorShift.Emuera.Compatibility
 		public bool ContinuesAfterStartupFault => false;
 		public bool UsesFastDisplayRefresh => false;
 		public bool IgnoresDivAlignAttribute => false;
+		public bool SupportsConstTable => false;
+		public bool RejectsFloatCharaData => false;
 		public bool UsesLazyResourceIndex => false;
 		public bool UsesTimesClamp => false;
 		public bool UsesRandClamp => false;
@@ -589,6 +591,8 @@ namespace MinorShift.Emuera.Compatibility
 		public bool ContinuesAfterStartupFault => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.ContinueAfterStartupFault);
 		public bool UsesFastDisplayRefresh => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.FastDisplayRefresh);
 		public bool IgnoresDivAlignAttribute => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.DivAlignAttrIgnore);
+		public bool SupportsConstTable => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.ConstTable);
+		public bool RejectsFloatCharaData => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.RejectFloatCharaData);
 		public bool UsesLazyResourceIndex => true;
 		public bool UsesTimesClamp => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.TimesClamp);
 		public bool UsesRandClamp => capabilities.Contains(GEmuera.Core.Compatibility.SnakeCompatibilityCapabilities.RandClamp);

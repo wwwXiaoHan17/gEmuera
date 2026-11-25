@@ -40,6 +40,20 @@
 - [P2][open] **PRINTC 密集列布局在 px 图像缩放后的重排未验证**——EraTW 所在地是 div 网格，没有覆盖 PRINTC 路径。验收=以 PRINTC 密集输出的游戏在改字号后分栏不错位。触发条件：用户反馈某游戏改字号后 PRINTC 列错位时。来源：`evolution-log/2026-11-16-ui-scale-setting.md` 补遗（2026-11-20 恢复字体滑条）+ 同上 补遗 17。
 - [P2][closed] **模拟器内残留测试游戏 `/storage/emulated/0/emuera/testgame-img`**——2026-11-23 收尾时设备未连接、未删；用户裁定「不管」，不处理。日后若需清理：`adb shell rm -rf /storage/emulated/0/emuera/testgame-img`。来源：同上 补遗 22 → 关闭于 补遗 26（2026-11-23，用户裁定）。
 
+### 蛇版（snake）对齐 Emuera-SKIA（2026-11-24）
+
+来源日志：`evolution-log/2026-11-24-snake-18.0-alignment.md`（对齐到 Skiav18.0.0；参考实现在本机 `D:\clone\emuera_lazyloading_selfmodified_version`，上游提交 `7154549`，下一轮对齐从它起做增量审计）。
+
+- [P1][open] **`resources.pak` 单文件资源包未对齐**——上游 17.4.0 引入、18.0 列为正式特性；只以该包分发资源的游戏在本引擎找不到图片与图片 CSV。验收=只带 `resources.pak`（无散图）的夹具游戏在桌面与 Android 真机上立绘、背景、图片 CSV 均正常。触发条件：用户决定支持该分发格式，或有用户新版蛇版分发的游戏报缺图。为什么未做：属资源加载子系统，需独立设计（上游 `Runtime/Utils/ResourceStore.cs` 502 行及 `AppContents.cs` 等接入）。来源：该日志 §2 第 10 条、§6 第 1 条。
+- [P1][open] **legacy-runner 的 G10 守卫在默认日志配置下必然失败**——`Invoke-LegacyRunner.ps1 -Profile <退役档案>` 报 `Runner did not load expected first-party pack`：守卫在日志里找 Info 级的 `[LOAD] CompatPack enabled`，而用户 `config.toml` 的 `level = "warn"` 丢弃 Info；包其实已启用。验收=默认配置下该脚本对 snake 夹具 exit 0。修法二选一：runner 会话内临时打开 Info 镜像（不写用户配置），或守卫改读会话实际绑定的 `packIds`。触发条件：下次需要用该脚本做蛇版执行级冒烟时。为什么未做：改 runner 行为需用户确认口径；临时绕行（直接启动 Godot runner 场景）见该日志 §3「环境障碍与打通」。来源：该日志 §3、§6 第 2 条。
+- [P2][open] **`tools/pure-move/Test-PureMove.ps1` 的 `-Include` 不补基线侧**——分片与主文件不同名的家族（`VariableToken.cs` ↔ `VariableData.*.cs`）里，旧分片永远被算成新增。验收=`-Include` 同时传入新旧分片时报 `MULTISET: PURE MOVE`，并补一条该工具自带的 `Test-PureMove.ps1` 用例。触发条件：下次对该家族做拆分时。来源：该日志 §3、§6 第 3 条。
+- [P2][open] **两个生成物的换行符与 `.gitattributes` 不一致**——`src/Core/Compatibility/LegacyDialectInventories.Generated.cs`、`tools/legacy-runner/profiles.generated.json` 以 CRLF 提交而属性要求 LF，被生成器重写后内容零差异却显示为已修改。验收=重跑生成器后 `git status` 不列出这两文件。触发条件：用户决定做一次纯换行符提交时。来源：该日志 §3、§6 第 4 条。
+- [P2][open] **AGENTS.md 里其余三个参考实现路径在本机不存在**——`E:\MyCode\Era\emuera.em-master`（v24）、`E:\MyCode\GodotCode\gemuera\uEmuera-0.2.9d`、`XEmuera-0.5.1等`；`tools/dialect-inventory/README.md` 的 v24 示例路径同理（`PLAN.md:47-48` 为历史记录不算）。验收=AGENTS.md 四个参考路径都指向本机存在的目录。触发条件：用户提供 v24 等参考实现的位置时。来源：该日志 §6 第 5 条。
+- [P2][open] **`SnakeCompatibilityModule.ModuleVersion` 仍是 `1.1.0`**——snake 包已到 1.3.0，该常量目前无消费者。验收=定一条「模块版本是否随包版本联动」的规则并执行。触发条件：下次给 snake 包升版本时。来源：该日志 §6 第 6 条。
+- [P2][closed] **新 `.cs` 文件的 `.uid` 侧车尚未生成**——`scripts/Emuera/GameData/ConstArrayTable.cs`、`ConstArrayTableDiskFiles.cs`、`scripts/Emuera/GameData/Variable/VariableData.FloatTokens.cs`、`tests/xUnitTest/GEmuera.Core.Tests/ConstArrayTableTests.cs`。验收=在 Godot 编辑器里打开一次项目后，对应 `.cs.uid` 生成并入库。触发条件：下次打开编辑器后。来源：该日志 §6 第 7 条。→ 2026-11-24 关闭：编辑器已重扫项目，四个 `.uid` 都已出现在工作区（未跟踪，随各自源文件一起提交即可）。
+- [P2][open] **已失效的旧上游差异工具是否清理**——`tools/dialect-inventory/Invoke-/Test-LegacyDialectUpstreamDiff.ps1`、`LegacyDialectUpstreamDiff.psm1`、`legacy-dialect-upstream-diff.json`、`LegacyDialectReflectionDiff/`（README 已标注失效）。验收=用户裁定删除或修复。触发条件：下次整理 `tools/dialect-inventory` 时。来源：该日志 §6 第 8 条。
+- [P2][open] **Android 真机上的常数表未验证**——桌面无头已通过（含走 `uEmuera.Utils` 的磁盘层），但 Android 走 Godot 文件 API 的分支与大小写不敏感路径索引未在真机跑过。验收=APK 上运行同一夹具输出一致。触发条件：下次出 APK 验收时顺带。来源：该日志 §3「未验证」。→ 2026-11-24 进展：x86_64 模拟器（API 37，16KB 页镜像）上用导出的 APK 跑同一夹具，输出与桌面逐项一致（`CTBL:3:4=18 … CONSTTABLE_OK`）；arm64 真机仍未验证，条目保持 open。
+
 ### 其他功能域
 
 （暂无——各历史日志的 open 项按上一条规则增量迁移。）

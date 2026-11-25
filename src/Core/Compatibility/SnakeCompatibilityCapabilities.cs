@@ -73,6 +73,23 @@ public static class SnakeCompatibilityCapabilities
     /// erafl 会话经自身 AllowsOutKeyword 派生放行（EraFlCompatibilityModule.OutKeywordBehavior）。</summary>
     public const string OutKeyword = "declare.out-keyword.v1";
 
+    /// <summary>
+    /// #DIM / #DIMS / #DIMF 的 CONSTTABLE 常数表声明（Emuera-SKIA Skiav18.0；也认「常数表」「常数数组」两种写法）：
+    /// 值与各维名称读自同名 CSV/ERD 表，只能在 ERH 声明、必须写尺寸、不得写内联初值、最多二维；
+    /// 注册数就是真实下标，注册名可当名称下标，且名称查表不依赖 Config.UseERD。
+    /// 涉及 UserDefinedVariable 声明解析、ConstArrayTable 装载、HeaderFileLoader 名称注册、
+    /// 以及静态二维 token 按行优先回填默认值。v24 参考无此语法；能力未激活的会话把
+    /// CONSTTABLE 当普通变量名（基线行为不变）。
+    /// </summary>
+    public const string ConstTable = "declare.const-table.v1";
+
+    /// <summary>
+    /// #DIMF CHARADATA 在声明处报错（Emuera-SKIA Skiav18.0）：上游没有角色浮点 token，
+    /// 此前该组合会静默落进整数分支变成整数角色变量。gemuera 既有实现支持一维/二维角色浮点变量，
+    /// 故只在声明本 capability 的会话收紧为报错，其余会话保持既有行为。
+    /// </summary>
+    public const string RejectFloatCharaData = "declare.reject-float-charadata.v1";
+
     /// <summary>函数声明行剥除 VARIADIC 变长参数标记（v24 参考按普通标识符解析）。</summary>
     public const string VariadicStrip = "parse.variadic-strip.v1";
 
@@ -113,6 +130,8 @@ public static class SnakeCompatibilityCapabilities
                 [VariadicStrip] = "UsesVariadicStrip",
                 [FloatTypeSystem] = "UsesFloatTypeSystem",
                 [DivAlignAttrIgnore] = "IgnoresDivAlignAttribute",
+                [ConstTable] = "SupportsConstTable",
+                [RejectFloatCharaData] = "RejectsFloatCharaData",
             });
 
     public static readonly IReadOnlyList<string> RequiredCapabilityIds =
@@ -138,6 +157,8 @@ public static class SnakeCompatibilityCapabilities
             FloatTypeSystem,
             PresetErdMerge,
             DivAlignAttrIgnore,
+            ConstTable,
+            RejectFloatCharaData,
         });
 
     /// <summary>

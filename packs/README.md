@@ -23,7 +23,7 @@
 | `pack.gemuera.megaten` | megaten | 零表面 + 5 个 Wired capability | 手写（等价测试为 golden） |
 | `pack.gemuera.erablue` | erablue | +SETANIMETIMER、1 个 Wired capability | 手写 |
 | `pack.gemuera.erafl` | erafl | +SETANIMETIMER、10 个 Wired capability（算法库仍在引擎） | 手写 |
-| `pack.gemuera.snake` | snake | 最大差集（22 指令 + 93 函数，v1.1.0 对齐 Skiav17.2 含 AUDIO 六函数）、20 个 Wired capability（v1.2.0 增 html.div-align-attr-ignore）、FOR/SETBGIMAGE 变体、BITMAP_CACHE_ENABLE 碰撞态 | 由冻结表面生成（freeze v2） |
+| `pack.gemuera.snake` | snake | 最大差集（22 指令 + 93 函数，v1.1.0 对齐 Skiav17.2 含 AUDIO 六函数）、22 个 Wired capability（v1.2.0 增 html.div-align-attr-ignore；v1.3.0 对齐 Skiav18.0.0 增 declare.const-table 常数表声明与 declare.reject-float-charadata）、FOR/SETBGIMAGE 变体、BITMAP_CACHE_ENABLE 碰撞态 | 由冻结表面生成（freeze v2） |
 
 - 一包一目录：`packs/<packId>/<packId>.csproj` + 内嵌 manifest；构建产物 DLL 名必须等于 packId。
 - 部署/分发：先跑 `tools/compat-pack/Build-FirstPartyPacks.ps1` 生成 `compat_packs/<packId>/<packId>.dll` staging（gitignored），导出时由 `export_presets.cfg` 的 include_filter 打进 PCK；启动时 `FirstPartyPackBootstrap` 释放到安装根（桌面 = exe 同级 `compat_packs/`；Android = `/storage/emulated/0/emuera/packs/`）。
@@ -111,7 +111,7 @@ legacy `targetEngineApi: 1`（映射为 1.0/1.0），但官方包必须已完成
 # 1) 再生方言清单（引擎注册表/冻结表面变化后；写入 LegacyDialectInventories.Generated.cs 与 profiles.generated.json）
 dotnet run --project tools/dialect-inventory/LegacyDialectInventoryGenerator -- <项目根>
 
-# 2) 第一方包等价门禁（真实 DLL 走加载/组装链；含 snake 19 capability 与碰撞态）
+# 2) 第一方包等价门禁（真实 DLL 走加载/组装链；含 snake 22 capability 与碰撞态）
 dotnet test tests/xUnitTest/GEmuera.Core.Tests/GEmuera.Core.Tests.csproj -c Release --filter "FullyQualifiedName~FirstPartyPackEquivalenceTests"
 
 # 3) staging（导出前必跑；产出 compat_packs/<packId>/<packId>.dll，gitignored）
@@ -121,7 +121,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/compat-pack/Build-Firs
 powershell -NoProfile -ExecutionPolicy Bypass -File tools/compat-pack/Test-CompatPackReleaseGate.ps1 -ProjectRoot .
 ```
 
-第一方包清单为人工/生成器写出后固化；**禁止手改已冻结的 v24 表面哈希**（G8 钉扎 `99a8763b…`）。
+第一方包清单为人工/生成器写出后固化；**禁止手改已冻结的 v24 表面哈希**（G8 钉扎 `5310c6d8…`，freeze v4；
+哈希只随生成器/`LegacySurfaceHash` 的重算结果整批重钉，见 `governance/evolution-log/2026-11-24-snake-18.0-alignment.md`）。
 用户手装更新语义：安装根维护 `.first-party-packs.json`（packId → 上次内置释放 SHA256）；
 目标字节与记录一致时接受内置升级，不一致视为用户替换、不覆盖（执行设计 §6.2）。
 
