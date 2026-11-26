@@ -237,7 +237,8 @@ per-game 启用配置（launcher 侧：游戏 → 包列表）给出**包文件�
    capability=<id>|<status>|<consumerContractId>|<introducedInEngineApi>
    ~~~
 
-   指令/函数按名字键、METHOD 投影名按 Ordinal 排序、capability 按 id、variant 先按指令名再按变体名做 Ordinal 排序（不是整行排序）；不含绝对路径/时间戳/进程值。对文本取 SHA256 得小写十六进制 64 字符。**哈希规范 v1 修订（2026-11-03 修复轮）**：新增 `methodProjection=<name>` 段覆盖 spec §5.4 的"指令到 METHOD 投影的条件"；该修订属于 v1 内的语义补全，不是新版本轴，所有既有 `baseSurfaceHash` 必须按本规范重算。METHOD 投影名的唯一事实源是生成清单 `LegacyDialectInventories.MethodProjectedInstructionNames`（宿主 validation context、上下文缺省与生成器三处同源）。当前基线值 `99a8763bfc3ff3780df05fc0cda0d9bc0ec6fc60975f5918a6e50f1717832fdb`（freeze v2，2026-11-14） 由 `LegacySurfaceHashTests.LegacySurfaceHash_V24_IsStable` 与官方包测试钉住；生成清单 / capability / 变体漂移时先红，必须重跑 `LegacyDialectInventoryGenerator` 与 `Generate-V18PackManifest` 后再发布/更新包声明。
+   指令/函数按名字键、METHOD 投影名按 Ordinal 排序、capability 按 id、variant 先按指令名再按变体名做 Ordinal 排序（不是整行排序）；不含绝对路径/时间戳/进程值。对文本取 SHA256 得小写十六进制 64 字符。**哈希规范 v1 修订（2026-11-03 修复轮）**：新增 `methodProjection=<name>` 段覆盖 spec §5.4 的"指令到 METHOD 投影的条件"；该修订属于 v1 内的语义补全，不是新版本轴，所有既有 `baseSurfaceHash` 必须按本规范重算。METHOD 投影名的唯一事实源是生成清单 `LegacyDialectInventories.MethodProjectedInstructionNames`（宿主 validation context、上下文缺省与生成器三处同源）。当前基线值 `5310c6d87acdb2ea224abcc0866bd81707e06246bf0b8e8aa4c537debf85b2c1`（freeze v4，2026-11-23；由 `LegacyDialectInventoryGenerator` 打印。
+更正：本处旧值 `99a8763bfc3ff…` 只有前 8 位与当时的真实基线 `99a8763bf53f850b…` 相同，后半段是手抄错误） 由 `LegacySurfaceHashTests.LegacySurfaceHash_V24_IsStable` 与官方包测试钉住；生成清单 / capability / 变体漂移时先红，必须重跑 `LegacyDialectInventoryGenerator` 与 `Generate-V18PackManifest` 后再发布/更新包声明。
 
 
 ### 12.10 2026-11-03 final fix wave（整支 final review 后的唯一修复轮）
@@ -434,7 +435,8 @@ per-game 启用配置（launcher 侧：游戏 → 包列表）给出**包文件�
 
 - `gemuera.v18`/`game.megaten`/`game.erablue`/`game.erafl`/`game.snake` 五个内置方言模块与
   profile 已全部删除；差异改由第一方数据包 `packs/pack.gemuera.<profile>/` 表达（一包一目录、
-  manifest-only）。v24 基线会话表面不变；`baseSurfaceHash` 于 freeze v2（2026-11-14，Skiav17.2 对齐 +6 AUDIO，MP 345→351）按规范重算重钉为 `99a8763b…`（原 `950dbeb9…`，历史值见 evolution log）。
+  manifest-only）。v24 基线会话表面不变；`baseSurfaceHash` 于 freeze v2（2026-11-14，Skiav17.2 对齐 +6 AUDIO，MP 345→351）按规范重算重钉为 `99a8763b…`（原 `950dbeb9…`，历史值见 evolution log）；
+  freeze v4（2026-11-23，Skiav18.0.0 对齐 +2 capability：declare.const-table / declare.reject-float-charadata，表面与 MP 不变）重钉为 `5310c6d8…`。
 - 冻结包校验表面宇宙：`tools/dialect-inventory/retired-dialect-surface-universe.json`
   （来源 commit 30fd56e8…）是包校验/capability/variant 词汇表的 ABI 输入，退役后**只读**，
   生成器正常模式 = live v24 + 冻结退役数据，保证 `MethodProjectedInstructionNames` 等
@@ -458,6 +460,25 @@ per-game 启用配置（launcher 侧：游戏 → 包列表）给出**包文件�
   resume/再次扫描重试）；编辑器直接扫 `res://compat_packs`。
 - 用户更新语义：目标 SHA 与记录一致 = 接受内置升级；不一致 = 用户替换/改过，不覆盖（KeptUser）。
   失败逐包聚合、绝不阻断启动，launcher 映射预检失败按 §3.1 回退 v24 并提示。
+- **2026-11-24 补充（过期第一方包自愈，收窄上条的 KeptUser）**：引擎表面一变（重钉 `baseSurfaceHash`）后，
+  用户手放的旧包没有状态记录，按上条永远不会被内置包更新，游戏每次启动静默回退基线。现在释放器可注入
+  替换判定（`CompatPackStalePackPolicy`）：仅当目标是**与内置载荷同 `packId` 且对当前引擎必然被拒**的包、
+  而内置载荷可用时才替换，旧文件备份为 `.<packId>.dll.stale-bak`；目标读不出、是别的包、或仍然可用一律保留。
+  判定不装载包：`CompatPackManifestPeek` 从程序集字节读内嵌清单，走与规则层同一个头部判定
+  （`CompatPackRules.CollectHeaderErrors`：保留名 / 基线档案 / `baseSurfaceHash` / 双轴版本 / `saveProfileId`），
+  所以"预检不通过"等价于"真实加载必然拒载"；预检通过不保证可加载（能力词汇、表面符号等仍由真实加载校验）。
+  启动器侧对称：`CompatPackStaleSelectionRebinder` 在注入前把指向过期第一方包的选择改绑到内置同名包
+  （路径不同才换）并写回 `launcher.cfg [compat_packs]`；换不了的原样注入（整组拒载 = 回退基线）并在状态栏明示。
+- **2026-11-26 补充（`[compat_packs]` 的存储不变量）**：同一个游戏在该节只保留一条。读取取的是文件里
+  第一个匹配的键，所以保存某个游戏的选择时（启动器界面提交与自愈写回共用
+  `LauncherSettingsStore.SaveCompatPackSelection`）会一并清除写法不同、但读取时会被当成同一个游戏的旧键
+  （Windows 下即仅大小写不同，判定见 `CompatPackLauncherConfig.FindShadowingGameKeys`，与读取路径同一个比较器）。
+  否则手改或旧格式留下的旧键会一直排在前面被读到，表现成「改了选择却一直用旧选择」。
+  同日核对后定下的另外三条：改绑结果按「归一化路径 + 平台比较器」去重，内置包无论在选中清单里排在过期副本
+  之前还是之后都只出现一次（同一路径给两次会被引擎按 packId 重复整组拒载）；写回只发生在交互启动链、且只针对
+  按游戏保存的非空选择——诊断回放入口（`ConfigureLegacyRunnerSession`，legacy-runner 与进程内换局）只读
+  `launcher.cfg`，改绑仅在本次会话内生效（该进程此后一律不写回）；释放器的「内置载荷可用」同样是清单头部级
+  结论，内置包的完整有效性由发布门禁对它们的真实加载保证。
 - legacy-runner 对退役 profile 做"翻译 + 显式注入 `GEMUERA_COMPAT_PACKS` + 报告
   baseProfile/packIds + 断言 `[LOAD] CompatPack enabled`"；缺包/未加载即 FAIL（G10 不假绿）。
 

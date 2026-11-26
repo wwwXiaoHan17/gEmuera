@@ -137,14 +137,15 @@ static class Program
             LegacyCompatibilityProfile snake = LoadFirstPartyPackProfile(
                 typeof(PackGemueraSnake.PackGemueraSnakeMarker), out CompatPackHandle snakeHandle, out string snakePackDirectory);
 
-            // G5（执行设计 §4.8）：capability 词汇表冻结为 42 项（33 Wired + 9 DiagnosticOnly；div-align quirk 后 freeze v3）。
-            Assert(EngineCapabilityCatalog.All.Count == 42,
-                $"Engine capability vocabulary drifted: {EngineCapabilityCatalog.All.Count} != 41 (frozen pack ABI surface).");
+            // G5（执行设计 §4.8）：capability 词汇表冻结为 44 项（35 Wired + 9 DiagnosticOnly；
+            // div-align quirk 后 freeze v3 = 42，Skiav18.0 常数表对齐后 freeze v4 = 44）。
+            Assert(EngineCapabilityCatalog.All.Count == 44,
+                $"Engine capability vocabulary drifted: {EngineCapabilityCatalog.All.Count} != 44 (frozen pack ABI surface).");
             // G8（执行设计 §4.8）：v24 基线语义哈希钉扎；漂移 = 冻结宇宙/生成清单/变体/capability 被改。
             Assert(
                 LegacySurfaceHash.ComputeV24SurfaceHash(
                     LegacySurfaceHash.BuildV24SurfaceHashInput("v24pure")) ==
-                "99a8763bf53f850bbd9a2c52315a375bd4075f396b467d8d4ad097a27bd05b37",
+                "5310c6d87acdb2ea224abcc0866bd81707e06246bf0b8e8aa4c537debf85b2c1",
                 "v24 baseSurfaceHash drifted; frozen retired surface universe or v24 surface changed.");
 
             Assert(v24.IsInstructionVisible("PRINT"), "v24 lost a baseline instruction.");

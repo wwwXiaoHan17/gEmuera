@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using GEmuera.Core.Compatibility.Packs;
 using Godot;
 
 namespace gEmuera.GodotHost;
@@ -153,12 +154,24 @@ public static class LauncherSettingsStore
 		return result;
 	}
 
-	/// <summary>保存单个游戏的选择；空串清除该键（不留孤儿条目）。</summary>
+	/// <summary>
+	/// 保存单个游戏的选择；空串清除该键（不留孤儿条目）。
+	/// 同一个游戏只留一条：与 <paramref name="normalizedGameKey"/> 写法不同、但读取时会被当成同一个游戏
+	/// 的旧键（Windows 下即仅大小写不同，见 <see cref="CompatPackLauncherConfig.FindShadowingGameKeys"/>）
+	/// 一并清除——读取取的是文件里第一个匹配的键，只写归一化键会让旧条目一直抢先被读到。
+	/// </summary>
 	public static void SaveCompatPackSelection(string normalizedGameKey, string packedSelection)
 	{
 		if (string.IsNullOrEmpty(normalizedGameKey))
 			return;
 		var config = LoadOrEmpty();
+		if (config.HasSection(CompatPacksSection))
+		{
+			foreach (string shadowingKey in CompatPackLauncherConfig.FindShadowingGameKeys(
+				config.GetSectionKeys(CompatPacksSection), normalizedGameKey,
+				caseSensitiveFilesystem: !OperatingSystem.IsWindows()))
+				config.EraseSectionKey(CompatPacksSection, shadowingKey);
+		}
 		if (string.IsNullOrEmpty(packedSelection))
 		{
 			if (config.HasSectionKey(CompatPacksSection, normalizedGameKey))

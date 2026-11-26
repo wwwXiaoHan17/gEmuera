@@ -60,6 +60,14 @@ Audio: BGM 加载失败 → file=bgm01.ogg error=FileNotFoundException
 | `UI.` | UI | `PARSER.` | StatementRecognition |
 | `FS.` | FileSystem | | |
 
+> 2026-11-24 追加（可见性，实测）：Info/Warn 是否落盘还受用户的日志类别开关影响。**显式传入
+> `EmueraLogCategory` 的非 Error 日志，在最小配置（只有 `[logging]`、未开调试模型与类别开关）下实测不落盘**；
+> 不指定类别、靠消息前缀（如 `[LOAD]`）在通过开关后再归类的写法，两种配置下都落盘
+> （`FirstPartyPackBootstrap`、`FirstWindow.CompatPackSelfHeal.cs` 即此写法）。需要默认可见的 Info/Warn
+> 请用后一种写法；显式类别只用于确实只在该类别开关打开时才想看的记录。实测范围：x86_64 模拟器 APK
+> （最小配置）与用户桌面配置（`[debug_model_zh_cn] enabled=true`、`[logging.categories]` 全开，两种写法均落盘）；
+> 其余组合未逐一验证。见 `governance/evolution-log/2026-11-24-stale-first-party-pack-self-heal.md`。
+
 **稳定前缀**（显式 eventId，专用入口；同一 eventId 拥有独立限流桶）：
 
 | 入口 | 前缀 | 示例 |

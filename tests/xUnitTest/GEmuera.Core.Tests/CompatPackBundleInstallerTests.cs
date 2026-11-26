@@ -241,4 +241,168 @@ public class CompatPackBundleInstallerTests
         }
         finally { Cleanup(root); }
     }
+
+    // —— 用户手装的过期第一方包：宿主注入判定后允许替换（2026-11-24 自愈）——————
+    // 默认（不注入判定）行为不变：记录缺失/与记录不符的目标一律 KeptUser。
+
+    /// <summary>用户手装包的目标路径；顺带建好一包一目录（用户是用文件管理器放进现有/新建目录的）。</summary>
+    static string StaleTargetPath(string root)
+    {
+        string directory = Path.Combine(root, "pack.test.demo");
+        Directory.CreateDirectory(directory);
+        return Path.Combine(directory, "pack.test.demo.dll");
+    }
+
+    [Fact]
+    public void WithoutReplacer_UserPlacedTarget_IsStillKept()
+    {
+        string root = NewRoot();
+        try
+        {
+            byte[] existing = DllPayload("user-stale");
+            File.WriteAllBytes(StaleTargetPath(root), existing);
+
+            var result = CompatPackBundleInstaller.InstallFromPayloads(
+                new[] { new CompatPackBundlePayload("pack.test.demo", DllPayload("fresh")) }, root, null, null);
+
+            Assert.Equal(1, result.KeptUser);
+            Assert.Equal(0, result.ReplacedStale);
+            Assert.Equal(existing, File.ReadAllBytes(StaleTargetPath(root)));
+            // 包目录里只有目标本身，没有留下备份或临时文件。
+            Assert.Equal(new[] { StaleTargetPath(root) }, Directory.GetFiles(Path.GetDirectoryName(StaleTargetPath(root))!));
+        }
+        finally { Cleanup(root); }
+    }
+
+    [Fact]
+    public void StaleUserPlacedTarget_WhenReplacerApproves_IsReplacedAndBackedUp()
+    {
+        string root = NewRoot();
+        try
+        {
+            byte[] existing = DllPayload("user-stale");
+            File.WriteAllBytes(StaleTargetPath(root), existing);
+            byte[] payload = DllPayload("fresh", fill: 0x77);
+            var asked = new List<string>();
+
+            var result = CompatPackBundleInstaller.InstallFromPayloads(
+                new[] { new CompatPackBundlePayload("pack.test.demo", payload) }, root, null,
+                (pack, targetPath) =>
+                {
+                    asked.Add(pack.PackId + "|" + targetPath);
+                    return true;
+                });
+
+            Assert.True(result.Succeeded, string.Join("; ", result.Errors));
+            // 判定只对「记录缺失/不符」的目标发起，并拿到它要覆盖的确切路径。
+            Assert.Equal(new[] { "pack.test.demo|" + StaleTargetPath(root) }, asked);
+            Assert.Equal(0, result.KeptUser);
+            Assert.Equal(0, result.Installed);
+            Assert.Equal(1, result.ReplacedStale);
+            Assert.Equal(new[] { "pack.test.demo" }, result.ReplacedStalePackIds);
+            Assert.Equal(payload, File.ReadAllBytes(StaleTargetPath(root)));
+            // 用户的旧文件留在同目录的隐藏备份里，操作可逆。
+            string backup = Path.Combine(
+                Path.GetDirectoryName(StaleTargetPath(root))!, ".pack.test.demo.dll" + CompatPackStalePackPolicy.StaleBackupSuffix);
+            Assert.Equal(existing, File.ReadAllBytes(backup));
+            // 状态记录写入新字节：此后按内置升级语义跟进。
+            string state = File.ReadAllText(Path.Combine(root, CompatPackBundleInstaller.StateFileName));
+            Assert.Contains(
+                Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(payload)).ToLowerInvariant(), state);
+        }
+        finally { Cleanup(root); }
+    }
+
+    [Fact]
+    public void UserPlacedTarget_WhenReplacerDeclines_IsKeptWithoutBackup()
+    {
+        string root = NewRoot();
+        try
+        {
+            byte[] existing = DllPayload("user-modified-but-usable");
+            File.WriteAllBytes(StaleTargetPath(root), existing);
+
+            var result = CompatPackBundleInstaller.InstallFromPayloads(
+                new[] { new CompatPackBundlePayload("pack.test.demo", DllPayload("fresh", fill: 0x78)) }, root, null,
+                (_, _) => false);
+
+            Assert.True(result.Succeeded);
+            Assert.Equal(1, result.KeptUser);
+            Assert.Equal(0, result.ReplacedStale);
+            Assert.Equal(existing, File.ReadAllBytes(StaleTargetPath(root)));
+            Assert.Single(Directory.GetFiles(Path.GetDirectoryName(StaleTargetPath(root))!));
+        }
+        finally { Cleanup(root); }
+    }
+
+    [Fact]
+    public void ReplacerThrows_TargetIsKeptAndFailureAggregated()
+    {
+        string root = NewRoot();
+        try
+        {
+            byte[] existing = DllPayload("user-stale");
+            File.WriteAllBytes(StaleTargetPath(root), existing);
+
+            var result = CompatPackBundleInstaller.InstallFromPayloads(
+                new[] { new CompatPackBundlePayload("pack.test.demo", DllPayload("fresh", fill: 0x79)) }, root, null,
+                (_, _) => throw new IOException("disk on fire"));
+
+            Assert.False(result.Succeeded);
+            Assert.Equal(1, result.KeptUser);
+            Assert.Equal(0, result.ReplacedStale);
+            Assert.Contains(result.Errors, error => error.Contains("pack.test.demo") && error.Contains("disk on fire"));
+            Assert.Equal(existing, File.ReadAllBytes(StaleTargetPath(root)));
+        }
+        finally { Cleanup(root); }
+    }
+
+    [Fact]
+    public void StaleBackupCannotBeWritten_TargetIsNotReplaced()
+    {
+        string root = NewRoot();
+        try
+        {
+            byte[] existing = DllPayload("user-stale");
+            File.WriteAllBytes(StaleTargetPath(root), existing);
+            // 备份文件名被一个目录占住：备份必然失败，此时绝不能先删用户的旧文件。
+            string blockedBackup = Path.Combine(
+                Path.GetDirectoryName(StaleTargetPath(root))!, ".pack.test.demo.dll" + CompatPackStalePackPolicy.StaleBackupSuffix);
+            Directory.CreateDirectory(blockedBackup);
+
+            var result = CompatPackBundleInstaller.InstallFromPayloads(
+                new[] { new CompatPackBundlePayload("pack.test.demo", DllPayload("fresh", fill: 0x7A)) }, root, null,
+                (_, _) => true);
+
+            Assert.False(result.Succeeded);
+            Assert.Equal(1, result.KeptUser);
+            Assert.Equal(0, result.ReplacedStale);
+            Assert.Equal(existing, File.ReadAllBytes(StaleTargetPath(root)));
+        }
+        finally { Cleanup(root); }
+    }
+
+    [Fact]
+    public void Replacer_IsNeverAskedForTargetsTheInstallerOwns()
+    {
+        string root = NewRoot();
+        try
+        {
+            var payloads = new[] { new CompatPackBundlePayload("pack.test.demo", DllPayload("v1")) };
+            CompatPackBundleInstaller.InstallFromPayloads(payloads, root);
+            var asked = 0;
+
+            // 目标字节 == 内置字节（跳过）与 目标 == 上次内置写入（内置升级）都不该征求判定。
+            var skipped = CompatPackBundleInstaller.InstallFromPayloads(payloads, root, null, (_, _) => { asked++; return false; });
+            byte[] upgraded = DllPayload("v2", fill: 0x91);
+            var upgrade = CompatPackBundleInstaller.InstallFromPayloads(
+                new[] { new CompatPackBundlePayload("pack.test.demo", upgraded) }, root, null, (_, _) => { asked++; return false; });
+
+            Assert.Equal(1, skipped.Skipped);
+            Assert.Equal(1, upgrade.Installed);
+            Assert.Equal(0, upgrade.ReplacedStale);
+            Assert.Equal(0, asked);
+        }
+        finally { Cleanup(root); }
+    }
 }

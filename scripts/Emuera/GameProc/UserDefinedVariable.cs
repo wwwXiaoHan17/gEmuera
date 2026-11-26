@@ -31,6 +31,19 @@ namespace MinorShift.Emuera.GameProc
 		public bool Private = false;
 		public bool CharaData = false;
 		public bool Const = false;
+
+		// declare.const-table.v1（Emuera-SKIA Skiav18.0）：常数表声明，值与各维名称由同名 CSV/ERD 表提供，
+		// 不走内联初始值；装填复用 DefaultInt/DefaultStr/DefaultFloat（一维直接用，二维由静态 token 行优先回填）。
+		/// <summary>声明为常数表： CONSTTABLE 关键字（也认「常数表」「常数数组」）。</summary>
+		public bool ConstTable = false;
+		/// <summary>主表路径（CSV 优先）。</summary>
+		public string ConstTablePath = null;
+		/// <summary>各维 name→index，由 HeaderFileLoader 注册进 ConstantData。</summary>
+		public Dictionary<string, int>[] ConstTableNames = null;
+		/// <summary>补充表冲突等 Lv1 提示，由 HeaderFileLoader 统一报告。</summary>
+		public List<string> ConstTableWarnings = null;
+		/// <summary>已被常数表消费的文件，不再交给 EE_ERD 名称数据路径重复解析。</summary>
+		public List<string> ConstTableConsumed = null;
 		
 		//1822 Privateの方もDIMだけ遅延させようとしたけどちょっと課題がおおいのでやめとく
 		public static UserDefinedVariableData Create(DimLineWC dimline)
@@ -155,7 +168,37 @@ namespace MinorShift.Emuera.GameProc
 				//TODO ifの数があたまわるい なんとかしたい
 				switch (keyword)
 				{
+					// 常数表关键字为 snake 系语法（Emuera-SKIA Skiav18.0）；能力未激活的会话按普通变量名处理（v24 基线行为）。
+					case "CONSTTABLE":
+					case "常数表":
+					case "常数数组":
+						if (!Program.Compatibility.Snake.SupportsConstTable)
+						{
+							ret.Name = keyword;
+							goto whilebreak;
+						}
+						// 名称下标在 HeaderFileLoader 注册；函数内声明没有对应注册路径，不能只让数值下标可用。
+						if (isPrivate)
+							throw new CodeEE(keyword + " 只能在 ERH 中声明，不能在函数内使用", sc);
+						if (ret.CharaData)
+							throw new CodeEE(keyword + "とCHARADATAキーワードは同時に指定できません", sc);
+						if (ret.Global)
+							throw new CodeEE(keyword + "とGLOBALキーワードは同時に指定できません", sc);
+						if (ret.Save)
+							throw new CodeEE(keyword + "とSAVEDATAキーワードは同時に指定できません", sc);
+						if (ret.Reference)
+							throw new CodeEE(keyword + "とREFキーワードは同時に指定できません", sc);
+						if (staticDefined && !ret.Static)
+							throw new CodeEE(keyword + "とDYNAMICキーワードは同時に指定できません", sc);
+						if (ret.Const)
+							throw new CodeEE(keyword + "キーワードが二重に指定されています", sc);
+						ret.ConstTable = true;
+						ret.Const = true;
+						ret.Static = true;
+						break;
 					case "CONST":
+						if (ret.ConstTable)
+							throw new CodeEE(keyword + "とCONSTTABLEキーワードは同時に指定できません", sc);
 						if (ret.CharaData)
 							throw new CodeEE(keyword + "とCHARADATAキーワードは同時に指定できません", sc);
 						if (ret.Global)
@@ -291,6 +334,10 @@ namespace MinorShift.Emuera.GameProc
 					case "CHARADATA":
 						if (isPrivate)
 							throw new CodeEE("ローカル変数の宣言に" + keyword + "キーワードは指定できません", sc);
+						// declare.reject-float-charadata.v1（Skiav18.0）：上游没有角色浮点 token，该组合在声明处直接拒绝
+						//（此前会落进整数分支变成整数角色变量）。能力未激活的会话保持既有的一维/二维角色浮点变量。
+						if (isFloat && Program.Compatibility.Snake.RejectsFloatCharaData)
+							throw new CodeEE("#DIMF 不支持 CHARADATA（角色浮点变量尚未实现）", sc);
 						if (ret.Reference)
 							throw new CodeEE(keyword + "とREFキーワードは同時に指定できません", sc);
 						if (ret.Const)
@@ -331,6 +378,9 @@ namespace MinorShift.Emuera.GameProc
 			List<int> sizeNum = new List<int>();
 			if (wc.EOL)//サイズ省略
 			{
+				// 常数表的尺寸同时决定越界判定（表里超出尺寸的值会被丢弃），省略会让整表变成 1 个元素。
+				if (ret.ConstTable)
+					throw new CodeEE("常数表声明必须写明尺寸：" + ret.Name + "（一维如 ,7，二维如 ,7,5）", sc);
 				if (ret.Const)
 					throw new CodeEE("CONSTキーワードが指定されていますが初期値が設定されていません");
 				sizeNum.Add(1);
@@ -374,11 +424,14 @@ namespace MinorShift.Emuera.GameProc
 
 			if (wc.Current.Type != '=')//初期値指定なし
 			{
-				if (ret.Const)
+				if (ret.Const && !ret.ConstTable)
 					throw new CodeEE("CONSTキーワードが指定されていますが初期値が設定されていません");
 			}
 			else//初期値指定あり
 			{
+				// 常数表的值只来自同名表；允许内联初始值会造成“写了却不生效”的静默覆盖。
+				if (ret.ConstTable)
+					throw new CodeEE("常数表的值来自同名表，不能写内联初始值：" + ret.Name, sc);
 				if (((OperatorWord)wc.Current).Code != OperatorCode.Assignment)
 					throw new CodeEE("予期しない演算子を発見しました");
 				if (ret.Reference)
@@ -436,7 +489,11 @@ namespace MinorShift.Emuera.GameProc
 				throw new CodeEE("書式が間違っています", sc);
 
 			if (sizeNum.Count == 0)
+			{
+				if (ret.ConstTable)
+					throw new CodeEE("常数表声明必须写明尺寸：" + ret.Name, sc);
 				sizeNum.Add(1);
+			}
 
 			// snake 参考（UserDefinedVariable 351-354）：OUT 变量恒为标量引用
 			//（Dimension=0、Lengths=[1]），短路在维度/尺寸校验之前——#DIM OUT X,1,1,1,1 不报多维错
@@ -450,8 +507,10 @@ namespace MinorShift.Emuera.GameProc
 
 			ret.Private = isPrivate;
 			ret.Dimension = sizeNum.Count;
-			if (ret.Const && ret.Dimension > 1)
+			if (ret.Const && ret.Dimension > 1 && !ret.ConstTable)
 				throw new CodeEE("CONSTキーワードが指定された変数を多次元配列にはできません");
+			if (ret.ConstTable && ret.Dimension > 2)
+				throw new CodeEE("常数表只支持一维与二维数组", sc);
 			if (ret.CharaData && ret.Dimension > 2)
 				throw new CodeEE("3次元以上のキャラ型変数を宣言することはできません", sc);
 			if (ret.Dimension > 3)
@@ -467,6 +526,26 @@ namespace MinorShift.Emuera.GameProc
 			}
 			if ((totalBytes <= 0) || (totalBytes > 1000000))
 				throw new CodeEE("ユーザー定義変数のサイズは1以上1000000以下でなければなりません", sc);
+			if (ret.ConstTable)
+			{
+				int valueKind = isFloat ? ConstArrayTable.KindFloat : (dims ? ConstArrayTable.KindStr : ConstArrayTable.KindInt);
+				// 尺寸要到解析出 Lengths 之后才知道，所以候选表的适配检查放在这里；
+				// 主表缺失或不适配时退回下一份同名候选，其余同名表作为补充合并（冲突只警告）。
+				ConstArrayTable.Result table = ConstArrayTable.Load(ret.Name, ret.Lengths, valueKind,
+					ConstArrayTableDiskFiles.Instance, out string tableError);
+				if (table == null)
+					throw new CodeEE("常数表声明 " + ret.Name + " 不可用：" + tableError, sc);
+				ret.ConstTablePath = table.Path;
+				ret.ConstTableNames = table.Names;
+				ret.ConstTableWarnings = table.Warnings;
+				ret.ConstTableConsumed = table.ConsumedPaths;
+				if (table.Values is Int64[] intValues)
+					ret.DefaultInt = intValues;
+				else if (table.Values is string[] strValues)
+					ret.DefaultStr = strValues;
+				else
+					ret.DefaultFloat = (double[])table.Values;
+			}
 			if (!isPrivate && ret.Save && !Config.SystemSaveInBinary)
 			{
 				GenericUtils.Warn($"[DIM] Binary save check failed: var={ret.Name}, dims={dims}, dim={ret.Dimension}, chara={ret.CharaData}, SaveInBinary={Config.SystemSaveInBinary}");

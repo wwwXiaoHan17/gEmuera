@@ -85,7 +85,7 @@ Get-ChildItem Scripts,src -Recurse -Filter *.cs -File | Where-Object { $_.FullNa
 | `Scripts/EmueraContent.cs` | 8105 | A | **方言 marker 分类文件**（见 §6.1）——但实测 marker 命中 **0**，那 3 条 fileRegex 是惰性条目，拆分**不需要**改方言目录；不可迁核心 ≈1616 行，单轮不可能脱离 2000，目标是"只减不增 + 每轮 -30%" |
 | `Scripts/Emuera/GameData/Function/Creator.Method.cs` | 6282 | A | snake-alignment 钉扎（§6.2）；沿用 DT/Map/Sql/Xml 先例按函数类别继续拆。**注意：本文件 206 个类型声明全部嵌套**，无独立顶层类 → 只能用模式 A |
 | `Scripts/Emuera/GameData/Variable/VariableEvaluator.cs` | 3796 | A | **save-baseline SHA + 8 个方法符号钉扎**（§6.3）；`#region File操作`(2482–3610) 硬锁，**结构下限 ≈2057 行，不可达 2000** |
-| `Scripts/Emuera/GameData/Variable/VariableToken.cs` | 3524 | A/B | 2026-09-13 已搬出 VD.ref（694 行）。注意该文件装的是 `VariableData` 的实现，分片须命名 `VariableData.*`；实测还有 6 个 ≥200 行类族可切，全搬完 ≈1102 |
+| `Scripts/Emuera/GameData/Variable/VariableToken.cs` | 3207 | A/B | 2026-09-13 已搬出 VD.ref（694 行）；2026-11-23 已搬出 VD.float（`VariableData.FloatTokens.cs`，408 行，Test-PureMove PASS）。注意该文件装的是 `VariableData` 的实现，分片须命名 `VariableData.*`；实测还有 ≥200 行类族可切 |
 
 **2026-09-13 已完成纯移动、脱离在册清单的 8 个文件**（提交 `8eef88a`、`e8ad27c`、第三批）：
 
@@ -320,7 +320,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/dialect-inventory/Test
 | `Scripts/EmueraContent.cs` | 8105 |
 | `Scripts/Emuera/GameData/Function/Creator.Method.cs` | 6282 |
 | `Scripts/Emuera/GameData/Variable/VariableEvaluator.cs` | 3796 |
-| `Scripts/Emuera/GameData/Variable/VariableToken.cs` | 3524 |
+| `Scripts/Emuera/GameData/Variable/VariableToken.cs` | 3207 |
 
 > `VariableEvaluator.cs` 属 §6 钉扎最重的一类：`tools/save-baseline/legacy-save-baseline.json`
 > 对它有 SHA-256 + 字节长度钉扎，且 8 个受钉扎的方法符号全部落在 1129 行的 `#region File操作` 内

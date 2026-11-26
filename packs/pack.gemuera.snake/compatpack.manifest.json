@@ -1,10 +1,10 @@
 {
   "packId": "pack.gemuera.snake",
-  "packVersion": "1.2.0",
+  "packVersion": "1.3.0",
   "contractAbi": "1.1",
   "engineApi": "1.0",
   "baseProfileId": "v24pure",
-  "baseSurfaceHash": "99a8763bf53f850bbd9a2c52315a375bd4075f396b467d8d4ad097a27bd05b37",
+  "baseSurfaceHash": "5310c6d87acdb2ea224abcc0866bd81707e06246bf0b8e8aa4c537debf85b2c1",
   "surface": {
     "addInstructions": [
       "CALLSTR",
@@ -137,7 +137,9 @@
     "call.extra-arguments.v1",
     "csv.preset-erd-merge.v1",
     "csv.relation-without-mastername.v1",
+    "declare.const-table.v1",
     "declare.out-keyword.v1",
+    "declare.reject-float-charadata.v1",
     "display.fast-refresh.v1",
     "flow.before-error-event.v1",
     "flow.throw-event.v1",

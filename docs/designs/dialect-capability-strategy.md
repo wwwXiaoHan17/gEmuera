@@ -88,6 +88,23 @@ gEmuera 的方言（dialect/profile）体系当前无法达成"兼容全部 Era 
   - snake 模块版本 `1.0.0 → 1.1.0`，capability 账本 18 → 19 项（仅新增 ERD 合并；CHKDATA 门控已撤销）；生成清单 snake 函数 349 → 351（METHOD 投影指令 668 → 670）。
 - 本批不追：v14–v15 变量写入/打印监视与 CLI 调试（非目标，桌面调试工具链）、v16 插件加载健壮性（gEmuera 已有同源实现，差异单独立项）、v16 Skia 字体修复（Godot TextServer 路径不适用；私有字体控制台链已另有实现）。
 
+**2026-11-23 增量同步（参考上游 gitgud.io/minus010001/emuera_lazyloading_selfmodified_version 的本机克隆 `D:\clone\emuera_lazyloading_selfmodified_version`；
+Skiav18.0.0 = 提交 `7154549`，审计起点 Skiav17.2 = `8005f9f`；中间 16 个提交、引擎侧 21 个文件。完整记录见 `governance/evolution-log/2026-11-24-snake-18.0-alignment.md`）**：
+- 已落地（均走 snake capability 门控，v24pure 表面与行为不变；生成清单零 diff；`baseSurfaceHash` 因 capability 目录进哈希而重钉为 `5310c6d8…`）：
+  - `CONSTTABLE` 常数表声明（上游 Skiav18.0；`declare.const-table.v1`）：`#DIM`/`#DIMS`/`#DIMF` 的修饰关键字（也认「常数表」「常数数组」），
+    只能在 ERH 声明、必须写尺寸、不得写内联初值、最多二维；值与各维名称读自同名 CSV/ERD（`CSV/<名称>.csv` 主表，
+    `CSV/<名称>.erd` 与 `ERB/**/<名称>.ERD` 为补充，`.als` 为别名），字段按 RFC 4180 切分；注册名登记进 `ConstantData`，
+    名称下标不依赖 USE ERD；静态二维 token 按行优先回填默认值。实现见 `scripts/Emuera/GameData/ConstArrayTable.cs`
+    （纯规则层，xUnit 直链 49 用例）与 `ConstArrayTableDiskFiles.cs`（走 `uEmuera.Utils`，Android 走 Godot 文件 API）。
+  - `#DIMF CHARADATA` 在声明处报错（`declare.reject-float-charadata.v1`）：上游没有角色浮点 token；gemuera 既有实现支持
+    一维/二维角色浮点变量，故只在声明该 capability 的会话收紧为报错。
+  - snake 包 `1.2.0 → 1.3.0`，capability 账本 20 → 22 项；引擎 capability 词汇表 42 → 44（Wired 33 → 35）。
+- 审计后确认已对齐、无需改动：`#DIMF` 一至三维（token 既有且与上游同名）；一维内置数组存档长度保底（上游修的是
+  「读档把 `SparseArray.Length` 覆盖成旧档长度」，gemuera 读档暂存区取当前声明长度，不中此缺陷）；多维变量内联初值
+  （两侧都报「多次元変数には初期値を設定できません」，上游的二维默认值回填只服务于常数表）。
+- 本批不追：`resources.pak` 单文件资源包（上游 17.4.0 引入、18.0 列为正式特性；属资源加载子系统，登记 backlog）；
+  eraWire（EWP）外部前端协议及其命中/tooltip 内部改动（与本引擎无关）。
+
 ### 5. 六游戏验收矩阵
 
 - 游戏解压入库 `E:\MyCode\Era`：五游戏已解压就位（版本化目录名，魔王为 `(2)` 后缀新副本）；eratohok 尚未解压，待补。
@@ -113,6 +130,8 @@ gEmuera 的方言（dialect/profile）体系当前无法达成"兼容全部 Era 
 - **EvilMask fork 差异深度**：实体审查证实魔王魔改代码使用 ++/-- 复合赋值（×327，1824+EM/EE 语法），随包 1821.8 CN fork exe 跑不动魔改代码，其 `emuera.log` 留有解析失败记录；正确组合按随包 `1824+v18+EMv17+EEv41` 等价能力即可，EvilMask 1821 差异模块大概率不需要（除非要跑未经魔改的原版 0.93 代码）。
 - **eratohok 约 450MB 音频**：手机端存储与 lazy loading 策略需要在 Phase D 实测评估；eratohok 目前尚未解压入库。
 - **snake 源码无 git 历史**（zip 解压）：同步只能以 CHANGELOG + 文件对照，本次盘点即基线，后续更新需人工 diff。
+  （2026-11-23 更正：上游已克隆到本机 `D:\clone\emuera_lazyloading_selfmodified_version`，带完整 git 历史；
+  此条不再成立，增量审计改为 `git diff <上一基线提交>..<新基线提交> -- Emuera`，版本提交对照见 AGENTS.md。）
 - **开放**：per-game 配置落在 `user://launcher.cfg` 还是独立文件（Phase A 设计时定）；探测器对"包内多个引擎 exe"（魔王、OCG2）如何选主方言（建议：以游戏自带主启动器 exe 为准，允许用户改）。
 
 ## 治理

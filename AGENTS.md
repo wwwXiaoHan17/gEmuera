@@ -10,10 +10,10 @@ Emuera 核心编译器以 C# 编写，为减少开发成本、方便 AI 对接�
 
 - 首要运行与测试目标：Android/手机端，方案以导出 APK 可用为准。
 - 桌面端可用于调试，但不能替代 APK 验证结论。
-- 参考实现：`E:\MyCode\Era\emuera_lazyloading_selfmodified_version-develop-skiasharp (2)\emuera_lazyloading_selfmodified_version-develop-skiasharp`（snake fork，Skiav12.1，2026-09-04 盘点基线，zip 解压无 git 历史）、`E:\MyCode\Era\emuera.em-master`（v24）、`E:\MyCode\GodotCode\gemuera\uEmuera-0.2.9d`、`E:\MyCode\GodotCode\gemuera\XEmuera-0.5.1等`。
+- 参考实现：`D:\clone\emuera_lazyloading_selfmodified_version`（snake fork；上游 `https://gitgud.io/minus010001/emuera_lazyloading_selfmodified_version` 的 `main-skiasharp` 分支，2026-11-23 克隆，HEAD `7154549` = Skiav18.0.0，带完整 git 历史。**本仓库的蛇版对齐进度以 `governance/evolution-log/` 里最近一次 snake 对齐日志为准，不随此克隆版本自动变化**（2026-11-23 对齐到 Skiav18.0.0，见 `governance/evolution-log/2026-11-24-snake-18.0-alignment.md`；其中 `resources.pak` 单文件资源包未对齐。上游没有 tag，按 CHANGELOG 版本提交定位：12.1.0 = `4849416`、13.0.0 = `5717045`、17.2.0 = `8005f9f`、17.4.0 = `2537080`、18.0.0 = `7154549`；下一轮对齐用 `git diff <上一基线提交>..<新基线提交> -- Emuera` 做增量审计））、`E:\MyCode\Era\emuera.em-master`（v24）、`E:\MyCode\GodotCode\gemuera\uEmuera-0.2.9d`、`E:\MyCode\GodotCode\gemuera\XEmuera-0.5.1等`。
 - 涉及 Godot 架构、UI、性能、平台适配时，使用 `godot-master` skill 辅助判断。
 - Snake 接口（`emuera_lazyloading_*`）语义对齐：修改 `Scripts/Emuera/` 解释器前对照
-  `E:\MyCode\Era\emuera_lazyloading_selfmodified_version-develop-skiasharp (2)\emuera_lazyloading_selfmodified_version-develop-skiasharp`（CHANGELOG.md 即版本变更契约），保证 ERB 语义不偏离。
+  `D:\clone\emuera_lazyloading_selfmodified_version`（`CHANGELOG.md` 即版本变更契约；版本串 `SkiavX.Y` 对应 changelog 的 `[X.Y.Z]`），保证 ERB 语义不偏离。该上游的源码目录布局与本仓库 `Scripts/Emuera/` 不一一对应：`#DIM` 解析在 `Emuera/Runtime/Script/Data/UserDefinedVariable.cs`，变量 token 在 `Emuera/Runtime/Script/Statements/Variable/`。
 
 ## 必读与配套文档
 
