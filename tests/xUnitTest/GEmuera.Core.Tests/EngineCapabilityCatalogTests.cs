@@ -188,8 +188,9 @@ public class EngineCapabilityCatalogTests
     [Fact]
     public void Catalog_EveryDescriptor_IsWellFormed()
     {
-        // 19 snake + 17 eraFL（declare.out-keyword.v1 与 snake 共享，只算一条）+ 5 megaten + 1 erablue = 41。
-        Assert.Equal(42, EngineCapabilityCatalog.All.Count);
+        // 22 snake + 17 eraFL（declare.out-keyword.v1 与 snake 共享，只算一条）+ 5 megaten + 1 erablue = 45，
+        // 再扣掉与 snake 共享的那 1 条 = 44（Skiav18.0 常数表对齐后 freeze v4）。
+        Assert.Equal(44, EngineCapabilityCatalog.All.Count);
         foreach (KeyValuePair<string, CapabilityDescriptor> entry in EngineCapabilityCatalog.All)
         {
             Assert.Equal(entry.Key, entry.Value.CapabilityId);
@@ -197,11 +198,11 @@ public class EngineCapabilityCatalogTests
             Assert.Equal(EngineApiV1, entry.Value.IntroducedInEngineApi);
         }
 
-        // 最终分类账（freeze v3，2026-11-15 div-align quirk）：33 Wired / 9 DiagnosticOnly / 42 unique。
+        // 最终分类账（freeze v4，2026-11-23 Skiav18.0 常数表对齐）：35 Wired / 9 DiagnosticOnly / 44 unique。
         // DiagnosticOnly 9 = eraFL 3 零消费者表面 + 4 端口账本 + megaten 标准色名 + erablue 插件。
-        Assert.Equal(33, EngineCapabilityCatalog.All.Values.Count(d => d.Status == CapabilityStatus.Wired));
+        Assert.Equal(35, EngineCapabilityCatalog.All.Values.Count(d => d.Status == CapabilityStatus.Wired));
         Assert.Equal(9, EngineCapabilityCatalog.All.Values.Count(d => d.Status == CapabilityStatus.DiagnosticOnly));
-        Assert.Equal(42, EngineCapabilityCatalog.All.Values
+        Assert.Equal(44, EngineCapabilityCatalog.All.Values
             .Select(d => d.CapabilityId)
             .Distinct(StringComparer.Ordinal)
             .Count());
@@ -373,9 +374,10 @@ public class EngineCapabilityCatalogTests
     public void RequiredWiredCapabilityIds_PinnedCounts()
     {
         // IsEnabled 只由 catalog 的 Wired 子集推断，计数漂移会直接改变会话激活语义：
-        // snake 19/19 全 Wired；eraFL 13 项账本里 3 个零消费者表面项是 DiagnosticOnly，
+        // snake 22/22 全 Wired（Skiav18.0 对齐新增 declare.const-table.v1 与 declare.reject-float-charadata.v1）；
+        // eraFL 13 项账本里 3 个零消费者表面项是 DiagnosticOnly，
         // Wired = 10（8 policy 行为 + display.dynamic-map-transaction + input.pointer-button）。
-        Assert.Equal(20, SnakeCompatibilityCapabilities.RequiredWiredCapabilityIds.Count);
+        Assert.Equal(22, SnakeCompatibilityCapabilities.RequiredWiredCapabilityIds.Count);
         Assert.Equal(10, EraFlCompatibilityModule.RequiredWiredCapabilityIds.Count);
 
         Assert.Contains(EraFlCompatibilityModule.DynamicMapCapability, EraFlCompatibilityModule.RequiredWiredCapabilityIds);

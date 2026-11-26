@@ -1002,6 +1002,33 @@ namespace uEmuera
 		/// <returns></returns>
 		public static int GetDisplayLength(string s, float fontsize)
 		{
+			// 原生库快速路径：宽度序列 + 与原实现同序的浮点累加（零宽跳过、半宽 fontsize/2），
+			// 累加顺序一致故结果位级一致；库缺失时回退托管逐字符规则。
+			if (!string.IsNullOrEmpty(s))
+			{
+				var pool = System.Buffers.ArrayPool<byte>.Shared;
+				byte[] widths = pool.Rent(s.Length);
+				try
+				{
+					if (MinorShift._Library.NativeTextWidth.TryFillWidthUnits(s, widths))
+					{
+						float nativeXsize = 0;
+						float half = fontsize / 2;
+						for (int i = 0; i < s.Length; ++i)
+						{
+							var w = widths[i];
+							if (w == 0)
+								continue;
+							nativeXsize += w == 1 ? half : fontsize;
+						}
+						return (int)nativeXsize;
+					}
+				}
+				finally
+				{
+					pool.Return(widths);
+				}
+			}
 			float xsize = 0;
 			char c = '\x0';
 			for(int i = 0; i < s.Length; ++i)
@@ -1040,6 +1067,10 @@ namespace uEmuera
 		{
 			if(string.IsNullOrEmpty(str))
 				return 0;
+			// 原生库快速路径：与本方法规则同构（等价门禁 tools/native-width-check，含全 BMP 对照），
+			// 库缺失时回退下方托管实现。
+			if (MinorShift._Library.NativeTextWidth.TryGetByteCount(str, out int nativeCount))
+				return nativeCount;
 			var count = 0;
 			var length = str.Length;
 			for(int i = 0; i < length; ++i)

@@ -36,6 +36,9 @@ namespace MinorShift.Emuera.GameProc
 		/// <returns></returns>
 		public bool LoadHeaderFiles(string headerDir, bool displayReport)
 		{
+			// 常数表（declare.const-table.v1）按文件名缓存了 CSV/ERB 目录索引；重新解析 ERH 时先丢弃，
+			// 否则新增或改名的表文件会被旧索引挡住。单独重载 ERB 不会走到这里，索引不重建。
+			ConstArrayTableDiskFiles.ClearIndex();
 			List<KeyValuePair<string, string>> headerFiles = Config.GetFiles(headerDir, "*.ERH");
 #if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
             headerFiles.AddRange(Config.GetFiles(headerDir, "*.erh"));
@@ -327,6 +330,8 @@ namespace MinorShift.Emuera.GameProc
 						idDic.AddUseDefinedVariable(var);
 						if (Config.UseERD || Program.Compatibility.Snake.AllowsUserDefinedVariableResolution)
 							LoadUserDefinedNameData(data, dimline.SC);
+						if (data.ConstTableNames != null)
+							RegisterConstTableNames(data, dimline.SC);
 					}
 					catch (IdentifierNotFoundCodeEE e)
 					{
@@ -398,7 +403,12 @@ namespace MinorShift.Emuera.GameProc
 			{
 				List<string> info;
 				if (erdFileNames.TryGetValue(data.Name, out info))
-					GlobalStatic.ConstantData.RegisterUserDefinedNameData(info, data.Name, data.Lengths[0], Config.DisplayReport, position);
+				{
+					// 常数表已消费的文件（主表、值扩展、名称表）由常数表处理，不再交给名称数据路径重复解析。
+					info = WithoutConstTable(info, data.ConstTableConsumed);
+					if (info != null)
+						GlobalStatic.ConstantData.RegisterUserDefinedNameData(info, data.Name, data.Lengths[0], Config.DisplayReport, position);
+				}
 				return;
 			}
 			for (int dim = 1; dim <= data.Dimension && dim <= data.Lengths.Length; dim++)
@@ -406,8 +416,44 @@ namespace MinorShift.Emuera.GameProc
 				string key = data.Name + "@" + dim.ToString();
 				List<string> info;
 				if (erdFileNames.TryGetValue(key, out info))
-					GlobalStatic.ConstantData.RegisterUserDefinedNameData(info, key, data.Lengths[dim - 1], Config.DisplayReport, position);
+				{
+					info = WithoutConstTable(info, data.ConstTableConsumed);
+					if (info != null)
+						GlobalStatic.ConstantData.RegisterUserDefinedNameData(info, key, data.Lengths[dim - 1], Config.DisplayReport, position);
+				}
 			}
+		}
+
+		/// <summary>剔除常数表已解析的文件：这些由常数表处理，名称数据路径（EE_ERD）不再重复解析。</summary>
+		private static List<string> WithoutConstTable(List<string> list, List<string> consumed)
+		{
+			if (list == null || consumed == null || consumed.Count == 0)
+				return list;
+			var used = new HashSet<string>(consumed, StringComparer.OrdinalIgnoreCase);
+			var ret = new List<string>();
+			foreach (string path in list)
+			{
+				if (!used.Contains(path))
+					ret.Add(path);
+			}
+			return ret.Count == 0 ? null : ret;
+		}
+
+		/// <summary>
+		/// 常数表（declare.const-table.v1，Emuera-SKIA Skiav18.0）的名称注册：值表、名称表与 .als 已在
+		/// ConstArrayTable.Load 里按主表优先合并完，这里统一注册，并以 Lv1 报告补充表的冲突与坏格。
+		/// 常数表的名称不依赖 Config.UseERD。
+		/// </summary>
+		private void RegisterConstTableNames(UserDefinedVariableData data, ScriptPosition position)
+		{
+			if (data.ConstTableWarnings != null)
+			{
+				foreach (string nameWarning in data.ConstTableWarnings)
+					ParserMediator.Warn(nameWarning, position, 1);
+			}
+			GlobalStatic.ConstantData.RegisterConstArrayNames(data.Name, data.Dimension, data.ConstTableNames);
+			if (Config.DisplayReport)
+				output.PrintSystemLine(data.ConstTablePath + "読み込み中・・・");
 		}
 
 		private static string NormalizeSnakeFloatLiterals(string source)

@@ -65,11 +65,16 @@ namespace MinorShift.Emuera.GameProc
             originalState = state;
             initialiing = true;
             Stopwatch loadStopwatch = Stopwatch.StartNew();
+            long lastMarkMs = 0;
             void MarkLoad(string stage)
             {
-                long ms = loadStopwatch.ElapsedMilliseconds;
+                long totalMs = loadStopwatch.ElapsedMilliseconds;
+                long segMs = totalMs - lastMarkMs;
+                lastMarkMs = totalMs;
+                // 分段值 + 累计值双列：seg 定位本阶段开销，total 保留旧口径可比性
+                string line = $"[LOADTIME] {stage}: {segMs}ms (total {totalMs}ms)";
                 if (Config.DisplayReport)
-                    GenericUtils.Info($"[LOADTIME] {stage}: {ms}ms");
+                    GenericUtils.Info(line);
                 // 始终落盘（Release APK 也生效）：定位 30k 图片加载耗时构成，避免盲优化。
                 try
                 {
@@ -77,8 +82,7 @@ namespace MinorShift.Emuera.GameProc
                     if (!string.IsNullOrEmpty(dir))
                     {
                         Directory.CreateDirectory(dir);
-                        File.AppendAllText(Path.Combine(dir, "load_times.log"),
-                            $"[LOADTIME] {stage}: {ms}ms\n");
+                        File.AppendAllText(Path.Combine(dir, "load_times.log"), line + "\n");
                     }
                 }
                 catch { }
@@ -248,11 +252,16 @@ namespace MinorShift.Emuera.GameProc
 				GenericUtils.Info("[LOAD] Loading ERB files...");
 				ErbLoader loader = new ErbLoader(console, exm, this);
                 if (Program.AnalysisMode)
+                {
                     noError = await loader.LoadErbsAsync(Program.AnalysisFiles, labelDic);
+                    MarkLoad("erb");
+                }
                 else
-                    noError = await loader.LoadErbFilesAsync(Program.ErbDir, Config.DisplayReport, labelDic, Config.UseLazyLoading && Program.SupportsLazyLoading);
+                {
+                    // erb 阶段细分埋点：parse/setlabels/check/lazy-save 各自落段，定位启动大头
+                    noError = await loader.LoadErbFilesAsync(Program.ErbDir, Config.DisplayReport, labelDic, Config.UseLazyLoading && Program.SupportsLazyLoading, MarkLoad);
+                }
 				GenericUtils.Info($"[LOAD] ERB loaded, noError={noError}");
-				MarkLoad("erb");
                 initSystemProcess();
                 initialiing = false;
             }
@@ -822,20 +831,22 @@ namespace MinorShift.Emuera.GameProc
 		public string getRawTextFormFilewithLine(ScriptPosition position)
         {
 			string extents = position.Filename.Substring(position.Filename.Length - 4).ToLower();
+			string dir;
 			if (extents == ".erb")
-			{
-				return uEmuera.Utils.FileExists(Program.ErbDir + position.Filename)
-					? position.LineNo > 0 ? uEmuera.Utils.ReadAllLines(Program.ErbDir + position.Filename, Config.Encode).Skip(position.LineNo - 1).First() : ""
-					: "";
-			}
+				dir = Program.ErbDir;
 			else if (extents == ".csv")
-			{
-				return uEmuera.Utils.FileExists(Program.CsvDir + position.Filename)
-					? position.LineNo > 0 ? uEmuera.Utils.ReadAllLines(Program.CsvDir + position.Filename, Config.Encode).Skip(position.LineNo - 1).First() : ""
-					: "";
-			}
+				dir = Program.CsvDir;
 			else
 				return "";
+			string path = dir + position.Filename;
+			// 优先命中启动期预读缓存：警告密集的游戏（上千文件）逐条警告都重读整个源文件
+			// 是 O(警告数 × 文件大小) 的重复 IO。缓存已释放（解析结束后 RemoveByExtension）时
+			// 回退到旧磁盘读取路径，行为不变。
+			if (Preload.TryGetFileLines(path, out var lines))
+				return position.LineNo > 0 && position.LineNo <= lines.Length ? lines[position.LineNo - 1] : "";
+			return uEmuera.Utils.FileExists(path) && position.LineNo > 0
+				? uEmuera.Utils.ReadAllLines(path, Config.Encode).Skip(position.LineNo - 1).First()
+				: "";
 		}
 
 	}

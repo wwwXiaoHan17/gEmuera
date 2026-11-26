@@ -2373,11 +2373,25 @@ namespace MinorShift.Emuera.GameData.Variable
 				int[] sizes = data.Lengths;
 				IsStatic = true;
 				array = new Int64[sizes[0], sizes[1]];
+				// declare.const-table.v1（Emuera-SKIA Skiav18.0）：二维常数表的值按 [第1维, 第2维] 行优先回填。
+				// 多维声明不允许内联初始值，除常数表外 DefaultInt 恒为 null；能力未激活时不取，保持基线行为。
+				defArray = Program.Compatibility.Snake.SupportsConstTable ? data.DefaultInt : null;
+				RestoreDefault();
 			}
 			Int64[,] array = null;
-			public override void SetDefault()
+			readonly Int64[] defArray;
+			void RestoreDefault()
 			{
 				Array.Clear(array, 0, totalSize);
+				if (defArray == null)
+					return;
+				int n = Math.Min(defArray.Length, totalSize);
+				for (int k = 0; k < n; k++)
+					array[k / sizes[1], k % sizes[1]] = defArray[k];
+			}
+			public override void SetDefault()
+			{
+				RestoreDefault();
 			}
 			public override Int64 GetIntValue(ExpressionMediator exm, Int64[] arguments)
 			{
@@ -2520,11 +2534,24 @@ namespace MinorShift.Emuera.GameData.Variable
 				int[] sizes = data.Lengths;
 				IsStatic = true;
 				array = new string[sizes[0], sizes[1]];
+				// declare.const-table.v1：二维字符串常数表行优先回填（同 StaticInt2DVariableToken）。
+				defArray = Program.Compatibility.Snake.SupportsConstTable ? data.DefaultStr : null;
+				RestoreDefault();
 			}
 			string[,] array = null;
-			public override void SetDefault()
+			readonly string[] defArray;
+			void RestoreDefault()
 			{
 				Array.Clear(array, 0, totalSize);
+				if (defArray == null)
+					return;
+				int n = Math.Min(defArray.Length, totalSize);
+				for (int k = 0; k < n; k++)
+					array[k / sizes[1], k % sizes[1]] = defArray[k];
+			}
+			public override void SetDefault()
+			{
+				RestoreDefault();
 			}
 			public override string GetStrValue(ExpressionMediator exm, Int64[] arguments)
 			{
@@ -3174,372 +3201,6 @@ namespace MinorShift.Emuera.GameData.Variable
 			}
 
 		}
-			#region float
-
-			private sealed class StaticFloat1DVariableToken : UserDefinedVariableToken
-			{
-				public StaticFloat1DVariableToken(UserDefinedVariableData data)
-					: base(VariableCode.VAR, data)
-				{
-					int[] sizes = data.Lengths;
-					IsStatic = true;
-					array = new double[sizes[0]];
-					defArray = data.DefaultFloat;
-					if (defArray != null)
-						Array.Copy(defArray, array, defArray.Length);
-				}
-				double[] array = null;
-				double[] defArray = null;
-				public override void SetDefault()
-				{
-					Array.Clear(array, 0, totalSize);
-					if (defArray != null)
-						Array.Copy(defArray, array, defArray.Length);
-				}
-				public override double GetFloatValue(ExpressionMediator exm, Int64[] arguments)
-				{
-					return array[arguments[0]];
-				}
-				public override void SetValue(double value, Int64[] arguments)
-				{
-					array[arguments[0]] = value;
-				}
-				public override void SetValue(double[] values, Int64[] arguments)
-				{
-					int start = (int)arguments[0];
-					int end = start + values.Length;
-					for (int i = start; i < end; i++)
-						array[i] = values[i - start];
-				}
-				public override void SetValueAll(double value, int start, int end, int charaPos)
-				{
-					for (int i = start; i < end; i++)
-						array[i] = value;
-				}
-				public override object GetArray() { return array; }
-				public override void In() { }
-				public override void Out() { }
-			}
-
-			private sealed class StaticFloat2DVariableToken : UserDefinedVariableToken
-			{
-				public StaticFloat2DVariableToken(UserDefinedVariableData data)
-					: base(VariableCode.VAR2D, data)
-				{
-					int[] sizes = data.Lengths;
-					IsStatic = true;
-					array = new double[sizes[0], sizes[1]];
-				}
-				double[,] array = null;
-				public override void SetDefault()
-				{
-					Array.Clear(array, 0, totalSize);
-				}
-				public override double GetFloatValue(ExpressionMediator exm, Int64[] arguments)
-				{
-					return array[arguments[0], arguments[1]];
-				}
-				public override void SetValue(double value, Int64[] arguments)
-				{
-					array[arguments[0], arguments[1]] = value;
-				}
-				public override void SetValue(double[] values, Int64[] arguments)
-				{
-					int start = (int)arguments[1];
-					int end = start + values.Length;
-					for (int i = start; i < end; i++)
-						array[arguments[0], i] = values[i - start];
-				}
-				public override void SetValueAll(double value, int start, int end, int charaPos)
-				{
-					int a1 = array.GetLength(0);
-					int a2 = array.GetLength(1);
-					for (int i = 0; i < a1; i++)
-						for (int j = 0; j < a2; j++)
-							array[i, j] = value;
-				}
-				public override object GetArray() { return array; }
-				public override void In() { }
-				public override void Out() { }
-			}
-
-			private sealed class StaticFloat3DVariableToken : UserDefinedVariableToken
-			{
-				public StaticFloat3DVariableToken(UserDefinedVariableData data)
-					: base(VariableCode.VAR3D, data)
-				{
-					int[] sizes = data.Lengths;
-					IsStatic = true;
-					array = new double[sizes[0], sizes[1], sizes[2]];
-				}
-				double[, ,] array = null;
-				public override void SetDefault()
-				{
-					Array.Clear(array, 0, totalSize);
-				}
-				public override double GetFloatValue(ExpressionMediator exm, Int64[] arguments)
-				{
-					return array[arguments[0], arguments[1], arguments[2]];
-				}
-				public override void SetValue(double value, Int64[] arguments)
-				{
-					array[arguments[0], arguments[1], arguments[2]] = value;
-				}
-				public override void SetValue(double[] values, Int64[] arguments)
-				{
-					int start = (int)arguments[2];
-					int end = start + values.Length;
-					for (int i = start; i < end; i++)
-						array[arguments[0], arguments[1], i] = values[i - start];
-				}
-				public override void SetValueAll(double value, int start, int end, int charaPos)
-				{
-					int a1 = array.GetLength(0);
-					int a2 = array.GetLength(1);
-					int a3 = array.GetLength(2);
-					for (int i = 0; i < a1; i++)
-						for (int j = 0; j < a2; j++)
-							for (int k = 0; k < a3; k++)
-								array[i, j, k] = value;
-				}
-				public override object GetArray() { return array; }
-				public override void In() { }
-				public override void Out() { }
-			}
-
-			private sealed class PrivateFloat1DVariableToken : UserDefinedVariableToken
-			{
-				public PrivateFloat1DVariableToken(UserDefinedVariableData data)
-					: base(VariableCode.VAR, data)
-				{
-					int[] sizes = data.Lengths;
-					IsStatic = false;
-					arrayList = new List<double[]>();
-					defArray = data.DefaultFloat;
-				}
-				readonly List<double[]> arrayList = null;
-				double[] array = null;
-				double[] defArray = null;
-				public override void SetDefault() { }
-				public override double GetFloatValue(ExpressionMediator exm, Int64[] arguments)
-				{
-					return array[arguments[0]];
-				}
-				public override void SetValue(double value, Int64[] arguments)
-				{
-					array[arguments[0]] = value;
-				}
-				public override void SetValue(double[] values, Int64[] arguments)
-				{
-					int start = (int)arguments[0];
-					int end = start + values.Length;
-					for (int i = start; i < end; i++)
-						array[i] = values[i - start];
-				}
-				public override void SetValueAll(double value, int start, int end, int charaPos)
-				{
-					for (int i = start; i < end; i++)
-						array[i] = value;
-				}
-				public override object GetArray() { return array; }
-				public override void In()
-				{
-					if (array != null)
-						arrayList.Add(array);
-					array = new double[sizes[0]];
-					if (defArray != null)
-						Array.Copy(defArray, array, defArray.Length);
-				}
-				public override void Out()
-				{
-					if (arrayList.Count > 0)
-					{
-						array = arrayList[arrayList.Count - 1];
-						arrayList.RemoveAt(arrayList.Count - 1);
-					}
-					else
-						array = null;
-				}
-			}
-
-			private sealed class PrivateFloat2DVariableToken : UserDefinedVariableToken
-			{
-				public PrivateFloat2DVariableToken(UserDefinedVariableData data)
-					: base(VariableCode.VAR2D, data)
-				{
-					int[] sizes = data.Lengths;
-					IsStatic = false;
-					arrayList = new List<double[,]>();
-				}
-				readonly List<double[,]> arrayList = null;
-				double[,] array = null;
-				public override void SetDefault() { }
-				public override double GetFloatValue(ExpressionMediator exm, Int64[] arguments)
-				{
-					return array[arguments[0], arguments[1]];
-				}
-				public override void SetValue(double value, Int64[] arguments)
-				{
-					array[arguments[0], arguments[1]] = value;
-				}
-				public override void SetValue(double[] values, Int64[] arguments)
-				{
-					int start = (int)arguments[1];
-					int end = start + values.Length;
-					for (int i = start; i < end; i++)
-						array[arguments[0], i] = values[i - start];
-				}
-				public override void SetValueAll(double value, int start, int end, int charaPos)
-				{
-					int a1 = array.GetLength(0);
-					int a2 = array.GetLength(1);
-					for (int i = 0; i < a1; i++)
-						for (int j = 0; j < a2; j++)
-							array[i, j] = value;
-				}
-				public override object GetArray() { return array; }
-				public override void In()
-				{
-					if (array != null)
-						arrayList.Add(array);
-					array = new double[sizes[0], sizes[1]];
-				}
-				public override void Out()
-				{
-					if (arrayList.Count > 0)
-					{
-						array = arrayList[arrayList.Count - 1];
-						arrayList.RemoveAt(arrayList.Count - 1);
-					}
-					else
-						array = null;
-				}
-			}
-
-			private sealed class PrivateFloat3DVariableToken : UserDefinedVariableToken
-			{
-				public PrivateFloat3DVariableToken(UserDefinedVariableData data)
-					: base(VariableCode.VAR3D, data)
-				{
-					int[] sizes = data.Lengths;
-					IsStatic = false;
-					arrayList = new List<double[, ,]>();
-				}
-				readonly List<double[, ,]> arrayList = null;
-				double[, ,] array = null;
-				public override void SetDefault() { }
-				public override double GetFloatValue(ExpressionMediator exm, Int64[] arguments)
-				{
-					return array[arguments[0], arguments[1], arguments[2]];
-				}
-				public override void SetValue(double value, Int64[] arguments)
-				{
-					array[arguments[0], arguments[1], arguments[2]] = value;
-				}
-				public override void SetValue(double[] values, Int64[] arguments)
-				{
-					int start = (int)arguments[2];
-					int end = start + values.Length;
-					for (int i = start; i < end; i++)
-						array[arguments[0], arguments[1], i] = values[i - start];
-				}
-				public override void SetValueAll(double value, int start, int end, int charaPos)
-				{
-					int a1 = array.GetLength(0);
-					int a2 = array.GetLength(1);
-					int a3 = array.GetLength(2);
-					for (int i = 0; i < a1; i++)
-						for (int j = 0; j < a2; j++)
-							for (int k = 0; k < a3; k++)
-								array[i, j, k] = value;
-				}
-				public override object GetArray() { return array; }
-				public override void In()
-				{
-					if (array != null)
-						arrayList.Add(array);
-					array = new double[sizes[0], sizes[1], sizes[2]];
-				}
-				public override void Out()
-				{
-					if (arrayList.Count > 0)
-					{
-						array = arrayList[arrayList.Count - 1];
-						arrayList.RemoveAt(arrayList.Count - 1);
-					}
-					else
-						array = null;
-				}
-			}
-
-			private sealed class UserDefinedCharaFloat1DVariableToken : UserDefinedCharaVariableToken
-			{
-				public UserDefinedCharaFloat1DVariableToken(UserDefinedVariableData data, VariableData varData, int arrayIndex)
-					: base(VariableCode.CVAR, data, varData, arrayIndex)
-				{
-				}
-				public override double GetFloatValue(ExpressionMediator exm, Int64[] arguments)
-				{
-					double[] array = (double[])GetArrayChara((int)arguments[0]);
-					return array[arguments[1]];
-				}
-				public override void SetValue(double value, Int64[] arguments)
-				{
-					double[] array = (double[])GetArrayChara((int)arguments[0]);
-					array[arguments[1]] = value;
-				}
-				public override void SetValue(double[] values, Int64[] arguments)
-				{
-					double[] array = (double[])GetArrayChara((int)arguments[0]);
-					int start = (int)arguments[1];
-					int end = start + values.Length;
-					for (int i = start; i < end; i++)
-						array[i] = values[i - start];
-				}
-				public override void SetValueAll(double value, int start, int end, int charaPos)
-				{
-					double[] array = (double[])GetArrayChara(charaPos);
-					for (int i = start; i < end; i++)
-						array[i] = value;
-				}
-			}
-
-			private sealed class UserDefinedCharaFloat2DVariableToken : UserDefinedCharaVariableToken
-			{
-				public UserDefinedCharaFloat2DVariableToken(UserDefinedVariableData data, VariableData varData, int arrayIndex)
-					: base(VariableCode.CVAR2D, data, varData, arrayIndex)
-				{
-				}
-				public override double GetFloatValue(ExpressionMediator exm, Int64[] arguments)
-				{
-					double[,] array = (double[,])GetArrayChara((int)arguments[0]);
-					return array[arguments[1], arguments[2]];
-				}
-				public override void SetValue(double value, Int64[] arguments)
-				{
-					double[,] array = (double[,])GetArrayChara((int)arguments[0]);
-					array[arguments[1], arguments[2]] = value;
-				}
-				public override void SetValue(double[] values, Int64[] arguments)
-				{
-					double[,] array = (double[,])GetArrayChara((int)arguments[0]);
-					int start = (int)arguments[2];
-					int end = start + values.Length;
-					int index1 = (int)arguments[1];
-					for (int i = start; i < end; i++)
-						array[index1, i] = values[i - start];
-				}
-				public override void SetValueAll(double value, int start, int end, int charaPos)
-				{
-					double[,] array = (double[,])GetArrayChara(charaPos);
-					int a1 = sizes[0];
-					int a2 = sizes[1];
-					for (int i = 0; i < a1; i++)
-						for (int j = 0; j < a2; j++)
-							array[i, j] = value;
-				}
-			}
-			#endregion
 		#endregion
 		#endregion
 	}

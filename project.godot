@@ -36,6 +36,11 @@ project/assembly_name="gemuera-c#"
 
 enabled=PackedStringArray("res://addons/gdUnit4/plugin.cfg", "res://addons/markdownlabel/plugin.cfg")
 
+[input_devices]
+
+sensors/enable_accelerometer=true
+sensors/enable_gravity=true
+
 [launcher]
 
 default_game_library="E:/MyCode/Era"

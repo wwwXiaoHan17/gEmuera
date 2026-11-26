@@ -3,10 +3,11 @@ namespace GEmuera.Core.Compatibility;
 /// <summary>
 /// 内置 snake 兼容模块（lazy loading fork，Skiav16 血统；2026-10-18 对齐上游
 /// main-skiasharp v16 的 ERB 语义增量：预设变量同名 ERD 合并、EXIST_IN_CSV/EXIST_IN_ERD、
-/// RAND 伪变量钳制。CHKDATA 的 RESULT:1 版本写回经参考核对为 v24/snake 共同行为，
+/// RAND 伪变量钳制；2026-11-14 对齐 Skiav17.2（AUDIO 六函数、div align）；2026-11-23 对齐
+/// Skiav18.0.0（CONSTTABLE 常数表声明、#DIMF CHARADATA 拒绝）。CHKDATA 的 RESULT:1 版本写回经参考核对为 v24/snake 共同行为，
 /// 不作为方言 capability）。
 /// 会话闭包 = v24 基座 + 本模块：指令/函数表面差集由生成清单镜像（见
-/// LegacyDialectInventories.SnakeDelta*），19 项 quirk capability 账本驱动
+/// LegacyDialectInventories.SnakeDelta*），22 项 quirk capability 账本驱动
 /// legacy 桥的 ISnakeCompatibilityPolicy 逐属性派生（映射穷尽性由 SurfaceSmoke
 /// 反射断言把关）。文法族选择（VARI/VARS 动态路径、FOR 共享表内核、PRINTC 像素
 /// 分栏算法）属模块选择语义（IsEnabled），不在 capability 账本内。
@@ -34,6 +35,6 @@ public static class SnakeCompatibilityModule
     };
 
     // P-D 步 5（2026-11-07）：内置 snake profile 已退役为第一方数据包
-    // packs/pack.gemuera.snake（最大差集 + 19 Wired capability + builtin:snake 变体）。
+    // packs/pack.gemuera.snake（最大差集 + 22 Wired capability + builtin:snake 变体）。
     // 本类保留常量/PortTypeIds：policy 与测试词汇表继续消费。
 }

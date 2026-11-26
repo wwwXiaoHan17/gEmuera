@@ -489,6 +489,11 @@ namespace MinorShift.Emuera.Content
 		//（banker's，x.5→偶数，如 165.5→166、90.5→90）——勿按 away-from-zero 理解。
 		internal static byte[] ApplyColorMatrixBytes(byte[] data, float[][] cm)
 		{
+			// 原生快路径（native/gemuera-native/src/colormatrix.rs）：与下方托管实现逐字节一致，
+			// 门禁 tools/colormatrix-check（反射本方法对拍 + 病理 golden + 随机 sweep）；
+			// 缺库/ABI 低/缓冲异常回退托管参考实现（下半段，保持位级语义的唯一权威）。
+			if (NativeColorMatrix.TryApplyColorMatrix(data, cm))
+				return data;
 			float m00 = cm[0][0], m10 = cm[1][0], m20 = cm[2][0], m30 = cm[3][0], m40 = cm[4][0];
 			float m01 = cm[0][1], m11 = cm[1][1], m21 = cm[2][1], m31 = cm[3][1], m41 = cm[4][1];
 			float m02 = cm[0][2], m12 = cm[1][2], m22 = cm[2][2], m32 = cm[3][2], m42 = cm[4][2];
@@ -532,6 +537,14 @@ namespace MinorShift.Emuera.Content
 			byte[] maskData, int maskW,
 			int w, int h, int destX, int destY)
 		{
+			// 原生快路径（native/gemuera-native/src/blend.rs）：与下方托管实现逐字节一致，
+			// 门禁 tools/blend-check（参考对拍 + 反射本方法互证，毒化探针取托管真参考）；
+			// 缺库/ABI 低/缓冲异常回退托管参考实现（下半段，位级语义唯一权威）。
+			bool nativeModified;
+			if (NativeBlend.TryBlendWithMask(dstData, dw, dh, srcData, srcW, maskData, maskW,
+					w, h, destX, destY, Program.Compatibility.Snake.UsesMaskAlphaChannel,
+					out nativeModified))
+				return nativeModified;
 			bool modified = false;
 			for (int y = 0; y < h; y++)
 			{

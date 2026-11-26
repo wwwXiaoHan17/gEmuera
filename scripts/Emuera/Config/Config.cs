@@ -6,6 +6,8 @@ using System;
 //using System.Windows.Forms;
 using MinorShift._Library;
 
+using GEmuera.Core.Ui;
+
 using uEmuera.Forms;
 using uEmuera.Drawing;
 
@@ -572,6 +574,57 @@ namespace MinorShift.Emuera
 			WindowY = height;
 			DrawableWidth = width - DrawingParam_ShapePositionShift;
 		}
+		/// <summary>
+		/// 运行时改写核心字号（不写回游戏的 emuera.config）。UI 字号 API 的核心入口：
+		/// 镜像 SetConfig 的钳制规则（字号下限 8；行高随字号等比缩放且不低于字号），
+		/// 重算派生排版参数（DrawingParam_ShapePositionShift/DrawableWidth）并清字体缓存
+		/// （GetFont 缓存按字体名键控、字号烘焙在首次创建，不清则新文本仍用旧字号）；
+		/// 同步 ConfigData 条目以保持 ERB GETCONFIG("フォントサイズ"/"LINE HEIGHT") 一致。
+		/// 仅影响之后生成的行；调用方须在解释器空闲时调用（ClearFont 与解释器线程
+		/// 并发读 fontDic 存在竞态，见 EmueraContent.ProcessPendingFontSize）。
+		/// </summary>
+		public static void SetRuntimeFontSize(int newFontSize)
+		{
+			int clamped = FontSizeScaling.ClampFontSize(newFontSize);
+			if (clamped == FontSize)
+				return;
+			int oldFontSize = FontSize;
+			// 首次运行时改字号前记录游戏配置基准：RuntimeFontScale = FontSize/基准，
+			// 供行内 px 图像随排版缩放（XEmuera FontScale 的布局整体缩放语义）。
+			// 用户把字号改回基准值时比例回到 1；默认（从未调用本方法）行为逐字节不变。
+			if (RuntimeFontSizeBase == 0)
+			{
+				RuntimeFontSizeBase = oldFontSize;
+				RuntimeWindowXBase = WindowX;
+			}
+			FontSize = clamped;
+			// 窗口宽度（布局像素）同乘 RuntimeFontScale——XEmuera FontScale 的「窗口宽度相应
+			// 调整」：不缩放则每行字符数随字号减半、ERB 按 CLIENTWIDTH() 的估宽全部偏小，
+			// 布局被压缩（用户实测 36 明显紧凑）。GETCONFIG(窗口幅) 仍报基准（ConfigData
+			// 不同步），与字号基准语义一致。
+			if (RuntimeWindowXBase > 0)
+				WindowX = Math.Max(1, (int)Math.Round(RuntimeWindowXBase * (double)clamped / RuntimeFontSizeBase));
+			LineHeight = FontSizeScaling.ComputeScaledLineHeight(oldFontSize, LineHeight, clamped);
+			DrawingParam_ShapePositionShift = 0;
+			if (TextDrawingMode != TextDrawingMode.WINAPI)
+				DrawingParam_ShapePositionShift = Math.Max(2, FontSize / 6);
+			DrawableWidth = WindowX - DrawingParam_ShapePositionShift;
+			ClearFont();
+			// 不要把运行时字号同步进 ConfigData：ERB（EraTW グラフィック表示ライブラリ等）把
+			// GETCONFIG("フォントサイズ"/"一行の高さ") 当作布局标定基准——百分比尺寸按
+			// 「常量/基准字号」换算，渲染时再乘运行时字号，两者相除恰好放大 RuntimeFontScale 倍；
+			// 若此处同步运行时值，基准随字号漂移，图片渲染尺寸不再随排版缩放（实测：字 2×、
+			// div 2×、图片 1× → 图片相对变小、网格溢出视口）。XEmuera 同款语义：
+			// 配置=基准，FontScale=运行时乘数。
+		}
+		// 运行时字号基准（首次 SetRuntimeFontSize 时的字号；0=未做过运行时改字号）。
+		// 行内图像的 px 尺寸按 RuntimeFontScale 缩放以跟随排版（见 ConsoleImagePart）。
+		public static int RuntimeFontSizeBase { get; private set; }
+		// 窗口宽度基准（首次调用时的 WindowX），SetRuntimeFontSize 按字号比例缩放 WindowX。
+		static int RuntimeWindowXBase { get; set; }
+		public static float RuntimeFontScale =>
+			RuntimeFontSizeBase > 0 ? (float)FontSize / RuntimeFontSizeBase : 1f;
+
 		public static int WindowY { get; private set; }
 		public static int WindowPosX { get; private set; }
 		public static int WindowPosY { get; private set; }

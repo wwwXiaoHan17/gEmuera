@@ -10,10 +10,10 @@ Emuera 核心编译器以 C# 编写，为减少开发成本、方便 AI 对接�
 
 - 首要运行与测试目标：Android/手机端，方案以导出 APK 可用为准。
 - 桌面端可用于调试，但不能替代 APK 验证结论。
-- 参考实现：`E:\MyCode\Era\emuera_lazyloading_selfmodified_version-develop-skiasharp (2)\emuera_lazyloading_selfmodified_version-develop-skiasharp`（snake fork，Skiav12.1，2026-09-04 盘点基线，zip 解压无 git 历史）、`E:\MyCode\Era\emuera.em-master`（v24）、`E:\MyCode\GodotCode\gemuera\uEmuera-0.2.9d`、`E:\MyCode\GodotCode\gemuera\XEmuera-0.5.1等`。
+- 参考实现：`D:\clone\emuera_lazyloading_selfmodified_version`（snake fork；上游 `https://gitgud.io/minus010001/emuera_lazyloading_selfmodified_version` 的 `main-skiasharp` 分支，2026-11-23 克隆，HEAD `7154549` = Skiav18.0.0，带完整 git 历史。**本仓库的蛇版对齐进度以 `governance/evolution-log/` 里最近一次 snake 对齐日志为准，不随此克隆版本自动变化**（2026-11-23 对齐到 Skiav18.0.0，见 `governance/evolution-log/2026-11-24-snake-18.0-alignment.md`；其中 `resources.pak` 单文件资源包未对齐。上游没有 tag，按 CHANGELOG 版本提交定位：12.1.0 = `4849416`、13.0.0 = `5717045`、17.2.0 = `8005f9f`、17.4.0 = `2537080`、18.0.0 = `7154549`；下一轮对齐用 `git diff <上一基线提交>..<新基线提交> -- Emuera` 做增量审计））、`E:\MyCode\Era\emuera.em-master`（v24）、`E:\MyCode\GodotCode\gemuera\uEmuera-0.2.9d`、`E:\MyCode\GodotCode\gemuera\XEmuera-0.5.1等`。
 - 涉及 Godot 架构、UI、性能、平台适配时，使用 `godot-master` skill 辅助判断。
 - Snake 接口（`emuera_lazyloading_*`）语义对齐：修改 `Scripts/Emuera/` 解释器前对照
-  `E:\MyCode\Era\emuera_lazyloading_selfmodified_version-develop-skiasharp (2)\emuera_lazyloading_selfmodified_version-develop-skiasharp`（CHANGELOG.md 即版本变更契约），保证 ERB 语义不偏离。
+  `D:\clone\emuera_lazyloading_selfmodified_version`（`CHANGELOG.md` 即版本变更契约；版本串 `SkiavX.Y` 对应 changelog 的 `[X.Y.Z]`），保证 ERB 语义不偏离。该上游的源码目录布局与本仓库 `Scripts/Emuera/` 不一一对应：`#DIM` 解析在 `Emuera/Runtime/Script/Data/UserDefinedVariable.cs`，变量 token 在 `Emuera/Runtime/Script/Statements/Variable/`。
 
 ## 必读与配套文档
 
@@ -91,13 +91,32 @@ Emuera 核心编译器以 C# 编写，为减少开发成本、方便 AI 对接�
 - **csproj 已排除 `Build\**`（已退役）、`export\**` 与 `reports\**` 的编译收录**：产物/工作区
   目录里若混入杂散 `.cs` 会以 CS0579 重复特性炸构建且报错文件毫不相干（csproj 已加
   `<Compile Remove>` 兜底，新建其它临时目录时仍需确认是否被默认 glob 收录）。
+  2026-11-21 新变体：gitignore 不删除文件——其他分支构建过的 `tools/*/obj/**/GlobalUsings.g.cs`
+  残留会被宿主 glob 收编，其 `global using System.Threading;` 引发 CS0104（`Timer` 等
+  Godot/SDK 同名类型歧义）；症状诡异（同内容分支一绿一红）时先查未跟踪 obj 残留。
 - **PowerShell 函数/别名命名避开内置别名**：别名解析优先于函数，`function Rd {...}` 会静默
   变成 `Remove-Item`。危险名至少包括 `rd`/`del`/`rm`/`mv`/`cp`/`ls`/`cd`/`cat`/`sc`/`gc`；
   脚本内联 `[IO.File]::ReadAllText(...)`，不要包成短名函数。
+- **仓库 `.ps1` 必须 UTF-8 BOM**（2026-11-21 实证）：Windows PowerShell 5.1 把无 BOM 文件按
+  ANSI/GBK 解析，中文注释会破坏语法；Write 工具产出无 BOM，需 `printf '\xEF\xBB\xBF' | cat -` 前置。
+- **原生库统一走 `native/` + `tools/native-build/` + `export/NativeLibs/` 可选复制模式**
+  （2026-11-21 起强制）：Rust/C++ 源码放 `native/<crate>/`（cdylib，产物 gitignore），
+  构建分发只用 `tools/native-build/Build-GemueraNative.ps1`（Android 产物必须 16KB page 对齐，
+  脚本内置 ELF PT_LOAD 校验）；csproj 的 Copy 目标一律 `Exists()` 条件——产物缺失不阻塞构建；
+  新原生模块在 crate 内加平级模块文件（勿每功能一个 .so）；导出函数 `gem_<模块>_<动作>` 命名，
+  加导出递增 `NATIVE_ABI_VERSION`，C# 探针用**最低版本语义**（`>= MinAbi`，勿用 `==`）。
 - **GDScript / 独立 addon 验证**：纯 GDScript 逻辑（如 `addons/markdownlabel/`）用自建契约测试跑
   `Godot --headless --path <项目根> --script res://tools/<suite>/run_tests.gd`（SceneTree 脚本，有失败 `quit(1)`；
   参考 `tools/markdownlabel-tests/`，2026-11-03 起）；RichTextLabel/UI 布局类改动必须再用**窗口模式**脚本截图核对
   （`--headless` 无渲染；用 `root.get_texture().get_image().save_png(...)` 生成 PNG 后人工查看），不要只信无头输出。
+- **桌面窗口模式测试不得破坏用户真实配置**（2026-11-23 实证）：`%APPDATA%\Godot\app_userdata\gemuera-c#\`
+  下的 `settings.cfg` / `launcher.cfg` 是用户真实环境的配置（界面缩放/语言/分辨率/最近游戏/内核与
+  兼容包选择/调试开关），不是测试夹具：启动器一选中游戏或改兼容/调试设置就回写 `launcher.cfg`，
+  界面缩放/分辨率/旋转开关写 `settings.cfg`。跑桌面 gEmuera 前先把两份文件复制到
+  仓库外目录并记下**带时间戳的快照文件名**；测后按该文件名还原并 `cmp` 校验。禁止 `rm`（曾丢语言与
+  分辨率配置）、禁止凭记忆手写快照编号（收尾时曾把 `launcher.cfg` 还原成 3 天前的旧快照）、禁止手工
+  重写键值（字符串值必须带双引号，否则 `ConfigFile` 整份解析失败）。需要「干净首次启动」场景时改用
+  Android 模拟器验证。
 - Android 相关结论必须以 APK 实测为准；桌面端仅用于调试。
 
 ## 架构速览
@@ -166,7 +185,7 @@ project.godot -> assets/scenes/first_window.tscn -> FirstWindow._Ready()
 
 ## Agent 自我进化（governance）
 
-`governance/` 是本项目的自我进化基础设施，**不是可选动作**：会话之间不共享上下文，本次任务踩的坑不沉淀，下次会话（或下一个 Agent）会原样重踩。机制总览与记录模板见 `governance/README.md`；本节是强制流程与验收标准，与仓库内其他文档、历史记录或各工具启动预设的旧表述冲突时一律以本节为准（旧表述逐步收敛为指向本节的指针，历史日志只追加修正说明、不回改）。本节自 2026-11-03 起对**新增/追加记录**生效，历史日志不追溯、不重写。
+`governance/` 是本项目的自我进化基础设施，**不是可选动作**：会话之间不共享上下文，本次任务踩的坑不沉淀，下次会话（或下一个 Agent）会原样重踩。机制总览与记录模板见 `governance/README.md`；跨任务遗留事项统一登记在 `governance/backlog.md`（遗留台账：任务收尾与 evolution-log 同步更新，对接/验收/开新任务前必读）；本节是强制流程与验收标准，与仓库内其他文档、历史记录或各工具启动预设的旧表述冲突时一律以本节为准（旧表述逐步收敛为指向本节的指针，历史日志只追加修正说明、不回改）。本节自 2026-11-03 起对**新增/追加记录**生效，历史日志不追溯、不重写。
 
 ### 何时必须写
 
@@ -209,6 +228,7 @@ evolution-log（过程资产）→ **prompt-patterns**（用户提示词模式�
 - [ ] 只记本任务改动，未把其他会话未提交改动计入（证据：`git status --short` 基线对照）；
 - [ ] PR 描述（无 PR 则最终交付消息）含一行 `进化记录: governance/evolution-log/<文件名>.md`；
 - [ ] 临时测试/调试文件已删除，无产物/游戏内容进入 `res://`（证据：`git status --short`）。
+- [ ] 本任务新增/关闭的遗留条目已同步 `governance/backlog.md`（证据：台账条目行）。
 
 ## 协作规则
 

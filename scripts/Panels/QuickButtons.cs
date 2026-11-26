@@ -31,6 +31,12 @@ public partial class QuickButtons : CanvasLayer
 	bool floatingDragActive;
 	Vector2 floatingDragLastPosition;
 	Vector2 floatingPanelPosition = new Vector2(-1, -1);
+	// 浮层坐标物化时的安全区（位置+尺寸）：坐标只对物化它时的安全区有意义，
+	// 安全区一变（转屏/折叠/分屏/分辨率与水平留白调整）旧坐标即视为陈旧——可能
+	// 落在新区域的边缘甚至屏外（2026-11-22 用户反馈「竖屏拖到下面横屏很难看到」），
+	// 此时重置为未定位态、下一次布局落到当前方向目标角。
+	Rect2 floatingPanelAnchorRect;
+	bool floatingPanelAnchorRectValid;
 	Control floatingDragBar;
 	Label floatingDragGrip;
 	bool quickInputEnabled = true;
@@ -57,8 +63,7 @@ public partial class QuickButtons : CanvasLayer
 	const string QuickButtonFontSizeKey = "QuickButtonFontSize";
 	const string QuickFlipKey = "QuickFlip";
 	const string QuickFloatingKey = "QuickFloating";
-	const string QuickFloatingXKey = "QuickFloatingX";
-	const string QuickFloatingYKey = "QuickFloatingY";
+	// 浮动面板位置语义版本；见 EnsureSettingsLoaded 的迁移说明。
 	const int FloatingDragBarHeight = 26;
 	const int DefaultQuickButtonFontSize = 12;
 	const int DefaultQuickButtonWidth = 90;
@@ -85,8 +90,6 @@ public partial class QuickButtons : CanvasLayer
 	static int configuredFontSize = -1;
 	static bool configuredFlip;
 	static bool configuredFloating;
-	static int configuredFloatingX = -1;
-	static int configuredFloatingY = -1;
 
 	// Component interface: the panel advertises its own show/hide state changes
 	// so host scenes can react without polling. Emitted purely additively;
@@ -127,7 +130,8 @@ public partial class QuickButtons : CanvasLayer
 		}
 	}
 
-	// 面板水平翻转：默认靠右，翻转后靠左（宽度调节条同步翻到内侧）。默认关闭。
+	// 面板水平翻转：默认靠右（右下角），翻转后靠左（左下角，内容不镜像）；
+	// 宽度调节条同步移到面板内侧。默认关闭。
 	public static bool FlipEnabled
 	{
 		get
@@ -199,12 +203,64 @@ public partial class QuickButtons : CanvasLayer
 	/// <summary>当前悬浮面板左上角（画布坐标）；仅在 <see cref="FloatingOverlayMode"/> 下有效。</summary>
 	public Vector2 FloatingPanelPosition => floatingPanelPosition;
 
-	/// <summary>拖动条位移：限制在安全区内并立即重排（供拖动条自身的输入处理调用）。</summary>
+	/// <summary>
+	/// 拖动条位移：立即同步落位并钳制（不走 RequestPanelSizeUpdate 的异步布局——
+	/// 那条路径内部 await 一帧，拖动时面板跟不上手指）。
+	/// </summary>
 	public void MoveFloatingPanelBy(Vector2 delta)
 	{
 		if (!floatingOverlayMode || delta == Vector2.Zero)
 			return;
 		floatingPanelPosition += delta;
+		ApplyFloatingOverlayLayoutNow();
+	}
+
+	// 拖动/翻转镜像共用的即时落位：不动面板尺寸，按当前尺寸重算钳制位置并同步
+	// 摆放面板/调节条/拖动条三件套。悬浮拖动必须同帧生效（2026-11-22 用户反馈
+	// 「移动效果差」的修复之一；另一根因见 ToDragBarCanvasPosition 注释）。
+	void ApplyFloatingOverlayLayoutNow()
+	{
+		if (panel == null || !IsControlAlive(panel) || !IsControlAlive(resizeHandle))
+			return;
+		float width = panel.Size.X;
+		float height = panel.Size.Y;
+		if (width <= 0 || height <= 0)
+			return;
+		ApplyFloatingOverlayPanelSize(width, height);
+	}
+
+	/// <summary>
+	/// 「Quick面板翻转」开关切换后的即时响应（悬浮浮层）：把面板水平镜像到对侧
+	/// 并持久化。内嵌锚点模式由 RefreshSizing 的重排覆盖，不需要此调用。
+	/// </summary>
+	public void NotifyFlipSettingChanged()
+	{
+		if (!floatingOverlayMode)
+			return;
+		if (floatingPanelPosition.X < 0 || floatingPanelPosition.Y < 0)
+		{
+			// 尚未定位过（未显示/未拖动）：保持未定位态，下次布局按新翻转方向取默认位。
+			return;
+		}
+		var safeRect = GetSafeRect();
+		float width = IsControlAlive(panel) ? panel.Size.X : EffectiveButtonWidth;
+		if (width <= 0)
+			return;
+		float mirroredX = safeRect.Position.X + safeRect.Size.X
+			- (floatingPanelPosition.X - safeRect.Position.X) - width;
+		floatingPanelPosition = new Vector2(mirroredX, floatingPanelPosition.Y);
+		ApplyFloatingOverlayLayoutNow();
+	}
+
+	/// <summary>
+	/// 「回到初始位置」（2026-11-22 用户要求的功能）：把浮层送回当前方向目标角
+	/// （右下；翻转开=左下）。拖动条右端按钮与隐藏/打开边沿共用此原语。
+	/// </summary>
+	public void RehomeOverlayPanel()
+	{
+		if (!floatingOverlayMode)
+			return;
+		floatingPanelPosition = new Vector2(-1, -1);
 		RequestPanelSizeUpdate(false);
 	}
 
@@ -217,7 +273,11 @@ public partial class QuickButtons : CanvasLayer
 			floatingDragBar.Visible = false;
 	}
 
-	// 布局锚点派生：翻转 → 面板靠左；悬浮且真正被 Window 承载 → 贴左贴顶。
+	// 布局锚点派生（2026-11-22 用户两步裁定）：
+	// ① 垂直恒贴底、默认右下角——推翻 2026-11-16 补遗 11 的「一律贴顶」；
+	// ② 面板翻转语义收敛为纯位置换边（内容不镜像）：翻转后=左下角。
+	// 悬浮且真正被 Window 承载（桌面端）：面板在窗口内容区内贴左贴顶，
+	// 屏幕位置由 Window 自身决定。
 	bool AnchoredLeft => configuredFlip || (configuredFloating && floatingHosted);
 	bool AnchoredTop => configuredFloating && floatingHosted;
 
@@ -232,9 +292,9 @@ public partial class QuickButtons : CanvasLayer
 		EnsureSettingsLoaded();
 		Visible = false;
 		Layer = 90;
-		floatingPanelPosition = configuredFloatingX >= 0 && configuredFloatingY >= 0
-			? new Vector2(configuredFloatingX, configuredFloatingY)
-			: new Vector2(-1, -1);
+		// floatingPanelPosition 保持字段初始化的未定位态（-1,-1）：位置是纯运行期
+		// 状态，不持久化（2026-11-22 用户澄清「返回初始位置」后彻底拔掉坐标存取，
+		// 陈旧配置坐标是「重开后钉死在旧位置」的根源）。
 		// _Process 只服务惯性滚动；空闲时关闭，避免 Android 上每帧一次
 		// native→managed 调用（面板隐藏是常态，StartQuickInertia 会按需重开）。
 		SetProcess(false);
@@ -309,6 +369,7 @@ public partial class QuickButtons : CanvasLayer
 		floatingDragGrip.AddThemeFontSizeOverride("font_size", 12);
 		floatingDragGrip.AddThemeColorOverride("font_color", new Color(1, 1, 1, 0.7f));
 		floatingDragBar.AddChild(floatingDragGrip);
+
 		scroll = new ScrollContainer();
 		ConfigureQuickScrollContainer();
 		scroll.MouseFilter = Control.MouseFilterEnum.Pass;
@@ -832,12 +893,33 @@ public partial class QuickButtons : CanvasLayer
 
 	public void ShowPad()
 	{
+		// 悬浮浮层在「隐藏→打开」边沿回到初始角（右下；「Quick面板翻转」开=左下）：
+		// 位置记忆只在同一次打开的会话内有效（拖拽/翻转镜像仍即时生效）。陈旧绝对
+		// 坐标跨关闭/跨方向沿用是「面板丢失」的来源（2026-11-22 用户反馈：竖屏拖过
+		// 的位置重开后把面板带去意想不到的地方），隐藏即弃位。只在边沿重置——自动
+		// 唤起路径会在面板已可见时重复调 ShowPad，不能把用户刚拖的位置拽回角落。
+		if (!Visible && floatingOverlayMode)
+		{
+			// 无条件重置+请求布局：空面板（游戏未定义 QUICKBUTTON）没有任何其他
+			// 布局触发器，若只在「有旧坐标」时才请求，未定位态永远不会物化，
+			// 拖动条/面板停在 _Ready 默认锚点上（run_overlay_check 首轮 FAIL 根因）。
+			floatingPanelPosition = new Vector2(-1, -1);
+			RequestPanelSizeUpdate(false);
+		}
 		Visible = true;
 		EmitSignal(SignalName.PadShown);
 	}
 
 	public void HidePad()
 	{
+		// 关闭即回角（2026-11-22 用户澄清：「返回初始位置」在关闭那一刻立即生效，
+		// 不等下次打开——否则重开仍见旧位，观感是「钉死在最后移动的位置」）。
+		// 重置为未定位态后由布局路径落到当前方向目标角（右下；翻转开=左下）。
+		if (floatingOverlayMode && floatingPanelPosition.X >= 0)
+		{
+			floatingPanelPosition = new Vector2(-1, -1);
+			RequestPanelSizeUpdate(false);
+		}
 		Visible = false;
 		EmitSignal(SignalName.PadHidden);
 	}
@@ -886,6 +968,16 @@ public partial class QuickButtons : CanvasLayer
 
 	public void RefreshSafeAreaLayout()
 	{
+		// 安全区与「坐标物化时的安全区」不一致 → 坐标陈旧，重置为未定位态，
+		// 下一次布局落到当前方向目标角（右下；翻转开=左下）。
+		var safeRect = GetSafeRect();
+		if (floatingOverlayMode && floatingPanelAnchorRectValid
+			&& (safeRect.Position != floatingPanelAnchorRect.Position
+				|| safeRect.Size != floatingPanelAnchorRect.Size))
+		{
+			floatingPanelPosition = new Vector2(-1, -1);
+			RequestPanelSizeUpdate(false);
+		}
 		RefreshSizing();
 	}
 
@@ -1137,10 +1229,16 @@ public partial class QuickButtons : CanvasLayer
 		float bottomMargin = 20 + GetSafeBottomInset(safeRect);
 		float leftMargin = 20;
 		float topMargin = 20;
+		// 竖屏时系统菜单栏在右侧竖排（12 个图标向下延伸），面板贴右会直接盖住它，
+		// 因此额外让开一个按钮位 + 间距；横屏时菜单栏在顶部横排，只需让开顶部高度。
+		bool portraitMenuBar = safeRect.Size.Y > safeRect.Size.X;
+		if (portraitMenuBar)
+			rightMargin += 48f + 16f;
 
-		// 水平锚点：默认贴右（面板在右下角），翻转/悬浮 → 贴左。
-		// 宽度调节条始终在面板内侧（贴右 → 拉条在左；贴左 → 拉条在右），
-		// 翻转后用户仍能从屏幕内侧拖宽面板。
+		// 水平锚点：默认贴右（右下角）；「面板翻转」开启后贴左（左下角，纯位置
+		// 换边，内容不镜像）；桌面悬浮承载（Window 内容区内）也贴左。宽度调节条
+		// 始终在面板内侧（贴右 → 拉条在左；贴左 → 拉条在右），用户总能从屏幕
+		// 内侧拖宽面板。
 		if (AnchoredLeft)
 		{
 			panel.AnchorLeft = 0;
@@ -1164,28 +1262,22 @@ public partial class QuickButtons : CanvasLayer
 			resizeHandle.OffsetRight = -rightMargin - width;
 		}
 
-		if (AnchoredTop)
-		{
-			panel.AnchorTop = 0;
-			panel.AnchorBottom = 0;
-			panel.OffsetTop = topMargin;
-			panel.OffsetBottom = topMargin + height;
-			resizeHandle.AnchorTop = 0;
-			resizeHandle.AnchorBottom = 0;
-			resizeHandle.OffsetTop = topMargin;
-			resizeHandle.OffsetBottom = topMargin + height;
-		}
-		else
-		{
-			panel.AnchorTop = 1;
-			panel.AnchorBottom = 1;
-			panel.OffsetTop = -bottomMargin - height;
-			panel.OffsetBottom = -bottomMargin;
-			resizeHandle.AnchorTop = 1;
-			resizeHandle.AnchorBottom = 1;
-			resizeHandle.OffsetTop = -bottomMargin - height;
-			resizeHandle.OffsetBottom = -bottomMargin;
-		}
+		// 垂直锚点：贴底（2026-11-22 用户裁定默认右下角、翻转只换水平边=左下角，
+		// 推翻 2026-11-16「一律贴顶贴着唤出菜单」的决策）。旋转后锚点跟随新视口，
+		// RefreshSafeAreaLayout 会按新安全区重新钳制边距，面板始终落在同一侧底部。
+		// 悬浮承载（桌面 Window 宿主）仍贴顶 20：窗口内容区内部布局，屏幕位置由
+		// Window 自身决定。贴底时保留 maxHeight 顶部的 66px 预留，高面板不会
+		// 盖住顶部横排菜单栏。
+		float anchorV = AnchoredTop ? 0f : 1f;
+		float verticalMargin = AnchoredTop ? topMargin : bottomMargin;
+		panel.AnchorTop = anchorV;
+		panel.AnchorBottom = anchorV;
+		panel.OffsetTop = AnchoredTop ? verticalMargin : -verticalMargin - height;
+		panel.OffsetBottom = AnchoredTop ? verticalMargin + height : -verticalMargin;
+		resizeHandle.AnchorTop = anchorV;
+		resizeHandle.AnchorBottom = anchorV;
+		resizeHandle.OffsetTop = panel.OffsetTop;
+		resizeHandle.OffsetBottom = panel.OffsetBottom;
 	}
 
 	// 移动端悬浮层布局：面板位置完全由 floatingPanelPosition 决定（安全区内钳制），
@@ -1197,15 +1289,22 @@ public partial class QuickButtons : CanvasLayer
 		Vector2 pos = floatingPanelPosition;
 		if (pos.X < 0 || pos.Y < 0)
 		{
-			pos = new Vector2(
-				safeRect.Position.X + safeRect.Size.X - width - 20,
-				safeRect.Position.Y + safeRect.Size.Y - height - barHeight - 20);
+			// 默认贴底、贴右；「Quick面板翻转」开启时镜像到贴左（2026-11-22 翻转
+			// 语义收敛：纯位置换边，悬浮浮层默认位同样响应）。已手动拖动过的面板
+			// 保存有明确坐标，不受默认变化影响；旋转后由下方安全区钳制兜底。
+			const float EdgeMargin = 20f;
+			float defaultY = safeRect.Position.Y + safeRect.Size.Y - height - barHeight - EdgeMargin;
+			pos = FlipEnabled
+				? new Vector2(safeRect.Position.X + EdgeMargin, defaultY)
+				: new Vector2(safeRect.Position.X + safeRect.Size.X - width - EdgeMargin, defaultY);
 		}
 		float maxX = Mathf.Max(safeRect.Position.X, safeRect.Position.X + safeRect.Size.X - width);
 		float maxY = Mathf.Max(safeRect.Position.Y, safeRect.Position.Y + safeRect.Size.Y - height - barHeight);
 		pos.X = Mathf.Clamp(pos.X, safeRect.Position.X, maxX);
 		pos.Y = Mathf.Clamp(pos.Y, safeRect.Position.Y, maxY);
 		floatingPanelPosition = pos;
+		floatingPanelAnchorRect = safeRect;
+		floatingPanelAnchorRectValid = true;
 
 		SetTopLeftLayout(panel, pos.X, pos.Y + barHeight, width, height);
 		SetTopLeftLayout(resizeHandle, pos.X + width, pos.Y + barHeight, ResizeHandleWidth, height);
@@ -1239,20 +1338,22 @@ public partial class QuickButtons : CanvasLayer
 			if (touch.Pressed)
 			{
 				floatingDragActive = true;
-				floatingDragLastPosition = touch.Position;
+				floatingDragLastPosition = ToDragBarCanvasPosition(touch.Position);
+				SetFloatingDragBarVisual(active: true);
 			}
 			else if (floatingDragActive)
 			{
 				floatingDragActive = false;
-				SaveFloatingPosition();
+				SetFloatingDragBarVisual(active: false);
 			}
 			GetViewport().SetInputAsHandled();
 			return;
 		}
 		if (@event is InputEventScreenDrag drag && floatingDragActive)
 		{
-			MoveFloatingPanelBy(drag.Position - floatingDragLastPosition);
-			floatingDragLastPosition = drag.Position;
+			var canvasPos = ToDragBarCanvasPosition(drag.Position);
+			MoveFloatingPanelBy(canvasPos - floatingDragLastPosition);
+			floatingDragLastPosition = canvasPos;
 			GetViewport().SetInputAsHandled();
 			return;
 		}
@@ -1262,11 +1363,12 @@ public partial class QuickButtons : CanvasLayer
 			{
 				floatingDragActive = true;
 				floatingDragLastPosition = mouseButton.GlobalPosition;
+				SetFloatingDragBarVisual(active: true);
 			}
 			else if (floatingDragActive)
 			{
 				floatingDragActive = false;
-				SaveFloatingPosition();
+				SetFloatingDragBarVisual(active: false);
 			}
 			GetViewport().SetInputAsHandled();
 			return;
@@ -1279,12 +1381,23 @@ public partial class QuickButtons : CanvasLayer
 		}
 	}
 
-	void SaveFloatingPosition()
+	// GuiInput 里的触摸/拖拽 position 是控件局部坐标（_gui_call_input 会按控件
+	// 变换本地化）：拖动条随面板移动，直接用局部差分会被「控件自身位移」抵消——
+	// 手指世界系走 d、局部坐标只报回 d-面板位移，收敛后面板仅以约一半手指速度
+	// 跟随（2026-11-22 用户反馈「移动效果差/不灵敏」的主根因）。换算到画布坐标
+	// 再差分即稳定；鼠标事件的 GlobalPosition 本就是视口画布坐标，无需换算。
+	Vector2 ToDragBarCanvasPosition(Vector2 localPosition)
 	{
-		if (!floatingOverlayMode)
-			return;
-		SaveSetting(QuickFloatingXKey, Mathf.RoundToInt(floatingPanelPosition.X));
-		SaveSetting(QuickFloatingYKey, Mathf.RoundToInt(floatingPanelPosition.Y));
+		return IsControlAlive(floatingDragBar)
+			? floatingDragBar.GetGlobalTransform() * localPosition
+			: localPosition;
+	}
+
+	// 拖动中把拖动条提亮，给「已抓住」的视觉反馈；松手复原。
+	void SetFloatingDragBarVisual(bool active)
+	{
+		if (floatingDragBar != null && IsControlAlive(floatingDragBar))
+			floatingDragBar.Modulate = active ? new Color(1.3f, 1.3f, 1.35f, 1f) : Colors.White;
 	}
 
 	Vector2 ScrollQuickBy(Vector2 delta)
@@ -1458,8 +1571,9 @@ public partial class QuickButtons : CanvasLayer
 			MaxQuickButtonFontSize);
 		configuredFlip = cfg.GetValue(SettingsSection, QuickFlipKey, false).AsBool();
 		configuredFloating = cfg.GetValue(SettingsSection, QuickFloatingKey, false).AsBool();
-		configuredFloatingX = Mathf.RoundToInt((float)(double)cfg.GetValue(SettingsSection, QuickFloatingXKey, -1));
-		configuredFloatingY = Mathf.RoundToInt((float)(double)cfg.GetValue(SettingsSection, QuickFloatingYKey, -1));
+		// 位置坐标不持久化（QuickFloatingX/Y 于 2026-11-22 起停止读写）：悬浮面板
+		// 每次打开/关闭/跨方向旋转都回到当前方向的目标角，旧配置里的遗留键不再被
+		// 读取，也不删除用户配置文件中的既有键。
 	}
 
 	static void SaveSetting(string key, int value)

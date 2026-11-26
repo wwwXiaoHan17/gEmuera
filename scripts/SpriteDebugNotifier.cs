@@ -7,11 +7,11 @@ using Godot;
 /// </summary>
 public static class SpriteDebugNotifier
 {
-    public delegate void ImageLoadedHandler(string name, Image image, string info);
-    public static event ImageLoadedHandler OnImageLoaded;
+	public delegate void ImageLoadedHandler(string name, Image image, string info);
+	public static event ImageLoadedHandler OnImageLoaded;
 
-    public static void Notify(string name, Image image, string info)
-    {
-        OnImageLoaded?.Invoke(name, image, info);
-    }
+	public static void Notify(string name, Image image, string info)
+	{
+		OnImageLoaded?.Invoke(name, image, info);
+	}
 }

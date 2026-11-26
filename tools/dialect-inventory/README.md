@@ -55,6 +55,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\dialect-inventory\Test
 - 参数/返回类型门禁的权威来源是运行时反射差异证据（docs/NewFrameworkDesign/generated/legacy-dialect-reflection-diff.json），它在实际程序集上比较 v24/Snake 上游与当前工程的 ArgumentBuilder 形状、函数声明与行为矩阵；静态源码文本公式只作为诊断保留，不再单独判定语义差异。
 - 先运行 LegacyDialectReflectionDiff 再生成该报告；若反射证据缺失或存在差异，报告 fail-fast。
 
+> **状态（2026-11-23）：这两个脚本与 `LegacyDialectReflectionDiff` 在 P-D 退役（2026-11-07）后已不能直接跑通，不要再把它们当作蛇版对齐的盘点手段。**
+> `LegacyDialectUpstreamDiff.psm1` 仍从 `LegacyCompatibilityModules.cs` 读取 `PortOnlyInstructionNames` / `InstructionNames` /
+> `FunctionNames` / `SnakeExcludedFunctionNames`，而这些名单已迁到 `SnakeLegacySurfaceNames.cs`；目录文件
+> `legacy-dialect-upstream-diff.json` 钉的仍是 Skiav10.1 时代的上游哈希与计数（snake 326 指令 / 347 函数），
+> `Test-LegacyDialectUpstreamDiff.ps1` 的断言同理；反射差异工具要求 live snake profile，而该 profile 已退役。
+> 蛇版对齐改按每轮 evolution log 的做法：用上游克隆的 git 历史做增量审计
+> （`git -C D:\clone\emuera_lazyloading_selfmodified_version diff <上一基线提交>..<新基线提交> -- Emuera`），
+> 落到 `SnakeLegacySurfaceNames.cs` / `SnakeCompatibilityCapabilities.cs` / `retired-dialect-surface-universe.json` /
+> `packs/pack.gemuera.snake/compatpack.manifest.json`，再跑 `LegacyDialectInventoryGenerator` 与门禁集。
+
 ## 移动端验证边界
 
 - Android 调试 APK 通过 Godot 4.7 mono 导出并签名（arm64-v8a，v2/v3 签名方案验证通过），产物位于 ndroid/build/gemuera-debug.apk。

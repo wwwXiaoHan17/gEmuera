@@ -59,5 +59,8 @@
     <Compile Include="..\..\..\scripts\Emuera\Sub\StringStream.cs" Link="Host\StringStream.cs" />
     <Compile Include="..\..\..\scripts\Emuera\Content\DynamicSpritePathResolver.cs" Link="Host\DynamicSpritePathResolver.cs" />
     <Compile Include="..\..\..\scripts\Emuera\GameData\Function\SpriteCreateArgumentLayout.cs" Link="Host\SpriteCreateArgumentLayout.cs" />
+    <!-- 常数表（declare.const-table.v1，Emuera-SKIA Skiav18.0）：读取/切分/合并的纯规则层，文件访问经
+         IConstArrayTableFiles 注入；磁盘与编码访问在 ConstArrayTableDiskFiles.cs（不链接）。 -->
+    <Compile Include="..\..\..\scripts\Emuera\GameData\ConstArrayTable.cs" Link="Host\ConstArrayTable.cs" />
   </ItemGroup>
 </Project>

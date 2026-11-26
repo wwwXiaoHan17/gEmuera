@@ -65,6 +65,9 @@ public partial class FirstWindow : Control
 		// v24/snake 双标签已合并（2026-09-22）：游戏条目自带 profile 路由（列表后缀
 		// 显示 v24/snake/手动），扫描也统一一次全扫，分类标签只剩导航噪音。
 		Game,
+		// 高级兼容设置独立页签（2026-11-22）：原为游戏页顶部内联折叠块，展开后其
+		// 滚动条被游戏页外层滚动条遮挡（用户反馈），独立成页后滚动链路只有一层。
+		Compat,
 		Diagnostics,
 		Manual
 	}
@@ -104,8 +107,11 @@ public partial class FirstWindow : Control
 		// runner/in-process switch 的 per-session pack 通道刷新（E2-R3）：每次会话绑定都
 		// 按目标游戏重算启用清单并写环境变量——切换到 B 不得沿用上一局 A 的
 		// GEMUERA_COMPAT_PACKS（B 无选择时清除变量，回纯 v24；外部诊断 env 的合并语义与
-		// launcher 注入一致）。只读 launcher.cfg，不写回，不改变下一次交互启动。
-		ApplyCompatPackEnvironment(SelectedGamePath);
+		// launcher 注入一致）。只读 launcher.cfg，不写回，不改变下一次交互启动：
+		// 过期第一方包的改绑只在本次会话内生效。本进程此后也一律不写回——主场景挂上来后还会经
+		// ResolveStartupGamePath 再注入一次，靠调用点逐个传参挡不住。
+		SuppressCompatPackSelfHealPersistence();
+		ApplyCompatPackEnvironment(SelectedGamePath, persistSelfHeal: false);
 		return true;
 	}
 
@@ -118,9 +124,11 @@ public partial class FirstWindow : Control
 	MarginContainer launcherMargin;
 	SafeAreaApplicator launcherSafeArea;
 	Button gameTabButton;
+	Button compatTabButton;
 	Button diagnosticsTabButton;
 	Button manualTabButton;
 	Control gameTabContent;
+	Control compatTabContent;
 	Control manualTabContent;
 	Control diagnosticsTabContent;
 	CheckButton emueraDebugModeToggle;
@@ -142,11 +150,19 @@ public partial class FirstWindow : Control
 		FrameRateHelper.Apply();
 		VSyncHelper.Apply();
 		ResolutionHelper.Apply();
+		UiScaleHelper.Apply();
 
 		// 企业级说明：Android APK 首屏可能停留在启动器和权限流程，尚未进入 EmueraMain。
 		// 这里提前初始化诊断系统，确保冷启动、权限失败和游戏路径选择都能写入 breadcrumb。
 		GenericUtils.SetMainThread();
 		GenericUtils.InitializeLogging();
+
+		// 原生库探针（native-width-spike）：gemuera_native 加载状态 + 宽度抽查。
+		// GD.Print 必达 logcat（GenericUtils.Info 是 Conditional(DEBUG)，Release 缺席），
+		// 失败/缺库也只落日志一行，不影响启动。
+		string nativeWidthProbe = MinorShift._Library.NativeTextWidth.ProbeForLog();
+		GD.Print(nativeWidthProbe);
+		GenericUtils.Info(nativeWidthProbe);
 
 		// 统一深色主题：Theme 资源提供基线样式，代码 overrides 覆盖交互控件。
 		Theme = GEmueraTheme.LoadTheme();
@@ -244,15 +260,91 @@ public partial class FirstWindow : Control
 		title.Text = MultiLanguage.Get("FirstWindow.Title", "gEmuera(Emuera for Godot)");
 		// 布局回归修复（2026-09-22）：HBox 默认只给子控件最小宽度，带 autowrap 的
 		// Label 最小宽度会塌缩到单字符并逐字换行（实测把头部撑满全屏高、其余控件
-		// 全部被挤出可视区）。标题是短文本：关闭 autowrap + 横向占满，最小宽度恒为
-		// 全文宽，任何容器里都不会塌缩。
+		// 全部被挤出可视区）。标题是短文本：关闭 autowrap + 横向占满。
+		// 2026-11-16：再加 ClipText——标题最小宽度恒为全文宽时，窄屏/大 UI 缩放下
+		// header 总最小宽度会超过容器，把右侧「界面缩放」「旋转」挤出屏幕（用户实测
+		// 看不到旋转按钮）。允许裁剪后标题可被压缩，右侧控件始终可见。
 		title.AutowrapMode = TextServer.AutowrapMode.Off;
+		title.ClipText = true;
 		title.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 		title.AddThemeFontSizeOverride("font_size", 18);
 		title.AddThemeColorOverride("font_color", GEmueraTheme.TextPrimary);
 		header.AddChild(title);
 
+		header.AddChild(CreateUiScaleOption());
+
+		// 手动旋转：整界面转 90°。全平台显示（便于确认功能存在），非 Android 禁用。
+		bool rotationAvailable = OS.GetName() == "Android";
+		var rotateButton = new Button();
+		rotateButton.Text = MultiLanguage.Get("FirstWindow.Rotate", "旋转");
+		rotateButton.Disabled = !rotationAvailable;
+		rotateButton.TooltipText = rotationAvailable
+			? MultiLanguage.Get("FirstWindow.RotateHint",
+				"旋转整个界面 90°（会关闭「自动旋转」，改为固定方向）。")
+			: MultiLanguage.Get("FirstWindow.RotationAndroidOnly", "仅在 Android 设备上可用。");
+		rotateButton.CustomMinimumSize = new Vector2(72, 36);
+		rotateButton.AddThemeFontSizeOverride("font_size", 14);
+		GEmueraTheme.ApplyButton(rotateButton, GEmueraTheme.Surface, GEmueraTheme.Border);
+		rotateButton.Pressed += () => RotateChoiceDialog.Show(this);
+		header.AddChild(rotateButton);
+
 		return header;
+	}
+
+	// 系统级 UI 缩放（启动器 + 游戏内面板）选择器：root.ContentScaleFactor，
+	// 不影响游戏画面内容（其缩放由 Scalepad/双指捏合独立控制）。
+	Control CreateUiScaleOption()
+	{
+		var option = new OptionButton();
+		option.TooltipText = MultiLanguage.Get("FirstWindow.UiScaleHint",
+			"调整界面整体大小，不影响游戏画面。");
+		option.CustomMinimumSize = new Vector2(128, 36);
+		foreach (int percent in UiScaleHelper.PresetPercents)
+			option.AddItem(percent + "%");
+		SelectUiScaleOption(option);
+		option.ItemSelected += index =>
+		{
+			if (index < 0 || index >= UiScaleHelper.PresetPercents.Length)
+				return;
+			UiScaleHelper.SetScale(UiScaleHelper.PresetPercents[index] / 100f, persist: true);
+			option.Text = MultiLanguage.Get("FirstWindow.UiScale", "界面") + " " + UiScaleHelper.PresetPercents[index] + "%";
+			// content_scale_factor 变化不保证触发 viewport SizeChanged，主动贴合一次。
+			CallDeferred(nameof(RefitLauncherToViewport));
+		};
+		// 语言切换时刷新前缀文案，保留当前档位。
+		MultiLanguage.LanguageChanged += () =>
+		{
+			if (!GodotObject.IsInstanceValid(option))
+				return;
+			int percent = Mathf.RoundToInt(UiScaleHelper.current * 100);
+			option.Text = MultiLanguage.Get("FirstWindow.UiScale", "界面") + " " + percent + "%";
+		};
+		return option;
+	}
+
+	void SelectUiScaleOption(OptionButton option)
+	{
+		int percent = Mathf.RoundToInt(UiScaleHelper.current * 100);
+		int index = System.Array.IndexOf(UiScaleHelper.PresetPercents, percent);
+		if (index < 0)
+		{
+			// 配置值不在预设档位（历史手改 cfg）：归一到最近档位并回写，保证 UI 与生效值一致。
+			int best = 0;
+			int bestDiff = int.MaxValue;
+			for (int i = 0; i < UiScaleHelper.PresetPercents.Length; i++)
+			{
+				int diff = Mathf.Abs(UiScaleHelper.PresetPercents[i] - percent);
+				if (diff < bestDiff)
+				{
+					bestDiff = diff;
+					best = i;
+				}
+			}
+			index = best;
+			UiScaleHelper.SetScale(UiScaleHelper.PresetPercents[best] / 100f, persist: true);
+		}
+		option.Select(index);
+		option.Text = MultiLanguage.Get("FirstWindow.UiScale", "界面") + " " + UiScaleHelper.PresetPercents[index] + "%";
 	}
 
 	Control CreateLauncherTabs()
@@ -284,6 +376,11 @@ public partial class FirstWindow : Control
 		gameTabContent.SetAnchorsPreset(LayoutPreset.FullRect);
 		contentStack.AddChild(gameTabContent);
 
+		compatTabContent = CreateCompatTabContent();
+		compatTabContent.SetAnchorsPreset(LayoutPreset.FullRect);
+		compatTabContent.Visible = false;
+		contentStack.AddChild(compatTabContent);
+
 		manualTabContent = CreateManualContent();
 		manualTabContent.SetAnchorsPreset(LayoutPreset.FullRect);
 		manualTabContent.Visible = false;
@@ -306,10 +403,12 @@ public partial class FirstWindow : Control
 		rail.AddThemeConstantOverride("separation", 8);
 
 		gameTabButton = CreateRailButton(MultiLanguage.Get("FirstWindow.GameTab", "游戏"), () => SelectLauncherTab(LauncherTab.Game));
+		compatTabButton = CreateRailButton(MultiLanguage.Get("FirstWindow.CompatTab", "兼容"), () => SelectLauncherTab(LauncherTab.Compat));
 		diagnosticsTabButton = CreateRailButton(MultiLanguage.Get("FirstWindow.DebugLogButton", "调试/日志"), () => SelectLauncherTab(LauncherTab.Diagnostics));
 		manualTabButton = CreateRailButton(MultiLanguage.Get("FirstWindow.ManualButton", "操作手册"), () => SelectLauncherTab(LauncherTab.Manual));
 
 		rail.AddChild(gameTabButton);
+		rail.AddChild(compatTabButton);
 		rail.AddChild(diagnosticsTabButton);
 		rail.AddChild(manualTabButton);
 
@@ -341,6 +440,7 @@ public partial class FirstWindow : Control
 		// contentStack 规则：先隐藏全部子 content，再显示选中项。
 		// 不沿用 game/manual 的两两互斥判断，避免新增第三个 content 后出现显隐竞态。
 		gameTabContent.Visible = false;
+		compatTabContent.Visible = false;
 		manualTabContent.Visible = false;
 		if (diagnosticsTabContent != null)
 			diagnosticsTabContent.Visible = false;
@@ -353,17 +453,25 @@ public partial class FirstWindow : Control
 			return;
 		}
 
+		if (tab == LauncherTab.Compat)
+		{
+			// 兼容包候选依赖游戏扫描结果，但游戏列表此前已扫过；页签切换不重扫。
+			compatTabContent.Visible = true;
+			return;
+		}
+
 		bool showingManual = tab == LauncherTab.Manual;
 		gameTabContent.Visible = !showingManual;
 		manualTabContent.Visible = showingManual;
 
-		if (!showingManual)
+		if (tab == LauncherTab.Game)
 			ScanGames();
 	}
 
 	void UpdateTabButtonStyles()
 	{
 		ApplyRailButtonStyle(gameTabButton, currentTab == LauncherTab.Game);
+		ApplyRailButtonStyle(compatTabButton, currentTab == LauncherTab.Compat);
 		ApplyRailButtonStyle(diagnosticsTabButton, currentTab == LauncherTab.Diagnostics);
 		ApplyRailButtonStyle(manualTabButton, currentTab == LauncherTab.Manual);
 	}
@@ -515,13 +623,10 @@ public partial class FirstWindow : Control
 
 	Control CreateGameContent()
 	{
-		// Why（布局回归修复 2026-10-18）：展开「兼容设置」后（高级模式 + profile +
-		// 兼容包勾选列表 + 手动路径，最多再叠加 64 个包候选行）内容最小高度会超过
-		// 648p 窗口的可用内容区；VBox 在子项最小高度之和超出自身高度时不会收缩，
-		// 会把 ItemList/浏览按钮/Start 依次挤出 contentStack 底边并与状态行重叠
-		//（用户截图：展开后整块内容盖住游戏列表与底部按钮）。整块游戏页放进
-		// ScrollContainer 后：内容装得下时仍按窗口高度铺满（VBox 拿到视口高度），
-		// 装不下时出现滚动条，任何窗口高度都不会把控件渲染到 panel 之外。
+		// Why（2026-10-18 引入，2026-11-22 简化）：游戏页整体放进 ScrollContainer
+		// 作为小窗口/超长列表的兜底滚动。原顶部的「兼容设置」内联折叠块已整体迁移
+		// 到独立「兼容」页签（用户反馈：折叠块展开后其滚动条被游戏页外层滚动条
+		// 遮挡；独立页后滚动链路只有一层）。
 		var scroll = new ScrollContainer();
 		scroll.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 		scroll.SizeFlagsVertical = SizeFlags.ExpandFill;
@@ -534,16 +639,11 @@ public partial class FirstWindow : Control
 		content.AddThemeConstantOverride("separation", 12);
 		scroll.AddChild(content);
 
-		// 兼容设置默认折叠（移动端优先：游戏列表第一眼可见），折叠开关在
-		// CreateCompatibilitySettings 内部构建。
-		content.AddChild(CreateCompatibilitySettings());
-
 		gameList = new ItemList();
 		gameList.SizeFlagsVertical = SizeFlags.ExpandFill;
-		// 120 而非 260：展开兼容设置时（648p 窗口）让「高级模式/profile/兼容包/手动路径」
-		// 与列表、浏览行、Start 在可用高度内全部可见；窗口更高时 ExpandFill 会把列表
-		// 重新拉满。窗口更小或兼容包候选很多时由外层 ScrollContainer 兜底滚动。
-		gameList.CustomMinimumSize = new Vector2(0, 120);
+		// 最小高度仅兜底极矮窗口；常规窗口由 ExpandFill 拉满，超高列表由外层
+		// ScrollContainer 兜底滚动。
+		gameList.CustomMinimumSize = new Vector2(0, 160);
 		gameList.AddThemeFontSizeOverride("font_size", 20);
 		gameList.AddThemeConstantOverride("v_separation", 12);
 		gameList.AddThemeConstantOverride("line_separation", 8);
@@ -569,36 +669,36 @@ public partial class FirstWindow : Control
 		return scroll;
 	}
 
-	Control CreateCompatibilitySettings()
+	Control CreateCompatTabContent()
 	{
+		// 独立「兼容」页签（2026-11-22）：高级兼容开关 + profile 选择 + 兼容包选择
+		// 原是游戏页顶部的内联折叠块，展开后内容与游戏页外层滚动条互相遮挡。
+		// 独立成页后本页自持一层滚动，游戏页滚动条不再覆盖本页内容。
 		LoadCompatibilitySettings();
 
-		var settings = new VBoxContainer();
-		settings.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-		settings.AddThemeConstantOverride("separation", 6);
+		var scroll = new ScrollContainer();
+		scroll.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		scroll.SizeFlagsVertical = SizeFlags.ExpandFill;
+		scroll.HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled;
+		ApplyWideVerticalScrollbar(scroll.GetVScrollBar());
 
-		// 折叠开关：默认收起，点击展开高级兼容/profile/兼容包整块（移动端优先，
-		// 游戏列表上方只占一行）。状态不持久化——低频设置，每次进启动器默认收起。
-		var collapseToggle = new Button();
-		collapseToggle.Text = MultiLanguage.Get("FirstWindow.CompatSettingsToggle", "兼容设置") + " ▸";
-		collapseToggle.CustomMinimumSize = new Vector2(0, 40);
-		collapseToggle.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-		collapseToggle.AddThemeFontSizeOverride("font_size", 14);
-		GEmueraTheme.ApplyButton(collapseToggle, GEmueraTheme.Surface, GEmueraTheme.Border);
-		settings.AddChild(collapseToggle);
+		var content = new VBoxContainer();
+		content.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		content.AddThemeConstantOverride("separation", 12);
+		scroll.AddChild(content);
 
-		var body = new VBoxContainer();
-		body.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-		body.AddThemeConstantOverride("separation", 6);
-		body.Visible = false;
-		settings.AddChild(body);
-		collapseToggle.Pressed += () =>
-		{
-			body.Visible = !body.Visible;
-			collapseToggle.Text = MultiLanguage.Get(
-				"FirstWindow.CompatSettingsToggle",
-				"兼容设置") + (body.Visible ? " ▾" : " ▸");
-		};
+		content.AddChild(CreateSectionTitle(MultiLanguage.Get(
+			"FirstWindow.CompatTabTitle", "高级兼容设置")));
+
+		var hint = new Label();
+		hint.Text = MultiLanguage.Get(
+			"FirstWindow.CompatTabHint",
+			"覆盖下一次启动的兼容 profile 与兼容包。普通游戏保持默认路由即可，仅在游戏需要特殊兼容处理时调整。");
+		hint.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+		hint.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		hint.AddThemeColorOverride("font_color", GEmueraTheme.TextSecondary);
+		hint.AddThemeFontSizeOverride("font_size", 14);
+		content.AddChild(hint);
 
 		advancedCompatibilityToggle = new CheckButton();
 		advancedCompatibilityToggle.Text = MultiLanguage.Get(
@@ -612,7 +712,7 @@ public partial class FirstWindow : Control
 		advancedCompatibilityToggle.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 		advancedCompatibilityToggle.AddThemeFontSizeOverride("font_size", 15);
 		advancedCompatibilityToggle.Toggled += OnAdvancedCompatibilityToggled;
-		body.AddChild(advancedCompatibilityToggle);
+		content.AddChild(advancedCompatibilityToggle);
 
 		compatibilityProfileOption = new OptionButton();
 		compatibilityProfileOption.TooltipText = MultiLanguage.Get(
@@ -630,13 +730,13 @@ public partial class FirstWindow : Control
 		compatibilityProfileOption.Select(GetManualProfileOptionIndex());
 		compatibilityProfileOption.ItemSelected += OnManualProfileSelected;
 		compatibilityProfileOption.Visible = AdvancedCompatibilityEnabled;
-		body.AddChild(compatibilityProfileOption);
+		content.AddChild(compatibilityProfileOption);
 
 		// 兼容包选择 UI（扫描候选勾选 + 手动路径，移动端优先）整体在
 		// FirstWindow.CompatPackUi.cs（partial）构建，这里只挂接。
-		body.AddChild(CreateCompatPackPicker());
+		content.AddChild(CreateCompatPackPicker());
 
-		return settings;
+		return scroll;
 	}
 
 	void OnAdvancedCompatibilityToggled(bool enabled)
@@ -801,8 +901,14 @@ public partial class FirstWindow : Control
 	///     Warn 日志，兼容包状态提示行同步显示警告；
 	///   - 该游戏无选择 → 外部 env 仅作诊断输入透传（既有契约）；
 	///   - 两路皆空 → 清除变量，回到纯 v24。
+	/// 合并之后、注入之前经 <see cref="ResolveStaleFirstPartyPacks"/> 自愈：对当前引擎已不可用的
+	/// 第一方包换成内置同名包（FirstWindow.CompatPackSelfHeal.cs）。<paramref name="launcherProfileName"/>
+	/// 只影响 P2 映射默认值按哪个档案解析；缺省取上次启动用的档案，预览某个游戏时传它自己的档案。
+	/// <paramref name="persistSelfHeal"/>：自愈的改绑是否写回 launcher.cfg。交互启动链用缺省 true；
+	/// <see cref="ConfigureLegacyRunnerSession"/>（诊断回放 / 进程内换局）必须传 false——那个入口的契约是
+	/// 只读 launcher.cfg、不改变下一次交互启动；它在本次会话内仍然拿到改绑后的清单。
 	/// </summary>
-	static void ApplyCompatPackEnvironment(string gameRoot)
+	static void ApplyCompatPackEnvironment(string gameRoot, string launcherProfileName = null, bool persistSelfHeal = true)
 	{
 		bool hasStoredSelection = CompatPackLauncherConfig.TryGetSelectionForGame(
 			LauncherSettingsStore.LoadCompatPackSelections(),
@@ -811,7 +917,7 @@ public partial class FirstWindow : Control
 		string storedSelection = hasStoredSelection
 			? CompatPackLauncherConfig.SerializeSelection(paths)
 			: null;
-		TryGetMappedPackPath(SelectedCoreProfileName, out string mappedPath, out string mappedWarning);
+		TryGetMappedPackPath(launcherProfileName ?? SelectedCoreProfileName, out string mappedPath, out string mappedWarning);
 		bool mappedUsed = string.IsNullOrEmpty(storedSelection)
 			&& string.IsNullOrEmpty(externalCompatPacksOverride)
 			&& !string.IsNullOrEmpty(mappedPath);
@@ -821,6 +927,12 @@ public partial class FirstWindow : Control
 			storedSelection,
 			externalCompatPacksOverride,
 			mappedPath);
+		// 写回只针对「按游戏保存的、非空的选择」：条目存在但值为空时，实际生效的是外部环境变量或
+		// 映射默认值，把它们固化成按游戏选择会悄悄改变之后每次启动的选择来源。
+		merged = ResolveStaleFirstPartyPacks(
+			gameRoot,
+			hasStoredSelection && paths.Count > 0 && persistSelfHeal && !compatPackSelfHealPersistenceSuppressed,
+			merged);
 		if (hasStoredSelection && !string.IsNullOrEmpty(externalCompatPacksOverride))
 		{
 			GenericUtils.Warn(
@@ -1554,13 +1666,20 @@ public partial class FirstWindow : Control
 		if (statusLabel == null)
 			return;
 
+		// 先按这个游戏预检启用清单（过期第一方包就地改绑并写回），下面的提示才反映真实情况。
+		RefreshCompatPackSelectionHealth(entry);
+
 		string effectiveProfile = GetSelectedCoreProfileName(entry);
 		string routeDescription = GetEntryRouteDescription(entry);
 		string packWarning = "";
 		int selectedPackCount = GetSelectedCompatPackCount();
-		if (selectedPackCount > 0 && !string.Equals(effectiveProfile, CoreProfileV24Pure, System.StringComparison.Ordinal))
+		// 包只允许叠加 v24pure。已退役的 launcher 档案（snake/erafl/…）启动时会翻译成 v24pure + 包，
+		// 所以要比「引擎实际运行的档案」而不是 launcher 档案名——按档案名判会把正常组合说成将被拒载
+		//（2026-11-07 方言退役后遗留；与自愈提示并排出现时自相矛盾）。
+		string engineProfile = ResolveEngineProfileIdForBinding(effectiveProfile);
+		if (selectedPackCount > 0 && !string.Equals(engineProfile, CoreProfileV24Pure, System.StringComparison.Ordinal))
 		{
-			packWarning = $"；已选 {selectedPackCount} 项兼容包，但包要求 v24pure 基线——本次组合将被拒载并回退 {effectiveProfile}。";
+			packWarning = $"；已选 {selectedPackCount} 项兼容包，但包要求 v24pure 基线——本次组合将被拒载并回退 {engineProfile}。";
 		}
 		// 外部 GEMUERA_COMPAT_PACKS 与按游戏选择并存时的合并结果提示（E2-R3）：
 		// 注入链以按游戏选择为准，外部变量只作诊断输入——UI 在报告兼容包状态的既有

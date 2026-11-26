@@ -33,7 +33,12 @@ public partial class EmueraContent : Control
 
 	// Overlay and tool UI. These are Canvas/Control overlays above the console and
 	// should not own emuera state directly.
-	HBoxContainer menuBar;
+	BoxContainer menuBar;
+	// 系统菜单栏里的「旋转」入口（非 Android 置灰）。
+	TextureButton rotateMenuButton;
+	// 菜单面板容器与展开/收起按钮：竖屏时二者纵向同列（toggle 在最上）。
+	PanelContainer menuPanelContainer;
+	TextureButton menuToggleButton;
 	SafeAreaApplicator menuSafeArea;
 	Inputpad inputpad;
 	QuickButtons quickButtons;
@@ -352,6 +357,18 @@ public partial class EmueraContent : Control
 	// two-finger input is common on phones while tapping dense command buttons.
 	float contentScale = 1.0f;
 	bool contentScaleUserAdjusted;
+	// UI 缩放补偿（第二层画布缩放解耦）：实际渲染 Scale = contentScale × uiScaleCompensation，
+	// 其中 uiScaleCompensation = 1 / root.ContentScaleFactor。两因子相乘后物理大小与 UI 缩放
+	// 无关：contentScale 只表达用户意志（Scalepad/双指捏合/字体滑条/移动端 fit），
+	// root.ContentScaleFactor 只影响系统 UI（启动器/悬浮面板）。不持久化——每次从
+	// 窗口属性现算，会话内即时跟随；不写 contentScaleUserAdjusted，auto-fit 用户路径不变。
+	float uiScaleCompensation = 1.0f;
+
+	/// <summary>实际渲染缩放（画布单位）：布局/滚动/命中/坐标换算一律用它，禁用裸 contentScale。</summary>
+	float EffectiveContentScale => contentScale * uiScaleCompensation;
+
+	/// <summary>UI 缩放补偿因子（Scalepad Fit 等外部换算用）。实例不存在时视为无补偿。</summary>
+	public static float UiScaleCompensation => instance?.uiScaleCompensation ?? 1.0f;
 	Dictionary<int, Vector2> contentTouchPositions = new Dictionary<int, Vector2>();
 	bool contentTouchGestureActive = false;
 	bool contentPinchActive = false;
@@ -438,11 +455,14 @@ public partial class EmueraContent : Control
 	// click-to-advance.
 	Control rootContent;
 	CanvasLayer menuLayer;
-	HBoxContainer menuRoot;
-	HBoxContainer menuExpandedBar;
+	BoxContainer menuRoot;
+	// 用 BoxContainer 而非 HBoxContainer：竖屏时需要运行时切换 Vertical（横排 11 个
+	// 图标在窄屏会横向溢出）。HBoxContainer 的 vertical 不可改（引擎会报错）。
+	BoxContainer menuExpandedBar;
 	bool menuExpanded = false;
 	TextureButton inputMenuButton;
 	TextureButton quickMenuButton;
+	TextureButton quickRehomeMenuButton;
 	TextureButton autoSkipMenuButton;
 	TextureButton scaleMenuButton;
 	TextureButton mouseMenuButton;
@@ -666,6 +686,7 @@ public partial class EmueraContent : Control
 		ApplySafeRect(rootContent, safeRect);
 		ApplySafeRect(cbgContainer, safeRect);
 		menuSafeArea?.Apply();
+		UpdateMenuBarOrientation();
 		inputpad?.RefreshSafeAreaLayout();
 		scalepad?.RefreshSafeAreaLayout();
 		quickButtons?.RefreshSafeAreaLayout();
@@ -881,6 +902,9 @@ public partial class EmueraContent : Control
 	public override void _Ready()
 	{
 		instance = this;
+		// UI 缩放补偿按启动时窗口因子初始化（父节点 EmueraMain._Ready 已先应用持久化 UiScale：
+		// Godot 子节点 _Ready 晚于父节点，EmueraContent 又是运行时 AddChild，时序必然成立）。
+		SyncUiScaleCompensation();
 		RefreshViewportMetrics();
 		GetViewport().SizeChanged += OnViewportSizeChanged;
 
@@ -920,7 +944,7 @@ public partial class EmueraContent : Control
 
 		BuildTooltipLayer();
 
-		menuRoot = new HBoxContainer();
+		menuRoot = new BoxContainer();
 		menuRoot.AnchorLeft = 1;
 		menuRoot.AnchorRight = 1;
 		menuRoot.AnchorTop = 0;
@@ -935,6 +959,7 @@ public partial class EmueraContent : Control
 		// Panel holding the 9 action icons (hidden until toggled).
 		// Placed BEFORE the toggle in the HBox so it sits on the toggle's left.
 		var menuPanel = new PanelContainer();
+		menuPanelContainer = menuPanel;
 		menuPanel.MouseFilter = MouseFilterEnum.Stop;
 		var menuPanelStyle = GEmueraTheme.SurfaceStyle(
 			GEmueraTheme.SurfaceRaised,
@@ -948,7 +973,7 @@ public partial class EmueraContent : Control
 		menuPanel.Visible = false;
 		menuRoot.AddChild(menuPanel);
 
-		menuExpandedBar = new HBoxContainer();
+		menuExpandedBar = new BoxContainer();
 		menuExpandedBar.AddThemeConstantOverride("separation", 6);
 		menuPanel.AddChild(menuExpandedBar);
 
@@ -958,17 +983,30 @@ public partial class EmueraContent : Control
 		AddIconButton("res://assets/icons/options.svg", OnOptionsPressed);
 		inputMenuButton = AddIconButton("res://assets/icons/io_input.svg", OnInputTogglePressed);
 		quickMenuButton = AddIconButton("res://assets/icons/quick.svg", OnQuickTogglePressed);
+		// 「面板回位」：悬浮浮层被拖远/跨方向坐标陈旧而难以看到时，从系统菜单
+		// 一键回当前方向目标角（右下；翻转开=左下）。入口必须放在面板之外——
+		// 面板本身不可见时，面板上的任何按钮都够不着（2026-11-22 用户裁定）。
+		quickRehomeMenuButton = AddIconButton("res://assets/icons/rehome.svg", OnQuickRehomePressed);
+		quickRehomeMenuButton.Disabled = !IsQuickFloatingOverlayActive;
 		autoSkipMenuButton = AddIconButton("res://assets/icons/auto_skip.svg", OnAutoSkipTogglePressed);
 		AddIconButton("res://assets/icons/menu_save_log.svg", OnSaveLogPressed);
 		AddIconButton("res://assets/icons/Title.svg", OnGotoTitlePressed);
 		AddIconButton("res://assets/icons/exit.svg", OnExitPressed);
 		scaleMenuButton = AddIconButton("res://assets/icons/scale.svg", OnScaleTogglePressed);
 		mouseMenuButton = AddIconButton("res://assets/icons/mouse.svg", OnVirtualMouseTogglePressed);
+		// 手动旋转：入口与其它系统功能并列，免去进设置页找。
+		// 全平台显示，非 Android 置灰（便于确认功能存在）。
+		rotateMenuButton = AddIconButton("res://assets/icons/rotate.svg", OnRotateScreenPressed);
+		rotateMenuButton.Disabled = OS.GetName() != "Android";
 
 		// Toggle at the right edge (last child = rightmost in HBox).
 		var menuToggleBtn = new TextureButton();
+		menuToggleButton = menuToggleBtn;
 		menuToggleBtn.CustomMinimumSize = new Vector2(SystemButtonTouchSize, SystemButtonTouchSize);
 		menuToggleBtn.StretchMode = TextureButton.StretchModeEnum.KeepAspectCentered;
+		// 顶部对齐（不拉伸）：竖屏时面板很高（12 个图标竖排），HBox 会把 toggle 拉伸到
+		// 面板高度、图形垂直居中，导致展开/收起时按钮位置上下跳动（用户反馈「乱跑」）。
+		menuToggleBtn.SizeFlagsVertical = SizeFlags.ShrinkBegin;
 		menuToggleBtn.MouseFilter = MouseFilterEnum.Stop;
 		StyleSystemIconButton(menuToggleBtn);
 		if (ResourceLoader.Exists("res://assets/icons/menu.svg"))
@@ -1678,6 +1716,9 @@ public partial class EmueraContent : Control
 	{
 		var btn = new TextureButton();
 		btn.CustomMinimumSize = new Vector2(SystemButtonTouchSize, SystemButtonTouchSize);
+		// 不随容器拉伸：竖排时父容器很高，Fill 会把图标拉长。
+		btn.SizeFlagsHorizontal = SizeFlags.ShrinkCenter;
+		btn.SizeFlagsVertical = SizeFlags.ShrinkCenter;
 		btn.StretchMode = TextureButton.StretchModeEnum.KeepAspectCentered;
 		btn.MouseFilter = MouseFilterEnum.Stop;
 		StyleSystemIconButton(btn);
@@ -3863,9 +3904,10 @@ public partial class EmueraContent : Control
 	}
 
 	// Protect divisions and scroll math from zero scale.
+	// 返回实际渲染缩放（含 UI 缩放补偿）——所有布局/滚动/命中数学的唯一口径。
 	float GetSafeContentScale()
 	{
-		return Mathf.Max(contentScale, 0.001f);
+		return Mathf.Max(EffectiveContentScale, 0.001f);
 	}
 
 	// Unscaled console layout must never be narrower than emuera's drawable area.
@@ -5682,7 +5724,7 @@ public partial class EmueraContent : Control
 			return contentPosition;
 		var rect = scrollContainer.GetGlobalRect();
 		var scrollOffset = new Vector2(NormalizeContentHorizontalScroll(scrollContainer.ScrollHorizontal), scrollContainer.ScrollVertical);
-		var scaled = contentPosition * (contentScale > 0.001f ? contentScale : 1.0f);
+		var scaled = contentPosition * GetSafeContentScale();
 		return scaled - scrollOffset + rect.Position;
 	}
 
@@ -5695,8 +5737,7 @@ public partial class EmueraContent : Control
 		var rect = scrollContainer.GetGlobalRect();
 		var contentPosition = globalPosition - rect.Position;
 		contentPosition += new Vector2(NormalizeContentHorizontalScroll(scrollContainer.ScrollHorizontal), scrollContainer.ScrollVertical);
-		if (contentScale > 0.001f)
-			contentPosition /= contentScale;
+		contentPosition /= GetSafeContentScale();
 		return contentPosition;
 	}
 
@@ -6025,6 +6066,15 @@ public partial class EmueraContent : Control
 	public void RefreshQuickButtonSettings()
 	{
 		quickButtons?.RefreshSizing();
+	}
+
+	// 「Quick面板翻转」开关切换后的即时响应：内嵌锚点模式由 RefreshSizing 的重排
+	// 覆盖；悬浮窗（桌面原生窗）与移动端浮层不经过锚点，需各自水平镜像到对侧，
+	// 否则开关拨了看不到任何变化（2026-11-22 用户反馈「翻转不灵敏」）。
+	public void NotifyQuickFlipChanged()
+	{
+		quickButtons?.NotifyFlipSettingChanged();
+		quickFloatingWindow?.OnFlipSettingChanged();
 	}
 
 	// 悬浮仅表示“面板可脱离右下角自由摆放”，不再等于“需要原生 OS 窗口”：
@@ -6489,8 +6539,20 @@ public partial class EmueraContent : Control
 	}
 
 	// Reflect overlay/auto-skip state in the menu icon tint.
+	// 悬浮浮层模式是否生效（决定「面板回位」菜单项可用性）。
+	bool IsQuickFloatingOverlayActive =>
+		quickButtons != null && QuickButtons.FloatingEnabled && quickButtons.FloatingOverlayMode;
+
+	// 「面板回位」：不依赖面板本身可达（面板不可见时面板上的按钮同样够不着）。
+	void OnQuickRehomePressed()
+	{
+		quickButtons?.RehomeOverlayPanel();
+	}
+
 	void UpdateSystemButtonVisuals()
 	{
+		if (quickRehomeMenuButton != null)
+			quickRehomeMenuButton.Disabled = !IsQuickFloatingOverlayActive;
 		SetSystemButtonActive(inputMenuButton, inputpad != null && inputpad.IsShow);
 		SetSystemButtonActive(quickMenuButton, quickButtons != null && quickButtons.IsShow);
 		SetSystemButtonActive(autoSkipMenuButton, autoClickSkipEnabled);
@@ -6513,6 +6575,56 @@ public partial class EmueraContent : Control
 		menuExpanded = !menuExpanded;
 		if (menuExpandedBar != null && menuExpandedBar.GetParent() is Control panel)
 			panel.Visible = menuExpanded;
+	}
+
+	// 系统菜单栏朝向：竖屏改竖排。
+	// 为什么：横排 11 个图标在竖屏窄宽度下会横向溢出，右侧按钮被裁切不可用；
+	// 竖排后放进右上角面板向下展开，全部按钮可见。menuRoot 是顶部锚定的 HBox，
+	// 面板变高会自然下移，位置无需另调。
+	void UpdateMenuBarOrientation()
+	{
+		if (menuExpandedBar == null || menuRoot == null || menuPanelContainer == null)
+			return;
+		bool portrait = Size.X > 0 && Size.X < Size.Y;
+		if (portrait)
+		{
+			// 竖屏：toggle 与图标纵向同列，toggle 固定在最上；面板整体收缩、靠右上。
+			// 关键是同时把根容器与面板的尺寸标志设为「收缩」，否则竖排时面板会被
+			// 拉伸到容器宽度/高度之外（实测曾出现 1362px 高溢出）。
+			menuRoot.Vertical = true;
+			menuRoot.GrowHorizontal = GrowDirection.Begin;
+			menuRoot.GrowVertical = GrowDirection.End;
+			menuExpandedBar.Vertical = true;
+			menuPanelContainer.SizeFlagsHorizontal = SizeFlags.ShrinkEnd;
+			menuPanelContainer.SizeFlagsVertical = SizeFlags.ShrinkBegin;
+			EnsureMenuToggleFirst(true);
+			return;
+		}
+		menuRoot.Vertical = false;
+		menuRoot.GrowHorizontal = GrowDirection.Begin;
+		// GrowVertical 必须是 End（从顶部锚点向下伸展）。此前误写 Begin（向上伸展），
+		// 竖屏转横屏后整条菜单栏被顶出屏幕上方（实测 root.pos.y=-68，用户反馈「看不见」）。
+		menuRoot.GrowVertical = GrowDirection.End;
+		menuExpandedBar.Vertical = false;
+		menuPanelContainer.SizeFlagsHorizontal = SizeFlags.ShrinkBegin;
+		menuPanelContainer.SizeFlagsVertical = SizeFlags.ShrinkBegin;
+		EnsureMenuToggleFirst(false);
+	}
+
+	// 竖屏把 toggle 放到子节点首位（最上）；横屏放到末位（最右）。
+	void EnsureMenuToggleFirst(bool portrait)
+	{
+		if (menuToggleButton == null || !GodotObject.IsInstanceValid(menuToggleButton))
+			return;
+		int target = portrait ? 0 : menuRoot.GetChildCount() - 1;
+		if (menuToggleButton.GetIndex() != target)
+			menuRoot.MoveChild(menuToggleButton, target);
+	}
+
+	// 系统菜单里的「旋转」：与启动器/设置窗同一个入口，弹「仅本次/永久」选择框。
+	void OnRotateScreenPressed()
+	{
+		RotateChoiceDialog.Show(this);
 	}
 
 	// React to orientation/resolution changes. Android exports can resize when
@@ -6564,7 +6676,9 @@ public partial class EmueraContent : Control
 	// size is handled separately by UpdateScaleBounds.
 	void ApplyContentScaleTransform()
 	{
-		var scaleVector = new Vector2(contentScale, contentScale);
+		// 实际渲染用有效缩放（含 UI 补偿）：UI 缩放只改系统 UI，不动游戏内容物理大小。
+		float effectiveScale = GetSafeContentScale();
+		var scaleVector = new Vector2(effectiveScale, effectiveScale);
 		if (consoleRenderSurface != null)
 			consoleRenderSurface.Scale = scaleVector;
 		if (lineContainer != null)
@@ -6579,24 +6693,11 @@ public partial class EmueraContent : Control
 	public void RefreshFontSize()
 	{
 		int size = FontSize;
-// Update all existing lines
-		if (lineContainer != null)
-		{
-			foreach (var node in lineContainer.GetChildren())
-			{
-				if (node is Control lineCtrl)
-				{
-					foreach (var child in lineCtrl.GetChildren())
-					{
-						if (child is Control ctrl)
-						{
-							ctrl.AddThemeFontSizeOverride("font_size", size);
-						}
-					}
-				}
-			}
-		}
-		consoleRenderSurface?.MarkDirty();
+		// 既有控制台行一律不重刷（2026-11-23 契约修正）：排版级缩放只影响之后生成的行，
+		// 已显示行的几何/字号在输出时已固化。此前这里对 lineContainer 子控件重设 font_size
+		// 并 MarkDirty 重绘画布，导致字号变更后旧文本按新字号在「新行位」重绘一份、
+		// 而 div 内图片/旧 Control 内容停在原位——表现为内容重复、图片丢失、间距错乱
+		//（实测：3 行界面在 36 号下出现两套错位内容）。
 		// Update auxiliary UI
 		inputpad?.ApplyFont(mainFont, size);
 		quickButtons?.ApplyFont(mainFont, size);
@@ -6629,6 +6730,7 @@ public partial class EmueraContent : Control
 	{
 		TrimUnboundedCaches();
 		ProcessPendingMobileViewportPolicy();
+		ProcessPendingFontSize();
 		AnimatedWebpSpriteFrames.ProcessPendingFrameUploads(OS.HasFeature("mobile"));
 		ProcessPendingContentPinchZoom();
 		ProcessContentInertia((float)delta);
@@ -7393,7 +7495,7 @@ public partial class EmueraContent : Control
 		var localFocus = center - rect.Position;
 		localFocus.X = Mathf.Clamp(localFocus.X, 0.0f, rect.Size.X);
 		localFocus.Y = Mathf.Clamp(localFocus.Y, 0.0f, rect.Size.Y);
-		float scale = Mathf.Max(contentScale, 0.001f);
+		float scale = GetSafeContentScale();
 		contentPinchFocusContent = (GetCurrentContentScrollVector() + localFocus) / scale;
 		contentPinchActive = true;
 		// 用户主动双指缩放后，旋转屏幕不再用 fit scale 覆盖用户选择。
@@ -7496,7 +7598,7 @@ public partial class EmueraContent : Control
 		contentPinchStartSpread = Mathf.Max(spread, ContentPinchMinSpread);
 		contentPinchStartScale = contentScale;
 		contentPinchFilteredSpread = contentPinchStartSpread;
-		float scale = Mathf.Max(contentScale, 0.001f);
+		float scale = GetSafeContentScale();
 		contentPinchFocusContent = (GetCurrentContentScrollVector() + scaleFocusLocalPoint) / scale;
 	}
 
@@ -7535,7 +7637,7 @@ public partial class EmueraContent : Control
 		localFocus.X = Mathf.Clamp(localFocus.X, 0.0f, rect.Size.X);
 		localFocus.Y = Mathf.Clamp(localFocus.Y, 0.0f, rect.Size.Y);
 
-		float previousScale = Mathf.Max(contentScale, 0.001f);
+		float previousScale = GetSafeContentScale();
 		var previousScroll = desiredContentScrollValid
 			? new Vector2(desiredContentScrollHorizontal, desiredContentScrollVertical)
 			: new Vector2(NormalizeContentHorizontalScroll(scrollContainer.ScrollHorizontal), scrollContainer.ScrollVertical);
@@ -7562,7 +7664,7 @@ public partial class EmueraContent : Control
 		if (scrollContainer == null)
 			return;
 
-		var nextScroll = contentFocus * contentScale - localFocus;
+		var nextScroll = contentFocus * GetSafeContentScale() - localFocus;
 		int targetHorizontal = NormalizeContentHorizontalScroll(Mathf.Clamp(Mathf.RoundToInt(nextScroll.X), 0, GetMaxContentHorizontalScroll()));
 		int targetVertical = Mathf.Clamp(Mathf.RoundToInt(nextScroll.Y), 0, GetMaxContentVerticalScroll());
 		scrollContainer.ScrollHorizontal = targetHorizontal;
@@ -7628,8 +7730,7 @@ public partial class EmueraContent : Control
 		var rect = scrollContainer.GetGlobalRect();
 		var contentPosition = globalPosition - rect.Position;
 		contentPosition += new Vector2(NormalizeContentHorizontalScroll(scrollContainer.ScrollHorizontal), scrollContainer.ScrollVertical);
-		if (contentScale > 0.001f)
-			contentPosition /= contentScale;
+		contentPosition /= GetSafeContentScale();
 		return contentPosition;
 	}
 
@@ -7665,8 +7766,7 @@ public partial class EmueraContent : Control
 			return globalPosition;
 		var rect = scrollContainer.GetGlobalRect();
 		var contentPosition = globalPosition - rect.Position;
-		if (contentScale > 0.001f)
-			contentPosition /= contentScale;
+		contentPosition /= GetSafeContentScale();
 		return contentPosition;
 	}
 

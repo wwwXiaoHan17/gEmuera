@@ -32,7 +32,10 @@ namespace MinorShift._Library
 			for (int i = 0; i < str.Length; i++)
 			{
 				//JIScnt += lang.GetByteCount(str[UTFcnt].ToString());
-				JIScnt += uEmuera.Utils.GetByteCount(str[UTFcnt].ToString());
+				// 原生库逐单元宽度快速路径（省去每字符 ToString 分配 + UnicodeCategory/哈希表查询），库缺失回退托管
+				JIScnt += NativeTextWidth.TryGetWidthUnit(str[UTFcnt], out int uftWidth)
+					? uftWidth
+					: uEmuera.Utils.GetByteCount(str[UTFcnt].ToString());
 				UTFcnt++;
 				if (JIScnt >= LangIndex)
 					break;
@@ -62,7 +65,10 @@ namespace MinorShift._Library
 				for (int i = 0; i < str.Length; i++)
 				{
 					//JIScnt += lang.GetByteCount(str[UTFcnt].ToString());
-					JIScnt += uEmuera.Utils.GetByteCount(str[UTFcnt].ToString());
+					// 原生库逐单元宽度快速路径（同 GetUFTIndex），库缺失回退托管
+					JIScnt += NativeTextWidth.TryGetWidthUnit(str[UTFcnt], out int startWidth)
+						? startWidth
+						: uEmuera.Utils.GetByteCount(str[UTFcnt].ToString());
 					UTFcnt++;
 					if (JIScnt >= startindex)
 						break;
@@ -76,7 +82,10 @@ namespace MinorShift._Library
 			{
 				ret.Append(str[UTFcnt]);
 				//JIScnt += lang.GetByteCount(str[UTFcnt].ToString());
-				JIScnt += uEmuera.Utils.GetByteCount(str[UTFcnt].ToString());
+				// 原生库逐单元宽度快速路径（同 GetUFTIndex），库缺失回退托管
+				JIScnt += NativeTextWidth.TryGetWidthUnit(str[UTFcnt], out int subWidth)
+					? subWidth
+					: uEmuera.Utils.GetByteCount(str[UTFcnt].ToString());
 				UTFcnt++;
 				if (JIScnt >= length)
 					break;

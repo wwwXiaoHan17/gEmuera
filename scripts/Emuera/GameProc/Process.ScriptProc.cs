@@ -58,7 +58,9 @@ namespace MinorShift.Emuera.GameProc
 				//if (line == null)
 				//	throw new ExeEE("Emuera.exeは次に実行する行を見失いました");
 				if (line.IsError)
+				{
 					throw new CodeEE(line.ErrMes);
+				}
 				else if (func != null)
 				{//1753 InstructionLineを先に持ってきてみる。わずかに速くなった気がしないでもない
 					if (!Program.DebugMode && func.Function.IsDebug())
@@ -489,7 +491,8 @@ namespace MinorShift.Emuera.GameProc
 						Color c = Color.FromName(colorName);
 						if (c.A == 0)
 						{
-							if (str.Equals("transparent", StringComparison.OrdinalIgnoreCase))
+							// colorName 判空：旧代码引用了未赋值的 doNormalFunction 局部 str，空/无效色名必 NRE
+							if (string.Equals(colorName, "transparent", StringComparison.OrdinalIgnoreCase))
 								throw new CodeEE("無色透明(Transparent)は色として指定できません");
 							throw new CodeEE("指定された色名\"" + colorName + "\"は無効な色名です");
 						}
@@ -536,7 +539,8 @@ namespace MinorShift.Emuera.GameProc
 						Color c = Color.FromName(colorName);
 						if (c.A == 0)
 						{
-							if (str.Equals("transparent", StringComparison.OrdinalIgnoreCase))
+							// colorName 判空：旧代码引用了未赋值的 doNormalFunction 局部 str，空/无效色名必 NRE
+							if (string.Equals(colorName, "transparent", StringComparison.OrdinalIgnoreCase))
 								throw new CodeEE("無色透明(Transparent)は色として指定できません");
 							throw new CodeEE("指定された色名\"" + colorName + "\"は無効な色名です");
 						}

@@ -129,9 +129,39 @@ public partial class QuickFloatingWindow : Window
 		var root = GetTree()?.Root;
 		if (root == null || !GodotObject.IsInstanceValid(root))
 			return new Vector2I(ScreenMargin, ScreenMargin);
+		// 「Quick面板翻转」：悬浮窗默认位同样换边（右下 ↔ 左下）。窗口内容区内
+		// 面板恒贴左贴顶，翻转的可见效果必须落在窗口自身位置上。
+		bool flip = QuickButtons.FlipEnabled;
+		int x = flip
+			? root.Position.X + ScreenMargin
+			: Mathf.Max(root.Position.X, root.Position.X + root.Size.X - Size.X - ScreenMargin);
 		return new Vector2I(
-			Mathf.Max(root.Position.X, root.Position.X + root.Size.X - Size.X - ScreenMargin),
+			x,
 			Mathf.Max(root.Position.Y, root.Position.Y + root.Size.Y - Size.Y - ScreenMargin));
+	}
+
+	/// <summary>
+	/// 「Quick面板翻转」开关切换：悬浮窗水平镜像到主窗口对侧并持久化。
+	/// 内容区面板恒贴左贴顶且窗口尺寸紧贴面板，翻转的可见效果只能落在窗口位置。
+	/// 尚未显示过时镜像已保存坐标（下次 Show 生效）。
+	/// </summary>
+	public void OnFlipSettingChanged()
+	{
+		var root = GetTree()?.Root;
+		if (root == null || !GodotObject.IsInstanceValid(root))
+			return;
+		if (positionInitialized)
+		{
+			int mirrored = root.Position.X + root.Size.X - (Position.X - root.Position.X) - Size.X;
+			Position = new Vector2I(mirrored, Position.Y);
+			ClampToRoot();
+			SavePosition();
+		}
+		else if (savedX >= 0)
+		{
+			savedX = Mathf.Max(root.Position.X,
+				root.Position.X + root.Size.X - (savedX - root.Position.X) - Size.X);
+		}
 	}
 
 	void OnPadHidden()

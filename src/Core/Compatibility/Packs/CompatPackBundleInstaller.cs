@@ -16,8 +16,9 @@ namespace GEmuera.Core.Compatibility.Packs;
 public sealed record CompatPackBundlePayload(string PackId, byte[] DllBytes);
 
 /// <summary>
-/// 第一方包释放结果（幂等）：Installed=本次写入；Skipped=目标已是同一字节；
-/// KeptUser=目标存在且不是内置上次写入的版本（用户手装/改过，不覆盖）；
+/// 第一方包释放结果（幂等）：Installed=本次写入（目标缺失，或目标仍是上次内置写入的字节→接受内置升级）；
+/// Skipped=目标已是同一字节；KeptUser=目标存在且不是内置上次写入的版本（用户手装/改过，不覆盖）；
+/// ReplacedStalePackIds=目标本是用户手装、但被宿主判定为「过期第一方包」而由内置载荷替换的包；
 /// Failed=逐包失败聚合（不阻断其它包，也不阻断启动）。
 /// </summary>
 public sealed record CompatPackBundleInstallResult(
@@ -26,9 +27,13 @@ public sealed record CompatPackBundleInstallResult(
     int KeptUser,
     int Failed,
     IReadOnlyList<string> InstalledPackIds,
-    IReadOnlyList<string> Errors)
+    IReadOnlyList<string> Errors,
+    IReadOnlyList<string> ReplacedStalePackIds)
 {
     public bool Succeeded => Failed == 0;
+
+    /// <summary>被判定为过期第一方包并由内置载荷替换的用户手装包数量（见 <see cref="CompatPackStalePackPolicy"/>）。</summary>
+    public int ReplacedStale => ReplacedStalePackIds.Count;
 }
 
 /// <summary>
@@ -38,6 +43,12 @@ public sealed record CompatPackBundleInstallResult(
 /// 目标缺失 → 写；目标 SHA 与记录值不同 → 视为用户手装/改过，不覆盖并计入 KeptUser；
 /// 目标 SHA 与记录值相同 → 允许覆盖（内置升级）；目标与源字节相同 → 跳过。
 /// 写入使用"临时文件 + rename"保证原子性；单包失败聚合到 Errors，绝不抛给启动链。
+/// </para>
+/// <para>
+/// KeptUser 的唯一例外（2026-11-24）：宿主注入 <c>replaceUserPlaced</c> 判定时，被判定为
+/// 「过期第一方包」（同 packId、对当前引擎必然被拒，而内置载荷可用，见
+/// <see cref="CompatPackStalePackPolicy"/>）的用户文件会被替换——旧文件先备份为包目录内的隐藏文件，
+/// 再原子覆盖并记入状态记录。不注入判定时行为与此前完全一致。
 /// </para>
 /// </summary>
 public static partial class CompatPackBundleInstaller
@@ -58,13 +69,14 @@ public static partial class CompatPackBundleInstaller
     public static CompatPackBundleInstallResult InstallFromDirectory(
         string sourceRoot,
         string targetRoot,
-        string? statePath = null)
+        string? statePath = null,
+        Func<CompatPackBundlePayload, string, bool>? replaceUserPlaced = null)
     {
         var payloads = new List<CompatPackBundlePayload>();
         var errors = new List<string>();
         if (string.IsNullOrWhiteSpace(sourceRoot) || !Directory.Exists(sourceRoot))
             return new CompatPackBundleInstallResult(0, 0, 0, 1, Array.Empty<string>(),
-                new[] { "内置包 staging 根不存在：" + (sourceRoot ?? "<null>") });
+                new[] { "内置包 staging 根不存在：" + (sourceRoot ?? "<null>") }, Array.Empty<string>());
 
         foreach (string directory in Directory.EnumerateDirectories(sourceRoot).Order(StringComparer.Ordinal))
         {
@@ -94,31 +106,37 @@ public static partial class CompatPackBundleInstaller
         {
             errors.Add("staging 未发现任何可释放的第一方包：" + sourceRoot);
             return new CompatPackBundleInstallResult(0, 0, 0, Math.Max(1, errors.Count),
-                Array.Empty<string>(), errors);
+                Array.Empty<string>(), errors, Array.Empty<string>());
         }
 
-        CompatPackBundleInstallResult result = InstallFromPayloads(payloads, targetRoot, statePath);
+        CompatPackBundleInstallResult result = InstallFromPayloads(payloads, targetRoot, statePath, replaceUserPlaced);
         return new CompatPackBundleInstallResult(
             result.Installed, result.Skipped, result.KeptUser, result.Failed + errors.Count,
-            result.InstalledPackIds, errors.Concat(result.Errors).ToArray());
+            result.InstalledPackIds, errors.Concat(result.Errors).ToArray(), result.ReplacedStalePackIds);
     }
 
-    /// <summary>按内存载荷释放（宿主从 res:// / APK PCK 读入后调用；单测直接覆盖此入口）。</summary>
+    /// <summary>
+    /// 按内存载荷释放（宿主从 res:// / APK PCK 读入后调用；单测直接覆盖此入口）。
+    /// <paramref name="replaceUserPlaced"/>：可选的用户手装包替换判定，只对「记录缺失/与记录不符」
+    /// 的目标调用并给出确切目标路径；返回 true 才替换。缺省 null = 一律保留用户版本。
+    /// </summary>
     public static CompatPackBundleInstallResult InstallFromPayloads(
         IReadOnlyList<CompatPackBundlePayload> payloads,
         string targetRoot,
-        string? statePath = null)
+        string? statePath = null,
+        Func<CompatPackBundlePayload, string, bool>? replaceUserPlaced = null)
     {
         var errors = new List<string>();
         int installed = 0;
         int skipped = 0;
         int keptUser = 0;
         var installedPackIds = new List<string>();
+        var replacedStalePackIds = new List<string>();
         if (payloads is null || payloads.Count == 0)
-            return new CompatPackBundleInstallResult(0, 0, 0, 0, Array.Empty<string>(), Array.Empty<string>());
+            return new CompatPackBundleInstallResult(0, 0, 0, 0, Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>());
         if (string.IsNullOrWhiteSpace(targetRoot))
             return new CompatPackBundleInstallResult(0, 0, 0, payloads.Count, Array.Empty<string>(),
-                new[] { "安装根为空。" });
+                new[] { "安装根为空。" }, Array.Empty<string>());
 
         string effectiveStatePath = string.IsNullOrWhiteSpace(statePath)
             ? Path.Combine(targetRoot, StateFileName)
@@ -193,7 +211,32 @@ public static partial class CompatPackBundleInstaller
                     continue;
                 }
 
-                // 记录缺失（旧版本升级路径）或用户手装/改过：保留用户版本。
+                // 记录缺失（旧版本升级路径）或用户手装/改过：默认保留用户版本。
+                // 宿主注入判定时的唯一例外——过期第一方包：先把旧文件备份到包目录内的隐藏文件
+                // （备份失败即中止，绝不先丢用户文件），再原子覆盖并记入状态记录，
+                // 此后该包回到「内置升级」语义。
+                if (replaceUserPlaced is not null)
+                {
+                    try
+                    {
+                        if (replaceUserPlaced(payload, targetPath))
+                        {
+                            string backupPath = Path.Combine(
+                                targetDirectory, "." + payload.PackId + ".dll" + CompatPackStalePackPolicy.StaleBackupSuffix);
+                            File.Copy(targetPath, backupPath, overwrite: true);
+                            WriteAtomically(targetPath, payload.DllBytes);
+                            installedHashes[payload.PackId] = sourceHash;
+                            stateChanged = true;
+                            replacedStalePackIds.Add(payload.PackId);
+                            continue;
+                        }
+                    }
+                    catch (Exception exception)
+                    {
+                        errors.Add("替换用户手装的过期包 " + payload.PackId + " 失败："
+                            + exception.GetType().Name + ": " + exception.Message);
+                    }
+                }
                 keptUser++;
             }
             catch (Exception exception)
@@ -208,7 +251,7 @@ public static partial class CompatPackBundleInstaller
         }
 
         return new CompatPackBundleInstallResult(
-            installed, skipped, keptUser, errors.Count, installedPackIds, errors);
+            installed, skipped, keptUser, errors.Count, installedPackIds, errors, replacedStalePackIds);
     }
 
     public static bool IsValidPackId(string? packId)

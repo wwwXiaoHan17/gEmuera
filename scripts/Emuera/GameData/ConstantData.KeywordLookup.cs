@@ -162,6 +162,35 @@ namespace MinorShift.Emuera.GameData
 			});
 		}
 
+		/// <summary>
+		/// 注册常数表（declare.const-table.v1，Emuera-SKIA Skiav18.0）解析出的各维名称，与 ERD 用户定义名共用
+		/// erdNameToIntDics（一维键为变量名，多维为 变量名@N）。常数表的名称集合就是最终结果：
+		/// 先清空再重建——名称数据路径可能已为同一个键登记了惰性加载，不清会在首次查找时把旧名字补回来，
+		/// 留下「同一索引两个名字」。常数表的名称查表因此不依赖 Config.UseERD。
+		/// </summary>
+		public void RegisterConstArrayNames(string varname, int dimension, Dictionary<string, int>[] namesByDim)
+		{
+			if (string.IsNullOrEmpty(varname))
+				return;
+			for (int d = 0; d < dimension; d++)
+			{
+				string key = dimension == 1 ? varname : varname + "@" + (d + 1);
+				if (namesByDim == null || namesByDim[d] == null)
+					continue;
+				lazyErdNameData.Remove(key);
+				Dictionary<string, int> dict;
+				if (!erdNameToIntDics.TryGetValue(key, out dict))
+				{
+					dict = new Dictionary<string, int>();
+					erdNameToIntDics.Add(key, dict);
+				}
+				else
+					dict.Clear();
+				foreach (KeyValuePair<string, int> pair in namesByDim[d])
+					dict[pair.Key] = pair.Value;
+			}
+		}
+
 		private bool EnsureUserDefinedNameDataLoaded(string varname)
 		{
 			if (string.IsNullOrEmpty(varname))
