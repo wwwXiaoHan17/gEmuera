@@ -46,11 +46,15 @@ public class CompatPackStaleSelectionRebinderTests
         public readonly HashSet<string> BundledPackIds = new(StringComparer.Ordinal);
 
         public CompatPackSelectionResolution Resolve(params string[] selected) =>
+            ResolveWith(CompatPackLauncherConfig.GameKeyComparer, selected);
+
+        /// <summary>显式指定路径比较器：涉及「仅大小写不同的写法」的用例不能依赖运行平台的大小写语义。</summary>
+        public CompatPackSelectionResolution ResolveWith(StringComparer pathComparer, params string[] selected) =>
             CompatPackStaleSelectionRebinder.Resolve(
                 selected,
                 path => Files.TryGetValue(path, out var verdict) ? verdict : Unreadable(),
                 packId => BundledPackIds.Contains(packId) ? Bundled : null,
-                CompatPackLauncherConfig.GameKeyComparer);
+                pathComparer);
     }
 
     [Fact]
@@ -188,18 +192,50 @@ public class CompatPackStaleSelectionRebinderTests
         Assert.Single(result.Warnings);
     }
 
-    [Fact]
-    public void BundledCopyAlreadySelected_DoesNotDuplicate()
+    [Theory]
+    [InlineData(true)]  // 内置包排在过期副本前面
+    [InlineData(false)] // 过期副本排在内置包前面：改绑先加入内置包，轮到内置包自己时不得再加一次
+    public void BundledCopyAlsoSelectedInEitherOrder_ResultContainsItOnce(bool bundledFirst)
     {
         var world = new World();
         world.Files[Stale] = StalePack("pack.gemuera.snake");
         world.Files[Bundled] = Fresh("pack.gemuera.snake", Engine.BaselineSurfaceHash);
         world.BundledPackIds.Add("pack.gemuera.snake");
 
-        var result = world.Resolve(Bundled, Stale);
+        var result = bundledFirst ? world.Resolve(Bundled, Stale) : world.Resolve(Stale, Bundled);
 
+        // 重复路径会让引擎把整组包按「packId 重复」拒载，结果里每个包恰好一次。
         Assert.Equal(new[] { Bundled }, result.Paths);
         Assert.Single(result.Rebinds);
+    }
+
+    [Fact]
+    public void StaleCopyRebound_KeepsSelectionOrderAroundOtherPacks()
+    {
+        var world = new World();
+        world.Files[Community] = Fresh("community.foo", Engine.BaselineSurfaceHash);
+        world.Files[Stale] = StalePack("pack.gemuera.snake");
+        world.Files[Bundled] = Fresh("pack.gemuera.snake", Engine.BaselineSurfaceHash);
+        world.BundledPackIds.Add("pack.gemuera.snake");
+
+        // 内置包不在输入清单里：改绑在原位置加入它（2026-11-24 的原行为，防止去重改动把它弄丢）。
+        var result = world.Resolve(Community, Stale);
+
+        Assert.Equal(new[] { Community, Bundled }, result.Paths);
+    }
+
+    [Fact]
+    public void SamePathTwiceInDifferentSpelling_IsDeduplicated()
+    {
+        var world = new World();
+        world.Files[Bundled] = Fresh("pack.gemuera.snake", Engine.BaselineSurfaceHash);
+        world.BundledPackIds.Add("pack.gemuera.snake");
+
+        var result = world.ResolveWith(
+            StringComparer.OrdinalIgnoreCase, Bundled, @"d:\GEMUERA\compat_packs\pack.gemuera.snake\pack.gemuera.snake.dll");
+
+        Assert.Equal(new[] { Bundled }, result.Paths);
+        Assert.False(result.Changed);
     }
 
     [Fact]
@@ -209,7 +245,8 @@ public class CompatPackStaleSelectionRebinderTests
         world.Files[Bundled] = StalePack("pack.gemuera.snake");
         world.BundledPackIds.Add("pack.gemuera.snake");
 
-        var result = world.Resolve(@"d:\GEMUERA\compat_packs\pack.gemuera.snake\pack.gemuera.snake.dll");
+        var result = world.ResolveWith(
+            StringComparer.OrdinalIgnoreCase, @"d:\GEMUERA\compat_packs\pack.gemuera.snake\pack.gemuera.snake.dll");
 
         Assert.Empty(result.Rebinds);
         Assert.Single(result.Warnings);

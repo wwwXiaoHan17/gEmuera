@@ -179,4 +179,62 @@ public class CompatPackLauncherConfigTests
         Assert.False(CompatPackLauncherConfig.TryGetSelectionForGame(selections, null, out _));
         Assert.False(CompatPackLauncherConfig.TryGetSelectionForGame(null!, "D:/Games/EraFL", out _));
     }
+
+    // —— 写回某游戏的选择时必须一并清除的「抢先键」——
+    // 读取取的是文件里第一个匹配的键；写路径若只写归一化键，遇到写法不同的旧键（手改或旧格式留下的
+    // 大小写差异）就会新增一条而不是替换，旧条目继续抢先被读到（2026-11-26 核对自愈写回时实测到）。
+
+    [Fact]
+    public void FindShadowingGameKeys_CaseInsensitiveFilesystem_ReturnsOnlyCaseVariantsOfTheSameGame()
+    {
+        var existing = new[]
+        {
+            @"d:/games/erafl",       // 归一化键本身：保留
+            @"D:/Games/EraFL",       // 同一个游戏、大小写不同：读取时会被当成同一个游戏，是抢先键
+            @"d:/games/erafl/",      // 带尾斜杠：读取路径匹配不到它，不是抢先键（只是读不到的孤儿条目）
+            @"d:/games/other",       // 另一个游戏
+            @"D:/Games/EraFL/DLC",   // 另一个（嵌套的）游戏
+        };
+
+        var shadowing = CompatPackLauncherConfig.FindShadowingGameKeys(existing, @"d:/games/erafl", caseSensitiveFilesystem: false);
+
+        Assert.Equal(new[] { @"D:/Games/EraFL" }, shadowing);
+    }
+
+    [Fact]
+    public void FindShadowingGameKeys_CaseSensitiveFilesystem_ReturnsNothingForCaseVariants()
+    {
+        var existing = new[] { "/storage/emulated/0/emuera/Game", "/storage/emulated/0/emuera/game" };
+
+        var shadowing = CompatPackLauncherConfig.FindShadowingGameKeys(existing, "/storage/emulated/0/emuera/Game", caseSensitiveFilesystem: true);
+
+        Assert.Empty(shadowing); // 大小写敏感文件系统上仅差大小写的两个键是两个不同的游戏
+    }
+
+    [Fact]
+    public void FindShadowingGameKeys_AgreesWithWhatTryGetSelectionForGameWouldMatch()
+    {
+        // 同源判据：抢先键恰好是「写法不同、但当作这个游戏去读也能读到」的键。
+        var existing = new[] { @"D:/Games/EraFL", @"d:/games/erafl", @"d:/games/other", @"d:/games/erafl/" };
+        string gameKey = CompatPackLauncherConfig.NormalizeGameKey(@"D:\Games\EraFL\", caseSensitiveFilesystem: false);
+
+        var shadowing = CompatPackLauncherConfig.FindShadowingGameKeys(existing, gameKey, caseSensitiveFilesystem: false);
+
+        foreach (string key in existing)
+        {
+            var selections = new Dictionary<string, string> { [key] = "x.dll" };
+            bool readableAsThisGame = CompatPackLauncherConfig.TryGetSelectionForGame(
+                selections, gameKey, caseSensitiveFilesystem: false, out _);
+            bool expectedShadowing = readableAsThisGame && !string.Equals(key, gameKey, StringComparison.Ordinal);
+            Assert.Equal(expectedShadowing, shadowing.Contains(key));
+        }
+    }
+
+    [Fact]
+    public void FindShadowingGameKeys_HandlesEmptyInputs()
+    {
+        Assert.Empty(CompatPackLauncherConfig.FindShadowingGameKeys(null, "a", caseSensitiveFilesystem: false));
+        Assert.Empty(CompatPackLauncherConfig.FindShadowingGameKeys(new string?[] { null, "", "A" }, null, caseSensitiveFilesystem: false));
+        Assert.Empty(CompatPackLauncherConfig.FindShadowingGameKeys(new string?[] { null, "", "a" }, "a", caseSensitiveFilesystem: false));
+    }
 }

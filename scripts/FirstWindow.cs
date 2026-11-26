@@ -107,8 +107,11 @@ public partial class FirstWindow : Control
 		// runner/in-process switch 的 per-session pack 通道刷新（E2-R3）：每次会话绑定都
 		// 按目标游戏重算启用清单并写环境变量——切换到 B 不得沿用上一局 A 的
 		// GEMUERA_COMPAT_PACKS（B 无选择时清除变量，回纯 v24；外部诊断 env 的合并语义与
-		// launcher 注入一致）。只读 launcher.cfg，不写回，不改变下一次交互启动。
-		ApplyCompatPackEnvironment(SelectedGamePath);
+		// launcher 注入一致）。只读 launcher.cfg，不写回，不改变下一次交互启动：
+		// 过期第一方包的改绑只在本次会话内生效。本进程此后也一律不写回——主场景挂上来后还会经
+		// ResolveStartupGamePath 再注入一次，靠调用点逐个传参挡不住。
+		SuppressCompatPackSelfHealPersistence();
+		ApplyCompatPackEnvironment(SelectedGamePath, persistSelfHeal: false);
 		return true;
 	}
 
@@ -901,8 +904,11 @@ public partial class FirstWindow : Control
 	/// 合并之后、注入之前经 <see cref="ResolveStaleFirstPartyPacks"/> 自愈：对当前引擎已不可用的
 	/// 第一方包换成内置同名包（FirstWindow.CompatPackSelfHeal.cs）。<paramref name="launcherProfileName"/>
 	/// 只影响 P2 映射默认值按哪个档案解析；缺省取上次启动用的档案，预览某个游戏时传它自己的档案。
+	/// <paramref name="persistSelfHeal"/>：自愈的改绑是否写回 launcher.cfg。交互启动链用缺省 true；
+	/// <see cref="ConfigureLegacyRunnerSession"/>（诊断回放 / 进程内换局）必须传 false——那个入口的契约是
+	/// 只读 launcher.cfg、不改变下一次交互启动；它在本次会话内仍然拿到改绑后的清单。
 	/// </summary>
-	static void ApplyCompatPackEnvironment(string gameRoot, string launcherProfileName = null)
+	static void ApplyCompatPackEnvironment(string gameRoot, string launcherProfileName = null, bool persistSelfHeal = true)
 	{
 		bool hasStoredSelection = CompatPackLauncherConfig.TryGetSelectionForGame(
 			LauncherSettingsStore.LoadCompatPackSelections(),
@@ -921,7 +927,12 @@ public partial class FirstWindow : Control
 			storedSelection,
 			externalCompatPacksOverride,
 			mappedPath);
-		merged = ResolveStaleFirstPartyPacks(gameRoot, hasStoredSelection, merged);
+		// 写回只针对「按游戏保存的、非空的选择」：条目存在但值为空时，实际生效的是外部环境变量或
+		// 映射默认值，把它们固化成按游戏选择会悄悄改变之后每次启动的选择来源。
+		merged = ResolveStaleFirstPartyPacks(
+			gameRoot,
+			hasStoredSelection && paths.Count > 0 && persistSelfHeal && !compatPackSelfHealPersistenceSuppressed,
+			merged);
 		if (hasStoredSelection && !string.IsNullOrEmpty(externalCompatPacksOverride))
 		{
 			GenericUtils.Warn(

@@ -50,12 +50,25 @@ public static class CompatPackStaleSelectionRebinder
         var paths = new List<string>();
         var rebinds = new List<CompatPackRebindNotice>();
         var warnings = new List<string>();
+
+        // 结果里每个文件只出现一次：引擎把同一个包给两次会按「packId 重复」把整组拒载。
+        // 比对键 = 归一化路径 + 调用方的路径比较器，仅大小写或分隔符写法不同的重复也算同一个文件。
+        var emitted = new HashSet<string>(pathComparer);
+        // 输入清单里出现过的全部文件。内置包如果本来就在清单里（哪怕排在过期副本后面），
+        // 改绑处不再抢先加入——由它自己那一轮按「可用」加入一次，既不重复也不挪动它在清单里的位置。
+        var selected = new HashSet<string>(pathComparer);
+        foreach (string path in selectedPaths)
+        {
+            if (!string.IsNullOrEmpty(path))
+                selected.Add(CompatPackLauncherConfig.NormalizePackPath(path));
+        }
+
         foreach (string path in selectedPaths)
         {
             CompatPackPeekResult verdict = SafePeek(peek, path);
             if (verdict.IsCompatible)
             {
-                paths.Add(path);
+                AddOnce(path);
                 continue;
             }
 
@@ -75,10 +88,8 @@ public static class CompatPackStaleSelectionRebinder
                     CompatPackLauncherConfig.NormalizePackPath(bundledPath))
                 && SafePeek(peek, bundledPath).IsCompatible)
             {
-                string normalizedBundled = CompatPackLauncherConfig.NormalizePackPath(bundledPath);
-                bool alreadySelected = paths.Any(existing => pathComparer.Equals(
-                    CompatPackLauncherConfig.NormalizePackPath(existing), normalizedBundled));
-                if (!alreadySelected)
+                string bundledKey = CompatPackLauncherConfig.NormalizePackPath(bundledPath);
+                if (!emitted.Contains(bundledKey) && !selected.Contains(bundledKey))
                     paths.Add(bundledPath);
                 rebinds.Add(new CompatPackRebindNotice(
                     path,
@@ -88,12 +99,20 @@ public static class CompatPackStaleSelectionRebinder
                 continue;
             }
 
-            paths.Add(path);
+            AddOnce(path);
             warnings.Add("兼容包 " + displayName + " 与当前引擎不匹配（" + verdict.ShortReason
                 + "），本次将以 v24 基线启动，请更新该包。");
         }
 
         return new CompatPackSelectionResolution(paths, rebinds, warnings);
+
+        void AddOnce(string path)
+        {
+            if (string.IsNullOrEmpty(path))
+                return;
+            if (emitted.Add(CompatPackLauncherConfig.NormalizePackPath(path)))
+                paths.Add(path);
+        }
     }
 
     static CompatPackPeekResult SafePeek(PeekFile peek, string path)

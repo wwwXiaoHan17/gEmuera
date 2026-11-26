@@ -469,6 +469,16 @@ per-game 启用配置（launcher 侧：游戏 → 包列表）给出**包文件�
   所以"预检不通过"等价于"真实加载必然拒载"；预检通过不保证可加载（能力词汇、表面符号等仍由真实加载校验）。
   启动器侧对称：`CompatPackStaleSelectionRebinder` 在注入前把指向过期第一方包的选择改绑到内置同名包
   （路径不同才换）并写回 `launcher.cfg [compat_packs]`；换不了的原样注入（整组拒载 = 回退基线）并在状态栏明示。
+- **2026-11-26 补充（`[compat_packs]` 的存储不变量）**：同一个游戏在该节只保留一条。读取取的是文件里
+  第一个匹配的键，所以保存某个游戏的选择时（启动器界面提交与自愈写回共用
+  `LauncherSettingsStore.SaveCompatPackSelection`）会一并清除写法不同、但读取时会被当成同一个游戏的旧键
+  （Windows 下即仅大小写不同，判定见 `CompatPackLauncherConfig.FindShadowingGameKeys`，与读取路径同一个比较器）。
+  否则手改或旧格式留下的旧键会一直排在前面被读到，表现成「改了选择却一直用旧选择」。
+  同日核对后定下的另外三条：改绑结果按「归一化路径 + 平台比较器」去重，内置包无论在选中清单里排在过期副本
+  之前还是之后都只出现一次（同一路径给两次会被引擎按 packId 重复整组拒载）；写回只发生在交互启动链、且只针对
+  按游戏保存的非空选择——诊断回放入口（`ConfigureLegacyRunnerSession`，legacy-runner 与进程内换局）只读
+  `launcher.cfg`，改绑仅在本次会话内生效（该进程此后一律不写回）；释放器的「内置载荷可用」同样是清单头部级
+  结论，内置包的完整有效性由发布门禁对它们的真实加载保证。
 - legacy-runner 对退役 profile 做"翻译 + 显式注入 `GEMUERA_COMPAT_PACKS` + 报告
   baseProfile/packIds + 断言 `[LOAD] CompatPack enabled`"；缺包/未加载即 FAIL（G10 不假绿）。
 

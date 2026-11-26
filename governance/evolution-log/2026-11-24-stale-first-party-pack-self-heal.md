@@ -203,3 +203,64 @@
 > 同一对只记一次、只打一次日志。[静态] 对照 `ApplyCompatPackEnvironment` 的调用点
 > （选游戏、切高级兼容、改档案、`SetSelectedGamePath`、`ResolveStartupGamePath`）。
 > 未重跑门禁：判定仍在 Core，这次只改宿主侧记忆。
+
+> 补遗（2026-11-26，用户指令「核对一遍」）：
+>
+> **状态**：本任务与前一任务已于 2026-11-25 16:00 / 16:01 提交（`7d6d67f`、`6ae3721`）。本次核对产生的修正
+> **与本补遗同批提交**（提交说明以 `fix(compat): 过期第一方包自愈核对修正` 开头，随分支 `ai/ui-scale-setting`
+> 的 PR 进入 dev），涉及 `CompatPackStaleSelectionRebinder.cs`、`CompatPackLauncherConfig.cs`、
+> `LauncherSettingsStore.cs`、`FirstWindow.cs`、`FirstWindow.CompatPackSelfHeal.cs` 与两个测试文件。
+>
+> **对上文两处陈述的更正**（原文保留）：§1「`CompatPackBundleInstallerTests.cs` 追加 7 个用例」应为 **6 个**；
+> §3 的证据目录名应为 `tools\runs\f1`、`f2`、`f2b-launcher-rebind`、`f3`（不是 `f1-*` / `f3-*`）。
+> 上文引用的关键日志行已逐条在证据文件里复核存在。
+>
+> **验证记录**（证据：`D:\gemuera-reports\compatpack-refresh-1\recheck-20261126\`，模拟器为 `tools\runs\r1`、`r2`、`r2b`、`r3`）
+>
+> - [实测] 提交 `6ae3721` 上重跑：Debug 构建 0 错误；发布门禁 PASS（8 项检查，桌面命令 7/7；Core 534/1、Facade 79、
+>   ABI 4；lifecycle 4/4）；`Test-Governance.ps1` 通过——补上 2026-11-25 补遗「未重跑门禁」的缺口。
+> - [实测] 2026-11-25 的去重修正：选择来自外部 `GEMUERA_COMPAT_PACKS`（不写回）时，一次启动里状态栏多次刷新，
+>   自愈日志只有 1 条，`launcher.cfg` 未被改动。
+> - [实测] 用户 2026-11-25 17:25 导出的 `gemuera-1.10.0-dev-20261125-debug.apk` 含提交后的自愈代码（含去重方法），
+>   内置四个带哈希的包均为 `5310c6d8…` 且与暂存逐字节一致；用户 11-25 16:14 的桌面游戏会话无 Error、无拒载。
+> - [实测] 核对中发现并修正（抢先键）：`launcher.cfg [compat_packs]` 里有写法与归一化键不同、但读取时会被当成
+>   同一个游戏的旧键（Windows 下仅大小写不同）时，写回只写归一化键——旧条目留下且每次启动都抢先被读到，
+>   带着它再启动一次会重新自愈并再记一条日志、文件永不收敛。修在存储层 `LauncherSettingsStore.SaveCompatPackSelection`
+>   （保存时清除抢先键；判定 `CompatPackLauncherConfig.FindShadowingGameKeys`，与读取路径同一个比较器；4 个新用例）。
+>   修正后：重复条目 → 只剩一条 → 再启动 0 条自愈日志；全小写键的原行为不变。
+> - [静态]+[实测] 独立复审（只读子代理通读本次提交的全部代码与测试）：无 P0；`CompatPackRules.Validate` 的重构经
+>   逐字符串比对确认错误文本与顺序均未变。提出 5 条 P2，处置：① 改绑结果可含重复路径（选中顺序「过期副本在前、
+>   内置包在后」）——已修（`Resolve` 全量去重，补 2 个用例）；② `ConfigureLegacyRunnerSession` 契约是只读
+>   `launcher.cfg`，但写回不区分入口——已修（写回只在交互启动链；诊断进程在进程级关掉写回，因为该入口之后主场景
+>   还会经 `ResolveStartupGamePath` 再注入一次，仅靠传参挡不住）；③「内置载荷可用」只是清单头部级结论——接受为
+>   已文档化限制（方向性保证成立、旧文件有备份、内置包的完整有效性由发布门禁的真实加载保证）；④ 写回门槛用
+>   「条目存在」而非「选择非空」——已修；⑤ 测试缺口——随 ①④ 补齐，`SameFile_DifferentSpelling` 改为显式传入比较器。
+> - [实测] 修正②时顺带发现：legacy-runner 的第一次注入早于日志系统初始化，自愈日志被丢弃且因「已记过」不再补记。
+>   已改为「只打一次，但要真的打出来」。runner 场景（eraTW 副本 + 指向旧包的保存选择、不设环境变量）：
+>   `runnerSuccess=true`、`exitReason=first_wait_reached`、自愈日志 1 条、**`launcher.cfg` 原样未动**。
+> - [实测] 桌面交互场景（最终程序集）：环境变量场景 1 条日志；保存的选择（全小写键）第 1 次 1 条、第 2 次 0 条；
+>   「旧包在前、内置包在后」写回为单条；空条目 + 环境变量时条目保持为空。每轮后用户三份配置与运行前逐字节一致。
+> - [实测] 最终工作区门禁：发布门禁 PASS（8 项检查，桌面命令 7/7；Core **541**/1、Facade 79、ABI 4；lifecycle 4/4）；
+>   `Test-Governance.ps1` 通过。
+> - [实测] 模拟器（x86_64，用最终工作区临时导出的包）三场景：内置路径被覆盖成旧版 → `installed=4 skipped=0
+>   kept-user=0 replaced-stale=1 failed=0`、游戏 `CompatPack enabled` 且输出 `CONSTTABLE_OK`；保存的选择指向别处的
+>   旧包 → 写回内置路径、自愈日志 1 条、**再启动 0 条**；过期社区包 → 选择未改动、引擎按同一条规则拒载。
+>
+> **环境障碍与打通**
+>
+> - Gradle 全局缓存损坏：`C:\Users\20109\.gradle\caches\8.11.1\transforms\` 下有 47 个条目（均生成于 2026-11-25 17:56）
+>   只剩 `transformed/`、缺 `metadata.bin`，Gradle 报 `Could not read workspace metadata`，安卓导出直接失败——
+>   **用户本机的任何一次安卓导出都会这样失败，直到这些条目被删除**（纯缓存，删掉整目录或这 47 个条目即可，Gradle 会重建）。
+>   我没有动用户的全局缓存，而是在仓库外用 `tools\make_isolated_gradle_home.py` 拼了一份隔离的 Gradle 目录
+>   （跳过坏条目），导出时临时指向它；用完已删。
+>   后续（同日 14:40，用户反馈「Gradle有问题」）：用户自己清空了 `transforms` 目录，但之后的两次导出仍以同一错误
+>   失败——从 14:11 一直活着的 Gradle 守护进程把旧的条目索引留在内存里。[实测] 停掉该空闲守护进程后，用用户自己的
+>   Gradle 环境导出验证成功，缓存重建为 1323 个完整条目。残缺条目的来源没有查清：守护进程日志显示 2026-11-25 17:25
+>   之后没有本项目的构建，不是本项目的导出留下的。
+> - 我自己的几次失误：给核对脚本打补丁时断言失败而未察觉，结果跑成了「大小写原样的键」的场景（恰好因此发现了抢先键
+>   问题，但属于误打误撞）；runner 场景的测试键用了正斜杠、与 runner 传入的反斜杠游戏根对不上，白跑一轮；新用例漏配
+>   内置包文件；局部变量重名与可空标注各导致一次编译失败。
+>
+> [未验证] arm64 真机（未连接设备）。与本次改动无关的观察（已登记台账）：用户 11-25 14:40 结束一个从 11-24 01:01
+> 运行至今的会话时出现一次 `LEGACY_BASELINE_STOP_FAILED`，该进程跑的是自愈之前的代码；`launcher.cfg` 里
+> EraTW_Snake_Beta 的兼容包条目在 11-25 16:14 被界面提交清空（只有界面会写空选择），不影响运行（走映射默认值）。

@@ -177,4 +177,34 @@ public static class CompatPackLauncherConfig
         }
         return false;
     }
+
+    /// <summary>
+    /// 写回某个游戏的选择时必须一并清除的「抢先键」：已有键里写法与 <paramref name="gameKey"/> 不同、
+    /// 但按 <see cref="TryGetSelectionForGame(IReadOnlyDictionary{string, string}, string?, bool, out IReadOnlyList{string})"/>
+    /// 的同一个比较会被当成同一个游戏读到的键（Windows 下即仅大小写不同）。
+    /// <para>
+    /// <see cref="TryGetSelectionForGame"/> 取的是文件里第一个匹配的键。若保存时只写归一化键，
+    /// 手改或旧格式留下的、大小写不同的旧键不会被替换而是多出一条——旧条目继续抢先被读到，
+    /// 于是「改了选择却一直读到旧选择」。判定与读取路径共用同一个比较器，保证清理范围恰好等于
+    /// 「会被当成这个游戏读到的键」；读不到的孤儿条目（例如带尾斜杠的键）不在其列。
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<string> FindShadowingGameKeys(
+        IEnumerable<string?>? existingKeys,
+        string? gameKey,
+        bool caseSensitiveFilesystem)
+    {
+        var shadowing = new List<string>();
+        if (existingKeys is null || string.IsNullOrWhiteSpace(gameKey))
+            return shadowing;
+        StringComparer comparer = GameKeyComparerFor(caseSensitiveFilesystem);
+        foreach (string? existing in existingKeys)
+        {
+            if (string.IsNullOrEmpty(existing))
+                continue;
+            if (!string.Equals(existing, gameKey, StringComparison.Ordinal) && comparer.Equals(existing, gameKey))
+                shadowing.Add(existing);
+        }
+        return shadowing;
+    }
 }
